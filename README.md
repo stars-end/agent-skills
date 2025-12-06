@@ -4,7 +4,7 @@ Global DX skills shared across all VMs and projects.
 
 ## Structure
 - Each skill in its own directory with `SKILL.md`
-- Synced via git to `github.com/fengning/agent-skills`
+- Synced via git to `github.com/stars-end/agent-skills`
 
 ## Updating Skills
 1. Edit skill in this directory
