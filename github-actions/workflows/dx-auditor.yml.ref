@@ -1,0 +1,40 @@
+name: Weekly DX Audit
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # Every Monday at midnight UTC
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # To commit audit report
+      issues: write    # To post to Beads epic (if used)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100  # Need commit history for analysis
+
+      - name: Install Beads CLI (optional)
+        run: |
+          # Uncomment if posting to Beads epic
+          # pip install beads-cli
+
+      - name: Run DX audit
+        uses: stars-end/agent-skills/.github/actions/dx-auditor@main
+        with:
+          lookback-commits: 60
+          lookback-runs: 30
+          output-file: docs/DX_AUDIT_LOG.md
+          # beads-epic: bd-audit  # Uncomment to post summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Commit audit report
+        run: |
+          git config user.name "DX Auditor Bot"
+          git config user.email "dx-auditor@agent-skills"
+          git add docs/DX_AUDIT_LOG.md
+          git commit -m "docs: Weekly DX audit report [skip ci]" || echo "No changes"
+          git push
