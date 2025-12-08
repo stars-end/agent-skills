@@ -1,0 +1,108 @@
+name: 'Lockfile Validation'
+description: 'Validate Poetry and pnpm lockfiles are in sync with manifests'
+author: 'Prime Radiant AI'
+
+inputs:
+  backend-directory:
+    description: 'Backend directory containing pyproject.toml (empty to skip)'
+    required: false
+    default: 'backend'
+  frontend-directory:
+    description: 'Frontend directory containing package.json (empty to skip)'
+    required: false
+    default: 'frontend'
+  fail-fast:
+    description: 'Fail on first lockfile error (true) or check all (false)'
+    required: false
+    default: 'true'
+
+outputs:
+  poetry-status:
+    description: 'Poetry lockfile status (ok, drift, missing, skipped)'
+    value: ${{ steps.check-poetry.outputs.status }}
+  pnpm-status:
+    description: 'pnpm lockfile status (ok, drift, missing, skipped)'
+    value: ${{ steps.check-pnpm.outputs.status }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check Poetry lockfile
+      id: check-poetry
+      if: inputs.backend-directory != ''
+      shell: bash
+      run: |
+        if [ ! -f "${{ inputs.backend-directory }}/pyproject.toml" ]; then
+          echo "status=skipped" >> $GITHUB_OUTPUT
+          echo "⚠️  pyproject.toml not found, skipping Poetry check"
+          exit 0
+        fi
+
+        if [ ! -f "${{ inputs.backend-directory }}/poetry.lock" ]; then
+          echo "status=missing" >> $GITHUB_OUTPUT
+          echo "❌ poetry.lock missing! Run: cd ${{ inputs.backend-directory }} && poetry lock"
+          exit 1
+        fi
+
+        cd ${{ inputs.backend-directory }}
+        if poetry check --lock; then
+          echo "status=ok" >> $GITHUB_OUTPUT
+          echo "✅ Poetry lockfile is in sync with pyproject.toml"
+        else
+          echo "status=drift" >> $GITHUB_OUTPUT
+          echo "❌ Poetry lockfile is OUT OF SYNC with pyproject.toml"
+          echo ""
+          echo "To fix locally:"
+          echo "  cd ${{ inputs.backend-directory }}"
+          echo "  poetry lock --no-update"
+          echo "  git add poetry.lock"
+          echo ""
+          echo "Or use lockfile-doctor skill:"
+          echo "  ~/.agent/skills/lockfile-doctor/fix.sh"
+          exit 1
+        fi
+
+    - name: Check pnpm lockfile
+      id: check-pnpm
+      if: inputs.frontend-directory != ''
+      shell: bash
+      run: |
+        if [ ! -f "${{ inputs.frontend-directory }}/package.json" ]; then
+          echo "status=skipped" >> $GITHUB_OUTPUT
+          echo "⚠️  package.json not found, skipping pnpm check"
+          exit 0
+        fi
+
+        if [ ! -f "${{ inputs.frontend-directory }}/pnpm-lock.yaml" ]; then
+          echo "status=missing" >> $GITHUB_OUTPUT
+          echo "❌ pnpm-lock.yaml missing! Run: cd ${{ inputs.frontend-directory }} && pnpm install"
+          exit 1
+        fi
+
+        cd ${{ inputs.frontend-directory }}
+        if pnpm install --frozen-lockfile --dry-run 2>&1 | grep -q "Lockfile is up to date"; then
+          echo "status=ok" >> $GITHUB_OUTPUT
+          echo "✅ pnpm lockfile is in sync with package.json"
+        else
+          echo "status=drift" >> $GITHUB_OUTPUT
+          echo "❌ pnpm lockfile is OUT OF SYNC with package.json"
+          echo ""
+          echo "To fix locally:"
+          echo "  cd ${{ inputs.frontend-directory }}"
+          echo "  pnpm install"
+          echo "  git add pnpm-lock.yaml"
+          echo ""
+          echo "Or use lockfile-doctor skill:"
+          echo "  ~/.agent/skills/lockfile-doctor/fix.sh"
+          exit 1
+        fi
+
+    - name: Summary
+      shell: bash
+      run: |
+        echo "### Lockfile Validation Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Lockfile | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Poetry (backend/) | ${{ steps.check-poetry.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| pnpm (frontend/) | ${{ steps.check-pnpm.outputs.status }} |" >> $GITHUB_STEP_SUMMARY

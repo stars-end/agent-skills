@@ -1,0 +1,74 @@
+name: 'Python Setup with Poetry'
+description: 'Auto-detect Python version from pyproject.toml, setup Poetry, and cache dependencies'
+author: 'Prime Radiant AI'
+
+inputs:
+  working-directory:
+    description: 'Working directory containing pyproject.toml (e.g., backend/)'
+    required: false
+    default: '.'
+  python-version:
+    description: 'Python version override (if not specified, reads from pyproject.toml)'
+    required: false
+    default: ''
+
+outputs:
+  python-version:
+    description: 'Python version that was installed'
+    value: ${{ steps.detect-version.outputs.python-version }}
+  cache-hit:
+    description: 'Whether Poetry cache was hit'
+    value: ${{ steps.poetry-cache.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Detect Python version from pyproject.toml
+      id: detect-version
+      shell: bash
+      run: |
+        cd ${{ inputs.working-directory }}
+        if [ -n "${{ inputs.python-version }}" ]; then
+          echo "python-version=${{ inputs.python-version }}" >> $GITHUB_OUTPUT
+          echo "Using explicit Python version: ${{ inputs.python-version }}"
+        else
+          # Extract Python version from pyproject.toml
+          PYTHON_VERSION=$(grep -E '^python = ".*"' pyproject.toml | sed 's/python = "\^//; s/"//')
+          echo "python-version=$PYTHON_VERSION" >> $GITHUB_OUTPUT
+          echo "Detected Python version from pyproject.toml: $PYTHON_VERSION"
+        fi
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ steps.detect-version.outputs.python-version }}
+
+    - name: Install Poetry
+      shell: bash
+      run: |
+        curl -sSL https://install.python-poetry.org | python3 -
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+    - name: Cache Poetry dependencies
+      id: poetry-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pypoetry
+          ${{ inputs.working-directory }}/.venv
+        key: poetry-${{ runner.os }}-${{ steps.detect-version.outputs.python-version }}-${{ hashFiles(format('{0}/poetry.lock', inputs.working-directory)) }}
+        restore-keys: |
+          poetry-${{ runner.os }}-${{ steps.detect-version.outputs.python-version }}-
+
+    - name: Configure Poetry
+      shell: bash
+      run: |
+        poetry config virtualenvs.in-project true
+        poetry config virtualenvs.create true
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        poetry install --no-interaction --no-ansi
+        echo "✅ Poetry dependencies installed"

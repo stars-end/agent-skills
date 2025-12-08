@@ -1,0 +1,123 @@
+name: 'Railway Deployment Preflight'
+description: 'Pre-deployment validation for Railway (lockfiles, imports, env vars)'
+author: 'Prime Radiant AI'
+
+inputs:
+  backend-directory:
+    description: 'Backend directory to validate'
+    required: false
+    default: 'backend'
+  check-imports:
+    description: 'Validate critical Python imports work'
+    required: false
+    default: 'true'
+  check-env-vars:
+    description: 'Check for required environment variables'
+    required: false
+    default: 'false'
+  required-env-vars:
+    description: 'Comma-separated list of required env vars (e.g., DATABASE_URL,CLERK_SECRET_KEY)'
+    required: false
+    default: ''
+
+outputs:
+  lockfile-status:
+    description: 'Lockfile validation status (ok, drift, missing)'
+    value: ${{ steps.check-lockfiles.outputs.status }}
+  imports-status:
+    description: 'Import validation status (ok, error, skipped)'
+    value: ${{ steps.check-imports.outputs.status }}
+  env-status:
+    description: 'Environment validation status (ok, missing, skipped)'
+    value: ${{ steps.check-env.outputs.status }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check lockfiles in sync
+      id: check-lockfiles
+      shell: bash
+      run: |
+        cd ${{ inputs.backend-directory }}
+
+        # Check Poetry lockfile
+        if [ ! -f "poetry.lock" ]; then
+          echo "status=missing" >> $GITHUB_OUTPUT
+          echo "❌ poetry.lock missing!"
+          exit 1
+        fi
+
+        if poetry check --lock; then
+          echo "status=ok" >> $GITHUB_OUTPUT
+          echo "✅ Poetry lockfile in sync"
+        else
+          echo "status=drift" >> $GITHUB_OUTPUT
+          echo "❌ Poetry lockfile OUT OF SYNC"
+          echo ""
+          echo "Railway deployment will fail with lockfile drift!"
+          echo "Fix with: poetry lock --no-update"
+          exit 1
+        fi
+
+    - name: Validate critical Python imports
+      id: check-imports
+      if: inputs.check-imports == 'true'
+      shell: bash
+      run: |
+        cd ${{ inputs.backend-directory }}
+
+        echo "Validating critical Python imports..."
+
+        # Test import that commonly fails in Railway
+        if poetry run python -c "import fastapi; import sqlalchemy; import pydantic" 2>&1; then
+          echo "status=ok" >> $GITHUB_OUTPUT
+          echo "✅ Critical imports validated"
+        else
+          echo "status=error" >> $GITHUB_OUTPUT
+          echo "❌ Import validation failed!"
+          echo ""
+          echo "This suggests dependencies may not install correctly in Railway."
+          echo "Check poetry.lock and pyproject.toml for consistency."
+          exit 1
+        fi
+
+    - name: Check required environment variables
+      id: check-env
+      if: inputs.check-env-vars == 'true' && inputs.required-env-vars != ''
+      shell: bash
+      run: |
+        MISSING=""
+        IFS=',' read -ra VARS <<< "${{ inputs.required-env-vars }}"
+
+        for var in "${VARS[@]}"; do
+          var=$(echo "$var" | xargs)  # trim whitespace
+          if [ -z "${!var}" ]; then
+            MISSING="$MISSING$var,"
+            echo "❌ Missing: $var"
+          else
+            echo "✅ Found: $var"
+          fi
+        done
+
+        if [ -n "$MISSING" ]; then
+          echo "status=missing" >> $GITHUB_OUTPUT
+          echo ""
+          echo "Missing required environment variables: $MISSING"
+          echo "Set in Railway dashboard or GitHub secrets"
+          exit 1
+        else
+          echo "status=ok" >> $GITHUB_OUTPUT
+          echo "✅ All required env vars present"
+        fi
+
+    - name: Summary
+      if: always()
+      shell: bash
+      run: |
+        echo "### Railway Preflight Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Lockfiles | ${{ steps.check-lockfiles.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Imports | ${{ steps.check-imports.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Env Vars | ${{ steps.check-env.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
