@@ -83,14 +83,13 @@ runs:
           git add .beads/issues.jsonl
 
           # Complete the merge
-          git commit --no-edit -m "chore: Auto-merge Beads JSONL (union strategy)
-
-Automatically resolved .beads/issues.jsonl conflict using union merge.
-Each issue is one line, so keeping all lines from both sides is safe.
-
-Feature-Key: bd-p4jf
-Agent: github-actions
-Role: auto-merge-bot"
+          git commit --no-edit -m "chore: Auto-merge Beads JSONL (union strategy)" \
+            -m "Automatically resolved .beads/issues.jsonl conflict using union merge." \
+            -m "Each issue is one line, so keeping all lines from both sides is safe." \
+            -m "" \
+            -m "Feature-Key: bd-p4jf" \
+            -m "Agent: github-actions" \
+            -m "Role: auto-merge-bot"
 
           echo "conflict-resolved=true" >> $GITHUB_OUTPUT
 
