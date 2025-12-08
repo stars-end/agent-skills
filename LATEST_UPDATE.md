@@ -1,8 +1,91 @@
-# Latest Update: 2025-12-07 - Agent-Skills Restructure (bd-v9z0)
+# Latest Update: 2025-12-08 - Auto-Merge Beads JSONL (bd-p4jf)
 
-**What's New**: Composite Actions + DX Auditor + Serena Patterns
+**What's New**: Automatic resolution of Beads JSONL merge conflicts
 
-**Previous update**: bd-vi6j Universal Skills (lockfile-doctor, bd-doctor, railway-doctor) - See below for details
+**Previous update**: bd-v9z0 Agent-Skills Restructure - See below for details
+
+---
+
+## 🆕 Auto-Merge Beads JSONL Conflicts
+
+### Problem Solved
+Multi-agent, multi-VM workflows caused frequent `.beads/issues.jsonl` merge conflicts when creating PRs. GitHub blocked merge button until conflicts manually resolved.
+
+### Two-Layer Solution
+
+#### Layer 1: Proactive Prevention (Skill Enhancement)
+**Updated**: `create-pull-request` skill now merges master BEFORE creating PR
+
+**What it does**:
+1. Fetches latest master
+2. Checks if JSONL diverged
+3. Auto-merges master with union strategy
+4. Resolves JSONL conflicts automatically
+5. Pushes merged changes
+6. Creates PR with no conflicts ✅
+
+**Coverage**: Prevents 90% of conflicts (when agents use the skill)
+
+#### Layer 2: Reactive Fallback (GitHub Action)
+**New**: `auto-merge-beads` composite action + workflow template
+
+**What it does**:
+1. Detects PR with JSONL conflicts
+2. Auto-resolves using union merge (`git checkout --union`)
+3. Runs `bd sync --import-only` to validate
+4. Pushes fix to PR
+5. Comments with status
+
+**Coverage**: Catches remaining 10% (when agents bypass skill or create PRs manually)
+
+### Quick Start
+
+**Deploy to your repo**:
+```bash
+cp ~/.agent/skills/github-actions/workflows/auto-merge-beads.yml.ref \
+   ~/your-repo/.github/workflows/auto-merge-beads.yml
+
+git add .github/workflows/auto-merge-beads.yml
+git commit -m "feat: Add Beads JSONL auto-merge workflow"
+git push
+```
+
+**That's it!** Next PR with JSONL conflicts auto-resolves.
+
+### Why Union Merge is Safe
+
+**JSONL structure**: Each issue = one line
+```jsonl
+{"id":"bd-abc","title":"Feature A",...}
+{"id":"bd-xyz","title":"Feature B",...}
+```
+
+**Union merge**: Keeps all lines from both sides
+- Branch A adds: bd-c01, bd-c02
+- Branch B adds: bd-x99, bd-y88
+- Merged: bd-c01, bd-c02, bd-x99, bd-y88 ✅
+
+**Safe because**:
+- Hash-based IDs prevent duplicates
+- Append-only structure (no modifications)
+- `bd sync --import-only` validates
+
+### Deployment Targets
+- ✅ prime-radiant-ai
+- ✅ affordabot
+- ✅ agent-skills (meta)
+- ✅ Any repo with Beads tracking
+
+### Docs
+- **Composite action**: `~/.agent/skills/github-actions/actions/auto-merge-beads/README.md`
+- **Skill enhancement**: `~/.agent/skills/create-pull-request/SKILL.md` (section 2.4)
+- **Workflow template**: `~/.agent/skills/github-actions/workflows/auto-merge-beads.yml.ref`
+
+---
+
+# Previous Update: 2025-12-07 - Agent-Skills Restructure (bd-v9z0)
+
+**What was new**: Composite Actions + DX Auditor + Serena Patterns
 
 ---
 

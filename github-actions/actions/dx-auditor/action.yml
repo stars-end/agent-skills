@@ -100,21 +100,89 @@ runs:
 
         echo "✅ Aggregation complete"
 
-    - name: Run Claude analysis (placeholder)
+    - name: Run Claude analysis
       id: analyze
       shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+        ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
       run: |
-        echo "⚠️  Claude API analysis not yet implemented"
-        echo "This step would:"
-        echo "  1. Send /tmp/aggregation.md to Claude API"
-        echo "  2. Prompt: 'Analyze DX toil patterns, calculate toil rate, suggest improvements'"
-        echo "  3. Parse response for toil rate and top pattern"
-        echo ""
-        echo "For now, outputting placeholder values..."
+        echo "Running Claude DX analysis..."
 
-        # Placeholder outputs (replace with Claude API call)
-        echo "toil-rate=0.42" >> $GITHUB_OUTPUT
-        echo "top-pattern=lockfile-drift" >> $GITHUB_OUTPUT
+        # Read aggregation data
+        AGGREGATION=$(cat /tmp/aggregation.md)
+
+        # Prepare API request
+        API_URL="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}/v1/messages"
+        MODEL="${ANTHROPIC_DEFAULT_SONNET_MODEL:-claude-sonnet-4-20250514}"
+
+        # Create prompt
+        PROMPT="You are a DX (Developer Experience) analyst. Analyze the following commit and CI data to identify toil patterns.
+
+${AGGREGATION}
+
+Please provide:
+1. **Toil rate**: Calculate the percentage of commits that are toil (fixing lockfiles, Beads sync, fixtures, CI iterations) vs feature work. Output as decimal (e.g., 0.42 for 42%).
+2. **Top pattern**: Identify the most common toil pattern (lockfile-drift, beads-sync, fixture-config, python-version, ci-iterations, or other).
+3. **Recommendations**: 2-3 specific, actionable recommendations to reduce toil.
+
+Format your response as:
+TOIL_RATE: <decimal>
+TOP_PATTERN: <pattern-name>
+RECOMMENDATIONS:
+- <recommendation 1>
+- <recommendation 2>
+- <recommendation 3>"
+
+        # Call Claude API
+        RESPONSE=$(curl -s -X POST "$API_URL" \
+          -H "Content-Type: application/json" \
+          -H "x-api-key: $ANTHROPIC_API_KEY" \
+          -H "anthropic-version: 2023-06-01" \
+          -d @- <<EOF
+{
+  "model": "$MODEL",
+  "max_tokens": 2048,
+  "messages": [{
+    "role": "user",
+    "content": "$PROMPT"
+  }]
+}
+EOF
+        )
+
+        # Parse response
+        CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text' 2>/dev/null || echo "")
+
+        if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
+          echo "⚠️  Claude API call failed or returned empty response"
+          echo "Response: $RESPONSE"
+          # Fallback to manual analysis
+          TOIL_RATE="0.0"
+          TOP_PATTERN="unknown"
+        else
+          echo "✅ Claude analysis complete"
+          echo "$CONTENT" > /tmp/claude-analysis.txt
+
+          # Extract toil rate
+          TOIL_RATE=$(echo "$CONTENT" | grep -oP 'TOIL_RATE:\s*\K[\d.]+' || echo "0.0")
+
+          # Extract top pattern
+          TOP_PATTERN=$(echo "$CONTENT" | grep -oP 'TOP_PATTERN:\s*\K[\w-]+' || echo "unknown")
+        fi
+
+        # Extract recommendations (everything after "RECOMMENDATIONS:")
+        RECOMMENDATIONS=$(echo "$CONTENT" | sed -n '/^RECOMMENDATIONS:/,$p' | tail -n +2 || echo "- No specific recommendations generated")
+
+        echo "toil-rate=$TOIL_RATE" >> $GITHUB_OUTPUT
+        echo "top-pattern=$TOP_PATTERN" >> $GITHUB_OUTPUT
+
+        # Save recommendations to temp file for report generation
+        echo "$RECOMMENDATIONS" > /tmp/recommendations.txt
+
+        echo "Toil rate: $TOIL_RATE"
+        echo "Top pattern: $TOP_PATTERN"
+        echo "Recommendations extracted"
 
     - name: Generate audit report
       shell: bash
@@ -136,7 +204,7 @@ runs:
 
         ## Recommendations
 
-        (Claude-generated recommendations would appear here)
+        $(cat /tmp/recommendations.txt 2>/dev/null || echo "- No recommendations available")
 
         ## Data
 

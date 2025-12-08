@@ -9,6 +9,7 @@ Reference implementations for common CI/CD workflows. Copy and adapt for your re
 | `lockfile-validation.yml.ref` | Fast-fail lockfile checks | `.github/workflows/lockfile-validation.yml` |
 | `python-test-job.yml.ref` | Python tests with auto-setup | `.github/workflows/tests.yml` |
 | `dx-auditor.yml.ref` | Weekly DX meta-analysis | `.github/workflows/dx-audit.yml` |
+| `auto-merge-beads.yml.ref` | Auto-resolve Beads JSONL conflicts | `.github/workflows/auto-merge-beads.yml` |
 
 ## 🎯 Why Templates, Not Reusable Workflows?
 
