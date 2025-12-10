@@ -52,14 +52,15 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
+        LOOKBACK_RUNS: ${{ inputs.lookback-runs }}
       run: |
-        echo "Collecting last ${{ inputs.lookback-runs }} CI runs..."
+        echo "Collecting last $LOOKBACK_RUNS CI runs..."
 
-        # Get workflow run conclusions
+        # Get workflow run conclusions (limit is applied via head, not jq slice)
         gh api repos/${{ github.repository }}/actions/runs \
           --paginate \
-          --jq '.workflow_runs[:${{ inputs.lookback-runs }}] | .[] | {id, conclusion, created_at, head_commit}' \
-          > /tmp/ci-runs.json
+          --jq '.workflow_runs[] | {id, conclusion, created_at, head_commit}' \
+          | head -n "$LOOKBACK_RUNS" > /tmp/ci-runs.json
 
         TOTAL=$(jq -s 'length' /tmp/ci-runs.json)
         FAILED=$(jq -s '[.[] | select(.conclusion == "failure")] | length' /tmp/ci-runs.json)
@@ -67,6 +68,7 @@ runs:
         echo "total-runs=$TOTAL" >> $GITHUB_OUTPUT
         echo "failed-runs=$FAILED" >> $GITHUB_OUTPUT
         echo "Collected $TOTAL runs ($FAILED failures)"
+
 
     - name: Aggregate failure patterns
       id: aggregate
