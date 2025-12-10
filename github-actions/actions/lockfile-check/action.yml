@@ -80,7 +80,9 @@ runs:
         fi
 
         cd ${{ inputs.frontend-directory }}
-        if pnpm install --frozen-lockfile --dry-run 2>&1 | grep -q "Lockfile is up to date"; then
+        # Use --frozen-lockfile which exits non-zero if lockfile is out of sync
+        # Use --ignore-scripts to avoid running postinstall in CI
+        if pnpm install --frozen-lockfile --ignore-scripts 2>&1; then
           echo "status=ok" >> $GITHUB_OUTPUT
           echo "✅ pnpm lockfile is in sync with package.json"
         else
