@@ -11,7 +11,11 @@ tags: [database, schema, migrations, supabase]
 
 # Database Schema
 
-Navigate Supabase database schema, 86+ migrations, and type definitions.
+Navigate database schema, 90+ migrations (legacy), and type definitions.
+
+> [!NOTE]
+> As of bd-k9tw (Dec 2025), migrations are documented in `supabase/migrations/README.md`.
+> The legacy Supabase workflow is deprecated - use Alembic for new migrations.
 
 ## Overview
 
@@ -19,124 +23,50 @@ PostgreSQL schema via Supabase with RLS policies. See `docs/database/SCHEMA.md`.
 
 ## Database Access
 
-**⚠️ CRITICAL: Must be in Railway shell for all database operations**
+**✅ PRIMARY: Railway Postgres (pgvector)**
+
+The database is a standard PostgreSQL container hosted on Railway.
+Connection string: `DATABASE_URL` (in Railway environment).
 
 ```bash
-# Verify environment first
-echo $RAILWAY_ENVIRONMENT  # Must be non-empty
+# Verify environment
+echo $RAILWAY_ENVIRONMENT
 
-# If empty, enter Railway shell:
-railway shell
+# Interactive Shell
+railway run --service pgvector -- psql "$DATABASE_URL"
+
+# Quick Checks
+railway run --service pgvector -- psql "$DATABASE_URL" -c "\dt"
+railway run --service pgvector -- psql "$DATABASE_URL" -c "SELECT count(*) FROM users;"
 ```
 
-**Common Queries:**
-
-```bash
-# Quick introspection
-psql "$DATABASE_URL" -c "\dt"  # List all tables
-psql "$DATABASE_URL" -c "\d users"  # Describe users table
-psql "$DATABASE_URL" -c "\d+ accounts"  # Detailed table info with indexes
-
-# Core tables
-psql "$DATABASE_URL" -c "SELECT * FROM users LIMIT 5;"
-psql "$DATABASE_URL" -c "SELECT * FROM accounts WHERE user_id = 'user_xxx';"
-psql "$DATABASE_URL" -c "SELECT * FROM holdings WHERE account_id = 'acc_xxx';"
-```
-
-**Migrations:**
-
-```bash
-# Inside railway shell + supabase directory
-cd supabase
-supabase db push  # Apply local migrations (see health check below)
-supabase db diff -f new_migration_name  # Generate migration from changes
-```
-
-**See AGENTS.md "Database Access" section for complete guide.**
+**⚠️ LEGACY: Supabase**
+Supabase is DEPRECATED for runtime operations. Only use for archival or reference.
+See `docs/STRATEGIC_MIGRATION_PLAN_RAILWAY.md` for migration details.
 
 ## Migrations
 
-- `supabase/migrations/` - All 86+ migrations (sequential)
-- Format: `YYYYMMDD_description.sql`
-- Key prefixes: `*clerk*`, `*plaid*`, `*eodhd*`
+### The New Standard: Alembic
+We are transitioning to standard **Alembic** migrations located in `backend/migrations/versions`.
+- **Create**: `cd backend && poetry run alembic revision -m "description"`
+- **Apply**: `cd backend && poetry run alembic upgrade head`
+
+### Manual SQL (Railway)
+For non-Alembic changes:
+```bash
+railway run --service pgvector -- psql "$DATABASE_URL" -f my_script.sql
+```
+
+### ⚠️ LEGACY: Supabase Migrations
+The `supabase/migrations/` directory and CLI `supabase db push` workflow are **DEPRECATED**.
+- Existing migrations (86+) are preserved for historical reference/archival.
+- Do **NOT** add new migrations here for Railway.
+- Do **NOT** rely on Supabase migration registry markers.
 
 ### End-to-end Checklist (schema changes)
+(Legacy Supabase workflow below - use only if strictly necessary during transition)
 
 Any time you change schema (tables, columns, indexes, RLS) or add Supabase migrations:
-
-1. **Work in Railway dev shell**
-   - Confirm: `echo $RAILWAY_ENVIRONMENT` is non-empty.
-   - Use the dev `DATABASE_URL` and `SUPABASE_PROJECT_ID`.
-
-2. **Apply migrations to dev**
-   ```bash
-   cd supabase
-   supabase db push
-   ```
-   - If this fails on **old** migrations, follow the health check flow below (registry repair or idempotent DDL) before proceeding.
-
-3. **Regenerate types and manifest**
-   ```bash
-   # From repo root, still in Railway shell
-   export SUPABASE_PROJECT_ID=klrrntdswlvjdqusahdk  # or injected value
-   make schema:generate
-   ```
-   - This must update:
-     - `supabase/types/database.types.ts`
-     - `supabase/generated/schema_manifest.json`
-     - `backend/schemas/generated/**`
-
-4. **Verify schema parity**
-   ```bash
-   cd backend
-   PYTHONPATH=. poetry run python ../scripts/verify_generated_schemas.py
-   ```
-   - This is the same check Tier 2 Auth Stub uses in CI.
-   - Fix any reported mismatches (missing columns, wrong nullability) before committing.
-
-5. **Commit everything together**
-   - In a feature branch:
-     - `supabase/migrations/**` changes
-     - `supabase/schemas/**` changes
-     - Regenerated types and manifests
-     - Updated `backend/schemas/generated/**`
-   - Do **not** split schema SQL and generated artifacts into separate feature branches; they must land atomically.
-
-### Migration Health Check (bd-k1c learnings)
-
-Before adding or merging new migrations:
-
-1. **Verify registry vs schema**
-   - Run in Railway shell:
-     ```bash
-     cd supabase
-     supabase db push
-     ```
-   - If it fails on **old** migrations (tables/triggers already exist), it means the schema was initialized by `golden_schema.sql` / `all_migrations.sql` / manual SQL and the migration registry is behind.
-
-2. **If db push fails on old migrations**
-   - Do **not** hack the schema via ad‑hoc SQL.
-   - Instead, repair the registry or make old migrations idempotent:
-     - Option A (registry repair): mark older versions as applied in `supabase_migrations.schema_migrations` (see `supabase/scripts/fix_migration_registry_bd_k1c.sql` for the bd‑k1c repair).
-     - Option B (idempotent migrations): wrap non‑idempotent DDL (e.g. `CREATE TRIGGER`) in `IF NOT EXISTS` blocks so replaying them is safe.
-   - Re‑run `supabase db push` after repair; only then add/merge new migrations.
-
-3. **New migrations (forward-only rule)**
-   - Prefer `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, and `CREATE INDEX IF NOT EXISTS` when possible to make replays safe.
-   - For **new migrations you add from now on**, use a **unique timestamp prefix** per file (e.g. `20251206152000_...`).
-   - **RPC Functions**: ALWAYS provide default values for arguments (e.g. `filter jsonb DEFAULT '{}'`) to avoid signature mismatches with standard backends.
-   - **Standard Scrape/Doc Schema**:
-     - `raw_scrapes`: MUST have `storage_uri` (text).
-     - `documents`: MUST have `source` (text).
-
-4. **Dev/test-data migrations hygiene**
-   - **Dev/test-data migrations** must live under `supabase/dev_migrations/`, NOT `supabase/migrations/`
-   - Schema migrations (DDL, RLS, indexes, FKs) go in `supabase/migrations/`
-   - Test-data seeding goes in `scripts/db-commands/` or `supabase/dev_migrations/`
-   - Do not use `supabase db push --include-all` on historical migrations; treat it as debugging tool only
-   - See `supabase/dev_migrations/README.md` for usage
-
-### Migration Registry Repair (When CLI Fails)
 
 If `supabase db push` fails with "Remote migration versions not found" (Drift), do **NOT** run manual SQL in Dashboard. This creates a vicious cycle.
 
@@ -150,6 +80,97 @@ If `supabase db push` fails with "Remote migration versions not found" (Drift), 
    supabase migration repair --status applied 20251129... 20251204...
    ```
 3. Then run `supabase db push` for new migrations.
+
+#### Ghost Versions: "Remote migration versions not found in local migrations directory"
+
+**Symptom:** CLI reports versions in the database that don't exist locally (e.g., `20250925`, `20251123`, `20251124`).
+
+**Root Cause Analysis - Two Scenarios:**
+
+**Scenario A: Missing Registry Marker Files (prime-radiant-ai pattern)**
+- The project uses "registry markers" - bare YYYYMMDD versions inserted into the registry as checkpoints (e.g., '20250925', '20251123')
+- Each marker requires a corresponding `YYYYMMDD_registry_marker.sql` file locally
+- If the marker file is missing/deleted, CLI fails even though the marker serves a valid purpose
+- **These are NOT errors to fix by reverting** - they're intentional checkpoints
+
+**Scenario B: True Ghost Versions**
+- Migrations manually applied via Dashboard SQL Editor without creating local files
+- Old migrations that were deleted/renamed locally but still in registry
+- Registry pollution from incorrect repair attempts
+
+**⚠️ CRITICAL: Do NOT edit migration SQL files to add IF NOT EXISTS guards as a workaround. This doesn't fix the root cause.**
+
+**Railway Authentication Issue:**
+- If you get `password authentication failed` errors, you're not authenticated with the production database.
+- **Fix:** Use `railway run supabase ...` instead of plain `supabase ...` commands. This injects the correct `DATABASE_URL`.
+
+**Step-by-Step Fix:**
+
+**1. Identify what's in the registry:**
+```bash
+# In Railway shell
+railway run supabase migration list
+# OR query the registry directly
+railway run -- psql "$DATABASE_URL" -c \
+  "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version;"
+```
+
+**2. Compare with local files:**
+```bash
+# List local migration files
+ls supabase/migrations/*.sql | sed 's/.*\///;s/_.*//' | sort
+```
+
+**3. Determine fix strategy based on version type:**
+
+**For Registry Markers (Scenario A):**
+- If version is a bare date (8 digits, no timestamp) like `20251124`
+- AND there are other migrations with that prefix (e.g., `20251124_advisor_feedback.sql`)
+- **Fix:** Create a marker file to satisfy CLI:
+  ```bash
+  cd supabase/migrations
+  cat > 20251124_registry_marker.sql <<'EOF'
+  -- Marker migration for version 20251124
+  -- Context: Registry checkpoint from schema repair
+  --
+  -- This file exists solely to satisfy Supabase CLI's requirement that every
+  -- version present in supabase_migrations.schema_migrations has a matching
+  -- local migration file whose name begins with the same version prefix.
+  --
+  -- The actual schema changes for this period were applied via timestamped
+  -- migrations or golden schema bootstrap scripts.
+  -- No additional DDL should be added here.
+
+  EOF
+  ```
+- This is safe and maintains the checkpoint system
+
+**For True Ghost Versions (Scenario B):**
+- If version doesn't correspond to any local files AND wasn't an intentional marker
+- **Fix:** Revert from registry:
+  ```bash
+  railway run supabase migration repair --status reverted <ghost_version>
+  ```
+- This removes the ghost WITHOUT dropping database objects
+- Only do this if you're certain it's not an intentional marker
+
+**4. Verify and push:**
+```bash
+railway run supabase migration list  # Should show no errors
+railway run supabase db push         # Should succeed for new migrations
+```
+
+**Prevention:**
+- **If using registry markers:** Keep marker files in version control alongside the migrations they checkpoint
+- **Document marker strategy:** Add comments in marker files explaining their purpose (see example above)
+- **Prefer timestamped migrations:** Use full `YYYYMMDDHHMMSS` format to avoid ambiguity
+- **Never manually run migration SQL in Dashboard** - always use `supabase db push`
+- **If you must use Dashboard for emergency fixes:** Generate a proper migration file afterward with `supabase db diff`
+
+**Registry Marker Strategy Trade-offs:**
+- ✅ **Pros:** Clear checkpoints for which batches of migrations are applied; useful for repair scripts
+- ❌ **Cons:** Extra files to maintain; CLI confusion if markers are missing; not a Supabase best practice
+- **Alternative:** Eliminate markers entirely, use only timestamped migrations, and repair registry only when truly needed
 
 ## Schema Definitions
 
