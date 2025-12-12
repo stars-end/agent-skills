@@ -1,0 +1,14 @@
+{
+  "repo": "llm-common",
+  "required": [
+    "sync-feature-branch",
+    "create-pull-request",
+    "lint-check"
+  ],
+  "recommended": [
+    "issue-first",
+    "finish-feature",
+    "session-end"
+  ]
+}
+

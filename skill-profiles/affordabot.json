@@ -1,0 +1,21 @@
+{
+  "repo": "affordabot",
+  "required": [
+    "issue-first",
+    "sync-feature-branch",
+    "create-pull-request",
+    "fix-pr-feedback",
+    "merge-pr",
+    "railway-doctor",
+    "lockfile-doctor"
+  ],
+  "recommended": [
+    "beads-workflow",
+    "beads-guard",
+    "docs-create",
+    "lint-check",
+    "finish-feature",
+    "session-end"
+  ]
+}
+
