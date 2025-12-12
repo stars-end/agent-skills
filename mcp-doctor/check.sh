@@ -93,8 +93,8 @@ if [[ "$missing" -eq 0 ]]; then
 fi
 
 echo "⚠️ mcp-doctor: $missing missing items"
+echo "Tip: setup instructions: $SKILLS_DIR/mcp-doctor/SKILL.md"
 if [[ "$STRICT" == "1" ]]; then
   exit 1
 fi
 exit 0
-
