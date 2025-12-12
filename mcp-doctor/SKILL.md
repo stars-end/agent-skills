@@ -7,14 +7,27 @@ Soft doctor to verify the **canonical MCP servers** are discoverable/configured 
 This does **not** validate the MCP servers themselves beyond basic “config present” checks, and it must **never print secrets**
 (bearer tokens, API keys, headers).
 
-## Canonical MCP servers (stars-end)
+## Required vs Optional MCP servers
 
-These are the MCP integrations we consider “standard” across our fleet:
+### REQUIRED (agent-mail only)
 
-1. **universal-skills** — https://github.com/klaudworks/universal-skills  
-2. **Serena MCP** — https://github.com/oraios/serena/blob/main/README.md  
-3. **Z.ai search MCP** — https://docs.z.ai/devpack/mcp/search-mcp-server  
-4. **Agent Mail MCP** — https://github.com/Dicklesworthstone/mcp_agent_mail  
+1. **Agent Mail MCP** — https://github.com/Dicklesworthstone/mcp_agent_mail
+   - **Required** for multi-agent coordination, DX alerts, and shared state
+   - All agents MUST have this configured
+
+### OPTIONAL (recommended but not required)
+
+2. **universal-skills** — https://github.com/klaudworks/universal-skills
+   - Recommended for skill discovery and management
+   - Falls back gracefully if missing
+
+3. **Serena MCP** — https://github.com/oraios/serena/blob/main/README.md
+   - Recommended for advanced code analysis
+   - Optional enhancement
+
+4. **Z.ai search MCP** — https://docs.z.ai/devpack/mcp/search-mcp-server
+   - Recommended for web search capabilities
+   - Optional enhancement  
 
 ## What it checks
 

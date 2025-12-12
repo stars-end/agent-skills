@@ -10,5 +10,15 @@
     "finish-feature",
     "session-end",
     "mcp-doctor"
-  ]
+  ],
+  "mcp": {
+    "required": [
+      "agent-mail"
+    ],
+    "optional": [
+      "universal-skills",
+      "serena",
+      "z.ai-search"
+    ]
+  }
 }
