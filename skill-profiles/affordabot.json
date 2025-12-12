@@ -15,7 +15,7 @@
     "docs-create",
     "lint-check",
     "finish-feature",
-    "session-end"
+    "session-end",
+    "mcp-doctor"
   ]
 }
-
