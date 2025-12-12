@@ -5,6 +5,9 @@ echo "🩺 mcp-doctor — canonical MCP + CLI checks (no secrets)"
 
 STRICT="${MCP_DOCTOR_STRICT:-0}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILLS_DIR="${SKILLS_DIR:-"$(cd "${SCRIPT_DIR}/.." && pwd)"}"
+
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 FILES=(
