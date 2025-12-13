@@ -181,28 +181,32 @@ runs:
       run: |
         mkdir -p $(dirname ${{ inputs.output-file }})
 
-        cat > ${{ inputs.output-file }} << 'REPORT'
-        # DX Audit Report
+        # Calculate toil rate percentage
+        TOIL_PCT=$(echo "scale=1; ${{ steps.analyze.outputs.toil-rate }} * 100" | bc)
+        FAILURE_PCT=$(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)
 
-        **Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-        **Commits analyzed**: ${{ steps.collect-commits.outputs.total-commits }}
-        **CI runs analyzed**: ${{ steps.collect-ci.outputs.total-runs }}
+        # Generate report
+        cat > ${{ inputs.output-file }} <<-'REPORT'
+	# DX Audit Report
 
-        ## Summary
+	**Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+	**Commits analyzed**: ${{ steps.collect-commits.outputs.total-commits }}
+	**CI runs analyzed**: ${{ steps.collect-ci.outputs.total-runs }}
 
-        - **Toil rate**: ${{ steps.analyze.outputs.toil-rate }} (${{ steps.analyze.outputs.toil-rate | awk '{print $1*100}' }}%)
-        - **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}
-        - **CI failure rate**: $(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)%
+	## Summary
 
-        ## Recommendations
+	- **Toil rate**: ${{ steps.analyze.outputs.toil-rate }} (${TOIL_PCT}%)
+	- **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}
+	- **CI failure rate**: ${FAILURE_PCT}%
 
-        $(cat /tmp/recommendations.txt 2>/dev/null || echo "- No recommendations available")
+	## Recommendations
 
-        ## Data
+	$(cat /tmp/recommendations.txt 2>/dev/null || echo "- No recommendations available")
 
-        See /tmp/aggregation.md for full analysis data.
+	## Data
 
-        REPORT
+	See /tmp/aggregation.md for full analysis data.
+	REPORT
 
         echo "✅ Report generated: ${{ inputs.output-file }}"
 
