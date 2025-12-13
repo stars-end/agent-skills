@@ -19,6 +19,10 @@ inputs:
     description: 'Beads epic to post summary to (e.g., bd-audit)'
     required: false
     default: ''
+  repo-writer-token:
+    description: 'Token with contents:write for pushing Beads JSONL (optional)'
+    required: false
+    default: ''
 
 outputs:
   toil-rate:
@@ -333,9 +337,21 @@ runs:
           exit 0
         fi
         
+        # Check if we have a token for pushing
+        TOKEN="${{ inputs.repo-writer-token }}"
+        if [ -z "$TOKEN" ]; then
+          echo "⚠️  No repo-writer-token provided, skipping push"
+          echo "commit-status=no-token" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
         # Configure git for commit
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
+        
+        # Set up authenticated remote for push
+        REPO_URL=$(git remote get-url origin | sed 's|https://|https://x-access-token:'"$TOKEN"'@|')
+        git remote set-url origin "$REPO_URL"
         
         # Commit and push
         git add .beads/issues.jsonl
@@ -343,13 +359,14 @@ runs:
         git commit -m "$COMMIT_MSG" -m "Feature-Key: ${{ inputs.beads-epic }}" -m "Agent: dx-auditor"
         
         git push || {
-          echo "⚠️  git push failed (may need contents:write permission)"
+          echo "⚠️  git push failed"
           echo "commit-status=push-failed" >> $GITHUB_OUTPUT
           exit 1
         }
         
         echo "✅ Committed Beads JSONL"
         echo "commit-status=ok" >> $GITHUB_OUTPUT
+
 
     - name: Summary
       shell: bash
