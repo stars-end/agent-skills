@@ -350,8 +350,8 @@ runs:
         git config --local user.name "github-actions[bot]"
         
         # Set up authenticated remote for push
-        REPO_URL=$(git remote get-url origin | sed 's|https://|https://x-access-token:'"$TOKEN"'@|')
-        git remote set-url origin "$REPO_URL"
+        # Use simple URL format (works for standard GH repos)
+        git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git"
         
         # Commit and push
         git add .beads/issues.jsonl
