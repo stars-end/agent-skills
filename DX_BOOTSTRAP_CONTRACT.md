@@ -119,6 +119,18 @@ PY
 
 ### Required Environment Variables
 
+**DX_AGENT_ID** (recommended for consistent identity):
+```bash
+# Add to ~/.bashrc, ~/.zshrc, or ~/.profile
+export DX_AGENT_ID="$(hostname -s)-claude-code"
+```
+
+**Format**: `<magicdns-host>-<platform>` (e.g., `v2202509262171386004-claude-code`)
+**Status**: P2, warn-only. Provides stable identity for git trailers and Agent Mail.
+**Fallback**: Auto-detects from hostname + platform if not set.
+
+See `DX_AGENT_ID.md` for full specification.
+
 **Agent Mail** (if using multi-agent coordination):
 ```bash
 export AGENT_MAIL_URL="http://macmini:8765/mcp/"

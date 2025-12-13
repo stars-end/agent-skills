@@ -153,13 +153,18 @@ Show informational message if doc updates recommended:
 
 If NO discovery (normal commit):
 ```bash
+# Get agent identity (uses DX_AGENT_ID if set, fallback to auto-detect)
+AGENT_ID="$(~/.agent/skills/scripts/get_agent_identity.sh)"
+
 git add -A
 git commit -m "feat: Progress on {FEATURE_KEY}
 
 Feature-Key: {currentIssue.id}
-Agent: claude-code
+Agent: $AGENT_ID
 Role: {current-role}"
 ```
+
+**Note**: `Agent:` trailer uses DX_AGENT_ID standard (bd-n1rv). See `DX_AGENT_ID.md` for details.
 
 If discovery handled, commit was already done in step 4.
 
