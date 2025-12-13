@@ -253,8 +253,6 @@ runs:
       id: create-issue
       if: inputs.beads-epic != ''
       shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
       run: |
         WEEK=$(date +%Y-W%W)
         TOIL="${{ steps.analyze.outputs.toil-fraction }}"
