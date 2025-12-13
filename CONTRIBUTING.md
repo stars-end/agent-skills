@@ -4,6 +4,22 @@
 
 ---
 
+## 📋 DX Bootstrap Contract
+
+**All agents working across repos MUST follow the [DX Bootstrap Contract](./DX_BOOTSTRAP_CONTRACT.md)**
+
+### Quick Reference
+
+**Session start sequence** (mandatory):
+1. `git pull origin master`
+2. `~/.agent/skills/dx-doctor/check.sh`
+3. Register Agent Mail identity (if configured)
+4. Check inbox for assignments
+
+**See**: `DX_BOOTSTRAP_CONTRACT.md` for full details
+
+---
+
 ## 🚨 Critical Rule: Agent Update Instructions
 
 **EVERY PR that requires agents to take action MUST update `AGENT_UPDATE_INSTRUCTIONS.md`**
