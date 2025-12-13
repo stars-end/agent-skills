@@ -141,17 +141,7 @@ runs:
           -H "Content-Type: application/json" \
           -H "x-api-key: $ANTHROPIC_API_KEY" \
           -H "anthropic-version: 2023-06-01" \
-          -d @- <<EOF
-{
-  "model": "$MODEL",
-  "max_tokens": 2048,
-  "messages": [{
-    "role": "user",
-    "content": "$PROMPT"
-  }]
-}
-EOF
-        )
+          -d "{\"model\":\"$MODEL\",\"max_tokens\":2048,\"messages\":[{\"role\":\"user\",\"content\":$(echo "$PROMPT" | jq -Rs .)}]}")
 
         # Parse response
         CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text' 2>/dev/null || echo "")
