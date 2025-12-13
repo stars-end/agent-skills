@@ -9,16 +9,17 @@ This does **not** validate the MCP servers themselves beyond basic “config pre
 
 ## Required vs Optional MCP servers
 
-### REQUIRED (agent-mail only)
+### REQUIRED (skills plane)
 
-1. **Agent Mail MCP** — https://github.com/Dicklesworthstone/mcp_agent_mail
-   - **Required** for multi-agent coordination, DX alerts, and shared state
+1. **universal-skills** — https://github.com/klaudworks/universal-skills
+   - **Required** for the shared skills plane
+   - Enables skill discovery and management across all agents
    - All agents MUST have this configured
 
 ### OPTIONAL (recommended but not required)
 
-2. **universal-skills** — https://github.com/klaudworks/universal-skills
-   - Recommended for skill discovery and management
+2. **Agent Mail MCP** — https://github.com/Dicklesworthstone/mcp_agent_mail
+   - Recommended for multi-agent coordination, DX alerts, and shared state
    - Falls back gracefully if missing
 
 3. **Serena MCP** — https://github.com/oraios/serena/blob/main/README.md
@@ -35,6 +36,9 @@ This does **not** validate the MCP servers themselves beyond basic “config pre
   - Repo-local: `.claude/settings.json`, `.vscode/mcp.json`, `codex.mcp.json`, `gemini.mcp.json`, `.mcp.json`, `opencode.json`
   - User/global: `~/.claude/settings.json`, `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/settings.json`
 - Reports `configured` / `missing` per MCP server name.
+- **Verifies the canonical skills mount invariant**:
+  - `~/.agent/skills` MUST point to `~/agent-skills` (symlink or exact copy)
+  - This ensures universal-skills MCP can discover skills correctly
 - Optionally reports presence of CLI tools we rely on:
   - `railway`, `gh`
 
@@ -54,6 +58,30 @@ export MCP_DOCTOR_STRICT=1  # exit non-zero if any required MCP missing
 ## Platform setup (copy/paste)
 
 This section is intentionally **copy/paste friendly** and avoids embedding secrets.
+
+### Required: Skills mount
+
+**First**, ensure the canonical skills mount is set up:
+
+```bash
+# Ensure ~/agent-skills exists
+if [[ ! -d ~/agent-skills ]]; then
+  git clone https://github.com/stars-end/agent-skills.git ~/agent-skills
+fi
+
+# Create symlink ~/.agent/skills -> ~/agent-skills
+mkdir -p ~/.agent
+ln -sfn ~/agent-skills ~/.agent/skills
+
+# Verify
+ls -la ~/.agent/skills
+```
+
+You can also use the helper script:
+
+```bash
+~/agent-skills/scripts/ensure_agent_skills_mount.sh
+```
 
 ### A) Claude Code
 

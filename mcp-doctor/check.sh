@@ -41,22 +41,22 @@ missing_optional=0
 echo ""
 echo "REQUIRED MCP servers:"
 
-# 1) agent-mail (REQUIRED)
-if f="$(have_in_files \"mcp-agent-mail\")" || f="$(have_in_files \"agent-mail\")"; then
-  echo "✅ agent-mail (config seen in: $f)"
+# 1) universal-skills (REQUIRED - skills plane)
+if f="$(have_in_files \"universal-skills\")" || f="$(have_in_files \"skills\")"; then
+  echo "✅ skills (universal-skills) (config seen in: $f)"
 else
-  echo "❌ agent-mail (no config found) — REQUIRED"
+  echo "❌ skills (universal-skills) (no config found) — REQUIRED"
   missing_required=$((missing_required+1))
 fi
 
 echo ""
 echo "OPTIONAL MCP servers:"
 
-# 2) universal-skills (OPTIONAL)
-if f="$(have_in_files \"universal-skills\")"; then
-  echo "✅ universal-skills (config seen in: $f)"
+# 2) agent-mail (OPTIONAL)
+if f="$(have_in_files \"mcp-agent-mail\")" || f="$(have_in_files \"agent-mail\")"; then
+  echo "✅ agent-mail (config seen in: $f)"
 else
-  echo "⚠️  universal-skills (no config found) — optional"
+  echo "⚠️  agent-mail (no config found) — optional"
   missing_optional=$((missing_optional+1))
 fi
 
@@ -74,6 +74,35 @@ if f="$(have_in_files \"z.ai\")" || f="$(have_in_files \"api.z.ai\")" || f="$(ha
 else
   echo "⚠️  z.ai search (no config found) — optional"
   missing_optional=$((missing_optional+1))
+fi
+
+echo ""
+echo "REQUIRED skills mount:"
+
+# Check ~/.agent/skills -> ~/agent-skills invariant
+SKILLS_MOUNT="$HOME/.agent/skills"
+AGENT_SKILLS_DIR="$HOME/agent-skills"
+
+if [[ -L "$SKILLS_MOUNT" ]]; then
+  TARGET="$(readlink "$SKILLS_MOUNT")"
+  if [[ "$TARGET" == "$AGENT_SKILLS_DIR" ]] || [[ "$(cd "$SKILLS_MOUNT" && pwd)" == "$AGENT_SKILLS_DIR" ]]; then
+    echo "✅ ~/.agent/skills -> ~/agent-skills (symlink: $TARGET)"
+  else
+    echo "❌ ~/.agent/skills points to wrong target: $TARGET (expected: $AGENT_SKILLS_DIR)"
+    missing_required=$((missing_required+1))
+  fi
+elif [[ -d "$SKILLS_MOUNT" ]]; then
+  MOUNT_REAL="$(cd "$SKILLS_MOUNT" && pwd)"
+  if [[ "$MOUNT_REAL" == "$AGENT_SKILLS_DIR" ]]; then
+    echo "✅ ~/.agent/skills -> ~/agent-skills (directory)"
+  else
+    echo "❌ ~/.agent/skills exists but is not ~/agent-skills: $MOUNT_REAL"
+    missing_required=$((missing_required+1))
+  fi
+else
+  echo "❌ ~/.agent/skills does not exist — REQUIRED"
+  echo "   Run: ln -sfn ~/agent-skills ~/.agent/skills"
+  missing_required=$((missing_required+1))
 fi
 
 echo ""
