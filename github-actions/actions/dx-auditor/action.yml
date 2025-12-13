@@ -118,23 +118,43 @@ runs:
         API_URL="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}/v1/messages"
         MODEL="${ANTHROPIC_DEFAULT_SONNET_MODEL:-claude-sonnet-4-20250514}"
 
-        # Create prompt
-        PROMPT="You are a DX (Developer Experience) analyst. Analyze the following commit and CI data to identify toil patterns.
+        # Create prompt with ultrathink for deep analysis
+        PROMPT="You are an elite DX (Developer Experience) analyst. <ultrathink>
+
+        Think step by step:
+        1. First, categorize each commit as 'feature work' or 'toil' (work that could be automated or prevented)
+        2. Identify recurring patterns in the toil commits
+        3. Trace root causes and propose systemic fixes
+
+        Here is the commit and CI data to analyze:
 
         ${AGGREGATION}
 
-        Please provide:
-        1. **Toil rate**: Calculate the percentage of commits that are toil (fixing lockfiles, Beads sync, fixtures, CI iterations) vs feature work. Output as decimal (e.g., 0.42 for 42%).
-        2. **Top pattern**: Identify the most common toil pattern (lockfile-drift, beads-sync, fixture-config, python-version, ci-iterations, or other).
-        3. **Recommendations**: 2-3 specific, actionable recommendations to reduce toil.
+        Based on your deep analysis, provide:
 
-        Format your response as:
-        TOIL_RATE: <decimal>
-        TOP_PATTERN: <pattern-name>
+        1. **Toil commits**: How many commits are toil vs total? Express as a fraction like '40/83 commits are toil'. Toil includes things like:
+           - Fixing lockfile drift (poetry.lock, pnpm-lock.yaml)
+           - Beads/JSONL sync issues
+           - CI configuration fixes
+           - Test fixture/config adjustments
+           - Multiple commits on same PR (iteration loops)
+           - Python version or dependency fixes
+           - Any work that could have been prevented or automated
+
+        2. **Top pattern**: What is the single most common toil pattern you observe? Be specific and descriptive (e.g., 'lockfile-drift', 'ci-iteration-loops', 'missing-dependency', 'test-fixture-mismatch'). These are examples - identify whatever pattern actually dominates.
+
+        3. **Root cause**: One sentence explaining WHY this toil keeps happening.
+
+        4. **Recommendations**: 2-3 specific, actionable improvements prioritized by impact.
+
+        Format your response EXACTLY as:
+        TOIL_FRACTION: <N>/<M> commits are toil
+        TOP_PATTERN: <descriptive-pattern-name>
+        ROOT_CAUSE: <one sentence>
         RECOMMENDATIONS:
-        - <recommendation 1>
-        - <recommendation 2>
-        - <recommendation 3>"
+        - [HIGH] <highest impact recommendation>
+        - [MEDIUM] <medium impact recommendation>
+        - [LOW] <lower priority recommendation>"
 
         # Call Claude API with timeout and error handling
         echo "Calling API at: $API_URL with model: $MODEL"
@@ -150,8 +170,9 @@ runs:
         if [ "$CURL_EXIT" -ne 0 ]; then
           echo "⚠️  curl failed with exit code: $CURL_EXIT"
           echo "Falling back to manual analysis..."
-          TOIL_RATE="0.0"
+          TOIL_FRACTION="unknown"
           TOP_PATTERN="unknown"
+          ROOT_CAUSE="LLM API unreachable"
           RECOMMENDATIONS="- Unable to reach LLM API (curl exit $CURL_EXIT)"
         else
           # Parse response
@@ -160,32 +181,38 @@ runs:
           if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
             echo "⚠️  Claude API returned empty response"
             echo "Response: $RESPONSE"
-            TOIL_RATE="0.0"
+            TOIL_FRACTION="unknown"
             TOP_PATTERN="unknown"
+            ROOT_CAUSE="LLM returned empty"
             RECOMMENDATIONS="- LLM API returned empty response"
           else
             echo "✅ Claude analysis complete"
             echo "$CONTENT" > /tmp/claude-analysis.txt
 
-            # Extract toil rate
-            TOIL_RATE=$(echo "$CONTENT" | grep -oP 'TOIL_RATE:\s*\K[\d.]+' || echo "0.0")
+            # Extract toil fraction (e.g., "40/83 commits are toil")
+            TOIL_FRACTION=$(echo "$CONTENT" | grep -oP 'TOIL_FRACTION:\s*\K[^\n]+' | head -1 || echo "unknown")
 
             # Extract top pattern
-            TOP_PATTERN=$(echo "$CONTENT" | grep -oP 'TOP_PATTERN:\s*\K[\w-]+' || echo "unknown")
+            TOP_PATTERN=$(echo "$CONTENT" | grep -oP 'TOP_PATTERN:\s*\K[^\n]+' | head -1 || echo "unknown")
+
+            # Extract root cause
+            ROOT_CAUSE=$(echo "$CONTENT" | grep -oP 'ROOT_CAUSE:\s*\K[^\n]+' | head -1 || echo "unknown")
 
             # Extract recommendations
             RECOMMENDATIONS=$(echo "$CONTENT" | sed -n '/^RECOMMENDATIONS:/,$p' | tail -n +2 || echo "- No specific recommendations generated")
           fi
         fi
 
-        echo "toil-rate=$TOIL_RATE" >> $GITHUB_OUTPUT
+        echo "toil-fraction=$TOIL_FRACTION" >> $GITHUB_OUTPUT
         echo "top-pattern=$TOP_PATTERN" >> $GITHUB_OUTPUT
+        echo "root-cause=$ROOT_CAUSE" >> $GITHUB_OUTPUT
 
         # Save recommendations to temp file for report generation
         echo "$RECOMMENDATIONS" > /tmp/recommendations.txt
 
-        echo "Toil rate: $TOIL_RATE"
+        echo "Toil: $TOIL_FRACTION"
         echo "Top pattern: $TOP_PATTERN"
+        echo "Root cause: $ROOT_CAUSE"
         echo "Recommendations extracted"
 
     - name: Generate audit report
@@ -193,22 +220,22 @@ runs:
       run: |
         mkdir -p $(dirname ${{ inputs.output-file }})
 
-        # Calculate percentages with awk (bc may not be installed)
-        TOIL_PCT=$(awk "BEGIN {printf \"%.1f\", ${{ steps.analyze.outputs.toil-rate }} * 100}")
-        FAILURE_PCT=$(awk "BEGIN {printf \"%.2f\", ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100}")
+        # Calculate failure percentage with awk
+        FAILURE_PCT=$(awk "BEGIN {printf \"%.1f\", ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100}")
 
         # Generate report
         {
           echo "# DX Audit Report"
           echo ""
-          echo "**Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "**Generated**: $(date -u +\"%Y-%m-%d %H:%M:%S UTC\")"
           echo "**Commits analyzed**: ${{ steps.collect-commits.outputs.total-commits }}"
           echo "**CI runs analyzed**: ${{ steps.collect-ci.outputs.total-runs }}"
           echo ""
           echo "## Summary"
           echo ""
-          echo "- **Toil rate**: ${{ steps.analyze.outputs.toil-rate }} (${TOIL_PCT}%)"
+          echo "- **Toil**: ${{ steps.analyze.outputs.toil-fraction }}"
           echo "- **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}"
+          echo "- **Root cause**: ${{ steps.analyze.outputs.root-cause }}"
           echo "- **CI failure rate**: ${FAILURE_PCT}%"
           echo ""
           echo "## Recommendations"
@@ -238,6 +265,7 @@ runs:
       run: |
         echo "### DX Audit Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- **Toil rate**: ${{ steps.analyze.outputs.toil-rate }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Toil**: ${{ steps.analyze.outputs.toil-fraction }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Root cause**: ${{ steps.analyze.outputs.root-cause }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Report**: [${{ inputs.output-file }}](${{ inputs.output-file }})" >> $GITHUB_STEP_SUMMARY
