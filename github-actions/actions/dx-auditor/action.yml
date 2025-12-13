@@ -56,14 +56,15 @@ runs:
       run: |
         echo "Collecting last $LOOKBACK_RUNS CI runs..."
 
-        # Get workflow run conclusions (limit is applied via head, not jq slice)
+        # Get workflow run conclusions
+        # Use || true to handle SIGPIPE (exit 141) when head closes pipe early
         gh api repos/${{ github.repository }}/actions/runs \
           --paginate \
           --jq '.workflow_runs[] | {id, conclusion, created_at, head_commit}' \
-          | head -n "$LOOKBACK_RUNS" > /tmp/ci-runs.json
+          2>/dev/null | head -n "$LOOKBACK_RUNS" > /tmp/ci-runs.json || true
 
-        TOTAL=$(jq -s 'length' /tmp/ci-runs.json)
-        FAILED=$(jq -s '[.[] | select(.conclusion == "failure")] | length' /tmp/ci-runs.json)
+        TOTAL=$(jq -s 'length' /tmp/ci-runs.json 2>/dev/null || echo "0")
+        FAILED=$(jq -s '[.[] | select(.conclusion == "failure")] | length' /tmp/ci-runs.json 2>/dev/null || echo "0")
 
         echo "total-runs=$TOTAL" >> $GITHUB_OUTPUT
         echo "failed-runs=$FAILED" >> $GITHUB_OUTPUT
