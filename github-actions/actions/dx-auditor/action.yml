@@ -193,9 +193,9 @@ runs:
       run: |
         mkdir -p $(dirname ${{ inputs.output-file }})
 
-        # Calculate toil rate percentage
-        TOIL_PCT=$(echo "scale=1; ${{ steps.analyze.outputs.toil-rate }} * 100" | bc)
-        FAILURE_PCT=$(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)
+        # Calculate percentages with awk (bc may not be installed)
+        TOIL_PCT=$(awk "BEGIN {printf \"%.1f\", ${{ steps.analyze.outputs.toil-rate }} * 100}")
+        FAILURE_PCT=$(awk "BEGIN {printf \"%.2f\", ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100}")
 
         # Generate report
         {
