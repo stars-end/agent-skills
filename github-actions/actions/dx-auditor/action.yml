@@ -227,7 +227,7 @@ runs:
       shell: bash
       run: |
         if command -v bd &> /dev/null; then
-          bd comment ${{ inputs.beads-epic }} "$(cat ${{ inputs.output-file }})"
+          bd comment ${{ inputs.beads-epic }} "$(cat ${{ inputs.output-file }})" || echo "⚠️  bd comment failed (db may not exist)"
           echo "✅ Posted audit summary to ${{ inputs.beads-epic }}"
         else
           echo "⚠️  bd CLI not available, skipping Beads post"
