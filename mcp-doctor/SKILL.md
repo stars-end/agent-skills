@@ -83,6 +83,20 @@ You can also use the helper script:
 ~/agent-skills/scripts/ensure_agent_skills_mount.sh
 ```
 
+### Config File Locations (Linux)
+
+**Claude Code:**
+- User config: `~/.claude/settings.json` or `~/.claude.json`
+- Repo config: `.claude/settings.json`
+
+**Codex CLI:**
+- User config: `~/.codex/config.toml`
+- Repo config: `codex.mcp.json` or `.codex/config.toml`
+
+**Gemini CLI / Antigravity:**
+- User config: `~/.gemini/settings.json`
+- Repo config: `gemini.mcp.json`
+
 ### A) Claude Code
 
 1) **universal-skills** (stdio)

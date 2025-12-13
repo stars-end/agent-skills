@@ -83,14 +83,18 @@ When this skill is relevant:
 
 ```bash
 # Check mode (default, safe for agents)
+./vm-bootstrap/check.sh
+# or
 ./vm-bootstrap/verify.sh check
 
-# Install mode (interactive)
-./vm-bootstrap/verify.sh install
+# Install mode (interactive, operator-confirmed)
+./vm-bootstrap/install.sh
 
 # Strict mode (CI)
 ./vm-bootstrap/verify.sh strict
 ```
+
+Note: `check.sh` is a wrapper for `verify.sh check`. `install.sh` provides interactive tool installation following the LINUX_VM_BOOTSTRAP_SPEC phases.
 
 ## Integration
 
