@@ -77,28 +77,27 @@ runs:
         echo "Aggregating failure patterns..."
 
         # Create aggregation report
-        cat > /tmp/aggregation.md << 'REPORT'
-        # DX Audit Data Aggregation
-
-        ## Commit Analysis (${{ steps.collect-commits.outputs.total-commits }} commits)
-
-        $(cat /tmp/commits.txt)
-
-        ## CI Run Analysis (${{ steps.collect-ci.outputs.total-runs }} runs)
-
-        - Total runs: ${{ steps.collect-ci.outputs.total-runs }}
-        - Failed runs: ${{ steps.collect-ci.outputs.failed-runs }}
-        - Failure rate: $(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)%
-
-        ## Common Patterns to Detect
-
-        - **Lockfile drift**: Commits fixing poetry.lock or pnpm-lock.yaml drift
-        - **Beads sync**: Commits fixing .beads/issues.jsonl issues
-        - **Fixture config**: Commits fixing test fixture setup
-        - **Python version**: Commits fixing Python version mismatches
-        - **CI iterations**: Multiple commits on same feature (toil indicator)
-
-        REPORT
+        {
+          echo "# DX Audit Data Aggregation"
+          echo ""
+          echo "## Commit Analysis (${{ steps.collect-commits.outputs.total-commits }} commits)"
+          echo ""
+          cat /tmp/commits.txt
+          echo ""
+          echo "## CI Run Analysis (${{ steps.collect-ci.outputs.total-runs }} runs)"
+          echo ""
+          echo "- Total runs: ${{ steps.collect-ci.outputs.total-runs }}"
+          echo "- Failed runs: ${{ steps.collect-ci.outputs.failed-runs }}"
+          echo "- Failure rate: $(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)%"
+          echo ""
+          echo "## Common Patterns to Detect"
+          echo ""
+          echo "- **Lockfile drift**: Commits fixing poetry.lock or pnpm-lock.yaml drift"
+          echo "- **Beads sync**: Commits fixing .beads/issues.jsonl issues"
+          echo "- **Fixture config**: Commits fixing test fixture setup"
+          echo "- **Python version**: Commits fixing Python version mismatches"
+          echo "- **CI iterations**: Multiple commits on same feature (toil indicator)"
+        } > /tmp/aggregation.md
 
         echo "✅ Aggregation complete"
 
@@ -186,27 +185,27 @@ runs:
         FAILURE_PCT=$(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)
 
         # Generate report
-        cat > ${{ inputs.output-file }} <<-'REPORT'
-	# DX Audit Report
-
-	**Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-	**Commits analyzed**: ${{ steps.collect-commits.outputs.total-commits }}
-	**CI runs analyzed**: ${{ steps.collect-ci.outputs.total-runs }}
-
-	## Summary
-
-	- **Toil rate**: ${{ steps.analyze.outputs.toil-rate }} (${TOIL_PCT}%)
-	- **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}
-	- **CI failure rate**: ${FAILURE_PCT}%
-
-	## Recommendations
-
-	$(cat /tmp/recommendations.txt 2>/dev/null || echo "- No recommendations available")
-
-	## Data
-
-	See /tmp/aggregation.md for full analysis data.
-	REPORT
+        {
+          echo "# DX Audit Report"
+          echo ""
+          echo "**Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "**Commits analyzed**: ${{ steps.collect-commits.outputs.total-commits }}"
+          echo "**CI runs analyzed**: ${{ steps.collect-ci.outputs.total-runs }}"
+          echo ""
+          echo "## Summary"
+          echo ""
+          echo "- **Toil rate**: ${{ steps.analyze.outputs.toil-rate }} (${TOIL_PCT}%)"
+          echo "- **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}"
+          echo "- **CI failure rate**: ${FAILURE_PCT}%"
+          echo ""
+          echo "## Recommendations"
+          echo ""
+          cat /tmp/recommendations.txt 2>/dev/null || echo "- No recommendations available"
+          echo ""
+          echo "## Data"
+          echo ""
+          echo "See /tmp/aggregation.md for full analysis data."
+        } > ${{ inputs.output-file }}
 
         echo "✅ Report generated: ${{ inputs.output-file }}"
 
