@@ -304,11 +304,8 @@ runs:
         PATTERN="${{ steps.analyze.outputs.top-pattern }}"
         ISSUE_URL="${{ steps.create-issue.outputs.issue-url }}"
         
-        # Build description
-        DESC=$(cat ${{ inputs.output-file }})
-        DESC="${DESC}
-
-        GitHub Issue: ${ISSUE_URL}"
+        # Build description (single line to avoid YAML issues)
+        DESC="DX Audit. GitHub Issue: ${ISSUE_URL} | Toil: ${TOIL} | Pattern: ${PATTERN}"
         
         # Create child issue under epic using --no-db to avoid SQLite requirement
         bd --no-db create "DX Audit ${WEEK}: ${TOIL}, ${PATTERN}" \
@@ -321,7 +318,38 @@ runs:
         }
         
         echo "✅ Created Beads issue under ${{ inputs.beads-epic }}"
-        echo "sync-status=ok" >> $GITHUB_OUTPUT
+        echo "sync-status=created" >> $GITHUB_OUTPUT
+
+    - name: Commit Beads JSONL
+      id: commit-beads
+      if: steps.beads-sync.outputs.sync-status == 'created'
+      continue-on-error: true
+      shell: bash
+      run: |
+        # Check if there are changes to commit
+        if [ -z "$(git status --porcelain .beads/issues.jsonl 2>/dev/null)" ]; then
+          echo "No changes to .beads/issues.jsonl"
+          echo "commit-status=no-changes" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Configure git for commit
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        
+        # Commit and push
+        git add .beads/issues.jsonl
+        COMMIT_MSG="chore: sync DX audit to Beads [skip ci]"
+        git commit -m "$COMMIT_MSG" -m "Feature-Key: ${{ inputs.beads-epic }}" -m "Agent: dx-auditor"
+        
+        git push || {
+          echo "⚠️  git push failed (may need contents:write permission)"
+          echo "commit-status=push-failed" >> $GITHUB_OUTPUT
+          exit 1
+        }
+        
+        echo "✅ Committed Beads JSONL"
+        echo "commit-status=ok" >> $GITHUB_OUTPUT
 
     - name: Summary
       shell: bash
@@ -338,10 +366,20 @@ runs:
           echo "- **Tracking**: [GitHub Issue](${{ steps.create-issue.outputs.issue-url }})" >> $GITHUB_STEP_SUMMARY
         fi
         
-        if [ "${{ steps.beads-sync.outputs.sync-status }}" = "ok" ]; then
-          echo "- **Beads**: ✅ Synced to ${{ inputs.beads-epic }}" >> $GITHUB_STEP_SUMMARY
-        elif [ "${{ steps.beads-sync.outputs.sync-status }}" = "failed" ]; then
-          echo "- **Beads**: ⚠️ Sync failed (see logs)" >> $GITHUB_STEP_SUMMARY
+        # Beads sync status
+        SYNC="${{ steps.beads-sync.outputs.sync-status }}"
+        COMMIT="${{ steps.commit-beads.outputs.commit-status }}"
+        
+        if [ "$SYNC" = "created" ] && [ "$COMMIT" = "ok" ]; then
+          echo "- **Beads**: ✅ Synced and committed to ${{ inputs.beads-epic }}" >> $GITHUB_STEP_SUMMARY
+        elif [ "$SYNC" = "created" ] && [ "$COMMIT" = "push-failed" ]; then
+          echo "- **Beads**: ⚠️ Created but push failed (check permissions)" >> $GITHUB_STEP_SUMMARY
+        elif [ "$SYNC" = "created" ]; then
+          echo "- **Beads**: ⚠️ Created but not committed" >> $GITHUB_STEP_SUMMARY
+        elif [ "$SYNC" = "no-cli" ] || [ "$SYNC" = "no-db" ]; then
+          echo "- **Beads**: ⏭️ Skipped (bd CLI or .beads not available)" >> $GITHUB_STEP_SUMMARY
+        elif [ "$SYNC" = "failed" ]; then
+          echo "- **Beads**: ❌ Sync failed (see logs)" >> $GITHUB_STEP_SUMMARY
         fi
         
         echo "" >> $GITHUB_STEP_SUMMARY
