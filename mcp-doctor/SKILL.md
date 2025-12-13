@@ -101,9 +101,62 @@ You can also use the helper script:
 
 1) **universal-skills** (stdio)
 
+**Option 1: npx wrapper (recommended for portability)**
+
 ```bash
 claude mcp add --transport stdio skills -- npx universal-skills mcp
 ```
+
+This pattern works without global installation and is portable across machines. The resulting config:
+
+```json
+{
+  "mcpServers": {
+    "universal-skills": {
+      "command": "npx",
+      "args": ["universal-skills", "mcp"]
+    }
+  }
+}
+```
+
+**Option 2: Direct binary (if installed globally)**
+
+```bash
+# If installed globally via:
+# npm install -g universal-skills
+# OR brew install universal-skills
+
+claude mcp add --transport stdio universal-skills -- universal-skills mcp
+```
+
+This pattern uses the installed binary directly. The resulting config:
+
+```json
+{
+  "mcpServers": {
+    "universal-skills": {
+      "command": "universal-skills",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Or with absolute path (common with Homebrew/Linuxbrew):
+
+```json
+{
+  "mcpServers": {
+    "universal-skills": {
+      "command": "/home/linuxbrew/.linuxbrew/bin/universal-skills",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+**Both patterns are valid.** Use `npx` for zero-install portability, or direct binary for slightly faster startup.
 
 2) **Z.ai Web Search MCP** (http)
 
@@ -130,9 +183,19 @@ Codex stores MCP config in `~/.codex/config.toml`:
 
 - **universal-skills** (stdio)
 
+**Option 1: npx wrapper (recommended)**
+
 ```bash
 codex mcp add skills -- npx universal-skills mcp
 ```
+
+**Option 2: Direct binary**
+
+```bash
+codex mcp add skills -- universal-skills mcp
+```
+
+Both patterns are valid. See section A) Claude Code above for detailed explanation of the differences.
 
 - **Agent Mail** (streamable http) – use env var for token:
 
@@ -154,6 +217,22 @@ env_http_headers = { "Authorization" = "ZAI_API_KEY" }
 
 Gemini CLI uses `~/.gemini/settings.json` (and supports `gemini mcp add …`).
 Antigravity should share the same file.
+
+- **universal-skills** (stdio)
+
+**Option 1: npx wrapper (recommended)**
+
+```bash
+gemini mcp add --transport stdio skills -- npx universal-skills mcp
+```
+
+**Option 2: Direct binary**
+
+```bash
+gemini mcp add --transport stdio universal-skills -- universal-skills mcp
+```
+
+Both patterns are valid. See section A) Claude Code above for detailed explanation.
 
 - **Z.ai Web Search**:
 

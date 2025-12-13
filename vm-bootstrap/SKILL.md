@@ -69,6 +69,29 @@ Before running in `install` or `strict` mode:
      - Commit/stash changes first, OR
      - Use `/dirty-repo-bootstrap` skill to snapshot to WIP branch
 
+## Agent Identity (DX_AGENT_ID)
+
+**Recommended**: Set `DX_AGENT_ID` for consistent agent identification across repos and sessions.
+
+```bash
+# Add to ~/.bashrc, ~/.zshrc, or ~/.profile
+export DX_AGENT_ID="$(hostname -s)-claude-code"
+```
+
+**Format**: `<magicdns-host>-<platform>`
+**Examples**: `v2202509262171386004-claude-code`, `macmini-codex-cli`
+
+**Why**: Provides stable identity for git trailers, Agent Mail coordination, and multi-repo workflows.
+
+**Helper script**:
+```bash
+~/.agent/skills/scripts/get_agent_identity.sh
+```
+
+**Status**: P2, warn-only. Missing DX_AGENT_ID triggers warnings but doesn't block operations.
+
+See `DX_AGENT_ID.md` for full specification and migration path.
+
 ## Agent Guidance
 
 When this skill is relevant:
