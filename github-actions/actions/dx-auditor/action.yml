@@ -136,35 +136,47 @@ runs:
         - <recommendation 2>
         - <recommendation 3>"
 
-        # Call Claude API
-        RESPONSE=$(curl -s -X POST "$API_URL" \
+        # Call Claude API with timeout and error handling
+        echo "Calling API at: $API_URL with model: $MODEL"
+        RESPONSE=""
+        CURL_EXIT=0
+        RESPONSE=$(curl -s --max-time 60 -X POST "$API_URL" \
           -H "Content-Type: application/json" \
           -H "x-api-key: $ANTHROPIC_API_KEY" \
           -H "anthropic-version: 2023-06-01" \
-          -d "{\"model\":\"$MODEL\",\"max_tokens\":2048,\"messages\":[{\"role\":\"user\",\"content\":$(echo "$PROMPT" | jq -Rs .)}]}")
+          -d "{\"model\":\"$MODEL\",\"max_tokens\":2048,\"messages\":[{\"role\":\"user\",\"content\":$(echo "$PROMPT" | jq -Rs .)}]}" \
+        ) || CURL_EXIT=$?
 
-        # Parse response
-        CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text' 2>/dev/null || echo "")
-
-        if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
-          echo "⚠️  Claude API call failed or returned empty response"
-          echo "Response: $RESPONSE"
-          # Fallback to manual analysis
+        if [ "$CURL_EXIT" -ne 0 ]; then
+          echo "⚠️  curl failed with exit code: $CURL_EXIT"
+          echo "Falling back to manual analysis..."
           TOIL_RATE="0.0"
           TOP_PATTERN="unknown"
+          RECOMMENDATIONS="- Unable to reach LLM API (curl exit $CURL_EXIT)"
         else
-          echo "✅ Claude analysis complete"
-          echo "$CONTENT" > /tmp/claude-analysis.txt
+          # Parse response
+          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text' 2>/dev/null || echo "")
 
-          # Extract toil rate
-          TOIL_RATE=$(echo "$CONTENT" | grep -oP 'TOIL_RATE:\s*\K[\d.]+' || echo "0.0")
+          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
+            echo "⚠️  Claude API returned empty response"
+            echo "Response: $RESPONSE"
+            TOIL_RATE="0.0"
+            TOP_PATTERN="unknown"
+            RECOMMENDATIONS="- LLM API returned empty response"
+          else
+            echo "✅ Claude analysis complete"
+            echo "$CONTENT" > /tmp/claude-analysis.txt
 
-          # Extract top pattern
-          TOP_PATTERN=$(echo "$CONTENT" | grep -oP 'TOP_PATTERN:\s*\K[\w-]+' || echo "unknown")
+            # Extract toil rate
+            TOIL_RATE=$(echo "$CONTENT" | grep -oP 'TOIL_RATE:\s*\K[\d.]+' || echo "0.0")
+
+            # Extract top pattern
+            TOP_PATTERN=$(echo "$CONTENT" | grep -oP 'TOP_PATTERN:\s*\K[\w-]+' || echo "unknown")
+
+            # Extract recommendations
+            RECOMMENDATIONS=$(echo "$CONTENT" | sed -n '/^RECOMMENDATIONS:/,$p' | tail -n +2 || echo "- No specific recommendations generated")
+          fi
         fi
-
-        # Extract recommendations (everything after "RECOMMENDATIONS:")
-        RECOMMENDATIONS=$(echo "$CONTENT" | sed -n '/^RECOMMENDATIONS:/,$p' | tail -n +2 || echo "- No specific recommendations generated")
 
         echo "toil-rate=$TOIL_RATE" >> $GITHUB_OUTPUT
         echo "top-pattern=$TOP_PATTERN" >> $GITHUB_OUTPUT
