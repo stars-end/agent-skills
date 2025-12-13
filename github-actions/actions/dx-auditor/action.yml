@@ -119,25 +119,22 @@ runs:
         MODEL="${ANTHROPIC_DEFAULT_SONNET_MODEL:-claude-sonnet-4-20250514}"
 
         # Create prompt
-        PROMPT="$(cat <<'EOF'
-You are a DX (Developer Experience) analyst. Analyze the following commit and CI data to identify toil patterns.
+        PROMPT="You are a DX (Developer Experience) analyst. Analyze the following commit and CI data to identify toil patterns.
 
-${AGGREGATION}
+        ${AGGREGATION}
 
-Please provide:
-1. **Toil rate**: Calculate the percentage of commits that are toil (fixing lockfiles, Beads sync, fixtures, CI iterations) vs feature work. Output as decimal (e.g., 0.42 for 42%).
-2. **Top pattern**: Identify the most common toil pattern (lockfile-drift, beads-sync, fixture-config, python-version, ci-iterations, or other).
-3. **Recommendations**: 2-3 specific, actionable recommendations to reduce toil.
+        Please provide:
+        1. **Toil rate**: Calculate the percentage of commits that are toil (fixing lockfiles, Beads sync, fixtures, CI iterations) vs feature work. Output as decimal (e.g., 0.42 for 42%).
+        2. **Top pattern**: Identify the most common toil pattern (lockfile-drift, beads-sync, fixture-config, python-version, ci-iterations, or other).
+        3. **Recommendations**: 2-3 specific, actionable recommendations to reduce toil.
 
-Format your response as:
-TOIL_RATE: <decimal>
-TOP_PATTERN: <pattern-name>
-RECOMMENDATIONS:
-- <recommendation 1>
-- <recommendation 2>
-- <recommendation 3>
-EOF
-        )"
+        Format your response as:
+        TOIL_RATE: <decimal>
+        TOP_PATTERN: <pattern-name>
+        RECOMMENDATIONS:
+        - <recommendation 1>
+        - <recommendation 2>
+        - <recommendation 3>"
 
         # Call Claude API
         RESPONSE=$(curl -s -X POST "$API_URL" \
