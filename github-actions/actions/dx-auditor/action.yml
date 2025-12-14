@@ -349,6 +349,10 @@ runs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
+        # Debug: Check token identity
+        echo "🔍 Checking repo-writer-token identity..."
+        curl -s -H "Authorization: token ${TOKEN}" https://api.github.com/user | grep "login" || echo "⚠️  Token check failed"
+        
         # Set up authenticated remote for push
         # Use token as username for Classic PATs
         git remote set-url origin "https://${TOKEN}@github.com/${{ github.repository }}.git"
