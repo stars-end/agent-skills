@@ -357,12 +357,16 @@ runs:
         # Use token as username for Classic PATs
         git remote set-url origin "https://${TOKEN}@github.com/${{ github.repository }}.git"
         
+        # Switch to feature branch to avoid protected branch issues
+        BRANCH_NAME="dx-audit/results"
+        git checkout -b "$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
+        
         # Commit and push
         git add .beads/issues.jsonl
         COMMIT_MSG="chore: sync DX audit to Beads [skip ci]"
-        git commit -m "$COMMIT_MSG" -m "Feature-Key: ${{ inputs.beads-epic }}" -m "Agent: dx-auditor"
+        git commit -m "$COMMIT_MSG" -m "Feature-Key: bd-991y" -m "Agent: dx-auditor" || echo "Nothing to commit"
         
-        git push || {
+        git push -u origin "$BRANCH_NAME" || {
           echo "⚠️  git push failed"
           echo "commit-status=push-failed" >> $GITHUB_OUTPUT
           exit 1
