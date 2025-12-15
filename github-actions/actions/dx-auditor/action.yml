@@ -45,9 +45,9 @@ runs:
         echo "Collecting last ${{ inputs.lookback-commits }} commits..."
 
         # Get commit messages with trailers
-        git log -${{ inputs.lookback-commits }} --format="%H|%s|%(trailers:key=Feature-Key,valueonly)" > /tmp/commits.txt
+        git log -${{ inputs.lookback-commits }} --format="%H|%s|%(trailers:key=Feature-Key,valueonly)" > ${RUNNER_TEMP}/commits.txt
 
-        TOTAL=$(wc -l < /tmp/commits.txt)
+        TOTAL=$(wc -l < ${RUNNER_TEMP}/commits.txt)
         echo "total-commits=$TOTAL" >> $GITHUB_OUTPUT
         echo "Collected $TOTAL commits"
 
@@ -65,10 +65,10 @@ runs:
         gh api repos/${{ github.repository }}/actions/runs \
           --paginate \
           --jq '.workflow_runs[] | {id, conclusion, created_at, head_commit}' \
-          2>/dev/null | head -n "$LOOKBACK_RUNS" > /tmp/ci-runs.json || true
+          2>/dev/null | head -n "$LOOKBACK_RUNS" > ${RUNNER_TEMP}/ci-runs.json || true
 
-        TOTAL=$(jq -s 'length' /tmp/ci-runs.json 2>/dev/null || echo "0")
-        FAILED=$(jq -s '[.[] | select(.conclusion == "failure")] | length' /tmp/ci-runs.json 2>/dev/null || echo "0")
+        TOTAL=$(jq -s 'length' ${RUNNER_TEMP}/ci-runs.json 2>/dev/null || echo "0")
+        FAILED=$(jq -s '[.[] | select(.conclusion == "failure")] | length' ${RUNNER_TEMP}/ci-runs.json 2>/dev/null || echo "0")
 
         echo "total-runs=$TOTAL" >> $GITHUB_OUTPUT
         echo "failed-runs=$FAILED" >> $GITHUB_OUTPUT
@@ -87,7 +87,7 @@ runs:
           echo ""
           echo "## Commit Analysis (${{ steps.collect-commits.outputs.total-commits }} commits)"
           echo ""
-          cat /tmp/commits.txt
+          cat ${RUNNER_TEMP}/commits.txt
           echo ""
           echo "## CI Run Analysis (${{ steps.collect-ci.outputs.total-runs }} runs)"
           echo ""
@@ -102,7 +102,7 @@ runs:
           echo "- **Fixture config**: Commits fixing test fixture setup"
           echo "- **Python version**: Commits fixing Python version mismatches"
           echo "- **CI iterations**: Multiple commits on same feature (toil indicator)"
-        } > /tmp/aggregation.md
+        } > ${RUNNER_TEMP}/aggregation.md
 
         echo "✅ Aggregation complete"
 
@@ -116,7 +116,7 @@ runs:
         echo "Running Claude DX analysis..."
 
         # Read aggregation data
-        AGGREGATION=$(cat /tmp/aggregation.md)
+        AGGREGATION=$(cat ${RUNNER_TEMP}/aggregation.md)
 
         # Prepare API request
         API_URL="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}/v1/messages"
@@ -191,7 +191,7 @@ runs:
             RECOMMENDATIONS="- LLM API returned empty response"
           else
             echo "✅ Claude analysis complete"
-            echo "$CONTENT" > /tmp/claude-analysis.txt
+            echo "$CONTENT" > ${RUNNER_TEMP}/claude-analysis.txt
 
             # Extract toil fraction (e.g., "40/83 commits are toil")
             TOIL_FRACTION=$(echo "$CONTENT" | grep -oP 'TOIL_FRACTION:\s*\K[^\n]+' | head -1 || echo "unknown")
@@ -212,7 +212,7 @@ runs:
         echo "root-cause=$ROOT_CAUSE" >> $GITHUB_OUTPUT
 
         # Save recommendations to temp file for report generation
-        echo "$RECOMMENDATIONS" > /tmp/recommendations.txt
+        echo "$RECOMMENDATIONS" > ${RUNNER_TEMP}/recommendations.txt
 
         echo "Toil: $TOIL_FRACTION"
         echo "Top pattern: $TOP_PATTERN"
@@ -244,11 +244,11 @@ runs:
           echo ""
           echo "## Recommendations"
           echo ""
-          cat /tmp/recommendations.txt 2>/dev/null || echo "- No recommendations available"
+          cat ${RUNNER_TEMP}/recommendations.txt 2>/dev/null || echo "- No recommendations available"
           echo ""
           echo "## Data"
           echo ""
-          echo "See /tmp/aggregation.md for full analysis data."
+          echo "See ${RUNNER_TEMP}/aggregation.md for full analysis data."
         } > ${{ inputs.output-file }}
 
         echo "✅ Report generated: ${{ inputs.output-file }}"
