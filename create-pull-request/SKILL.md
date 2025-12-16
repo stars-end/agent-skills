@@ -105,6 +105,14 @@ mcp__plugin_beads_beads__create(
 - If issue is feature → PR closes the feature directly
 - Check: `issue.dependents` to find child tasks
 
+### 2.3. Structural Verification (If Needed)
+If `layout.tsx`, `middleware.ts`, or global config changed:
+```bash
+echo "ℹ️  Structural changes detected. Running build check..."
+make build
+if fails: exit 1
+```
+
 ### 2.4. Sync with Master (Prevent JSONL Conflicts)
 
 **Before creating PR, merge master to prevent conflicts:**

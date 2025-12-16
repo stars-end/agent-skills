@@ -1,11 +1,8 @@
 ---
 name: jules-dispatch
 description: |
-  Dispatch Beads issues to Jules cloud agents. MUST BE USED for Jules automation.
-  Auto-discovers 'jules-ready' tasks from Beads, constructs rich mega-prompts with TECH_PLAN context,
-  and spawns async Jules sessions. Works across all repos using Beads.
-  Use when user says "send to jules", "dispatch to jules", "assign to jules", or "run in cloud".
-tags: [workflow, jules, cloud, automation, dx, agent-dispatch]
+  Dispatches work to Jules agents via the CLI. Automatically generates context-rich prompts from Beads issues and spawns async sessions. Use when user says "send to jules", "assign to jules", "dispatch task", or "run in cloud".
+tags: [workflow, jules, cloud, automation, dx]
 allowed-tools:
   - Bash(jules:*)
   - Bash(python:*)
@@ -15,27 +12,62 @@ allowed-tools:
 
 # Jules Dispatch Skill
 
-**Purpose:** Automate the handoff of Beads issues to Jules cloud agents for async implementation.
+**Purpose:** Automate the handoff of Beads issues to Jules agents using the `jules` CLI.
 
-## When to Use This Skill
+## Activation
 
 **Triggers:**
-- "send this to jules"
-- "dispatch bd-xyz to jules"
-- "assign to jules"
-- "run in the cloud"
-- "start jules session"
+- "assign this to jules"
+- "dispatch bd-123 to jules"
+- "start jules session for X"
+- "run these in the cloud"
 
-**Prerequisites:**
-- `jules` CLI installed and authenticated
-- Beads initialized in repo (`.beads/issues.jsonl` exists)
-- Issue has `jules-ready` label (or use `--force` for testing)
+**User provides:** Issue IDs (bd-xyz) OR prompt text.
 
 ## Core Workflow
 
-### 1. Discover Candidates
+### 1. Context Generation (The "Rich Prompt")
+Jules needs the same context guidance as Claude Code Web. We will reuse/adapt the `parallelize-cloud-work` prompt logic.
 
-Jules dispatch scans for issues with the `jules-ready` label:
+**Prompt Structure:**
+```
+TASK: {issue_title} ({issue_id})
+CONTEXT:
+- Repo: {repo_name}
+- Branch: feature-{issue_id}-jules
+
+🚨 INSTRUCTIONS:
+1. INVOKE SKILLS: {context_skills}
+2. EXPLORE: Check {files_of_interest}
+3. PLAN: Don't reimplement existing logic.
+4. EXECUTE:
+   - Checkout branch feature-{issue_id}-jules
+   - Commit with Feature-Key: {issue_id}
+   - Push and create PR
+```
+
+### 2. Dispatch Logic
+The skill will wrap the `jules remote new` command.
+
+**Command Template:**
+```bash
+jules remote new \
+  --repo . \
+  --session "{RICH_PROMPT}"
+```
+
+### 3. Loop & Parallelize
+If multiple issues are provided:
+```bash
+# pseudocode
+for issue_id in provided_issues:
+  prompt = generate_rich_prompt(issue_id)
+  jules remote new --repo . --session "$prompt"
+```
+
+## Workflow
+
+### 1. Execute Dispatch Script
 
 ```bash
 # Auto-discover from current repo
@@ -60,7 +92,6 @@ When a session is complete, retrieve the code into a local feature branch:
 
 ```bash
 python ~/.agent/skills/jules-dispatch/dispatch.py --action pull --session <SESSION_ID>
-
 ```
 
 ### 2. Mega-Prompt Construction
@@ -140,7 +171,7 @@ Found 1 candidates.
 ### Example 3: Force Dispatch Specific Issue
 
 ```bash
-python ~/.agent/skills/jules-dispatch/dispatch.py --issue bd-xyz --force
+python ~/.agent/skills/jules-dispatch/dispatch.py --action dispatch --issue bd-xyz --force
 ```
 
 ### Example 4: Monitor Progress
@@ -294,8 +325,7 @@ jules auth login
 Check Jules session status:
 
 ```bash
-jules session --list
-jules session --id <session_id>
+python ~/.agent/skills/jules-dispatch/dispatch.py --action list
 ```
 
 ## Version History
@@ -310,9 +340,3 @@ jules session --id <session_id>
 - **v1.0.0** (2025-12-10): Initial implementation
   - Basic dispatch via bd CLI
   - Manual issue ID arguments
-
----
-
-**Last Updated:** 2025-12-15
-**Related Skills:** beads-workflow, sync-feature-branch, create-pull-request
-**Helper Script:** `~/.agent/skills/jules-dispatch/dispatch.py`

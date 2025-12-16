@@ -102,11 +102,14 @@ Discovery-Type: bug"
 
 If risk = "prompt", ask user before creating issue.
 
-### 5. Quick Lint (Optional)
+### 5. Every Commit Check (make ci-lite)
 ```bash
-if make lint-fast exists:
-  make lint-fast
-  if fails: show errors, ask user to fix
+if make ci-lite exists:
+  make ci-lite
+  if fails: 
+    echo "❌ make ci-lite failed (Linting or Backend Tests)"
+    ask user: "Fix errors or force commit? (fix/force)"
+    if fix: exit 1
 ```
 
 ### 5.5. Doc Auto-Link and Impact Analysis
