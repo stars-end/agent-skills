@@ -45,7 +45,22 @@ python ~/.agent/skills/jules-dispatch/dispatch.py
 python ~/.agent/skills/jules-dispatch/dispatch.py --dry-run
 
 # Force dispatch specific issue (ignores label check)
-python ~/.agent/skills/jules-dispatch/dispatch.py --issue bd-xyz --force
+python ~/.agent/skills/jules-dispatch/dispatch.py --action dispatch --issue bd-xyz --force
+```
+
+### 3. Monitor
+Check status of active sessions:
+
+```bash
+python ~/.agent/skills/jules-dispatch/dispatch.py --action list
+```
+
+### 4. Pull & Apply (The Pull Pattern)
+When a session is complete, retrieve the code into a local feature branch:
+
+```bash
+python ~/.agent/skills/jules-dispatch/dispatch.py --action pull --session <SESSION_ID>
+
 ```
 
 ### 2. Mega-Prompt Construction
@@ -132,10 +147,11 @@ python ~/.agent/skills/jules-dispatch/dispatch.py --issue bd-xyz --force
 
 ```bash
 # List active Jules sessions
-jules session --list
+python ~/.agent/skills/jules-dispatch/dispatch.py --action list
 
-# Check for PRs from Jules
-gh pr list --search "jules in:head"
+# Pull code from completed session
+python ~/.agent/skills/jules-dispatch/dispatch.py --action pull --session 123456
+
 ```
 
 ## Preparing Issues for Jules
