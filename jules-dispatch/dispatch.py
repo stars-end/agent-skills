@@ -261,7 +261,7 @@ def list_sessions(repo_name: str):
     print(f"🔍 Checking Jules sessions for {repo_name}...")
     try:
         # Use standard list format
-        subprocess.run(["jules", "session", "--list"], check=True)
+        subprocess.run(["jules", "remote", "list", "--session"], check=True)
         print("\n💡 To pull a session:")
         print("   python dispatch.py --action pull --session <ID>")
     except subprocess.CalledProcessError:
