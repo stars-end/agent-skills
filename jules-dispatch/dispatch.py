@@ -171,6 +171,7 @@ def dispatch(issue: Dict, repo_name: str, repo_root: Path, dry_run: bool = True)
         print("❌ 'jules' CLI not found. Is it installed?")
 
 
+def main():
     # Argument parsing
     parser = argparse.ArgumentParser(description="Cross-repo Jules Manager")
     parser.add_argument("--action", choices=["dispatch", "list", "pull"], default="dispatch", help="Action to perform")
