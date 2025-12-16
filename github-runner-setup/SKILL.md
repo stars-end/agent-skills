@@ -129,6 +129,46 @@ cd ~/actions-runner-prime-radiant
 - Network issues → Check firewall rules for GitHub API access
 - Service not running → `sudo systemctl start ...`
 
+### Workflow Fails with "Unable to locate executable file: unzip"
+
+**Symptoms**: Setup actions (`actions/setup-bun`, `actions/setup-node`, etc.) fail with "unzip not found"
+
+**Solution**: Install missing system utilities
+```bash
+# Install unzip and zip system-wide
+sudo apt-get update
+sudo apt-get install -y unzip zip
+
+# Verify
+sudo -u runner which unzip  # Should show /usr/bin/unzip
+
+# Restart runner to pick up changes
+sudo systemctl restart actions.runner.stars-end-prime-radiant-ai.*
+```
+
+### Workflow Needs Python 3.13
+
+**Symptoms**: Workflows fail with wrong Python version or Python 3.13 not found
+
+**Solution**: Install Python 3.13 via mise
+```bash
+# Install mise for runner user (if not already)
+sudo -u runner bash -c 'curl https://mise.run | sh'
+
+# Configure shell
+sudo -u runner bash -c 'echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> ~/.bashrc'
+sudo -u runner bash -c 'echo "eval \"\$(mise activate bash)\"" >> ~/.bashrc'
+
+# Install Python 3.13
+sudo -u runner bash -c 'export PATH="$HOME/.local/bin:$PATH" && mise use --global python@3.13 && mise install'
+
+# Verify
+sudo -u runner bash --login -c 'python --version'  # Should show 3.13.x
+
+# Restart runner
+sudo systemctl restart actions.runner.stars-end-prime-radiant-ai.*
+```
+
 ### Workflow Fails with "Permission Denied"
 
 **Symptoms**: Workflows fail with permission errors accessing files/directories
