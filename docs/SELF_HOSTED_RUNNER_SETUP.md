@@ -58,7 +58,23 @@ id runner
 # Output: uid=1001(runner) gid=1001(runner) groups=1001(runner)
 ```
 
-### Phase 2: Setup Runner Environment
+### Phase 2: Install System Prerequisites
+
+```bash
+# Install required utilities for GitHub Actions
+sudo apt-get update
+sudo apt-get install -y unzip zip
+
+# Verify installation
+which unzip  # Should show /usr/bin/unzip
+which zip    # Should show /usr/bin/zip
+```
+
+**Why these are required:**
+- `unzip`: Required by `actions/setup-bun`, `actions/setup-node`, and other setup actions
+- `zip`: Required by various archive operations in workflows
+
+### Phase 3: Setup Runner Environment & Python 3.13
 
 ```bash
 # Switch to runner user
@@ -73,9 +89,32 @@ ln -sfn ~/agent-skills ~/.agent/skills
 
 # Verify mount
 ls -la ~/.agent/skills
+
+# Install mise for Python version management
+curl https://mise.run | sh
+
+# Add mise to PATH and shell initialization
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(/home/runner/.local/bin/mise activate bash)"' >> ~/.bashrc
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile
+echo 'eval "$(mise activate bash)"' >> ~/.profile
+
+# Install Python 3.13 (standardized across local/CI/production)
+export PATH="$HOME/.local/bin:$PATH"
+mise use --global python@3.13
+mise install
+
+# Verify Python 3.13
+python --version  # Should show Python 3.13.x
+which python      # Should show ~/.local/share/mise/installs/python/3.13.*/bin/python
 ```
 
-### Phase 3: Install GitHub Actions Runners
+**Why Python 3.13:**
+- Standardized across all environments (local mise, CI runners, production)
+- Debian 12 doesn't have Python 3.13 in apt repositories
+- mise provides consistent version management without system Python modification
+
+### Phase 4: Install GitHub Actions Runners
 
 **For each repository (prime-radiant-ai, affordabot):**
 
@@ -112,7 +151,7 @@ mkdir actions-runner-affordabot && cd actions-runner-affordabot
 # ... same steps as above, but for affordabot repo
 ```
 
-### Phase 4: Install as Systemd Services
+### Phase 5: Install as Systemd Services
 
 ```bash
 # Still as runner user, in each runner directory
@@ -132,7 +171,7 @@ sudo systemctl status actions.runner.stars-end-prime-radiant-ai.*
 sudo systemctl status actions.runner.stars-end-affordabot.*
 ```
 
-### Phase 5: Verify Runner Registration
+### Phase 6: Verify Runner Registration
 
 ```bash
 # Check runners are online
@@ -196,6 +235,51 @@ sudo journalctl -u actions.runner.stars-end-prime-radiant-ai.* -n 50
 # 1. Token expired -> Need to re-run config.sh with new token
 # 2. Permissions -> Check runner user has access to required directories
 # 3. Network -> Check firewall rules for GitHub API access
+```
+
+### Workflows Fail with "Unable to locate executable file: unzip"
+
+**Symptoms:** Setup actions (`actions/setup-bun`, `actions/setup-node`, etc.) fail with "unzip not found"
+
+**Fix:**
+```bash
+# Install unzip and zip system-wide
+sudo apt-get update
+sudo apt-get install -y unzip zip
+
+# Verify installation
+sudo -u runner which unzip  # Should show /usr/bin/unzip
+sudo -u runner which zip    # Should show /usr/bin/zip
+
+# Restart runner services to pick up new PATH
+sudo systemctl restart actions.runner.stars-end-prime-radiant-ai.*
+sudo systemctl restart actions.runner.stars-end-affordabot.*
+```
+
+### Workflows Need Python 3.13
+
+**Symptoms:** Workflows fail because Python 3.13 is not available or wrong version is used
+
+**Fix:**
+```bash
+# Install mise for runner user (if not already installed)
+sudo -u runner bash -c 'curl https://mise.run | sh'
+
+# Configure shell initialization
+sudo -u runner bash -c 'echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> ~/.bashrc'
+sudo -u runner bash -c 'echo "eval \"\$(/home/runner/.local/bin/mise activate bash)\"" >> ~/.bashrc'
+sudo -u runner bash -c 'echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> ~/.profile'
+sudo -u runner bash -c 'echo "eval \"\$(mise activate bash)\"" >> ~/.profile'
+
+# Install Python 3.13
+sudo -u runner bash -c 'export PATH="$HOME/.local/bin:$PATH" && mise use --global python@3.13 && mise install'
+
+# Verify
+sudo -u runner bash --login -c 'python --version'  # Should show Python 3.13.x
+
+# Restart runner services
+sudo systemctl restart actions.runner.stars-end-prime-radiant-ai.*
+sudo systemctl restart actions.runner.stars-end-affordabot.*
 ```
 
 ### Workflows Fail with "Permission Denied"
