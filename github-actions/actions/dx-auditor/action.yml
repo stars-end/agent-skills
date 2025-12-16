@@ -19,6 +19,10 @@ inputs:
     description: 'Beads epic to post summary to (e.g., bd-audit)'
     required: false
     default: ''
+  repo-writer-token:
+    description: 'Token with contents:write for pushing Beads JSONL (optional)'
+    required: false
+    default: ''
 
 outputs:
   toil-rate:
@@ -41,9 +45,9 @@ runs:
         echo "Collecting last ${{ inputs.lookback-commits }} commits..."
 
         # Get commit messages with trailers
-        git log -${{ inputs.lookback-commits }} --format="%H|%s|%(trailers:key=Feature-Key,valueonly)" > /tmp/commits.txt
+        git log -${{ inputs.lookback-commits }} --format="%H|%s|%(trailers:key=Feature-Key,valueonly)" > ${RUNNER_TEMP}/commits.txt
 
-        TOTAL=$(wc -l < /tmp/commits.txt)
+        TOTAL=$(wc -l < ${RUNNER_TEMP}/commits.txt)
         echo "total-commits=$TOTAL" >> $GITHUB_OUTPUT
         echo "Collected $TOTAL commits"
 
@@ -56,14 +60,15 @@ runs:
       run: |
         echo "Collecting last $LOOKBACK_RUNS CI runs..."
 
-        # Get workflow run conclusions (limit is applied via head, not jq slice)
+        # Get workflow run conclusions
+        # Use || true to handle SIGPIPE (exit 141) when head closes pipe early
         gh api repos/${{ github.repository }}/actions/runs \
           --paginate \
           --jq '.workflow_runs[] | {id, conclusion, created_at, head_commit}' \
-          | head -n "$LOOKBACK_RUNS" > /tmp/ci-runs.json
+          2>/dev/null | head -n "$LOOKBACK_RUNS" > ${RUNNER_TEMP}/ci-runs.json || true
 
-        TOTAL=$(jq -s 'length' /tmp/ci-runs.json)
-        FAILED=$(jq -s '[.[] | select(.conclusion == "failure")] | length' /tmp/ci-runs.json)
+        TOTAL=$(jq -s 'length' ${RUNNER_TEMP}/ci-runs.json 2>/dev/null || echo "0")
+        FAILED=$(jq -s '[.[] | select(.conclusion == "failure")] | length' ${RUNNER_TEMP}/ci-runs.json 2>/dev/null || echo "0")
 
         echo "total-runs=$TOTAL" >> $GITHUB_OUTPUT
         echo "failed-runs=$FAILED" >> $GITHUB_OUTPUT
@@ -77,28 +82,27 @@ runs:
         echo "Aggregating failure patterns..."
 
         # Create aggregation report
-        cat > /tmp/aggregation.md << 'REPORT'
-        # DX Audit Data Aggregation
-
-        ## Commit Analysis (${{ steps.collect-commits.outputs.total-commits }} commits)
-
-        $(cat /tmp/commits.txt)
-
-        ## CI Run Analysis (${{ steps.collect-ci.outputs.total-runs }} runs)
-
-        - Total runs: ${{ steps.collect-ci.outputs.total-runs }}
-        - Failed runs: ${{ steps.collect-ci.outputs.failed-runs }}
-        - Failure rate: $(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)%
-
-        ## Common Patterns to Detect
-
-        - **Lockfile drift**: Commits fixing poetry.lock or pnpm-lock.yaml drift
-        - **Beads sync**: Commits fixing .beads/issues.jsonl issues
-        - **Fixture config**: Commits fixing test fixture setup
-        - **Python version**: Commits fixing Python version mismatches
-        - **CI iterations**: Multiple commits on same feature (toil indicator)
-
-        REPORT
+        {
+          echo "# DX Audit Data Aggregation"
+          echo ""
+          echo "## Commit Analysis (${{ steps.collect-commits.outputs.total-commits }} commits)"
+          echo ""
+          cat ${RUNNER_TEMP}/commits.txt
+          echo ""
+          echo "## CI Run Analysis (${{ steps.collect-ci.outputs.total-runs }} runs)"
+          echo ""
+          echo "- Total runs: ${{ steps.collect-ci.outputs.total-runs }}"
+          echo "- Failed runs: ${{ steps.collect-ci.outputs.failed-runs }}"
+          echo "- Failure rate: $(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)%"
+          echo ""
+          echo "## Common Patterns to Detect"
+          echo ""
+          echo "- **Lockfile drift**: Commits fixing poetry.lock or pnpm-lock.yaml drift"
+          echo "- **Beads sync**: Commits fixing .beads/issues.jsonl issues"
+          echo "- **Fixture config**: Commits fixing test fixture setup"
+          echo "- **Python version**: Commits fixing Python version mismatches"
+          echo "- **CI iterations**: Multiple commits on same feature (toil indicator)"
+        } > ${RUNNER_TEMP}/aggregation.md
 
         echo "✅ Aggregation complete"
 
@@ -112,81 +116,107 @@ runs:
         echo "Running Claude DX analysis..."
 
         # Read aggregation data
-        AGGREGATION=$(cat /tmp/aggregation.md)
+        AGGREGATION=$(cat ${RUNNER_TEMP}/aggregation.md)
 
         # Prepare API request
         API_URL="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}/v1/messages"
         MODEL="${ANTHROPIC_DEFAULT_SONNET_MODEL:-claude-sonnet-4-20250514}"
 
-        # Create prompt
-        PROMPT="$(cat <<'EOF'
-You are a DX (Developer Experience) analyst. Analyze the following commit and CI data to identify toil patterns.
+        # Create prompt with ultrathink for deep analysis
+        PROMPT="You are an elite DX (Developer Experience) analyst. <ultrathink>
 
-${AGGREGATION}
+        Think step by step:
+        1. First, categorize each commit as 'feature work' or 'toil' (work that could be automated or prevented)
+        2. Identify recurring patterns in the toil commits
+        3. Trace root causes and propose systemic fixes
 
-Please provide:
-1. **Toil rate**: Calculate the percentage of commits that are toil (fixing lockfiles, Beads sync, fixtures, CI iterations) vs feature work. Output as decimal (e.g., 0.42 for 42%).
-2. **Top pattern**: Identify the most common toil pattern (lockfile-drift, beads-sync, fixture-config, python-version, ci-iterations, or other).
-3. **Recommendations**: 2-3 specific, actionable recommendations to reduce toil.
+        Here is the commit and CI data to analyze:
 
-Format your response as:
-TOIL_RATE: <decimal>
-TOP_PATTERN: <pattern-name>
-RECOMMENDATIONS:
-- <recommendation 1>
-- <recommendation 2>
-- <recommendation 3>
-EOF
-        )"
+        ${AGGREGATION}
 
-        # Call Claude API
-        RESPONSE=$(curl -s -X POST "$API_URL" \
+        Based on your deep analysis, provide:
+
+        1. **Toil commits**: How many commits are toil vs total? Express as a fraction like '40/83 commits are toil'. Toil includes things like:
+           - Fixing lockfile drift (poetry.lock, pnpm-lock.yaml)
+           - Beads/JSONL sync issues
+           - CI configuration fixes
+           - Test fixture/config adjustments
+           - Multiple commits on same PR (iteration loops)
+           - Python version or dependency fixes
+           - Any work that could have been prevented or automated
+
+        2. **Top pattern**: What is the single most common toil pattern you observe? Be specific and descriptive (e.g., 'lockfile-drift', 'ci-iteration-loops', 'missing-dependency', 'test-fixture-mismatch'). These are examples - identify whatever pattern actually dominates.
+
+        3. **Root cause**: One sentence explaining WHY this toil keeps happening.
+
+        4. **Recommendations**: 2-3 specific, actionable improvements prioritized by impact.
+
+        Format your response EXACTLY as:
+        TOIL_FRACTION: <N>/<M> commits are toil
+        TOP_PATTERN: <descriptive-pattern-name>
+        ROOT_CAUSE: <one sentence>
+        RECOMMENDATIONS:
+        - [HIGH] <highest impact recommendation>
+        - [MEDIUM] <medium impact recommendation>
+        - [LOW] <lower priority recommendation>"
+
+        # Call Claude API with timeout and error handling
+        echo "Calling API at: $API_URL with model: $MODEL"
+        RESPONSE=""
+        CURL_EXIT=0
+        RESPONSE=$(curl -s --max-time 60 -X POST "$API_URL" \
           -H "Content-Type: application/json" \
           -H "x-api-key: $ANTHROPIC_API_KEY" \
           -H "anthropic-version: 2023-06-01" \
-          -d @- <<EOF
-{
-  "model": "$MODEL",
-  "max_tokens": 2048,
-  "messages": [{
-    "role": "user",
-    "content": "$PROMPT"
-  }]
-}
-EOF
-        )
+          -d "{\"model\":\"$MODEL\",\"max_tokens\":2048,\"messages\":[{\"role\":\"user\",\"content\":$(echo "$PROMPT" | jq -Rs .)}]}" \
+        ) || CURL_EXIT=$?
 
-        # Parse response
-        CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text' 2>/dev/null || echo "")
-
-        if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
-          echo "⚠️  Claude API call failed or returned empty response"
-          echo "Response: $RESPONSE"
-          # Fallback to manual analysis
-          TOIL_RATE="0.0"
+        if [ "$CURL_EXIT" -ne 0 ]; then
+          echo "⚠️  curl failed with exit code: $CURL_EXIT"
+          echo "Falling back to manual analysis..."
+          TOIL_FRACTION="unknown"
           TOP_PATTERN="unknown"
+          ROOT_CAUSE="LLM API unreachable"
+          RECOMMENDATIONS="- Unable to reach LLM API (curl exit $CURL_EXIT)"
         else
-          echo "✅ Claude analysis complete"
-          echo "$CONTENT" > /tmp/claude-analysis.txt
+          # Parse response
+          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text' 2>/dev/null || echo "")
 
-          # Extract toil rate
-          TOIL_RATE=$(echo "$CONTENT" | grep -oP 'TOIL_RATE:\s*\K[\d.]+' || echo "0.0")
+          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
+            echo "⚠️  Claude API returned empty response"
+            echo "Response: $RESPONSE"
+            TOIL_FRACTION="unknown"
+            TOP_PATTERN="unknown"
+            ROOT_CAUSE="LLM returned empty"
+            RECOMMENDATIONS="- LLM API returned empty response"
+          else
+            echo "✅ Claude analysis complete"
+            echo "$CONTENT" > ${RUNNER_TEMP}/claude-analysis.txt
 
-          # Extract top pattern
-          TOP_PATTERN=$(echo "$CONTENT" | grep -oP 'TOP_PATTERN:\s*\K[\w-]+' || echo "unknown")
+            # Extract toil fraction (e.g., "40/83 commits are toil")
+            TOIL_FRACTION=$(echo "$CONTENT" | grep -oP 'TOIL_FRACTION:\s*\K[^\n]+' | head -1 || echo "unknown")
+
+            # Extract top pattern
+            TOP_PATTERN=$(echo "$CONTENT" | grep -oP 'TOP_PATTERN:\s*\K[^\n]+' | head -1 || echo "unknown")
+
+            # Extract root cause
+            ROOT_CAUSE=$(echo "$CONTENT" | grep -oP 'ROOT_CAUSE:\s*\K[^\n]+' | head -1 || echo "unknown")
+
+            # Extract recommendations
+            RECOMMENDATIONS=$(echo "$CONTENT" | sed -n '/^RECOMMENDATIONS:/,$p' | tail -n +2 || echo "- No specific recommendations generated")
+          fi
         fi
 
-        # Extract recommendations (everything after "RECOMMENDATIONS:")
-        RECOMMENDATIONS=$(echo "$CONTENT" | sed -n '/^RECOMMENDATIONS:/,$p' | tail -n +2 || echo "- No specific recommendations generated")
-
-        echo "toil-rate=$TOIL_RATE" >> $GITHUB_OUTPUT
+        echo "toil-fraction=$TOIL_FRACTION" >> $GITHUB_OUTPUT
         echo "top-pattern=$TOP_PATTERN" >> $GITHUB_OUTPUT
+        echo "root-cause=$ROOT_CAUSE" >> $GITHUB_OUTPUT
 
         # Save recommendations to temp file for report generation
-        echo "$RECOMMENDATIONS" > /tmp/recommendations.txt
+        echo "$RECOMMENDATIONS" > ${RUNNER_TEMP}/recommendations.txt
 
-        echo "Toil rate: $TOIL_RATE"
+        echo "Toil: $TOIL_FRACTION"
         echo "Top pattern: $TOP_PATTERN"
+        echo "Root cause: $ROOT_CAUSE"
         echo "Recommendations extracted"
 
     - name: Generate audit report
@@ -194,47 +224,188 @@ EOF
       run: |
         mkdir -p $(dirname ${{ inputs.output-file }})
 
-        cat > ${{ inputs.output-file }} << 'REPORT'
-        # DX Audit Report
+        # Calculate failure percentage with awk
+        FAILURE_PCT=$(awk "BEGIN {printf \"%.1f\", ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100}")
 
-        **Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-        **Commits analyzed**: ${{ steps.collect-commits.outputs.total-commits }}
-        **CI runs analyzed**: ${{ steps.collect-ci.outputs.total-runs }}
-
-        ## Summary
-
-        - **Toil rate**: ${{ steps.analyze.outputs.toil-rate }} (${{ steps.analyze.outputs.toil-rate | awk '{print $1*100}' }}%)
-        - **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}
-        - **CI failure rate**: $(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)%
-
-        ## Recommendations
-
-        $(cat /tmp/recommendations.txt 2>/dev/null || echo "- No recommendations available")
-
-        ## Data
-
-        See /tmp/aggregation.md for full analysis data.
-
-        REPORT
+        # Generate report
+        {
+          echo "# DX Audit Report"
+          echo ""
+          echo "**Generated**: $(date -u +\"%Y-%m-%d %H:%M:%S UTC\")"
+          echo "**Commits analyzed**: ${{ steps.collect-commits.outputs.total-commits }}"
+          echo "**CI runs analyzed**: ${{ steps.collect-ci.outputs.total-runs }}"
+          echo ""
+          echo "## Summary"
+          echo ""
+          echo "- **Toil**: ${{ steps.analyze.outputs.toil-fraction }}"
+          echo "- **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}"
+          echo "- **Root cause**: ${{ steps.analyze.outputs.root-cause }}"
+          echo "- **CI failure rate**: ${FAILURE_PCT}%"
+          echo ""
+          echo "## Recommendations"
+          echo ""
+          cat ${RUNNER_TEMP}/recommendations.txt 2>/dev/null || echo "- No recommendations available"
+          echo ""
+          echo "## Data"
+          echo ""
+          echo "See ${RUNNER_TEMP}/aggregation.md for full analysis data."
+        } > ${{ inputs.output-file }}
 
         echo "✅ Report generated: ${{ inputs.output-file }}"
 
-    - name: Post to Beads epic (if specified)
+    - name: Create GitHub Issue for tracking
+      id: create-issue
       if: inputs.beads-epic != ''
       shell: bash
       run: |
-        if command -v bd &> /dev/null; then
-          bd comment ${{ inputs.beads-epic }} "$(cat ${{ inputs.output-file }})"
-          echo "✅ Posted audit summary to ${{ inputs.beads-epic }}"
-        else
-          echo "⚠️  bd CLI not available, skipping Beads post"
+        WEEK=$(date +%Y-W%W)
+        TOIL="${{ steps.analyze.outputs.toil-fraction }}"
+        PATTERN="${{ steps.analyze.outputs.top-pattern }}"
+        
+        # Build body with report + metadata
+        BODY=$(cat ${{ inputs.output-file }})
+        BODY="${BODY}
+
+        ___
+        **Parent Epic**: ${{ inputs.beads-epic }}
+        **Generated by**: dx-audit workflow"
+        
+        # Create issue with structured title for easy querying
+        ISSUE_URL=$(gh issue create \
+          --title "DX Audit ${WEEK}: ${TOIL}, ${PATTERN}" \
+          --body "$BODY" \
+          --label "dx-audit,automated" 2>&1) || {
+          echo "⚠️  Failed to create GitHub Issue (may lack permissions)"
+          echo "issue-created=false" >> $GITHUB_OUTPUT
+          exit 0
+        }
+        
+        echo "✅ Created GitHub Issue: $ISSUE_URL"
+        echo "issue-url=$ISSUE_URL" >> $GITHUB_OUTPUT
+        echo "issue-created=true" >> $GITHUB_OUTPUT
+
+    - name: Sync to Beads (best-effort)
+      id: beads-sync
+      if: inputs.beads-epic != '' && steps.create-issue.outputs.issue-created == 'true'
+      continue-on-error: true
+      shell: bash
+      run: |
+        # This step is best-effort - if it fails, GH Issue is still the record
+        if ! command -v bd &> /dev/null; then
+          echo "⚠️  bd CLI not available"
+          echo "sync-status=no-cli" >> $GITHUB_OUTPUT
+          exit 0
         fi
+        
+        if [ ! -d .beads ]; then
+          echo "⚠️  No .beads directory in workspace"
+          echo "sync-status=no-db" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        WEEK=$(date +%Y-W%W)
+        TOIL="${{ steps.analyze.outputs.toil-fraction }}"
+        PATTERN="${{ steps.analyze.outputs.top-pattern }}"
+        ISSUE_URL="${{ steps.create-issue.outputs.issue-url }}"
+        
+        # Build description (single line to avoid YAML issues)
+        DESC="DX Audit. GitHub Issue: ${ISSUE_URL} | Toil: ${TOIL} | Pattern: ${PATTERN}"
+        
+        # Create child issue under epic using --no-db to avoid SQLite requirement
+        bd --no-db create "DX Audit ${WEEK}: ${TOIL}, ${PATTERN}" \
+          --type task \
+          --parent ${{ inputs.beads-epic }} \
+          --description "$DESC" || {
+          echo "⚠️  bd create failed"
+          echo "sync-status=failed" >> $GITHUB_OUTPUT
+          exit 1  # This will be caught by continue-on-error
+        }
+        
+        echo "✅ Created Beads issue under ${{ inputs.beads-epic }}"
+        echo "sync-status=created" >> $GITHUB_OUTPUT
+
+    - name: Commit Beads JSONL
+      id: commit-beads
+      if: steps.beads-sync.outputs.sync-status == 'created'
+      continue-on-error: true
+      shell: bash
+      run: |
+        # Check if there are changes to commit
+        if [ -z "$(git status --porcelain .beads/issues.jsonl 2>/dev/null)" ]; then
+          echo "No changes to .beads/issues.jsonl"
+          echo "commit-status=no-changes" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Check if we have a token for pushing
+        TOKEN="${{ inputs.repo-writer-token }}"
+        if [ -z "$TOKEN" ]; then
+          echo "⚠️  No repo-writer-token provided, skipping push"
+          echo "commit-status=no-token" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Configure git for commit
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        
+        # Debug: Check token identity
+        echo "🔍 Checking repo-writer-token identity..."
+        curl -s -H "Authorization: token ${TOKEN}" https://api.github.com/user | grep "login" || echo "⚠️  Token check failed"
+        
+        # Set up authenticated remote for push
+        # Use token as username for Classic PATs
+        git remote set-url origin "https://${TOKEN}@github.com/${{ github.repository }}.git"
+        
+        # Switch to feature branch to avoid protected branch issues
+        BRANCH_NAME="dx-audit/results"
+        git checkout -b "$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
+        
+        # Commit and push
+        git add .beads/issues.jsonl
+        COMMIT_MSG="chore: sync DX audit to Beads [skip ci]"
+        git commit -m "$COMMIT_MSG" -m "Feature-Key: bd-991y" -m "Agent: dx-auditor" || echo "Nothing to commit"
+        
+        git push -u origin "$BRANCH_NAME" || {
+          echo "⚠️  git push failed"
+          echo "commit-status=push-failed" >> $GITHUB_OUTPUT
+          exit 1
+        }
+        
+        echo "✅ Committed Beads JSONL"
+        echo "commit-status=ok" >> $GITHUB_OUTPUT
+
 
     - name: Summary
       shell: bash
       run: |
         echo "### DX Audit Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- **Toil rate**: ${{ steps.analyze.outputs.toil-rate }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Toil**: ${{ steps.analyze.outputs.toil-fraction }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Root cause**: ${{ steps.analyze.outputs.root-cause }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Show tracking status
+        if [ "${{ steps.create-issue.outputs.issue-created }}" = "true" ]; then
+          echo "- **Tracking**: [GitHub Issue](${{ steps.create-issue.outputs.issue-url }})" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Beads sync status
+        SYNC="${{ steps.beads-sync.outputs.sync-status }}"
+        COMMIT="${{ steps.commit-beads.outputs.commit-status }}"
+        
+        if [ "$SYNC" = "created" ] && [ "$COMMIT" = "ok" ]; then
+          echo "- **Beads**: ✅ Synced and committed to ${{ inputs.beads-epic }}" >> $GITHUB_STEP_SUMMARY
+        elif [ "$SYNC" = "created" ] && [ "$COMMIT" = "push-failed" ]; then
+          echo "- **Beads**: ⚠️ Created but push failed (check permissions)" >> $GITHUB_STEP_SUMMARY
+        elif [ "$SYNC" = "created" ]; then
+          echo "- **Beads**: ⚠️ Created but not committed" >> $GITHUB_STEP_SUMMARY
+        elif [ "$SYNC" = "no-cli" ] || [ "$SYNC" = "no-db" ]; then
+          echo "- **Beads**: ⏭️ Skipped (bd CLI or .beads not available)" >> $GITHUB_STEP_SUMMARY
+        elif [ "$SYNC" = "failed" ]; then
+          echo "- **Beads**: ❌ Sync failed (see logs)" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Report**: [${{ inputs.output-file }}](${{ inputs.output-file }})" >> $GITHUB_STEP_SUMMARY
