@@ -1,0 +1,24 @@
+{
+  "repo": "llm-common",
+  "required": [
+    "sync-feature-branch",
+    "create-pull-request",
+    "lint-check"
+  ],
+  "recommended": [
+    "issue-first",
+    "finish-feature",
+    "session-end",
+    "mcp-doctor"
+  ],
+  "mcp": {
+    "required": [
+      "agent-mail"
+    ],
+    "optional": [
+      "universal-skills",
+      "serena",
+      "z.ai-search"
+    ]
+  }
+}

@@ -1,0 +1,240 @@
+name: 'DX Auditor'
+description: 'Automated weekly DX meta-analysis to detect toil patterns'
+author: 'Prime Radiant AI'
+
+inputs:
+  lookback-commits:
+    description: 'Number of recent commits to analyze'
+    required: false
+    default: '60'
+  lookback-runs:
+    description: 'Number of recent CI runs to analyze'
+    required: false
+    default: '30'
+  output-file:
+    description: 'Output file path for audit report'
+    required: false
+    default: 'docs/DX_AUDIT_LOG.md'
+  beads-epic:
+    description: 'Beads epic to post summary to (e.g., bd-audit)'
+    required: false
+    default: ''
+
+outputs:
+  toil-rate:
+    description: 'Calculated toil rate (e.g., 0.58 for 58%)'
+    value: ${{ steps.analyze.outputs.toil-rate }}
+  top-pattern:
+    description: 'Most common toil pattern detected'
+    value: ${{ steps.analyze.outputs.top-pattern }}
+  report-path:
+    description: 'Path to generated audit report'
+    value: ${{ inputs.output-file }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Collect commit data
+      id: collect-commits
+      shell: bash
+      run: |
+        echo "Collecting last ${{ inputs.lookback-commits }} commits..."
+
+        # Get commit messages with trailers
+        git log -${{ inputs.lookback-commits }} --format="%H|%s|%(trailers:key=Feature-Key,valueonly)" > /tmp/commits.txt
+
+        TOTAL=$(wc -l < /tmp/commits.txt)
+        echo "total-commits=$TOTAL" >> $GITHUB_OUTPUT
+        echo "Collected $TOTAL commits"
+
+    - name: Collect CI run data
+      id: collect-ci
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        LOOKBACK_RUNS: ${{ inputs.lookback-runs }}
+      run: |
+        echo "Collecting last $LOOKBACK_RUNS CI runs..."
+
+        # Get workflow run conclusions (limit is applied via head, not jq slice)
+        gh api repos/${{ github.repository }}/actions/runs \
+          --paginate \
+          --jq '.workflow_runs[] | {id, conclusion, created_at, head_commit}' \
+          | head -n "$LOOKBACK_RUNS" > /tmp/ci-runs.json
+
+        TOTAL=$(jq -s 'length' /tmp/ci-runs.json)
+        FAILED=$(jq -s '[.[] | select(.conclusion == "failure")] | length' /tmp/ci-runs.json)
+
+        echo "total-runs=$TOTAL" >> $GITHUB_OUTPUT
+        echo "failed-runs=$FAILED" >> $GITHUB_OUTPUT
+        echo "Collected $TOTAL runs ($FAILED failures)"
+
+
+    - name: Aggregate failure patterns
+      id: aggregate
+      shell: bash
+      run: |
+        echo "Aggregating failure patterns..."
+
+        # Create aggregation report
+        cat > /tmp/aggregation.md << 'REPORT'
+        # DX Audit Data Aggregation
+
+        ## Commit Analysis (${{ steps.collect-commits.outputs.total-commits }} commits)
+
+        $(cat /tmp/commits.txt)
+
+        ## CI Run Analysis (${{ steps.collect-ci.outputs.total-runs }} runs)
+
+        - Total runs: ${{ steps.collect-ci.outputs.total-runs }}
+        - Failed runs: ${{ steps.collect-ci.outputs.failed-runs }}
+        - Failure rate: $(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)%
+
+        ## Common Patterns to Detect
+
+        - **Lockfile drift**: Commits fixing poetry.lock or pnpm-lock.yaml drift
+        - **Beads sync**: Commits fixing .beads/issues.jsonl issues
+        - **Fixture config**: Commits fixing test fixture setup
+        - **Python version**: Commits fixing Python version mismatches
+        - **CI iterations**: Multiple commits on same feature (toil indicator)
+
+        REPORT
+
+        echo "✅ Aggregation complete"
+
+    - name: Run Claude analysis
+      id: analyze
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+        ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
+      run: |
+        echo "Running Claude DX analysis..."
+
+        # Read aggregation data
+        AGGREGATION=$(cat /tmp/aggregation.md)
+
+        # Prepare API request
+        API_URL="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}/v1/messages"
+        MODEL="${ANTHROPIC_DEFAULT_SONNET_MODEL:-claude-sonnet-4-20250514}"
+
+        # Create prompt
+        PROMPT="$(cat <<'EOF'
+You are a DX (Developer Experience) analyst. Analyze the following commit and CI data to identify toil patterns.
+
+${AGGREGATION}
+
+Please provide:
+1. **Toil rate**: Calculate the percentage of commits that are toil (fixing lockfiles, Beads sync, fixtures, CI iterations) vs feature work. Output as decimal (e.g., 0.42 for 42%).
+2. **Top pattern**: Identify the most common toil pattern (lockfile-drift, beads-sync, fixture-config, python-version, ci-iterations, or other).
+3. **Recommendations**: 2-3 specific, actionable recommendations to reduce toil.
+
+Format your response as:
+TOIL_RATE: <decimal>
+TOP_PATTERN: <pattern-name>
+RECOMMENDATIONS:
+- <recommendation 1>
+- <recommendation 2>
+- <recommendation 3>
+EOF
+        )"
+
+        # Call Claude API
+        RESPONSE=$(curl -s -X POST "$API_URL" \
+          -H "Content-Type: application/json" \
+          -H "x-api-key: $ANTHROPIC_API_KEY" \
+          -H "anthropic-version: 2023-06-01" \
+          -d @- <<EOF
+{
+  "model": "$MODEL",
+  "max_tokens": 2048,
+  "messages": [{
+    "role": "user",
+    "content": "$PROMPT"
+  }]
+}
+EOF
+        )
+
+        # Parse response
+        CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text' 2>/dev/null || echo "")
+
+        if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
+          echo "⚠️  Claude API call failed or returned empty response"
+          echo "Response: $RESPONSE"
+          # Fallback to manual analysis
+          TOIL_RATE="0.0"
+          TOP_PATTERN="unknown"
+        else
+          echo "✅ Claude analysis complete"
+          echo "$CONTENT" > /tmp/claude-analysis.txt
+
+          # Extract toil rate
+          TOIL_RATE=$(echo "$CONTENT" | grep -oP 'TOIL_RATE:\s*\K[\d.]+' || echo "0.0")
+
+          # Extract top pattern
+          TOP_PATTERN=$(echo "$CONTENT" | grep -oP 'TOP_PATTERN:\s*\K[\w-]+' || echo "unknown")
+        fi
+
+        # Extract recommendations (everything after "RECOMMENDATIONS:")
+        RECOMMENDATIONS=$(echo "$CONTENT" | sed -n '/^RECOMMENDATIONS:/,$p' | tail -n +2 || echo "- No specific recommendations generated")
+
+        echo "toil-rate=$TOIL_RATE" >> $GITHUB_OUTPUT
+        echo "top-pattern=$TOP_PATTERN" >> $GITHUB_OUTPUT
+
+        # Save recommendations to temp file for report generation
+        echo "$RECOMMENDATIONS" > /tmp/recommendations.txt
+
+        echo "Toil rate: $TOIL_RATE"
+        echo "Top pattern: $TOP_PATTERN"
+        echo "Recommendations extracted"
+
+    - name: Generate audit report
+      shell: bash
+      run: |
+        mkdir -p $(dirname ${{ inputs.output-file }})
+
+        cat > ${{ inputs.output-file }} << 'REPORT'
+        # DX Audit Report
+
+        **Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        **Commits analyzed**: ${{ steps.collect-commits.outputs.total-commits }}
+        **CI runs analyzed**: ${{ steps.collect-ci.outputs.total-runs }}
+
+        ## Summary
+
+        - **Toil rate**: ${{ steps.analyze.outputs.toil-rate }} (${{ steps.analyze.outputs.toil-rate | awk '{print $1*100}' }}%)
+        - **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}
+        - **CI failure rate**: $(echo "scale=2; ${{ steps.collect-ci.outputs.failed-runs }} / ${{ steps.collect-ci.outputs.total-runs }} * 100" | bc)%
+
+        ## Recommendations
+
+        $(cat /tmp/recommendations.txt 2>/dev/null || echo "- No recommendations available")
+
+        ## Data
+
+        See /tmp/aggregation.md for full analysis data.
+
+        REPORT
+
+        echo "✅ Report generated: ${{ inputs.output-file }}"
+
+    - name: Post to Beads epic (if specified)
+      if: inputs.beads-epic != ''
+      shell: bash
+      run: |
+        if command -v bd &> /dev/null; then
+          bd comment ${{ inputs.beads-epic }} "$(cat ${{ inputs.output-file }})"
+          echo "✅ Posted audit summary to ${{ inputs.beads-epic }}"
+        else
+          echo "⚠️  bd CLI not available, skipping Beads post"
+        fi
+
+    - name: Summary
+      shell: bash
+      run: |
+        echo "### DX Audit Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Toil rate**: ${{ steps.analyze.outputs.toil-rate }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Top pattern**: ${{ steps.analyze.outputs.top-pattern }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Report**: [${{ inputs.output-file }}](${{ inputs.output-file }})" >> $GITHUB_STEP_SUMMARY

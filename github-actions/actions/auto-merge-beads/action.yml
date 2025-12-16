@@ -1,0 +1,138 @@
+name: Auto-Merge Beads JSONL
+description: Automatically resolve Beads JSONL merge conflicts using union merge strategy
+
+inputs:
+  base-ref:
+    description: 'Base branch to merge from (e.g., master, main)'
+    required: true
+  pr-branch:
+    description: 'PR branch to merge into'
+    required: true
+  github-token:
+    description: 'GitHub token for pushing changes'
+    required: true
+
+outputs:
+  conflict-resolved:
+    description: 'Whether a conflict was detected and resolved'
+    value: ${{ steps.merge.outputs.conflict-resolved }}
+  merge-required:
+    description: 'Whether a merge was required (base branch had updates)'
+    value: ${{ steps.check.outputs.merge-required }}
+
+runs:
+  using: composite
+  steps:
+    - name: Configure git
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Check if merge is needed
+      id: check
+      shell: bash
+      run: |
+        # Fetch base branch
+        git fetch origin ${{ inputs.base-ref }}
+
+        # Check if .beads/issues.jsonl exists
+        if [ ! -f .beads/issues.jsonl ]; then
+          echo "No Beads JSONL file found, skipping"
+          echo "merge-required=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Check if base branch has diverged
+        BASE_COMMITS=$(git rev-list --count HEAD..origin/${{ inputs.base-ref }})
+
+        if [ "$BASE_COMMITS" -eq 0 ]; then
+          echo "Base branch has no new commits, no merge needed"
+          echo "merge-required=false" >> $GITHUB_OUTPUT
+        else
+          echo "Base branch has $BASE_COMMITS new commits, merge required"
+          echo "merge-required=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Merge base branch
+      id: merge
+      if: steps.check.outputs.merge-required == 'true'
+      shell: bash
+      run: |
+        echo "Attempting to merge origin/${{ inputs.base-ref }}..."
+
+        # Try to merge (may have conflicts)
+        if git merge origin/${{ inputs.base-ref }} --no-edit; then
+          echo "✅ Clean merge, no conflicts"
+          echo "conflict-resolved=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Merge had conflicts - check what files
+        CONFLICT_FILES=$(git diff --name-only --diff-filter=U)
+        echo "Conflict files: $CONFLICT_FILES"
+
+        # Check if only .beads/issues.jsonl has conflicts
+        if [ "$CONFLICT_FILES" = ".beads/issues.jsonl" ]; then
+          echo "✅ Only Beads JSONL has conflicts, auto-resolving with union merge"
+
+          # Union merge: keep all lines from both sides
+          git checkout --union .beads/issues.jsonl
+
+          # Stage the resolved file
+          git add .beads/issues.jsonl
+
+          # Complete the merge
+          git commit --no-edit -m "chore: Auto-merge Beads JSONL (union strategy)" \
+            -m "Automatically resolved .beads/issues.jsonl conflict using union merge." \
+            -m "Each issue is one line, so keeping all lines from both sides is safe." \
+            -m "" \
+            -m "Feature-Key: bd-p4jf" \
+            -m "Agent: github-actions" \
+            -m "Role: auto-merge-bot"
+
+          echo "conflict-resolved=true" >> $GITHUB_OUTPUT
+
+        elif echo "$CONFLICT_FILES" | grep -q ".beads/issues.jsonl"; then
+          echo "❌ Multiple files have conflicts (including JSONL)"
+          echo "Cannot auto-merge - manual resolution required"
+          echo "Conflict files:"
+          echo "$CONFLICT_FILES"
+
+          # Abort the merge
+          git merge --abort
+
+          echo "conflict-resolved=false" >> $GITHUB_OUTPUT
+          exit 1
+
+        else
+          echo "❌ Conflicts in non-JSONL files"
+          echo "Cannot auto-merge - manual resolution required"
+          echo "Conflict files:"
+          echo "$CONFLICT_FILES"
+
+          # Abort the merge
+          git merge --abort
+
+          echo "conflict-resolved=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+    - name: Run bd sync
+      if: steps.merge.outputs.conflict-resolved == 'true'
+      shell: bash
+      run: |
+        if command -v bd >/dev/null 2>&1; then
+          echo "Running bd sync to import merged JSONL..."
+          bd sync --import-only || echo "⚠️ bd sync failed, continuing anyway"
+        else
+          echo "⚠️ bd command not found, skipping sync"
+        fi
+
+    - name: Push merged changes
+      if: steps.merge.outputs.conflict-resolved == 'true' || steps.check.outputs.merge-required == 'true'
+      shell: bash
+      run: |
+        echo "Pushing merged changes to ${{ inputs.pr-branch }}..."
+        git push origin HEAD:${{ inputs.pr-branch }}
+        echo "✅ Pushed successfully"

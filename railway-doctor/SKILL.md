@@ -323,6 +323,31 @@ railway-doctor fix
 **Cause**: Railpack breaking change (e.g., 0.0.70 packageManager field)
 **Prevention**: Pin Railpack version in railway.toml
 
+### Monorepo Root Pattern (Python + llm-common)
+
+**Symptom**: Works locally with `../packages/llm-common` or a vendored copy, but Railway deploy fails with missing modules or broken imports.
+
+**Root Cause**: Railway “isolated monorepo” deploys only the configured Root Directory (e.g., `backend/`). Anything outside that directory (`../packages/llm-common`) is invisible inside the container.
+
+**Best Practice Pattern**:
+- Set **Root Directory** for Python services to `backend/`.
+- Use a **standard dependency** for shared libraries like `llm-common`, never a relative path:
+  ```toml
+  # backend/pyproject.toml
+  [tool.poetry.dependencies]
+  llm-common = { git = "https://github.com/stars-end/llm-common.git", tag = "v0.4.0", extras = ["pgvector"] }
+  ```
+- Avoid `path = "../llm-common"` or `packages/llm-common` for runtime; those are fine for local dev only if the service is not deployed from that folder.
+- Start command should assume `backend/` as CWD:
+  ```bash
+  poetry run uvicorn main:app --host 0.0.0.0 --port "$PORT"
+  ```
+
+**Heuristic for Agents**:
+- If a Railway deploy fails only in one repo (e.g., Affordabot) but works in another (Prime Radiant), first check:
+  - Is the service using `Root Directory = backend/`?
+  - Is `llm-common` (or any shared lib) installed as a normal dependency instead of via `../` paths?
+
 ## Cross-Repo Deployment
 
 This skill deploys to `~/.agent/skills/` and works across:

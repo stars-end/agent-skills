@@ -1,0 +1,25 @@
+name: Python Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python setup with Poetry
+        uses: stars-end/agent-skills/.github/actions/python-setup@main
+        with:
+          working-directory: backend/
+
+      - name: Run tests
+        working-directory: backend/
+        run: poetry run pytest tests/ -v
+
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          directory: backend/

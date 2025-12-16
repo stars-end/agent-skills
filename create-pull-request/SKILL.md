@@ -105,6 +105,105 @@ mcp__plugin_beads_beads__create(
 - If issue is feature → PR closes the feature directly
 - Check: `issue.dependents` to find child tasks
 
+### 2.3. Structural Verification (If Needed)
+If `layout.tsx`, `middleware.ts`, or global config changed:
+```bash
+echo "ℹ️  Structural changes detected. Running build check..."
+make build
+if fails: exit 1
+```
+
+### 2.4. Sync with Master (Prevent JSONL Conflicts)
+
+**Before creating PR, merge master to prevent conflicts:**
+
+```bash
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔄 SYNCING WITH MASTER"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# Fetch latest master
+git fetch origin master
+
+# Check if .beads/issues.jsonl exists and has diverged
+if [ -f .beads/issues.jsonl ]; then
+  JSONL_DIVERGED=$(git diff origin/master...HEAD -- .beads/issues.jsonl | wc -l)
+
+  if [ "$JSONL_DIVERGED" -gt 0 ]; then
+    echo "⚠️  Beads JSONL has diverged from master ($JSONL_DIVERGED lines)"
+    echo "   Merging master now to prevent PR conflicts..."
+    echo ""
+
+    # Merge master (union merge auto-applies for JSONL)
+    if git merge origin/master --no-edit; then
+      echo "✅ Merged master successfully (clean merge)"
+    else
+      # Check if only JSONL has conflicts
+      CONFLICT_FILES=$(git diff --name-only --diff-filter=U)
+
+      if [ "$CONFLICT_FILES" = ".beads/issues.jsonl" ]; then
+        echo "✅ Auto-resolving JSONL conflict with union merge..."
+
+        # Union merge: keep all lines from both sides
+        git checkout --union .beads/issues.jsonl
+        git add .beads/issues.jsonl
+        git commit --no-edit -m "chore: Auto-merge JSONL (union strategy)
+
+Feature-Key: ${FEATURE_KEY}
+Agent: claude-code
+Role: create-pull-request-skill"
+
+        echo "✅ JSONL conflict resolved automatically"
+      else
+        echo "❌ Multiple files have conflicts, aborting auto-merge"
+        echo "   Conflict files:"
+        echo "$CONFLICT_FILES"
+        echo ""
+        echo "Please resolve conflicts manually, then run this skill again"
+        git merge --abort
+        exit 1
+      fi
+    fi
+
+    # Run bd sync to import merged JSONL
+    if command -v bd >/dev/null 2>&1; then
+      echo "Running bd sync to import merged JSONL..."
+      bd sync --import-only
+    fi
+
+    # Push merged changes
+    echo "Pushing merged changes..."
+    git push
+
+    echo ""
+    echo "✅ Synced with master, JSONL conflicts prevented"
+    echo ""
+  else
+    echo "✅ JSONL already in sync with master"
+    echo ""
+  fi
+else
+  echo "ℹ️  No Beads JSONL file, skipping sync check"
+  echo ""
+fi
+```
+
+**Why this is critical:**
+- **Prevents PR conflicts:** Merges master BEFORE creating PR
+- **Union merge strategy:** Auto-resolves JSONL conflicts (keeps all lines)
+- **Multi-agent safety:** Works across VMs (each agent syncs independently)
+- **Complements GitHub Action:** Proactive prevention (skill) + reactive fallback (action)
+
+**What happens:**
+1. Check if JSONL diverged from master
+2. If yes: Merge master automatically
+3. If conflict: Auto-resolve with union merge (JSONL only)
+4. Run `bd sync --import-only` to update local database
+5. Push merged changes
+6. Continue with PR creation
+
 ### 2.5. Ask if Work is Complete (CRITICAL)
 
 **Decision point:** Is work complete and ready to merge?

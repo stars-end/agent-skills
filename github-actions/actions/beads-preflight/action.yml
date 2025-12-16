@@ -1,0 +1,109 @@
+name: 'Beads Preflight Checks'
+description: 'Validate Beads workflow health before CI operations'
+author: 'Prime Radiant AI'
+
+inputs:
+  check-only:
+    description: 'Only check, do not auto-fix (CI should be read-only)'
+    required: false
+    default: 'true'
+  fail-on-issues:
+    description: 'Fail CI if Beads issues detected'
+    required: false
+    default: 'false'
+
+outputs:
+  status:
+    description: 'Beads health status (ok, warning, error)'
+    value: ${{ steps.check-beads.outputs.status }}
+  issues-found:
+    description: 'Comma-separated list of issues found'
+    value: ${{ steps.check-beads.outputs.issues }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check if bd CLI is available
+      id: check-bd
+      shell: bash
+      run: |
+        if ! command -v bd &> /dev/null; then
+          echo "⚠️  bd CLI not found - Beads checks skipped"
+          echo "This is OK if Beads is not used in this repo"
+          echo "status=skipped" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        echo "status=available" >> $GITHUB_OUTPUT
+
+    - name: Run Beads health checks
+      id: check-beads
+      if: steps.check-bd.outputs.status == 'available'
+      shell: bash
+      run: |
+        ISSUES=""
+        STATUS="ok"
+
+        # Check 1: JSONL timestamp skew
+        if git status --porcelain 2>/dev/null | grep -q ".beads/issues.jsonl"; then
+          if [ "$(git status --porcelain 2>/dev/null | grep ".beads/issues.jsonl" | cut -c1-2)" != "M " ]; then
+            ISSUES="${ISSUES}unstaged-jsonl,"
+            STATUS="warning"
+            echo "⚠️  .beads/issues.jsonl has unstaged changes"
+          fi
+        fi
+
+        # Check 2: Feature-Key in recent commits (if on feature branch)
+        BRANCH=$(git branch --show-current)
+        if [[ "$BRANCH" == feature-* ]]; then
+          if ! git log -1 --format=%B | grep -q "Feature-Key:"; then
+            ISSUES="${ISSUES}missing-feature-key,"
+            STATUS="warning"
+            echo "⚠️  Latest commit missing Feature-Key trailer"
+          fi
+        fi
+
+        # Check 3: Branch/issue alignment (if on feature branch)
+        if [[ "$BRANCH" == feature-bd-* ]]; then
+          ISSUE_ID=$(echo "$BRANCH" | sed 's/feature-//')
+          if ! bd list --status open | grep -q "$ISSUE_ID"; then
+            ISSUES="${ISSUES}issue-not-open,"
+            STATUS="warning"
+            echo "⚠️  Branch $BRANCH but issue $ISSUE_ID not open"
+          fi
+        fi
+
+        echo "status=$STATUS" >> $GITHUB_OUTPUT
+        echo "issues=$ISSUES" >> $GITHUB_OUTPUT
+
+        if [ "$STATUS" = "ok" ]; then
+          echo "✅ Beads health checks passed"
+        else
+          echo "⚠️  Beads health checks found warnings"
+          echo ""
+          echo "Issues detected: $ISSUES"
+          echo ""
+          echo "To fix locally:"
+          echo "  ~/.agent/skills/bd-doctor/check.sh"
+          echo "  ~/.agent/skills/bd-doctor/fix.sh"
+        fi
+
+        # Only fail if fail-on-issues is true
+        if [ "${{ inputs.fail-on-issues }}" = "true" ] && [ "$STATUS" != "ok" ]; then
+          exit 1
+        fi
+
+    - name: Summary
+      if: always()
+      shell: bash
+      run: |
+        echo "### Beads Preflight Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ steps.check-bd.outputs.status }}" = "skipped" ]; then
+          echo "⚠️  bd CLI not available - checks skipped" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "**Status**: ${{ steps.check-beads.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ steps.check-beads.outputs.issues }}" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Issues**: ${{ steps.check-beads.outputs.issues }}" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi

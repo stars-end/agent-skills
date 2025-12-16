@@ -1,0 +1,32 @@
+{
+  "repo": "prime-radiant-ai",
+  "required": [
+    "issue-first",
+    "sync-feature-branch",
+    "create-pull-request",
+    "fix-pr-feedback",
+    "merge-pr",
+    "context-database-schema",
+    "railway-doctor",
+    "lockfile-doctor"
+  ],
+  "recommended": [
+    "beads-workflow",
+    "beads-guard",
+    "docs-create",
+    "lint-check",
+    "finish-feature",
+    "session-end",
+    "mcp-doctor"
+  ],
+  "mcp": {
+    "required": [
+      "agent-mail"
+    ],
+    "optional": [
+      "universal-skills",
+      "serena",
+      "z.ai-search"
+    ]
+  }
+}
