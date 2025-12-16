@@ -171,13 +171,19 @@ def dispatch(issue: Dict, repo_name: str, repo_root: Path, dry_run: bool = True)
         print("❌ 'jules' CLI not found. Is it installed?")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Cross-repo Jules Dispatcher")
-    parser.add_argument("--dry-run", action="store_true", help="Print commands without executing")
-    parser.add_argument("--force", action="store_true", help="Ignore 'jules-ready' label check")
-    parser.add_argument("--issue", type=str, help="Dispatch specific issue only")
+    # Argument parsing
+    parser = argparse.ArgumentParser(description="Cross-repo Jules Manager")
+    parser.add_argument("--action", choices=["dispatch", "list", "pull"], default="dispatch", help="Action to perform")
+    
+    # Dispatch args
+    parser.add_argument("--dry-run", action="store_true", help="[Dispatch] Print commands without executing")
+    parser.add_argument("--force", action="store_true", help="[Dispatch] Ignore 'jules-ready' label check")
+    parser.add_argument("--issue", type=str, help="[Dispatch] Dispatch specific issue only")
     parser.add_argument("--repo", type=str, help="Override auto-detected repo (owner/name)")
     
+    # Pull args
+    parser.add_argument("--session", type=str, help="[Pull] Session ID to pull")
+
     args = parser.parse_args()
 
     # Find repo root
@@ -191,7 +197,19 @@ def main():
     if not repo_name:
         print("❌ Error: Could not detect repo name. Use --repo owner/name")
         sys.exit(1)
-    
+
+    if args.action == "list":
+        list_sessions(repo_name)
+        return
+
+    if args.action == "pull":
+        if not args.session:
+            print("❌ Error: --session ID required for pull action")
+            sys.exit(1)
+        pull_session(args.session, repo_root)
+        return
+
+    # Dispatch Logic
     print(f"📁 Repo: {repo_name}")
     print(f"📍 Root: {repo_root}")
 
@@ -237,5 +255,53 @@ def main():
         dispatch(issue, repo_name, repo_root, dry_run=args.dry_run)
 
 
+def list_sessions(repo_name: str):
+    """List active Jules sessions for the repo."""
+    print(f"🔍 Checking Jules sessions for {repo_name}...")
+    try:
+        # Use standard list format
+        subprocess.run(["jules", "session", "--list"], check=True)
+        print("\n💡 To pull a session:")
+        print("   python dispatch.py --action pull --session <ID>")
+    except subprocess.CalledProcessError:
+        print("❌ Failed to list sessions.")
+    except FileNotFoundError:
+        print("❌ 'jules' CLI not found.")
+
+
+def pull_session(session_id: str, repo_root: Path):
+    """Pull code from a Jules session and apply it to a feature branch."""
+    print(f"📥 Pulling Session {session_id}...")
+    
+    # 1. Fetch Session Info to find Issue ID (Parsing stdout is tricky, maybe just prompt?)
+    # For now, we will inspect the session diff to guess or just use a generic branch.
+    # Actually, we can assume the user wants to apply it to CURRENT branch if they already checked it out,
+    # OR we can try to be smart. 
+    # Let's use 'feature-jules-<session_id>' if we can't find the ID, but 'feature-<issue_id>' if we can.
+    
+    # We'll just fetch and apply. The user (Agent) should handle branching before calling this if they want strict control.
+    # BUT the strategy says "Create branch".
+    
+    branch_name = f"feature-jules-{session_id}"
+    
+    try:
+        # Create branch
+        print(f"🌿 Creating/Switching to branch {branch_name}...")
+        subprocess.run(["git", "checkout", "-b", branch_name], check=False) # Helper, ignore error if exists
+        subprocess.run(["git", "checkout", branch_name], check=True)
+        
+        # Pull and Apply
+        print(f"⚡ applying patch...")
+        subprocess.run(["jules", "remote", "pull", "--session", session_id, "--apply"], check=True)
+        
+        print("\n✅ Patch applied!")
+        print("Next Steps:")
+        print("1. Run `make ci-lite` to verify.")
+        print("2. Commit and PR.")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to pull session: {e}")
+
 if __name__ == "__main__":
     main()
+
