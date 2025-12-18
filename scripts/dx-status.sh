@@ -58,7 +58,7 @@ else
     ERRORS=$((ERRORS+1))
 fi
 
-# 3. Check Binaries (Explicitly based on learnings)
+# 3. Check Binaries
 echo "--- Required Tools ---"
 check_binary "universal-skills"
 if command -v cass >/dev/null 2>&1; then
@@ -66,7 +66,7 @@ if command -v cass >/dev/null 2>&1; then
 else
     echo -e "${YELLOW}⚠️  Binary missing: cass${RESET}"
     echo "   (Optional but recommended for memory retrieval)"
-    # Warn only, don't fail strict check yet
+    # Warn only
 fi
 
 # 4. Invoke MCP Doctor
@@ -87,5 +87,6 @@ if [ $ERRORS -eq 0 ]; then
     exit 0
 else
     echo -e "${RED}⚠️  SYSTEM UNHEALTHY. Found $ERRORS errors.${RESET}"
+    echo -e "${YELLOW}💡 TROUBLESHOOTING: Read ~/agent-skills/memory/playbooks/99_TROUBLESHOOTING.md for fixes.${RESET}"
     exit 1
 fi
