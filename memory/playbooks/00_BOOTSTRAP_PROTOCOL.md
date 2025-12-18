@@ -16,3 +16,7 @@
 *   **Refactoring:** Use `serena`.
 *   **Planning:** Query `cass`.
 *   **Committing:** Respect `pre-commit` hooks.
+
+## 4. Troubleshooting
+If you encounter **Dirty Repos** or **Missing Tools**, read:
+`~/agent-skills/memory/playbooks/99_TROUBLESHOOTING.md`
