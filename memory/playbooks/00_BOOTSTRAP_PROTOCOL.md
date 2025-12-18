@@ -16,7 +16,7 @@
 *   **Refactoring:** Use `serena`.
 *   **Planning:** Query `cass`.
 *   **Committing:** Respect `pre-commit` hooks.
-*   **Tooling:** **USE THE CLI.** Don't ask the user to check `gh` or `railway` status. Read `~/agent-skills/memory/playbooks/02_CLI_MASTERY.md`.
+*   **Secrets/Tools:** Read `~/agent-skills/cli-mastery/SKILL.md`. **Trust the Environment (Railway).**
 
 ## 4. Troubleshooting
 If you encounter **Dirty Repos** or **Missing Tools**, read:
