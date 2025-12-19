@@ -27,7 +27,12 @@ echo -e "${GREEN} -> Setting up skills mount (~/.agent/skills)...${RESET}"
 mkdir -p "$HOME/.agent"
 ln -sfn "$AGENTS_ROOT" "$HOME/.agent/skills"
 
-# 3. Setup Cass (Memory)
+# 3. Install Smart Tools (run)
+echo -e "${GREEN} -> Installing Smart Tools...${RESET}"
+ln -sf "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"
+chmod +x "$AGENTS_ROOT/tools/run"
+
+# 4. Setup Cass (Memory)
 echo -e "${GREEN} -> Configuring Cass Memory...${RESET}"
 mkdir -p "$HOME/.cass"
 cat > "$HOME/.cass/settings.json" <<EOF
@@ -40,7 +45,7 @@ cat > "$HOME/.cass/settings.json" <<EOF
 }
 EOF
 
-# 4. Install Hooks (Anti-Corruption)
+# 5. Install Hooks (Anti-Corruption)
 echo -e "${GREEN} -> Installing Git Hooks...${RESET}"
 HOOK_SCRIPT="$AGENTS_ROOT/scripts/validate_beads.py"
 
@@ -61,14 +66,14 @@ install_hook() {
 install_hook "$HOME/prime-radiant-ai"
 install_hook "$HOME/affordabot"
 
-# 5. Tool Check (Informational)
+# 6. Tool Check
 echo -e "${GREEN} -> Checking for required tools...${RESET}"
 if ! command -v universal-skills >/dev/null 2>&1; then
     echo -e "${YELLOW}⚠️  universal-skills not found in PATH.${RESET}"
     echo "   Recommended: npm install -g universal-skills"
 fi
 
-# 6. Refresh Environment
+# 7. Refresh Environment
 echo -e "${GREEN} -> Refreshing environment...${RESET}"
 if ! grep -q "dx-hydrate" "$HOME/.bashrc"; then
     echo "alias hydrate='$AGENTS_ROOT/scripts/dx-hydrate.sh'" >> "$HOME/.bashrc"

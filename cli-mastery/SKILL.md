@@ -5,17 +5,21 @@
 ## 🚨 Environment Variable Protocol (CRITICAL)
 
 **Core Rule:** Do NOT look for `.env` files.
-We use **Railway** to inject secrets directly into the process environment.
+**Automation:** Use the `run` command wrapper.
 
-**The "Trust the Shell" Invariant:**
-1.  **Source of Truth:** The environment variables (`os.environ`, `process.env`) are the *only* source of truth.
-2.  **Verification:** If you suspect a missing variable, run `railway run env | grep <VAR_NAME>`.
-3.  **Prohibited:** Never create `.env` files to "fix" missing secrets. This causes leaks.
+### The `run` Command
+We have installed a smart wrapper called `run`. It automatically detects if you need Railway secrets and injects them.
 
-**How to Run Code:**
-If your code fails with missing config, you are likely running "naked". Wrap it:
+**Usage:**
+Always prefix your execution commands with `run`.
+
 *   ❌ `python main.py`
-*   ✅ `railway run python main.py`
+*   ✅ `run python main.py` (Automatically becomes `railway run python main.py`)
+*   ✅ `run pytest`
+*   ✅ `run make dev`
+
+**Verification:**
+If `run env | grep DATABASE_URL` returns nothing, then the project is not configured correctly.
 
 ---
 
@@ -29,10 +33,7 @@ If your code fails with missing config, you are likely running "naked". Wrap it:
 Don't guess. Check the logs.
 ```bash
 # Get the last 50 lines of logs
-railway logs -n 50
-
-# Check deployment status
-railway up --detach
+run railway logs -n 50
 ```
 
 ---
@@ -45,21 +46,10 @@ Always use `--json` to get structured data.
 ```bash
 # List open PRs
 gh pr list --json number,title,author,state
-
-# Check CI/CD Run Status
-gh run list --limit 5 --json conclusion,status
 ```
 
 ### 2. Actions
 ```bash
-# Create a PR (Autofill from branch)
+# Create a PR
 gh pr create --fill
-
-# Checkout a PR
-gh pr checkout 123
 ```
-
-## 🧠 "Agentic" Workflow Example
-
-**Bad Agent:** "I see a `.env` file is missing. I will create one."
-**Good Agent:** "I need to run the backend. I will use `railway run python main.py` to ensure secrets are injected."

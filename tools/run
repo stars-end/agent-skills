@@ -1,0 +1,26 @@
+#!/bin/bash
+# Smart Runner (run)
+# Automatically wraps commands in 'railway run' if needed.
+
+# 1. Check if we are in a Railway Project
+if [ ! -f "railway.toml" ] && [ ! -f "railway.json" ]; then
+    # Not a railway project? Just run the command.
+    exec "$@"
+fi
+
+# 2. Check if we are already in an Environment
+if [ -n "$RAILWAY_ENVIRONMENT" ]; then
+    # Already injected? Just run.
+    exec "$@"
+fi
+
+# 3. Check if Railway CLI is available
+if ! command -v railway >/dev/null 2>&1; then
+    echo "⚠️  'railway' CLI not found. Running raw command..." >&2
+    exec "$@"
+fi
+
+# 4. Auto-Upgrade
+# We use 'exec' so this script is replaced by the process (signals flow correctly)
+echo "🚂 Auto-injecting Railway Environment..." >&2
+exec railway run "$@"
