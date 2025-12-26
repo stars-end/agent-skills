@@ -49,6 +49,12 @@ EOF
 echo -e "${GREEN} -> Installing Git Hooks...${RESET}"
 HOOK_SCRIPT="$AGENTS_ROOT/scripts/validate_beads.py"
 
+# Enforce GEMINI.md -> AGENTS.md symlink
+if [ -f "AGENTS.md" ]; then
+    echo -e "${GREEN} -> Linking GEMINI.md...${RESET}"
+    ln -sf AGENTS.md GEMINI.md
+fi
+
 install_hook() {
     REPO_PATH="$1"
     if [ -d "$REPO_PATH/.git" ]; then
@@ -75,10 +81,27 @@ fi
 
 # 7. Refresh Environment
 echo -e "${GREEN} -> Refreshing environment...${RESET}"
-if ! grep -q "dx-hydrate" "$HOME/.bashrc"; then
-    echo "alias hydrate='$AGENTS_ROOT/scripts/dx-hydrate.sh'" >> "$HOME/.bashrc"
-alias dx-check='/home/feng/agent-skills/scripts/dx-check.sh'
-    echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$HOME/.bashrc"
-fi
+
+configure_shell() {
+    RC_FILE="$1"
+    if [ -f "$RC_FILE" ]; then
+        echo "   Configuring $RC_FILE..."
+        if ! grep -q "dx-hydrate" "$RC_FILE"; then
+            echo "" >> "$RC_FILE"
+            echo "# Agent Skills DX" >> "$RC_FILE"
+            echo "alias hydrate='$AGENTS_ROOT/scripts/dx-hydrate.sh'" >> "$RC_FILE"
+            echo "alias dx-check='$AGENTS_ROOT/scripts/dx-check.sh'" >> "$RC_FILE"
+            echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$RC_FILE"
+            
+            # Auto-check on login
+            echo "if [ -f '$AGENTS_ROOT/scripts/dx-status.sh' ]; then" >> "$RC_FILE"
+            echo "  '$AGENTS_ROOT/scripts/dx-status.sh' >/dev/null 2>&1 || echo \"⚠️  DX Environment Unhealthy. Run 'dx-check' to fix.\"" >> "$RC_FILE"
+            echo "fi" >> "$RC_FILE"
+        fi
+    fi
+}
+
+configure_shell "$HOME/.bashrc"
+configure_shell "$HOME/.zshrc"
 
 echo -e "${BLUE}✨ Hydration Complete. ready for multi-agent dispatch.${RESET}"
