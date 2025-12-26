@@ -77,6 +77,7 @@ fi
 echo -e "${GREEN} -> Refreshing environment...${RESET}"
 if ! grep -q "dx-hydrate" "$HOME/.bashrc"; then
     echo "alias hydrate='$AGENTS_ROOT/scripts/dx-hydrate.sh'" >> "$HOME/.bashrc"
+alias dx-check='/home/feng/agent-skills/scripts/dx-check.sh'
     echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$HOME/.bashrc"
 fi
 

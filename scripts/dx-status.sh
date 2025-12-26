@@ -61,6 +61,8 @@ fi
 # 3. Check Binaries
 echo "--- Required Tools ---"
 check_binary "universal-skills"
+check_binary "bd"
+check_binary "jules"
 if command -v cass >/dev/null 2>&1; then
     echo -e "${GREEN}✅ Binary found: cass${RESET}"
 else

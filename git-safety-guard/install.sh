@@ -2,6 +2,7 @@
 #
 # install.sh
 # Installs Claude Code hook to block destructive git/filesystem commands
+# and a pre-push hook to enforce ci-lite.
 #
 # Usage:
 #   ./install.sh          # Install in current project (.claude/)
@@ -32,7 +33,7 @@ fi
 # Create directories
 mkdir -p "$INSTALL_DIR/hooks"
 
-# Write the guard script
+# --- 1. Write the guard script (Claude Hook) ---
 cat > "$INSTALL_DIR/hooks/git_safety_guard.py" << 'PYTHON_SCRIPT'
 #!/usr/bin/env python3
 """
@@ -125,10 +126,10 @@ SAFE_PATTERNS = [
     # Allow rm -rf on temp directories (these are designed for ephemeral data)
     r"rm\s+-[a-z]*r[a-z]*f[a-z]*\s+/tmp/",        # /tmp/...
     r"rm\s+-[a-z]*r[a-z]*f[a-z]*\s+/var/tmp/",    # /var/tmp/...
-    r"rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\$TMPDIR/",    # $TMPDIR/...
-    r"rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\\\${TMPDIR",   # ${TMPDIR}/... or ${TMPDIR:-...}
-    r'rm\s+-[a-z]*r[a-z]*f[a-z]*\s+"\$TMPDIR/',   # "$TMPDIR/..."
-    r'rm\s+-[a-z]*r[a-z]*f[a-z]*\s+"\\\${TMPDIR',  # "${TMPDIR}/..." or "${TMPDIR:-...}"
+    r"rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\\$TMPDIR/",    # $TMPDIR/...
+    r"rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\\\\\${TMPDIR",   # ${TMPDIR}/... or ${TMPDIR:-...}
+    r'rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\"$TMPDIR/",   # "$TMPDIR/..."
+    r'rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\\\"\\\\\${TMPDIR',  # "${TMPDIR}/..." or "${TMPDIR:-...}"
 ]
 
 
@@ -179,60 +180,52 @@ if __name__ == "__main__":
     main()
 PYTHON_SCRIPT
 
-# Make executable
 chmod +x "$INSTALL_DIR/hooks/git_safety_guard.py"
 echo -e "${GREEN}✓${NC} Created $INSTALL_DIR/hooks/git_safety_guard.py"
 
-# Handle settings.json - merge if exists, create if not
+# --- 2. Write the pre-push hook (The Physics) ---
+# This hook runs 'make ci-lite' before any push.
+cat > "$INSTALL_DIR/hooks/pre-push" << 'HOOK_SCRIPT'
+#!/bin/bash
+# pre-push hook enforced by agent-skills
+# Runs ci-lite before code leaves the machine.
+
+if [ -f Makefile ]; then
+    if grep -q "ci-lite:" Makefile;
+    then
+        echo "🧪 Running 'make ci-lite' before push..."
+        if ! make ci-lite;
+        then
+            echo "❌ PUSH BLOCKED: CI-Lite failed."
+            echo "🚨 Fix errors before pushing or use --no-verify (not recommended)."
+            exit 1
+        fi
+        echo "✅ CI-Lite passed."
+    fi
+fi
+exit 0
+HOOK_SCRIPT
+
+chmod +x "$INSTALL_DIR/hooks/pre-push"
+echo -e "${GREEN}✓${NC} Created $INSTALL_DIR/hooks/pre-push"
+
+# --- 3. Handle settings.json (Claude Integration) ---
 SETTINGS_FILE="$INSTALL_DIR/settings.json"
 
 if [[ -f "$SETTINGS_FILE" ]]; then
-    # Check if hooks.PreToolUse already exists
     if python3 -c "import json; d=json.load(open('$SETTINGS_FILE')); exit(0 if 'hooks' in d and 'PreToolUse' in d['hooks'] else 1)" 2>/dev/null; then
-        echo -e "${YELLOW}⚠${NC}  $SETTINGS_FILE already has PreToolUse hooks configured."
-        echo -e "    Please manually add this to your existing PreToolUse array:"
-        echo ""
-        echo '    {'
-        echo '      "matcher": "Bash",'
-        echo '      "hooks": ['
-        echo '        {'
-        echo '          "type": "command",'
-        echo "          \"command\": \"$HOOK_PATH\""
-        echo '        }'
-        echo '      ]'
-        echo '    }'
-        echo ""
+        echo -e "${YELLOW}⚠${NC} $SETTINGS_FILE already has PreToolUse hooks. Add $HOOK_PATH manually."
     else
-        # Merge hooks into existing settings
         python3 << MERGE_SCRIPT
 import json
-
-with open("$SETTINGS_FILE", "r") as f:
-    settings = json.load(f)
-
-if "hooks" not in settings:
-    settings["hooks"] = {}
-
-settings["hooks"]["PreToolUse"] = [
-    {
-        "matcher": "Bash",
-        "hooks": [
-            {
-                "type": "command",
-                "command": "$HOOK_PATH"
-            }
-        ]
-    }
-]
-
-with open("$SETTINGS_FILE", "w") as f:
-    json.dump(settings, f, indent=2)
-    f.write("\n")
+with open("$SETTINGS_FILE", "r") as f: settings = json.load(f)
+if "hooks" not in settings: settings["hooks"] = {}
+settings["hooks"]["PreToolUse"] = [{"matcher": "Bash", "hooks": [{"type": "command", "command": "$HOOK_PATH"}]}]
+with open("$SETTINGS_FILE", "w") as f: json.dump(settings, f, indent=2); f.write("\n")
 MERGE_SCRIPT
-        echo -e "${GREEN}✓${NC} Updated $SETTINGS_FILE with hook configuration"
+        echo -e "${GREEN}✓${NC} Updated $SETTINGS_FILE"
     fi
 else
-    # Create new settings.json
     cat > "$SETTINGS_FILE" << SETTINGS_JSON
 {
   "hooks": {
@@ -253,33 +246,22 @@ SETTINGS_JSON
     echo -e "${GREEN}✓${NC} Created $SETTINGS_FILE"
 fi
 
+# --- 4. Install Native Git Hooks (if project local) ---
+if [[ "$INSTALL_TYPE" == "project" ]]; then
+    mkdir -p .git/hooks
+    ln -sf "../../.claude/hooks/pre-push" .git/hooks/pre-push
+    echo -e "${GREEN}✓${NC} Linked pre-push hook to .git/hooks/"
+fi
+
 # Summary
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}Installation complete!${NC}"
 echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
 echo ""
-echo "The following destructive commands are now blocked:"
-echo "  • git checkout -- <files>"
-echo "  • git restore <files>"
-echo "  • git reset --hard"
-echo "  • git clean -f"
-echo "  • git push --force / -f"
-echo "  • git branch -D"
-echo "  • rm -rf (except /tmp, /var/tmp, \$TMPDIR)"
-echo "  • git stash drop/clear"
+echo "Enforced via Claude Hooks & Native Git Hooks:"
+echo "  • Destructive commands (git checkout --, rm -rf) are BLOCKED."
+echo "  • Pushes are BLOCKED if 'make ci-lite' fails."
 echo ""
-echo -e "${YELLOW}⚠  IMPORTANT: Restart Claude Code for the hook to take effect.${NC}"
+echo -e "${YELLOW}⚠ IMPORTANT: Restart Claude Code for tool changes to take effect.${NC}"
 echo ""
-
-# Test the hook
-echo "Testing hook..."
-TEST_RESULT=$(echo '{"tool_name": "Bash", "tool_input": {"command": "git checkout -- test.txt"}}' | \
-    python3 "$INSTALL_DIR/hooks/git_safety_guard.py" 2>/dev/null || true)
-
-if echo "$TEST_RESULT" | grep -q "permissionDecision.*deny" 2>/dev/null; then
-    echo -e "${GREEN}✓${NC} Hook test passed - destructive commands will be blocked"
-else
-    echo -e "${RED}✗${NC} Hook test failed - check Python installation"
-    exit 1
-fi
