@@ -90,7 +90,7 @@ STATE_REC="$INSTALL_DIR/hooks/state-recovery"
 echo '#!/bin/bash' > "$STATE_REC"
 echo 'echo "🔄 [dx-hooks] Checking environment integrity..."' >> "$STATE_REC"
 echo 'if [ -f .beads/issues.jsonl ] && command -v bd &> /dev/null; then' >> "$STATE_REC"
-echo '    # Attempt import, ignore errors if db locked' >> "$STATE_REC"
+# Attempt import, ignore errors if db locked
 echo '    bd import 2>/dev/null || true' >> "$STATE_REC"
 echo 'fi' >> "$STATE_REC"
 echo 'if [ -f pnpm-lock.yaml ] && command -v pnpm &> /dev/null; then' >> "$STATE_REC"
@@ -110,11 +110,14 @@ echo 'exit 0' >> "$STATE_REC"
 # 2.3 Permission Sentinel (Safe Version)
 PERM_SENTINEL="$INSTALL_DIR/hooks/permission-sentinel"
 echo '#!/bin/bash' > "$PERM_SENTINEL"
+# Only target scripts/ and bin/ directories
 echo '# Only target scripts/ and bin/ directories' >> "$PERM_SENTINEL"
-echo 'FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E "^(scripts|bin)/.*\.(sh|py)$")' >> "$PERM_SENTINEL"
+
+FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E "^(scripts|bin)/.*\.(sh|py)$")
 echo 'if [ -n "$FILES" ]; then' >> "$PERM_SENTINEL"
 echo '    echo "$FILES" | xargs -I {} chmod +x {}' >> "$PERM_SENTINEL"
-    # Only re-add the specific files we changed' >> "$PERM_SENTINEL"
+    # Only re-add the specific files we changed
+    echo '    # Only re-add the specific files we changed' >> "$PERM_SENTINEL"
     echo '    echo "$FILES" | xargs git add' >> "$PERM_SENTINEL"
 fi' >> "$PERM_SENTINEL"
 echo 'exit 0' >> "$PERM_SENTINEL"
