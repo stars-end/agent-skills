@@ -1,29 +1,62 @@
 name: 'Lockfile Guardian'
-description: 'Ensures lockfiles are in sync with manifest changes'
+description: 'Ensures and Auto-Fixes lockfiles'
 inputs:
   github-token:
     description: 'GitHub Token'
     required: true
+  auto-fix:
+    description: 'Whether to auto-commit fixes'
+    default: 'true'
 
 runs:
   using: 'composite'
   steps:
-    - name: Check Python Lockfile
+    - name: Check & Fix Python Lockfile
       shell: bash
       run: |
         if git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q 'pyproject.toml'; then
           if ! git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q 'poetry.lock'; then
-            echo "::error::pyproject.toml changed but poetry.lock did not. Run 'poetry lock' locally."
-            exit 1
+            echo "⚠️ pyproject.toml changed but poetry.lock did not."
+            
+            if [ "${{ inputs.auto-fix }}" == "true" ]; then
+                echo "🔧 Auto-Fixing poetry.lock..."
+                pip install poetry
+                poetry lock
+                
+                git config --global user.name "Lockfile Guardian"
+                git config --global user.email "bot@stars-end.ai"
+                git add poetry.lock
+                git commit -m "fix(deps): Auto-update poetry.lock"
+                git push origin HEAD:${{ github.head_ref }}
+                echo "✅ Fixed and Pushed."
+            else
+                echo "::error::Lockfile desync detected. Run 'poetry lock' locally."
+                exit 1
+            fi
           fi
         fi
 
-    - name: Check JS Lockfile
+    - name: Check & Fix JS Lockfile
       shell: bash
       run: |
         if git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q 'package.json'; then
           if ! git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q 'pnpm-lock.yaml'; then
-            echo "::error::package.json changed but pnpm-lock.yaml did not. Run 'pnpm install' locally."
-            exit 1
+            echo "⚠️ package.json changed but pnpm-lock.yaml did not."
+            
+            if [ "${{ inputs.auto-fix }}" == "true" ]; then
+                echo "🔧 Auto-Fixing pnpm-lock.yaml..."
+                npm install -g pnpm
+                pnpm install --lockfile-only
+                
+                git config --global user.name "Lockfile Guardian"
+                git config --global user.email "bot@stars-end.ai"
+                git add pnpm-lock.yaml
+                git commit -m "fix(deps): Auto-update pnpm-lock.yaml"
+                git push origin HEAD:${{ github.head_ref }}
+                echo "✅ Fixed and Pushed."
+            else
+                echo "::error::Lockfile desync detected. Run 'pnpm install' locally."
+                exit 1
+            fi
           fi
         fi
