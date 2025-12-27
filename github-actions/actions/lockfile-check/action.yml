@@ -2,7 +2,7 @@ name: 'Lockfile Guardian'
 description: 'Ensures and Auto-Fixes lockfiles'
 inputs:
   github-token:
-    description: 'GitHub Token'
+    description: 'GitHub Token for pushing fixes'
     required: true
   auto-fix:
     description: 'Whether to auto-commit fixes (Requires label "lockfile-autofix")'
@@ -12,49 +12,55 @@ inputs:
     default: 'backend'
   frontend-directory:
     description: 'Path to frontend (pnpm) root'
-    default: ''
+    default: '.'
 
 runs:
   using: 'composite'
   steps:
+    - name: Configure Git Auth
+      shell: bash
+      if: inputs.auto-fix == 'true'
+      run: |
+        git config --global user.name "Lockfile Guardian"
+        git config --global user.email "bot@stars-end.ai"
+        # Set remote URL with token for push
+        git remote set-url origin "https://x-access-token:${{ inputs.github-token }}@github.com/${{ github.repository }}"
+
     - name: Check & Fix Python Lockfile
       shell: bash
       env:
         BACKEND_DIR: ${{ inputs.backend-directory }}
       run: |
-        # Adjust for root or subdir
         BASE_DIR="."
         if [ -n "$BACKEND_DIR" ] && [ -d "$BACKEND_DIR" ]; then
             BASE_DIR="$BACKEND_DIR"
         fi
         
-        # Paths relative to repo root
         TOML="$BASE_DIR/pyproject.toml"
         LOCK="$BASE_DIR/poetry.lock"
 
-        if git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q "$TOML"; then
-          if ! git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q "$LOCK"; then
-            echo "⚠️ $TOML changed but $LOCK did not."
-            
-            # Check label safety
-            HAS_LABEL=${{ contains(github.event.pull_request.labels.*.name, 'lockfile-autofix') }}
-            
-            if [ "${{ inputs.auto-fix }}" == "true" ] && [ "$HAS_LABEL" == "true" ]; then
-                echo "🔧 Auto-Fixing poetry.lock in $BASE_DIR..."
-                pip install poetry
-                (cd "$BASE_DIR" && poetry lock)
+        if [ -f "$TOML" ]; then
+            if git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q "$TOML"; then
+              if ! git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q "$LOCK"; then
+                echo "⚠️ $TOML changed but $LOCK did not."
                 
-                git config --global user.name "Lockfile Guardian"
-                git config --global user.email "bot@stars-end.ai"
-                git add "$LOCK"
-                git commit -m "fix(deps): Auto-update poetry.lock"
-                git push origin HEAD:${{ github.head_ref }}
-                echo "✅ Fixed and Pushed."
-            else
-                echo "::error::Lockfile desync detected. Run 'cd $BASE_DIR && poetry lock' locally."
-                exit 1
+                HAS_LABEL=${{ contains(github.event.pull_request.labels.*.name, 'lockfile-autofix') }}
+                
+                if [ "${{ inputs.auto-fix }}" == "true" ] && [ "$HAS_LABEL" == "true" ]; then
+                    echo "🔧 Auto-Fixing poetry.lock in $BASE_DIR..."
+                    pip install poetry
+                    (cd "$BASE_DIR" && poetry lock)
+                    
+                    git add "$LOCK"
+                    git commit -m "fix(deps): Auto-update poetry.lock"
+                    git push origin HEAD:${{ github.head_ref }}
+                    echo "✅ Fixed and Pushed."
+                else
+                    echo "::error::Lockfile desync detected. Run 'cd $BASE_DIR && poetry lock' locally."
+                    exit 1
+                fi
+              fi
             fi
-          fi
         fi
 
     - name: Check & Fix JS Lockfile
@@ -70,26 +76,26 @@ runs:
         PKG="$BASE_DIR/package.json"
         LOCK="$BASE_DIR/pnpm-lock.yaml"
 
-        if git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q "$PKG"; then
-          if ! git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q "$LOCK"; then
-            echo "⚠️ $PKG changed but $LOCK did not."
-            
-            HAS_LABEL=${{ contains(github.event.pull_request.labels.*.name, 'lockfile-autofix') }}
-            
-            if [ "${{ inputs.auto-fix }}" == "true" ] && [ "$HAS_LABEL" == "true" ]; then
-                echo "🔧 Auto-Fixing pnpm-lock.yaml in $BASE_DIR..."
-                npm install -g pnpm
-                (cd "$BASE_DIR" && pnpm install --lockfile-only)
+        if [ -f "$PKG" ]; then
+            if git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q "$PKG"; then
+              if ! git diff --name-only origin/${{ github.base_ref }}..HEAD | grep -q "$LOCK"; then
+                echo "⚠️ $PKG changed but $LOCK did not."
                 
-                git config --global user.name "Lockfile Guardian"
-                git config --global user.email "bot@stars-end.ai"
-                git add "$LOCK"
-                git commit -m "fix(deps): Auto-update pnpm-lock.yaml"
-                git push origin HEAD:${{ github.head_ref }}
-                echo "✅ Fixed and Pushed."
-            else
-                echo "::error::Lockfile desync detected. Run 'cd $BASE_DIR && pnpm install' locally."
-                exit 1
+                HAS_LABEL=${{ contains(github.event.pull_request.labels.*.name, 'lockfile-autofix') }}
+                
+                if [ "${{ inputs.auto-fix }}" == "true" ] && [ "$HAS_LABEL" == "true" ]; then
+                    echo "🔧 Auto-Fixing pnpm-lock.yaml in $BASE_DIR..."
+                    npm install -g pnpm
+                    (cd "$BASE_DIR" && pnpm install --lockfile-only)
+                    
+                    git add "$LOCK"
+                    git commit -m "fix(deps): Auto-update pnpm-lock.yaml"
+                    git push origin HEAD:${{ github.head_ref }}
+                    echo "✅ Fixed and Pushed."
+                else
+                    echo "::error::Lockfile desync detected. Run 'cd $BASE_DIR && pnpm install' locally."
+                    exit 1
+                fi
+              fi
             fi
-          fi
         fi
