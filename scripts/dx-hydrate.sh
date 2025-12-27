@@ -59,10 +59,11 @@ for repo in "$HOME/prime-radiant-ai" "$HOME/affordabot" "$HOME/llm-common" "$AGE
     fi
 done
 
-# Enforce GEMINI.md -> AGENTS.md symlink
+# Enforce GEMINI.md -> AGENTS.md symlink (Relative)
 for repo in "$HOME/prime-radiant-ai" "$HOME/affordabot" "$HOME/llm-common" "$AGENTS_ROOT"; do
     if [ -f "$repo/AGENTS.md" ]; then
-        ln -sf "$repo/AGENTS.md" "$repo/GEMINI.md"
+        echo "   Linking GEMINI.md in $repo..."
+        (cd "$repo" && ln -sf AGENTS.md GEMINI.md)
     fi
 done
 
