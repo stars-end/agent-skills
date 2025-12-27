@@ -1,0 +1,488 @@
+55df66e - ci(dx): update dx-audit frequency and assignee (Feng Tao Ning)
+.github/workflows/dx-audit.yml
+
+c6106ad - Use llm-common context pointer selection (v0.7.2) (#479) (fengning-starsend)
+.beads/issues.jsonl
+backend/poetry.lock
+backend/pyproject.toml
+backend/services/research/portfolio_agent.py
+backend/tests/test_portfolio_agent.py
+
+04fb33f - docs(dx): update AGENTS.md with golden bootloader (Feng Tao Ning)
+AGENTS.md
+
+cafbb5a - style(dx): standardize stories directory casing to docs/testing/stories (Feng Tao Ning)
+docs/GITHUB_ACTIONS_PRICING_ANALYSIS.md
+docs/RUNNER_FIX_VERIFICATION.md
+docs/testing/stories/advisor_deep_insights.yml
+docs/testing/stories/advisor_prd_questions.yml
+docs/testing/stories/advisor_qa.yml
+docs/testing/stories/advisor_rag.yml
+docs/testing/stories/analytics_basic.yml
+docs/testing/stories/auth_2fa_profile.yml
+docs/testing/stories/dashboard_smoke.yml
+docs/testing/stories/deep_chat_ui.yml
+docs/testing/stories/enrichment_integrity.yml
+docs/testing/stories/plaid_link.yml
+docs/testing/stories/story-dashboard-advisor.yml
+docs/testing/stories/story-plaid-link.yml
+docs/testing/stories/true_user_flow.yml
+
+bd737e5 - Pin llm-common to v0.7.0 (#478) (fengning-starsend)
+.beads/issues.jsonl
+Makefile
+backend/poetry.lock
+backend/pyproject.toml
+frontend/vite.config.ts
+poetry.lock
+pyproject.toml
+scripts/generate-pr-report.sh
+scripts/verification/unified_verify.py
+
+7855822 - chore(beads): fix prefix mismatch (wd0a) (#477) (fengning-starsend)
+.beads/issues.jsonl
+
+517b4b8 - docs(beads): add Jules TECH_PLAN files (#476) (fengning-starsend)
+.beads/issues.jsonl
+docs/bd-yn9g.11/TECH_PLAN.md
+docs/bd-yn9g.12/TECH_PLAN.md
+
+3bbed8e - Docs/Beads: dual-frontend decision + Beads prefix fix (#475) (fengning-starsend)
+.beads/issues.jsonl
+docs/bd-yn9g/SPEC.md
+
+1363ec9 - Merge pull request #474 from stars-end/feature-bd-yn9g.fire-and-forget (fengning-starsend)
+05c7e49 - docs: add fire-and-forget packets for Jules (fengning-starsend)
+.beads/issues.jsonl
+docs/bd-yn9g/JULES_DISPATCH.md
+docs/bd-yn9g/packets/bd-yn9g.11.md
+docs/bd-yn9g/packets/bd-yn9g.12.md
+
+054b6df - Merge pull request #473 from stars-end/feature-bd-yn9g.consultant-feedback (fengning-starsend)
+5aaeeb7 - docs: incorporate consultant review into bd-yn9g spec (fengning-starsend)
+.beads/issues.jsonl
+docs/bd-yn9g/JULES_DISPATCH.md
+docs/bd-yn9g/SPEC.md
+
+8e9895a - Merge pull request #472 from stars-end/feature-bd-yn9g.jules-dispatch (fengning-starsend)
+54ec088 - docs: add Jules dispatch packets for bd-yn9g (fengning-starsend)
+.beads/issues.jsonl
+docs/bd-yn9g/JULES_DISPATCH.md
+docs/bd-yn9g/SPEC.md
+
+b15fd4c - Merge pull request #471 from stars-end/feature-bd-yn9g.9 (fengning-starsend)
+c7ae394 - docs: bundle Dexter ports (glm tool selection, context pointers) (fengning-starsend)
+.beads/issues.jsonl
+docs/bd-yn9g/DEXTER_AUDIT.md
+docs/bd-yn9g/SPEC.md
+
+3cca833 - Merge pull request #470 from stars-end/feature-bd-yn9g.5 (fengning-starsend)
+9000995 - docs: refresh Dexter audit and update rewrite spec (fengning-starsend)
+.beads/issues.jsonl
+docs/bd-yn9g/DEXTER_AUDIT.md
+docs/bd-yn9g/SPEC.md
+
+4e85c6f - Merge pull request #468 from stars-end/feature-bd-yn9g.1 (fengning-starsend)
+9c6408b - Merge remote-tracking branch 'origin/master' into feature-bd-yn9g.1 (github-actions[bot])
+9a4e54e - chore: close bd-yn9g.1 (fengning-starsend)
+.beads/issues.jsonl
+
+925c197 - chore: frontend unification spec (fengning-starsend)
+.beads/issues.jsonl
+docs/bd-yn9g/SPEC.md
+
+f9852e4 - fix: Use frontend service URL (frontend-dev-f8a3) for UI tests (#467) (fengning-starsend)
+.github/workflows/verify-overnight.yml
+
+c09ac18 - fix: Use correct Railway domain in overnight verification (#466) (fengning-starsend)
+.beads/deletions.jsonl
+.github/workflows/verify-overnight.yml
+artifacts-new/verification-report-20509928721/verify-20251225-203125/report.md
+artifacts-new/verification-report-20509928721/verify-20251225-203125/screenshots/pr_02_auth.png
+artifacts-new/verification-report-20509928721/verify-20251225-203125/screenshots/pr_03_chat.png
+artifacts-new/verification-report-20509928721/verify-20251225-203125/screenshots/pr_04_accounts.png
+artifacts-new/verification-report-20509928721/verify-20251225-203125/screenshots/pr_05_securities.png
+artifacts-new/verification-report-20509928721/verify-20251225-203125/screenshots/pr_06_analytics.png
+artifacts-new/verification-report-20509928721/verify-20251225-203125/summary.json
+
+6ff9711 - fix: Add explicit playwright pip install before browser install (#465) (fengning-starsend)
+.github/workflows/verify-overnight.yml
+
+f8f9df9 - fix: Rewrite unified_verify for real browser tests with screenshots (#463) (fengning-starsend)
+.beads/deletions.jsonl
+.github/workflows/verify-overnight.yml
+artifacts-download/verification-report-20508935534/verify-20251225-190719/report.md
+artifacts-download/verification-report-20508935534/verify-20251225-190719/summary.json
+scripts/verification/unified_verify.py
+
+f8873b7 - fix: Make health check non-blocking for Railway cold starts (#462) (fengning-starsend)
+scripts/verification/unified_verify.py
+
+4b5f1e8 - fix: Poetry env use mise Python + clean old artifacts (#459) (fengning-starsend)
+.github/workflows/verify-overnight.yml
+
+5620f63 - fix: Use pre-installed mise for CI (#457) (fengning-starsend)
+.github/workflows/verify-overnight.yml
+
+ee5908f - fix: Use mise toolkit for overnight CI (local/CI parity) (#455) (fengning-starsend)
+.github/workflows/verify-overnight.yml
+
+3b7eb7e - fix: Fix overnight CI - Python 3.13, permissions, remove orphan submodule (#453) (fengning-starsend)
+.github/workflows/verify-overnight.yml
+
+a324e8b - feat: Harmonize Makefile targets (verify-dev, verify-local, verify-pr) (#452) (fengning-starsend)
+AGENTS.md
+Makefile
+
+c7cc379 - feat: Add DeepChat UI component with SSE streaming (#451) (fengning-starsend)
+frontend/src/components/advisor/DeepChat.tsx
+frontend/src/hooks/useSSEChat.ts
+
+2555fba - feat: Add SSE /api/chat endpoint for Deep Chat streaming (#450) (fengning-starsend)
+.beads/deletions.jsonl
+backend/api/v2/__init__.py
+backend/api/v2/chat.py
+
+86ad555 - feat: Add verify-pr for Railway PR environment verification (Antigravity Agent)
+.beads/deletions.jsonl
+Makefile
+scripts/generate-pr-report.sh
+
+298cd79 - fix: Update llm-common to include verification module (Antigravity Agent)
+backend/poetry.lock
+
+c49ca51 - fix: Add missing tabs to verify-ci Makefile target (Antigravity Agent)
+Makefile
+
+6abc51e - docs: Add deep_chat_ui.yml test story for AI Advisor (#449) (fengning-starsend)
+docs/TESTING/STORIES/deep_chat_ui.yml
+
+cb86f9f - feat: Add unified CI verification framework (8 user stories) (#448) (fengning-starsend)
+.github/workflows/verify-overnight.yml
+Makefile
+packages/llm-common
+scripts/verification/unified_verify.py
+
+756aa43 - chore(prime-radiant): Upgrade glm-4.6 to glm-4.7 (#447) (fengning-starsend)
+.github/workflows/claude-code-review.yml
+.github/workflows/claude.yml
+.github/workflows/dx-audit.yml
+.opencode/agent/backend-engineer.md
+.opencode/agent/devops-engineer.md
+.opencode/agent/documentation-engineer.md
+.opencode/agent/frontend-engineer.md
+.opencode/agent/fullstack-developer.md
+.opencode/agent/product-manager.md
+.opencode/agent/quality-assurance-tester.md
+.opencode/agent/security-engineer.md
+.opencode/agent/tech-lead.md
+.opencode/agent/testing-engineer.md
+.opencode/agent/ui-ux-designer.md
+docs/DX_GITHUB_ACTIONS.md
+docs/DX_QOL_SOLUTION_DESIGN.md
+scripts/test-modular-system.sh
+
+f397a29 - chore: close bd-9l3j after PR merge (fengning-starsend)
+.beads/issues.jsonl
+
+5235b4f - [bd-9l3j] Migrate EODHD refresh from GitHub Actions to Railway cron (#446) (fengning-starsend)
+.beads/issues.jsonl
+.github/workflows/eodhd-scheduled-refresh.yml
+docs/EODHD_REFRESH.md
+eodhd-cron/Dockerfile
+eodhd-cron/README.md
+eodhd-cron/entrypoint.sh
+eodhd-cron/railway.toml
+railway.json
+scripts/eodhd-refresh.py
+
+275d137 - chore: Remove all Supabase references from CI after Railway migration (#441) (fengning-starsend)
+.beads/issues.jsonl
+.github/workflows/auto-regenerate-schema.yml
+.github/workflows/ci.yml
+.github/workflows/generate-schema-artifacts.yml
+scripts/run-local-ci.sh
+
+6c503b9 - Merge pull request #440 from stars-end/chore/cleanup-orphaned-submodule (fengning-starsend)
+b339af5 - chore: Remove orphaned llm-common submodule and CI config (fengning-starsend)
+.github/workflows/ci.yml
+.gitmodules
+packages/llm-common
+
+b0c3db4 - Merge pull request #439 from stars-end/fix/railway-llm-common-git-dep (fengning-starsend)
+37d7efe - fix(railway): Revert llm-common to git dependency for deployment (fengning-starsend)
+backend/poetry.lock
+backend/pyproject.toml
+
+e164ee4 - Merge pull request #438 from stars-end/fix/pnpm-version-alignment (fengning-starsend)
+8382b1c - fix(ci): Align packageManager to pnpm@10.17.0 (fengning-starsend)
+package.json
+
+f74ed63 - Merge pull request #437 from stars-end/hotfix/ci-submodules-all-backend-jobs (fengning-starsend)
+0db58ea - fix(ci): Add submodules: recursive to ALL backend checkout steps (fengning-starsend)
+.github/workflows/ci.yml
+
+1d56768 - Merge pull request #436 from stars-end/fix/ci-submodules-1220 (fengning-starsend)
+6f7fa65 - fix(ci): Add submodules: recursive to backend checkout steps (fengning-starsend)
+.github/workflows/ci.yml
+
+1dadf7d - Merge pull request #435 from stars-end/feature/llm-common-hybrid-dep (fengning-starsend)
+8db8b95 - chore: merge master after PR #434 (fengning-starsend)
+628c0e8 - Merge pull request #434 from stars-end/feature/provenance-feedback-round-2 (fengning-starsend)
+d926255 - chore: Migrate llm-common to Hybrid Path Dependency (fengning-starsend)
+.gitmodules
+backend/poetry.lock
+backend/pyproject.toml
+packages/llm-common
+test_output.txt
+test_output_2.txt
+
+8ec5eab - chore: remove incorrectly indexed llm-common files before submodule add (fengning-starsend)
+packages/llm-common/README.md
+packages/llm-common/docs/LLM_COMMON_PG_BACKEND_MIGRATION.md
+packages/llm-common/llm_common/__init__.py
+packages/llm-common/llm_common/cost_tracker.py
+packages/llm-common/llm_common/exceptions.py
+packages/llm-common/llm_common/llm_client.py
+packages/llm-common/llm_common/web_search.py
+packages/llm-common/pyproject.toml
+packages/llm-common/tests/__init__.py
+packages/llm-common/tests/test_llm_client.py
+packages/llm-common/tests/test_web_search.py
+
+f0f4005 - chore: resolve merge conflict in registry.py (PR #434) (fengning-starsend)
+6a3a8dc - fix: add missing ToolResult import to registry.py (fengning-starsend)
+backend/packages/metrics_registry/registry.py
+
+fc63ac8 - fix: address PR feedback for provenance framework (fengning-starsend)
+.beads/issues.jsonl
+backend/packages/metrics_registry/registry.py
+backend/packages/metrics_registry/types.py
+
+0b11100 - fix: address PR feedback for provenance framework (fengning-starsend)
+.beads/issues.jsonl
+backend/packages/metrics_registry/registry.py
+backend/packages/metrics_registry/types.py
+
+f441184 - fix: bug-fixes-1220-1018 P0 stability and P1 Dexter grounding (#433) (fengning-starsend)
+.beads/issues.jsonl
+backend/packages/metrics_registry/registry.py
+backend/packages/metrics_registry/types.py
+backend/services/provenance/__init__.py
+backend/services/provenance/models.py
+backend/services/provenance/render.py
+backend/services/provenance/validate.py
+frontend/e2e-tiers/tier-auth-stub/user-journey-auth.spec.ts
+package.json
+
+58da260 - chore(ci): Delete unused Supabase check script (fengning-starsend)
+scripts/ci/check_supabase_env.sh
+
+32c3507 - chore(ci): Cleanup legacy logic (P2 complete) (fengning-starsend)
+.github/workflows/ci.yml
+scripts/legacy/setup-clerk-stub.sh
+scripts/run-local-ci.sh
+
+42c295e - fix(test): Simplify profile Step 2 to avoid MUI click interception (fengning-starsend)
+frontend/e2e-tiers/tier-auth-stub/user-journey-profile.spec.ts
+
+10f4ac6 - fix(ci): Enable Vite proxy to fix CORS localhost/127.0.0.1 mismatch (fengning-starsend)
+.github/workflows/ci.yml
+
+fd3ec4c - fix(test): Final flaky test fixes for Tier 2 E2E suite (fengning-starsend)
+frontend/e2e-tiers/tier-auth-stub/user-journey-auth.spec.ts
+frontend/e2e-tiers/tier-auth-stub/user-journey-profile.spec.ts
+
+00fe14d - fix(test): Make existing E2E tests more resilient to CI environment (fengning-starsend)
+frontend/e2e-tiers/tier-auth-stub/user-journey-auth.spec.ts
+frontend/e2e-tiers/tier-auth-stub/user-journey-integrations.spec.ts
+frontend/e2e-tiers/tier-auth-stub/user-journey-portfolio.spec.ts
+
+43383ce - fix(test): Make new E2E tests resilient to backend 500 errors (fengning-starsend)
+frontend/e2e-tiers/tier-auth-stub/user-journey-integrations.spec.ts
+frontend/e2e-tiers/tier-auth-stub/user-journey-portfolio.spec.ts
+frontend/e2e-tiers/tier-auth-stub/user-journey-profile.spec.ts
+
+44a3c53 - fix(test): Add useClerk mock to fix AppRouter unit tests (fengning-starsend)
+frontend/src/__tests__/setup.tsx
+
+e490819 - fix(ci): Add missing get_db import + switch to RAILPACK [bd-t9as] (#432) (fengning-starsend)
+.beads/issues.jsonl
+backend/api/v2/system.py
+backend/tests/e2e/test_portfolio_analytics_api.py
+docs/bd-gpa7-railpack-frozen-lockfile/INDEX.md
+frontend/e2e-tiers/tier-auth-stub/user-journey-integrations.spec.ts
+frontend/e2e-tiers/tier-auth-stub/user-journey-portfolio.spec.ts
+frontend/e2e-tiers/tier-auth-stub/user-journey-profile.spec.ts
+frontend/railway.toml
+
+5106e6d - [bd-qf94] fix: PRD gap fixes - EODHD db error, analytics metrics, new stories (#425) (fengning-starsend)
+1260fe2 - docs: Add bd-gpa7 Railpack frozen-lockfile feature request (fengning-starsend)
+.beads/issues.jsonl
+docs/bd-gpa7-railpack-frozen-lockfile/INDEX.md
+
+527641e - fix: Revert to NIXPACKS - Railpack frozen-lockfile cannot be overridden (fengning-starsend)
+frontend/nixpacks.toml
+frontend/railway.toml
+
+ca75094 - fix: Use .npmrc frozen-lockfile=false for Railpack monorepo support (fengning-starsend)
+frontend/.npmrc
+frontend/nixpacks.toml
+frontend/railway.toml
+
+e7bc3a3 - fix: Switch to NIXPACKS builder to escape Railpack cache bug (fengning-starsend)
+frontend/nixpacks.toml
+frontend/railway.toml
+
+0695c09 - fix: Bump frontend version to bust Railway cache (fengning-starsend)
+frontend/package.json
+
+d59e2ab - fix: Completely regenerate pnpm-lock.yaml from scratch (fengning-starsend)
+pnpm-lock.yaml
+
+b021b6a - fix: Add installCommand to bypass frozen-lockfile for monorepo (fengning-starsend)
+frontend/railway.toml
+
+23113a7 - chore: Trigger deploy with fixed lockfile (fengning-starsend)
+frontend/vite.config.ts
+
+53e0a77 - fix: Regenerate pnpm-lock.yaml to fix Railway frontend deploy (fengning-starsend)
+pnpm-lock.yaml
+
+d3e18d3 - chore: Disable Railway build cache to fix stale package.json (fengning-starsend)
+frontend/railway.toml
+
+342c1d3 - chore: Trigger Railway frontend rebuild (fengning-starsend)
+frontend/vite.config.ts
+
+7fd8dc6 - fix: Remove broken supabase symlinks from bin/ (fengning-starsend)
+.beads/issues.jsonl
+bin/supabase
+bin/supabase-verify
+
+82f1f7f - feat: MVP v1 Ship - CI Fix + llm-common Integration (bd-35hs) (#431) (fengning-starsend)
+.beads/.local_version
+.beads/issues.jsonl
+backend/poetry.lock
+docs/bd-mvp-v1-1219-1320/implementation_plan.md
+package.json
+pnpm-lock.yaml
+scripts/run-local-ci.sh
+
+0bf0684 - fix: Add executable permission to setup-clerk-stub.sh (fengning-starsend)
+scripts/legacy/setup-clerk-stub.sh
+
+1c642d6 - fix: Add missing setup-clerk-stub.sh for CI (fengning-starsend)
+scripts/legacy/setup-clerk-stub.sh
+
+575e6a6 - fix: Skip Supabase checks in ci_doctor when USE_RAILWAY_DB=true (fengning-starsend)
+.beads/issues.jsonl
+scripts/ci/ci_doctor.py
+
+c9b9bf7 - fix: Resolve Railway build failure (llm-common git dependency) (#430) (fengning-starsend)
+.beads/issues.jsonl
+backend/poetry.lock
+backend/pyproject.toml
+poetry.lock
+pyproject.toml
+
+19ec992 - fix: Resolve Railway P0 - Fundamentals (bd-qf94.9) and CORS (bd-qf94.6) (#429) (fengning-starsend)
+.beads/issues.jsonl
+backend/db_access.py
+backend/main.py
+
+4150fcc - fix: Resolve Railway P0 blockers - CORS and DB schema (#428) (fengning-starsend)
+.beads/issues.jsonl
+backend/main.py
+backend/migrations/20251219_fix_eodhd_eod_prices_columns.sql
+backend/models.py
+
+4a442b2 - feat: Add realtime cron mode for intraday price updates (bd-qf94.2) (#427) (fengning-starsend)
+.beads/issues.jsonl
+railway.json
+scripts/eodhd-refresh.py
+
+f95284d - fix: Replace Plotly placeholders with real charts in Analytics (bd-qf94.4) (#426) (fengning-starsend)
+.beads/issues.jsonl
+advisor_console.json
+advisor_debug.html
+advisor_debug.png
+advisor_debug_2.png
+advisor_e2e_1_initial.png
+advisor_e2e_2_question.png
+advisor_e2e_3_response.png
+advisor_fixed.html
+advisor_fixed.png
+backend/api/accounts.py
+backend/api/v2/accounts.py
+backend/api/v2/advisor.py
+backend/api/v2/users.py
+backend/auth/clerk.py
+backend/db/database.py
+backend/db_access.py
+backend/llm/prompts.py
+backend/llm/validation.py
+backend/models.py
+backend/poetry.lock
+backend/pyproject.toml
+backend/scripts/eodhd-refresh.py
+backend/scripts/seed_dev_data.py
+backend/scripts/test_fixes.py
+backend/services/analytics_service.py
+backend/services/context_builder.py
+backend/services/eodhd_admin_service.py
+backend/services/eodhd_refresh_service.py
+backend/services/llm_portfolio_analyzer.py
+dashboard_console.json
+dashboard_regression.html
+dashboard_regression.png
+debug_console.py
+debug_screenshot.py
+debug_state.html
+debug_state.png
+docs/TESTING/STORIES/advisor_deep_insights.yml
+docs/TESTING/STORIES/advisor_prd_questions.yml
+docs/TESTING/STORIES/auth_2fa_profile.yml
+docs/TESTING/STORIES/enrichment_integrity.yml
+docs/TESTING/STORIES/true_user_flow.yml
+frontend/e2e/auth.setup.ts
+frontend/playwright-report/index.html
+frontend/src/components/AnalyticsDashboard.tsx
+frontend/src/pages/AdvisorPage.tsx
+frontend/src/pages/ProfilePage.tsx
+frontend/src/test-utils/clerkStub.tsx
+frontend/test-results/.last-run.json
+scripts/mvp_story_verification_results.json
+scripts/test_analytics_fix.py
+scripts/test_eodhd_sector_fix.py
+scripts/verify_admin_eodhd.sh
+scripts/verify_auth_bypass.py
+scripts/verify_mvp_stories.py
+
+5e2a411 - fix(frontend): replace Supabase JWT templates with Railway auth (fengning-starsend)
+.beads/issues.jsonl
+frontend/src/components/AnalyticsDashboard.tsx
+frontend/src/components/DashboardPage.tsx
+frontend/src/components/SnapTrade/ConnectionManager.tsx
+frontend/src/components/advisor/AdvisorChat.tsx
+frontend/src/components/research/ResearchPage.tsx
+frontend/src/lib/snaptradeService.ts
+frontend/src/lib/supabase.ts
+
+8205ddd - fix(deps): update frontend lockfile to match package.json (fengning-starsend)
+.beads/issues.jsonl
+
+9d57948 - Merge remote master with beads sync (fengning-starsend)
+ac72d61 - chore(beads): sync issue status after MVP v1 ship (fengning-starsend)
+.beads/issues.jsonl
+docs/bd-1n83/INDEX.md
+docs/bd-1n83/TESTING_GUIDE.md
+docs/bd-e2zd/INDEX.md
+
+65dc46c - feat(e2e): implement hybrid Playwright login for Railway auth (#424) (fengning-starsend)
+.beads/issues.jsonl
+scripts/e2e_agent/run_prime_smoke.py
+
+c3230e4 - fix(backend): mount EODHD integrations router in v2 API (#423) (fengning-starsend)
+.beads/issues.jsonl
+backend/api/v2/__init__.py

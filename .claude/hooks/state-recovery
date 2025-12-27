@@ -1,0 +1,25 @@
+#!/bin/bash
+# post-merge/post-checkout hook
+# Keeps local environment in sync with remote state.
+
+# 1. Beads Import
+if [ -f .beads/issues.jsonl ] && command -v bd &> /dev/null; then
+    bd import --no-auto-sync 2>/dev/null || true
+fi
+
+# 2. Lockfile Sync (pnpm)
+if [ -f pnpm-lock.yaml ] && command -v pnpm &> /dev/null; then
+    if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q 'pnpm-lock.yaml'; then
+        echo "🔄 [dx] pnpm-lock changed. Installing..."
+        pnpm install --frozen-lockfile >/dev/null 2>&1 || echo "⚠️ pnpm install failed."
+    fi
+fi
+
+# 3. Submodules
+if [ -f .gitmodules ]; then
+    if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q 'packages/llm-common'; then
+        echo "🔄 [dx] Submodules changed. Updating..."
+        git submodule update --init --recursive >/dev/null 2>&1 || true
+    fi
+fi
+exit 0

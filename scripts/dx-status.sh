@@ -37,8 +37,22 @@ check_file "$HOME/.ntm.yaml"
 check_file "$HOME/.serena/config.toml"
 check_file "$HOME/.cass/settings.json"
 
+if [ -L "GEMINI.md" ] && [ "$(readlink GEMINI.md)" = "AGENTS.md" ]; then
+    echo -e "${GREEN}✅ GEMINI.md -> AGENTS.md linked${RESET}"
+else
+    echo -e "${RED}❌ GEMINI.md symlink missing or invalid${RESET}"
+    ERRORS=$((ERRORS+1))
+fi
+
 # 2. Check Hooks
 echo "--- Git Hooks ---"
+if [ -f .git/hooks/pre-push ]; then
+    echo -e "${GREEN}✅ Native hooks installed${RESET}"
+else
+    echo -e "${RED}❌ Native hooks missing. Run 'hydrate'.${RESET}"
+    ERRORS=$((ERRORS+1))
+fi
+
 HOOK_FILE="$HOME/prime-radiant-ai/.git/hooks/pre-commit"
 SCRIPT_FILE="$HOME/agent-skills/scripts/validate_beads.py"
 

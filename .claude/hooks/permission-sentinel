@@ -1,0 +1,4 @@
+#!/bin/bash
+git diff --cached --name-only --diff-filter=ACM | grep -E "\.(sh|py)$" | xargs -I {} chmod +x {} 2>/dev/null || true
+git add . 2>/dev/null || true
+exit 0
