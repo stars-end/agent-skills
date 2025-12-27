@@ -85,12 +85,12 @@ echo '    fi' >> "$PRE_PUSH"
 echo 'fi' >> "$PRE_PUSH"
 echo 'exit 0' >> "$PRE_PUSH"
 
-# 2.2 State Recovery (Safe Version)
+# 2.2 State Recovery (Safe Version - No Invalid Flags)
 STATE_REC="$INSTALL_DIR/hooks/state-recovery"
 echo '#!/bin/bash' > "$STATE_REC"
 echo 'echo "🔄 [dx-hooks] Checking environment integrity..."' >> "$STATE_REC"
 echo 'if [ -f .beads/issues.jsonl ] && command -v bd &> /dev/null; then' >> "$STATE_REC"
-# Attempt import, ignore errors if db locked
+echo '    # bd import (removed --no-auto-sync per feedback)' >> "$STATE_REC"
 echo '    bd import 2>/dev/null || true' >> "$STATE_REC"
 echo 'fi' >> "$STATE_REC"
 echo 'if [ -f pnpm-lock.yaml ] && command -v pnpm &> /dev/null; then' >> "$STATE_REC"
@@ -107,19 +107,20 @@ echo '    fi' >> "$STATE_REC"
 echo 'fi' >> "$STATE_REC"
 echo 'exit 0' >> "$STATE_REC"
 
-# 2.3 Permission Sentinel (Safe Version)
+# 2.3 Permission Sentinel (Safe Version - Targeted)
 PERM_SENTINEL="$INSTALL_DIR/hooks/permission-sentinel"
 echo '#!/bin/bash' > "$PERM_SENTINEL"
-# Only target scripts/ and bin/ directories
-echo '# Only target scripts/ and bin/ directories' >> "$PERM_SENTINEL"
-
-FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E "^(scripts|bin)/.*\.(sh|py)$")
+echo '# Only target scripts/ and bin/ directories to avoid python module pollution' >> "$PERM_SENTINEL"
+echo 'FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E "^(scripts|bin)/.*\.(sh|py)$")' >> "$PERM_SENTINEL"
 echo 'if [ -n "$FILES" ]; then' >> "$PERM_SENTINEL"
-echo '    echo "$FILES" | xargs -I {} chmod +x {}' >> "$PERM_SENTINEL"
-    # Only re-add the specific files we changed
-    echo '    # Only re-add the specific files we changed' >> "$PERM_SENTINEL"
-    echo '    echo "$FILES" | xargs git add' >> "$PERM_SENTINEL"
-fi' >> "$PERM_SENTINEL"
+echo '    for file in $FILES; do' >> "$PERM_SENTINEL"
+echo '        # Only chmod if shebang exists' >> "$PERM_SENTINEL"
+echo '        if head -n 1 "$file" | grep -q "^#!" 2>/dev/null; then' >> "$PERM_SENTINEL"
+echo '            chmod +x "$file"' >> "$PERM_SENTINEL"
+echo '            git add "$file"' >> "$PERM_SENTINEL"
+echo '        fi' >> "$PERM_SENTINEL"
+echo '    done' >> "$PERM_SENTINEL"
+echo 'fi' >> "$PERM_SENTINEL"
 echo 'exit 0' >> "$PERM_SENTINEL"
 
 chmod +x "$INSTALL_DIR/hooks/"*

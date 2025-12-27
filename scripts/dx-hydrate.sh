@@ -62,8 +62,14 @@ done
 # Enforce GEMINI.md -> AGENTS.md symlink (Relative)
 for repo in "$HOME/prime-radiant-ai" "$HOME/affordabot" "$HOME/llm-common" "$AGENTS_ROOT"; do
     if [ -f "$repo/AGENTS.md" ]; then
-        echo "   Linking GEMINI.md in $repo..."
-        (cd "$repo" && ln -sf AGENTS.md GEMINI.md)
+        # Use a subshell to change dir safely
+        (
+            cd "$repo"
+            # Remove existing if it's an absolute link or broken
+            [ -L GEMINI.md ] && rm GEMINI.md
+            ln -sf AGENTS.md GEMINI.md
+            echo "   Linked GEMINI.md -> AGENTS.md in $repo"
+        )
     fi
 done
 
