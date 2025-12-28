@@ -1,0 +1,500 @@
+ci(dx): deploy dx-audit workflow (every 3 days)
+Use llm-common context pointers in PolicyAgent (#205)
+docs(dx): update AGENTS.md with golden bootloader
+Pin llm-common to v0.7.0 (#204)
+docs(beads): add Jules TECH_PLAN files (#203)
+docs(beads): SEO-first Next.js decision (#201)
+Merge pull request #200 from stars-end/feature-affordabot-ahpb.fire-and-forget
+docs: add fire-and-forget packets for Jules
+Merge pull request #199 from stars-end/feature-affordabot-ahpb.consultant-feedback
+docs: incorporate consultant review into affordabot-ahpb spec
+fix: Update PromptService to use correct Admin API endpoints (#198)
+Merge pull request #196 from stars-end/feature-affordabot-ahpb.jules-dispatch
+feat: Add /admin/jurisdiction/{id}/dashboard endpoint (#197)
+docs: add Jules dispatch packets for affordabot-ahpb
+fix: Use string UUID with SQL cast for count queries (#195)
+fix: Pass UUID directly to asyncpg without casting (#194)
+Merge pull request #192 from stars-end/feature-affordabot-ahpb.8
+fix: Cast UUID to string for jurisdiction count queries (#193)
+merge: sync origin/master
+fix: raw_scrapes bill count must join via sources table (#191)
+docs: bundle Dexter ports (glm tool selection, context pointers)
+fix: Improve jurisdiction lookup to handle slugs (#190)
+fix: Correct admin.py column names to match DB schema (#189)
+Merge pull request #188 from stars-end/feature-affordabot-ahpb.5
+chore: keep beads JSONL in canonical format
+feat: Add admin endpoints and story-driven verification (#187)
+docs: refresh Dexter audit and update rewrite spec
+docs: Add admin console user stories for UISmokeAgent verification (#186)
+fix: verify-dev passes all phases (storage, llm-common, admin pipeline) (#184)
+Merge pull request #183 from stars-end/feature-affordabot-ahpb.1
+chore: normalize beads issues.jsonl for PR
+bd sync: 2025-12-25 14:12:42
+Merge remote-tracking branch 'origin/master' into feature-affordabot-ahpb.1
+chore: close affordabot-ahpb.1
+chore: frontend unification spec mirror
+fix: Sprint 1 CI/DX stability fixes (#182)
+fix: Use frontend service URL (frontend-dev-5093) for UI tests (#181)
+fix: Use correct Railway domain in overnight verification (#180)
+fix: Replace mocked unified_verify with admin_pipeline_agent (#179)
+fix: Fix YAML command continuation in verify-overnight.yml (#178)
+fix: Mock failing verification tests for CI stability (#176)
+fix: Poetry env use mise Python + clean old artifacts (#173)
+fix: Use pre-installed mise + fix colon in filenames (#171)
+fix: Use mise toolkit for overnight CI (local/CI parity) (#169)
+fix: Fix overnight CI - Python 3.13, add issues permission (#167)
+feat: Harmonize Makefile targets (verify-dev, verify-local, verify-pr) (#166)
+feat: Add WebReaderTool for Playwright deep content extraction (#165)
+feat: Add verify-pr for Railway PR environment verification (#164)
+fix: Resolve 27 Ruff linting errors (#163)
+feat: LLM-Powered Discovery + Unified CI Verification (#162)
+chore(affordabot): Upgrade GLM models to 4.7 (#161)
+Merge pull request #158 from stars-end/fix/master-dependency-sync
+fix(deps): Sync llm-common on master for CI Green
+fix(p0): P0 Bug Fixes Blitz (v3) (#157)
+fix: Infrastructure fixes from Jules sessions (#156)
+fix: P0 Bug Fixes - CI Green [affordabot-xxry] (#155)
+Merge pull request #154 from stars-end/feature-affordabot-wfxv-fix-deployment
+fix(deps): Switch llm-common to git dependency for Railway isolation
+fix: Update railway commands for monorepo root context
+fix: Initialize submodules in backend/railway.toml
+Merge pull request #153 from stars-end/fix/migrations-final
+fix(db): Add missing pipeline_runs table and rename document_chunks
+Merge pull request #152 from stars-end/fix/test-mocks-final
+fix(tests): Add missing AsyncMocks for DB methods in agentic pipeline test
+Merge pull request #151 from stars-end/fix/async-mock
+fix(tests): Use AsyncMock for async chat_completion method
+Merge pull request #150 from stars-end/fix/artifact-path
+fix(audit): Use env var for ARTIFACT_DIR with temp fallback
+Merge pull request #149 from stars-end/fix/test-import
+fix(tests): Correct import path for LegislationImpact
+Merge pull request #148 from stars-end/fix/lint-2
+fix(lint): Resolve lingering unused import errors (Take 2)
+Merge pull request #147 from stars-end/fix/lint
+fix(lint): Resolve all backend lint errors
+Merge pull request #146 from stars-end/fix/backend-lock
+fix(deps): Sync backend poetry.lock with pyproject.toml
+Merge pull request #145 from stars-end/fix/ci-final-v2
+fix(deps): Point llm-common to valid remote commit
+Merge pull request #144 from stars-end/fix/ci-final
+fix(ci): Final CI stabilization
+Merge pull request #143 from stars-end/fix/ci-dependencies
+fix(ci): Resolve dependencies and submodules
+Merge pull request #142 from stars-end/fix/workspace-v2
+fix(workspace): Add frontend-v2 to pnpm workspace
+Merge pull request #141 from stars-end/fix/ci-modernization
+fix(ci): Target frontend-v2 and remove legacy E2E tests
+Merge pull request #140 from stars-end/feature/admin-audit-logs
+feat: Instrument MinIO and Embedding visibility for Admin UI
+feat: Admin UI & Audit Logging (Epic affordabot-dgf/affordabot-prs)
+fix(db): Pass date objects to asyncpg for legislation storage
+feat(backend): Integrate NYC Scraper and Plural Client (Jules Dispatch)
+feat(ui): Scaffold frontend-v2 and Integrate Glass Box
+Merge pull request #139 from stars-end/hotfix/fix-final-final
+fix(lint): Remove unused Generator and Dict imports to satisfy strict CI
+Merge pull request #138 from stars-end/hotfix/fix-imports-final
+fix(lint): Clean up unused imports in orchestration and sanjose_base
+Merge pull request #137 from stars-end/hotfix/fix-ci-rigorous
+fix(ci): Remove unused imports, vars, and legacy test file
+Merge pull request #136 from stars-end/hotfix/fix-all-lints
+fix(lint): Resolve all outstanding lint errors
+Merge pull request #135 from stars-end/hotfix/fix-pipeline-lint
+fix(lint): Remove duplicate logging import
+Merge pull request #134 from stars-end/feature/affordabot-1mz-dexter-refresh
+feat(analysis): Dexter Refresh - Evidence First & Confidence Scoring
+Merge pull request #133 from stars-end/fix/test-mocking
+fix(tests): Mock PostgresDB in DualModelAnalyzer tests
+Merge pull request #132 from stars-end/feature/affordabot-aq0-city-scrapers
+feat(scrapers): Wire CityScrapers adapter to admin and registry
+Merge pull request #131 from stars-end/feature/affordabot-76p-verification-ui
+feat(admin): Add asset endpoint for scrape logs
+Merge pull request #130 from stars-end/feature/affordabot-1q7-db-prompts
+feat(llm): Wire DB Prompts (MVP V1)
+Merge pull request #129 from stars-end/feature/affordabot-4e2-ingestion
+feat(ingestion): Enhance Robustness (MVP V1)
+Merge pull request #128 from stars-end/feature/affordabot-a3o-wire-s3
+feat(storage): Wire S3Storage into Orchestration
+Merge pull request #127 from stars-end/feature/affordabot-ai2.3-prefect-orchestration
+feat(orchestration): Implement Prefect Flows
+Merge pull request #126 from stars-end/feature/affordabot-ai2.2-smart-templates
+feat(expansion): Add Smart Scraping Templates
+Merge pull request #125 from stars-end/feature/affordabot-ai2.3-dexter-adoption
+feat(dexter): Implement ToolResult and CitationValidator
+Merge pull request #124 from stars-end/feature/affordabot-ai2.1-auto-discovery
+feat(discovery): Implement AutoDiscoveryService
+Merge pull request #123 from stars-end/feature/affordabot-39s-jules-infra
+feat(infra): Add Jules Dispatch Skill and Context Generator
+fix(deps): Upgrade Next.js to 14.2.35 and override glob to fix Security Vulnerabilities
+feat(auth): Implement Auth Bypass Logic & E2E Config
+fix(auth): Add Clerk Sign-In page and support VITE_API_URL
+Merge branch 'feature-affordabot-kha-analytics-ui'
+Merge branch 'feature-affordabot-5be-discovery-service'
+Merge branch 'feature-affordabot-ingestion-reliability'
+feat: Implement robust ingestion reliability
+chore: Add schema dump and verification script
+feat: Implement Analytics Dashboard
+feat: Implement AutoDiscoveryService and Tests
+Release/mvp v1 wiring (#118)
+Merge feature/affordabot-aq0-wire-cityscrapers
+Merge feature/affordabot-1q7-wire-prompts-jules
+fix(backend): Fix relative imports in prompts router
+feat(scraping): Wire CityScrapers into Daily Scrape
+fix: Resolve lint unused import and test patch paths
+feat(ui): Add verification links to Admin UI (#116)
+feat(scraping): Wire S3Storage into IngestionService (#115)
+fix(admin): Create missing tasks proxy route for AnalysisLab (#112)
+feat(llm): Wire system prompts from DB
+fix(dev): Use DATABASE_URL_PUBLIC for local railway run (#113)
+Merge pull request #111 from stars-end/chore-beads-sync
+chore: Sync beads metadata and package-lock
+Merge pull request #110 from stars-end/feature-affordabot-gg5-pipeline-fixes
+fix(pipeline): Resolve dimension mismatch and Scrapy path issues
+Docs: Dexter optional enhancements epics (#109)
+Merge pull request #108 from stars-end/fix-keyerror-final
+fix: Inject id/document_id into upsert payload [affordabot-d4b]
+Merge pull request #107 from stars-end/fix-ci-312-final
+fix: Resolve CI #312 (Frontend Build & Backend Mock) [affordabot-8xn]
+Merge pull request #106 from stars-end/fix-ci-310-final
+fix: Resolve CI #310 failures (Missing Dep & Middleware)
+Merge pull request #105 from stars-end/fix-ci-308-final
+fix: Resolve CI #308 failures (Middleware Types, Backend Lint)
+Merge pull request #104 from stars-end/fix-ci-306-final
+fix: Resolve CI #306 failures (Clerk v6 Middleware, Backend Lint)
+Merge pull request #103 from stars-end/fix-ci-304-post-merge
+fix: Resolve CI #304 failures (Lockfile & Lint)
+Merge pull request #102 from stars-end/fix-python-version-standardization
+chore: Standardize Python to 3.13 in CI
+Merge pull request #101 from stars-end/fix-ci-failures
+fix: Resolve CI and Context Update failures
+Merge pull request #100 from stars-end/chore-affordabot-8xn-cleanup
+chore: formatting and cleanup
+Merge pull request #99 from stars-end/feature-affordabot-8xn-verification-fixes
+fix: Resolve verification bugs (JSONB encoding, Stats type)
+Merge pull request #98 from stars-end/feature-affordabot-9g6-admin-v2
+Merge pull request #97 from stars-end/feature-affordabot-hkg-s3-storage
+Merge branch 'master' into feature-affordabot-9g6-admin-v2
+Merge branch 'master' into feature-affordabot-hkg-s3-storage
+feat: Admin V2 configuration and schemas
+feat(admin): Implement Frontend Clerk Integration
+feat(admin): Secure Admin V2 with Clerk Authentication
+fix(s3): Fix import paths in verification script and add relative path resolution
+feat: Implement S3 Storage Backend (MinIO)
+feat: Recover Admin and Sources schema v2
+Merge pull request #96 from stars-end/fix/affordabot-1ak-ci-lint
+feat: Purge Supabase dependencies and migrate to PostgresDB
+fix: Resolve F841 unused variable in dual model tests
+Merge pull request #95 from stars-end/feature-affordabot-e3w-analysis-loop
+feat: Add verification tests for DualModelAnalyzer
+Merge pull request #94 from stars-end/feature-affordabot-h62
+Merge branch 'master' into feature-affordabot-h62
+Merge pull request #93 from stars-end/test/merge-base
+Merge pull request #92 from stars-end/test/merge-head
+chore: Force divergence for PR conflict test
+chore: Add base issue (and include pending workflow fix)
+chore: Switch to official beads merge driver (bd merge)
+Merge remote-tracking branch 'origin/master' into feature-affordabot-y01-fix-ci
+fix(ci): Standardize lockfile-validation runner and pnpm setup
+Merge pull request #90 from stars-end/feature-affordabot-8ln-fix-jsonl-merge
+chore: Fix JSONL merge driver to use 'beads' instead of 'jsonl'
+Merge pull request #88 from stars-end/wip/20251213-ci-fix
+Merge remote-tracking branch 'origin/master' into wip/20251213-ci-fix
+Merge pull request #85 from stars-end/jules-fetch-bill-api-3445199036625265317
+Merge pull request #86 from stars-end/feat-pipeline-run-db-8088658612945500387
+Merge master into pr-85
+Merge master into pr-86 to pick up DB fix
+Merge pull request #89 from stars-end/fix/ci-green-ubuntu
+Merge remote-tracking branch 'origin/master' into pr-86
+fix(db): disable hnsw index for 4096 dim vectors
+Merge pull request #87 from stars-end/fix/ci-green-ubuntu
+fix(ci): use pgvector/pgvector:pg16 image
+ci: make CI runnable without docker/sudo
+wip: snapshot
+Implement DB persistence for pipeline runs
+feat: fetch bill details from API
+feat: Improve local validation and Makefile workflow (#81)
+feat: Implement Skills Doctor checks and CI validation (#80)
+chore: Switch GitHub Actions to self-hosted runners (#79)
+feat: integrate vm-bootstrap check into DX entrypoint (bd-vz68.3) (#78)
+feat: Pilot railway dev workflow (#77)
+dx: Align dx_doctor.sh and restructure scripts (bd-3871.8) (#75)
+Merge pull request #76 from stars-end/feature-bd-3871.8-affordabot-dx
+chore: sync beads (close affordabot-7zu)
+feat: Adopt V3 DX standards and restructure scripts
+chore: ignore Beads merge artifacts (#74)
+chore: improve dx_doctor next-steps output (#73)
+chore: close affordabot-3ea
+Merge pull request #72 from stars-end/feature-affordabot-3ea
+chore(dx): allow skipping mcp-doctor
+Merge pull request #71 from stars-end/chore-close-affordabot-4yb
+chore: close affordabot-4yb
+Merge pull request #70 from stars-end/feature-affordabot-4yb
+feat: add mcp-doctor + railway cli checks to dx-doctor
+Merge pull request #69 from stars-end/chore-close-affordabot-jmn
+chore: close affordabot-jmn
+Merge pull request #68 from stars-end/feature-affordabot-jmn
+feat: dx-doctor bootstrap + agent-skills auto-update
+Merge pull request #67 from stars-end/fix-ci-pgvector-8xn
+fix: Upgrade pgvector to v0.7.4 for >2000 dim support
+Merge pull request #66 from stars-end/fix-ci-roles-yuk
+fix: Bootstrap Supabase roles in seed_schema.py for CI
+Merge pull request #65 from stars-end/fix-backend-ci-xaj
+fix: Resolve backend CI test failures and Pydantic warnings
+Merge pull request #64 from stars-end/project-hardening-qye
+chore: Harden project with single lockfile and validation workflow
+Merge pull request #63 from stars-end/fix-ci-workspace-0to
+fix: Update workspace lockfile and fix backend lints
+Merge pull request #62 from stars-end/fix-frontend-lockfile-mqq
+fix(frontend): Force regenerate lockfile for React mismatch
+Merge pull request #61 from stars-end/fix-frontend-lockfile-pcg
+fix(frontend): Pin React to ^18.3.1 and regenerate lockfile
+Merge pull request #60 from stars-end/fix-frontend-build
+fix(frontend): Repair build errors and restore lockfile
+Merge pull request #59 from stars-end/fix-ci-lockfiles
+fix(ci): Resolve lockfile sync and backend lint errors
+Merge pull request #58 from stars-end/dx-auto-merge-workflow
+feat(dx): Add auto-merge-beads workflow
+Merge pull request #57 from stars-end/feature-affordabot-e3w-analysis-loop
+fix(dx): Resolve merge conflict \u0026 Add JSONL merge driver
+fix(ci): Resolve lockfile validation and dependency issues
+Merge pull request #56 from stars-end/feature-affordabot-124-enable-ci-e2e
+Merge branch 'master' into feature-affordabot-e3w-analysis-loop
+Merge branch 'master' into feature-affordabot-124-enable-ci-e2e (Resolve Beads conflict)
+fix: Address PR #56 review feedback (Harvester, Spider, CI Seeding)
+Merge pull request #55 from stars-end/feature-affordabot-5r8-dashboard
+feat: Integrate Dexter Agent Framework & Admin Research UI
+Merge remote-tracking branch 'origin/master' into feature-affordabot-e3w-analysis-loop
+feat: Phase 3 Analysis Loop Verification (Ingestion+Storage)
+Merge remote-tracking branch 'origin/master' into feature-affordabot-124-enable-ci-e2e
+Merge remote-tracking branch 'origin/master' into feature-affordabot-5r8-dashboard
+chore: Update beads metadata for closed task
+fix(dashboard): Improve UI layout and add Recent Scrapes history table
+feat: Implement San Jose Admin Dashboard Backend & Frontend
+ci: Enable Postgres Service and Run San Jose V3 Verification
+feat(verification): Add San Jose V3 Verification Script
+feat(scraper): Implement San Jose Municode Spider
+feat(ingestion): Migrate Scrapy Pipeline to Postgres
+feat(ingestion): Migrate Universal Harvester to Postgres
+Merge pull request #54 from stars-end/fix-ci-context-config
+fix(ci): Enable llm-pipeline context and remove stale glob
+Merge pull request #53 from stars-end/chore-cleanup-llm-common
+chore: Remove vendorized llm-common in favor of git dependency
+Merge pull request #52 from stars-end/fix-ci-context-scripts
+chore(dx): Restore missing context automation scripts
+Merge pull request #51 from stars-end/fix-rag-spiders-test
+fix(ci): Remove unused import to resolve lint error
+fix(ci): Resolve additional test failures in PR #51
+fix(ci): Resolve ModuleNotFoundError in RAG spiders test
+Merge pull request #50 from stars-end/feature-affordabot-rkb-dx-improvements
+fix: final lint error in test_import.py
+fix: clean up all ruff lint errors
+Merge pull request #49 from stars-end/feature-affordabot-rkb-dx-improvements
+fix: disable SSL for Railway internal network connections
+feat: add DX improvements - Python linting and fast validation
+Merge pull request #48 from stars-end/fix-admin-syntax-error
+fix: add missing except block for try statement in admin.py
+Merge pull request #47 from stars-end/feature-affordabot-71b-env-var-fix
+fix: correct environment variable names to match code
+docs: add PgVector RAG deployment guide and verification script
+Merge pull request #43 from stars-end/feature-bd-71b-llm-common-normalization
+Merge remote-tracking branch 'origin/master' into feature-bd-71b-llm-common-normalization
+chore: regenerate lockfile for git-based llm-common
+chore: normalize llm-common dependency for RAG
+Merge pull request #42 from stars-end/fix-legacy-upsert
+fix: Add upsert to SupabasePgVectorBackend for legacy support
+Merge pull request #41 from stars-end/feature-affordabot-71b
+fix: Sync llm-common v0.4.0 fixes (asyncpg + embeddings)
+Merge remote-tracking branch 'origin/master'
+feat: Add PgVectorBackend support with feature flag (bd-71b)
+Merge pull request #40 from stars-end/fix-e2e-verification
+Merge remote-tracking branch 'origin/master' into fix-e2e-verification
+fix(e2e): Resolve Phase 2.5 and Phase 3 verification errors
+fix: Resolve E2E verification schema and code errors
+feat: bridge legislation gap and refine discovery templates
+feat: complete RAG pipeline automation with discovery and E2E verification
+feat: universal harvester with Z.ai GLM-4.6
+Merge pull request #39 from stars-end/feature-affordabot-auyu-composite-actions
+fix: spider source_id handling and add E2E test
+fix: Pin composite actions to SHA for supply-chain security
+feat: add RAG cron deployment and admin API support
+fix: Update composite action paths and make agent-skills public
+feat: Deploy agent-skills composite actions to CI workflows
+chore: remove legacy prefect flows and add RAG cron script
+Merge pull request #38 from stars-end/fix-linting-master-again
+fix(ci): resolve unused imports in integration tests
+Merge pull request #37 from stars-end/feature-affordabot-e4f
+feat(test): add integration tests for database flows (affordabot-e4f)
+feat: Add detailed scraping infrastructure analysis and pricing reality check
+Merge pull request #36 from stars-end/fix-linting-master
+fix(ci): resolve unused imports in tests and flows
+Merge pull request #35 from stars-end/infra-auto-merge-beads
+feat: Add Beads JSONL auto-merge workflow
+Merge pull request #34 from stars-end/feature-affordabot-dqa
+feat(test): unit tests for services (affordabot-dqa)
+chore: update beads status
+Merge pull request #33 from stars-end/feature-affordabot-xb3
+feat(cron): migrate daily scraping to Railway Cron script (affordabot-xb3)
+Merge pull request #32 from stars-end/feature-affordabot-9ko
+feat(admin): implement sources and scrape management UI (affordabot-9ko)
+feat: Add comprehensive competitive analysis documentation
+Merge pull request #30 from stars-end/feature-affordabot-xy4
+chore: merge master into feature-affordabot-xy4 (resolve beads conflict)
+fix(ci): resolve ruff linting errors
+Merge pull request #29 from stars-end/feature-affordabot-eih
+chore: update beads status (affordabot-xy4)
+feat: rebuild context area skills for Affordabot
+chore: update beads status (affordabot-eih)
+fix: make historical migrations idempotent
+fix(ci): Restore missing _context-update.yml from prime-radiant-ai reference
+Merge pull request #28 from stars-end/feature-affordabot-dqa
+feat: Implement unit tests for Search, Ingestion, and Discovery services
+Merge pull request #27 from stars-end/feature-affordabot-1z4
+fix: remove unused imports (CI lint)
+feat: Infra Hardening (DB Schema & Registry Sync)
+feat: Implement E2E Search Pipeline (Affordabot-h62) (#26)
+fix: Add missing import in IngestionService
+feat: Implement E2E Search Pipeline (Affordabot-h62)
+feat: Unit Tests (Ingestion & Discovery) (#25)
+Merge pull request #24 from stars-end/fix-build-railway
+fix(build): standardize on python 3.13.0
+fix(lint): correct ruff violations
+fix: downgrade to py3.12 and disable package-mode for railway compat
+Merge pull request #23 from stars-end/feature-affordabot-94g
+ci: remove obsolete submodule checkout
+fix(e2e): bootstrap storage bucket and refresh lockfile for compat
+fix(e2e): use correct SUPABASE_SERVICE_ROLE_KEY env var
+fix(e2e): robust path handling for backend module imports
+feat(e2e): add cloud verification script for railway
+Merge pull request #22 from stars-end/feature-affordabot-9yb
+fix(ci): use vendored llm-common path in pyproject.toml and remove symlink hack
+fix(ci): vendor llm-common and remove submodules
+fix(ci): point submodule to canonical stars-end repo for access
+fix(ci): checkout submodules and symlink llm-common for path dependency
+fix(ci): upgrade to python 3.13 and add spikes
+feat(discovery): Implement Municode Spider via Playwright
+Merge pull request #21 from stars-end/release/roadmap-batch-1
+chore(beads): update issue state
+feat(storage): Implement BlobStorage protocol for raw artifact persistence (affordabot-d46)
+feat(discovery): Implement City Scrapers integration (affordabot-23x)
+chore(ci): Enable backend tests and linting
+Merge pull request #20 from stars-end/chore-cleanup
+feat: Implement OpenRouter Embeddings (Phase 4 Done)
+refactor: Rename 'MCP Style' to 'Z.ai Structured Search'
+feat: Optimize Search Discovery for MCP Reliability
+feat: Implement Chat Search Workaround for Discovery
+feat: Integrate Phase 4 Vector Storage logic
+feat: Implement Hybrid Extraction Pipeline (Discovery + Router)
+Merge pull request #19 from stars-end/chore-cleanup
+chore: close resolved beads issues
+Merge pull request #18 from stars-end/fix-admin-import
+fix(admin): move SupabaseDB import to top level
+Merge pull request #17 from stars-end/fix-runtime-import
+fix: add missing CORSMiddleware import
+Merge pull request #16 from stars-end/fix-llm-common-url
+fix: correct llm-common git URL (v0.3.0) and update lockfile
+Merge pull request #15 from stars-end/fix-railpack-install-cmd
+fix: use RAILPACK_INSTALL_COMMAND for git auth
+Merge pull request #14 from stars-end/fix-git-askpass
+fix: use GIT_ASKPASS for Railpack git auth
+Merge pull request #13 from stars-end/fix-nixpacks-preinstall
+fix: use nixpacks.toml preInstall phase for git auth
+Merge pull request #12 from stars-end/fix-railway-install-cmd
+fix: use NIXPACKS_INSTALL_CMD for reliable git auth
+Merge pull request #11 from stars-end/fix-git-auth-build
+fix: configure git credentials for Poetry build
+Merge pull request #10 from stars-end/fix-llm-common-branch
+fix: use master branch for llm-common dependency
+Merge pull request #9 from stars-end/feature-affordabot-puq-poetry-migration
+feat: migrate to Poetry with llm-common git dependency
+fix: copy llm_common source into backend for Railway build
+fix: copy llm_common into backend matching prime-radiant-ai structure
+fix: align with prime-radiant-ai structure using local llm_common symlink
+fix: use NIXPACKS_INSTALL_CMD to configure git auth
+fix: use nixpacks.toml to configure git auth in install phase
+fix: rename Z_AI_API_KEY to ZAI_API_KEY and configure private repo access
+fix: use git url for llm-common dependency in railway
+Merge pull request #8 from stars-end/feature-bd-affordabot-5at-agent-trailers
+Merge pull request #7 from stars-end/feature/affordabot-phase0-skeleton
+chore: resolve beads conflict in PR #7 (round 2)
+chore: resolve beads conflict in PR #7
+chore: add missing backend dependencies for Railway
+docs: align agent trailers and CLI-only beads
+feat: Phase 2.5 - Web Reader Integration
+chore: Make Beads helper scripts executable
+fix: Update commit-msg hook to accept affordabot- prefix
+feat: Phase 3 - Template Maintenance (affordabot-0qd)
+feat: Phase 2 - Admin UI + Auto-Discovery
+feat: Phase 1 - RAG Ingestion Pipeline
+feat: Phase 0.5 Schema Hardening
+docs: Update specs with source methods and auto-discovery
+fix: Simplify meeting spider for skeleton
+feat: Phase 0 Scraping Skeleton (San Jose)
+Merge pull request #6 from stars-end/feature/affordabot-0yo-specs
+docs: Finalize RAG/Scraping specs and Beads setup
+Merge pull request #5 from stars-end/feature/affordabot-x1u-toolchain
+feat: toolchain and dependency hygiene (affordabot-x1u)
+Merge pull request #3 from stars-end/feature-affordabot-ycs
+chore: Harden install flow & cleanup PR
+fix: Address PR #3 feedback (install path & temp files)
+Merge pull request #4 from stars-end/feature-affordabot-x1u
+chore: standardize Python toolchain to 3.13
+docs: Update implementation notes with Phase 2 completion
+refactor: Fix imports and extract scraper registry
+bd sync: 2025-12-03 08:05:35
+docs: Update implementation notes with Phase 1 completion
+feat: Add llm-common as git submodule
+chore: Remove packages/llm-common (preparing for submodule)
+fix: Use relative path for llm-common (Railway compat)
+feat: Migrate to canonical ~/llm-common
+Merge pull request #2 from stars-end/feature-affordabot-p7m
+Merge branch 'master' into feature-affordabot-p7m
+fix: Restore Beads export path to issues.jsonl
+chore: add new Affordabot LLM/RAG epics
+bd sync: 2025-12-03 05:51:50
+bd sync: 2025-12-02 09:53:10
+bd sync: 2025-12-02 09:51:32
+feat: Admin Endpoint Fixes & Jurisdiction Mapping
+fix: Railway deployment - inline llm-common dependencies
+docs: Add LLM framework completion summary
+Merge pull request #1 from fengning-starsend/feature-affordabot-0dz-unified-llm-framework
+feat: Unified LLM Framework with LiteLLM integration
+Feat: Implement llm-common shared package (Phase 1)
+Docs: Add LLM Framework Specification
+Expose proxy error details
+Support VITE_API_URL in admin API routes
+Standardize backend URL resolution in admin API routes
+Remove debug endpoint
+Fix frontend health check path
+Add debug endpoint
+Disable RateLimiter again to fix potential 500/429
+Revert backend to known good state
+Revert models route change
+Add backend_url to models response for debugging
+Expose error details in frontend scrape route
+Add test-error endpoint
+Disable Sentry to debug 500 error
+Disable RateLimiter middleware for debugging
+Add global exception handler for debugging
+Add error handling to Admin POST endpoints and fix analysis task creation
+Fix missing useEffect imports
+Fix Admin Dashboard 500 error and implement polling/feedback
+Fix seed script schema and refactor Admin UI
+Fix Admin Dashboard UI and Seed Data
+Fix deployment: Update healthcheckPath to /favicon.ico
+Fix build error: Replace Navbar with Sidebar in BillDetailPage and update UI
+frontend reverted mockup content
+fix: Enable Playwright webServer in CI mode
+fix: GitHub Actions CI - use packageManager field and disable Poetry backend tests
+fix: Update Makefile to work with actual project setup and add Playwright to gitignore
+fix: Add frontend-specific pnpm lockfile for Railway monorepo deployments
+fix: Railway RAILPACK buildCommand for pnpm workspace monorepo
+feat: Update GitHub Actions CI with proper Playwright and pnpm support
+feat: Add e2e testing infrastructure with Playwright and local CI
+fix: Add packageManager field to frontend/package.json for Railway RAILPACK
+fix: Configure Railway RAILPACK buildCommand for pnpm monorepo
+fix: Add frontend/pnpm-lock.yaml for Railway RAILPACK monorepo deployments
+fix: Remove stale frontend/pnpm-lock.yaml breaking Railway deployments
+docs: Final documentation update - 100% complete
+feat: Complete API integration with Next.js routes
+docs: Update documentation with completion status
+feat: Complete Admin Dashboard frontend components
+feat: Add Admin Dashboard frontend with Scrape Manager

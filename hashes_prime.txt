@@ -1,0 +1,250 @@
+55df66ebb2fc98ae58ae019fed44888d1daf81d0 ci(dx): update dx-audit frequency and assignee
+c6106ad6d5f8f5b6057a3d00546cd15f776d67e2 Use llm-common context pointer selection (v0.7.2) (#479)
+04fb33f5e4edae775c0bbb831ea4b2d19e8ccaf7 docs(dx): update AGENTS.md with golden bootloader
+cafbb5aa24026a4fe22b4653d882c71e776a336e style(dx): standardize stories directory casing to docs/testing/stories
+bd737e5cdfacdbe23a4f58f261c2b23af7e535fb Pin llm-common to v0.7.0 (#478)
+7855822f95bac4666f7e0252fcc9be1ae30e1949 chore(beads): fix prefix mismatch (wd0a) (#477)
+517b4b8de2e255c5fd72acd0d525456285170b5b docs(beads): add Jules TECH_PLAN files (#476)
+3bbed8ef5fe092f54b6cfc2d485540977167ef6c Docs/Beads: dual-frontend decision + Beads prefix fix (#475)
+1363ec9d3d94328772cba43b009100926f60f656 Merge pull request #474 from stars-end/feature-bd-yn9g.fire-and-forget
+05c7e497f4599a5e56550391d8f83b3f094b5042 docs: add fire-and-forget packets for Jules
+054b6df8b3ab3bf578b251e07c7270b3cd3dc9f3 Merge pull request #473 from stars-end/feature-bd-yn9g.consultant-feedback
+5aaeeb712c90849cbf92ce404a1cb22f62b3d0a0 docs: incorporate consultant review into bd-yn9g spec
+8e9895a622793f6eb645dbbad6565e694dfede6d Merge pull request #472 from stars-end/feature-bd-yn9g.jules-dispatch
+54ec088be8421fe97eef1e9bbd9e815ab42b2ead docs: add Jules dispatch packets for bd-yn9g
+b15fd4c38bc864aa79a98daae1d69b97068cce46 Merge pull request #471 from stars-end/feature-bd-yn9g.9
+c7ae394d645814a3ca3175e474452c6f41d51f49 docs: bundle Dexter ports (glm tool selection, context pointers)
+3cca833ef6e000fff936ff42771c28ee9ea1744d Merge pull request #470 from stars-end/feature-bd-yn9g.5
+9000995999d35daad1206afbc6b93c9d5d333014 docs: refresh Dexter audit and update rewrite spec
+4e85c6f060686482f1d4e661778e3a4fd9f91722 Merge pull request #468 from stars-end/feature-bd-yn9g.1
+9c6408b729cb2bb53b114653282c66191fa162de Merge remote-tracking branch 'origin/master' into feature-bd-yn9g.1
+9a4e54e2dc3843f15eda93e5749f73c22fb5a868 chore: close bd-yn9g.1
+925c1978651dd52e77b3784b8a0dfe33f765c6ad chore: frontend unification spec
+f9852e4eb8f778c10f0057caf3a0e2ac4d472420 fix: Use frontend service URL (frontend-dev-f8a3) for UI tests (#467)
+c09ac18553d56c10b4fa2f6888f0a65075d3148e fix: Use correct Railway domain in overnight verification (#466)
+6ff9711ce39ca528228a08bc93b80a2d61906a02 fix: Add explicit playwright pip install before browser install (#465)
+f8f9df98f57d96f52e5dfa5a49cf52a33d6dd1c8 fix: Rewrite unified_verify for real browser tests with screenshots (#463)
+f8873b7b8abe7804db4611c63005e7c3b202548d fix: Make health check non-blocking for Railway cold starts (#462)
+4b5f1e85fa961ad28f351f6c0d44245c47533117 fix: Poetry env use mise Python + clean old artifacts (#459)
+5620f636deaa2abf72db8bc14f8f9b3e61502e78 fix: Use pre-installed mise for CI (#457)
+ee5908ff71aca56466e0a08ff2a6e6a9fdc85647 fix: Use mise toolkit for overnight CI (local/CI parity) (#455)
+3b7eb7e926e1f4938ee3545b1c42dd8a10833bed fix: Fix overnight CI - Python 3.13, permissions, remove orphan submodule (#453)
+a324e8b989747411dd842fe51a40f7e4752efe4a feat: Harmonize Makefile targets (verify-dev, verify-local, verify-pr) (#452)
+c7cc37940d6b453b75124e056854dd80c4ff422c feat: Add DeepChat UI component with SSE streaming (#451)
+2555fba8c121d78c03209ce5a6b9d130264482f9 feat: Add SSE /api/chat endpoint for Deep Chat streaming (#450)
+86ad5555fe714e2aa8039137fcdba41835382331 feat: Add verify-pr for Railway PR environment verification
+298cd79b5e56094afbaa5e19059ae2b6e7b109eb fix: Update llm-common to include verification module
+c49ca51516ab533aabc24c85244ad75512d6d0e2 fix: Add missing tabs to verify-ci Makefile target
+6abc51e3aa5ad72bd21a9ffc2cbd893842f18795 docs: Add deep_chat_ui.yml test story for AI Advisor (#449)
+cb86f9f93ef941bea2b004a43e670c0b979965a0 feat: Add unified CI verification framework (8 user stories) (#448)
+756aa43fcd28685788e5f3659b72dd31488e4a4b chore(prime-radiant): Upgrade glm-4.6 to glm-4.7 (#447)
+f397a29940c9ffe27c6b0fa14e1de9580ceca93a chore: close bd-9l3j after PR merge
+5235b4fce7de009813e9cf3e41a4f0a16a30272a [bd-9l3j] Migrate EODHD refresh from GitHub Actions to Railway cron (#446)
+275d137420e7b96aeda2764464214305c693b4fa chore: Remove all Supabase references from CI after Railway migration (#441)
+6c503b9960d34cf0041a5071d07ea2722982a381 Merge pull request #440 from stars-end/chore/cleanup-orphaned-submodule
+b339af56030dcc45966031340a78463b1a0649ba chore: Remove orphaned llm-common submodule and CI config
+b0c3db4545deba74fdda3d8ae7edf3c693fa33a5 Merge pull request #439 from stars-end/fix/railway-llm-common-git-dep
+37d7efe36c89ffca1fe5b3fdd7a365c8bf4f6708 fix(railway): Revert llm-common to git dependency for deployment
+e164ee476bf2bd6beeddfb6b9b420dbc4edd0f49 Merge pull request #438 from stars-end/fix/pnpm-version-alignment
+8382b1c18aaae47224ec2d49d35b7c63ea07a281 fix(ci): Align packageManager to pnpm@10.17.0
+f74ed6353b7ae5373bc7267a493617de55125814 Merge pull request #437 from stars-end/hotfix/ci-submodules-all-backend-jobs
+0db58eaa3c7f800ea25943081af06fa368935c4b fix(ci): Add submodules: recursive to ALL backend checkout steps
+1d567683dbb3e47a1875d2313d8c41e615e91b3f Merge pull request #436 from stars-end/fix/ci-submodules-1220
+6f7fa65183b3dce1cf7f1f058fe4a0eab10c45d1 fix(ci): Add submodules: recursive to backend checkout steps
+1dadf7d268360489a7578b297774e2038aa47798 Merge pull request #435 from stars-end/feature/llm-common-hybrid-dep
+8db8b956ce4db5861957e938fae9f6e76aa8afc5 chore: merge master after PR #434
+628c0e8f54bd552d6bbc1fcad05c9766de0036fb Merge pull request #434 from stars-end/feature/provenance-feedback-round-2
+d9262554b56b89bafe2c04e95777bc209d8cb132 chore: Migrate llm-common to Hybrid Path Dependency
+8ec5eabe5f814d000e0473edb6af6b52467118cd chore: remove incorrectly indexed llm-common files before submodule add
+f0f4005aa36c25a123824db56becba798bda6dff chore: resolve merge conflict in registry.py (PR #434)
+6a3a8dc38ae50cc82545b022c0dc66f23ce9274f fix: add missing ToolResult import to registry.py
+fc63ac8777ef37360fa13343e6e036b90a721cb3 fix: address PR feedback for provenance framework
+0b11100cd7f7dab728b1fd3f6b0f653ddc65f430 fix: address PR feedback for provenance framework
+f44118403ce569a18f14fc7cdee9ffa962b7fb75 fix: bug-fixes-1220-1018 P0 stability and P1 Dexter grounding (#433)
+58da260428a6eb3c10ebc7f3e72b56e606a812a9 chore(ci): Delete unused Supabase check script
+32c3507ab2dc220297709304555b5e5f6a9223be chore(ci): Cleanup legacy logic (P2 complete)
+42c295e0be8901a22d23ca4cb1d065543f73f5e5 fix(test): Simplify profile Step 2 to avoid MUI click interception
+10f4ac6d8d0619d0468825ecc8d595f67d745b9a fix(ci): Enable Vite proxy to fix CORS localhost/127.0.0.1 mismatch
+fd3ec4c64d94f46d9352b04afca49a6c5155b4c2 fix(test): Final flaky test fixes for Tier 2 E2E suite
+00fe14d313c7ee65b36a8417f02cef65d3546fa1 fix(test): Make existing E2E tests more resilient to CI environment
+43383ce36825478183fa0f5e07b1ea7a64bd970e fix(test): Make new E2E tests resilient to backend 500 errors
+44a3c53b4c7eae554c4ec3f83ee8a328b3d94cb3 fix(test): Add useClerk mock to fix AppRouter unit tests
+e49081940bf56bb0ab835ce357e00b9766c7ff6a fix(ci): Add missing get_db import + switch to RAILPACK [bd-t9as] (#432)
+5106e6d181c11a2d44c6a936bf4dc0b4a0b900cd [bd-qf94] fix: PRD gap fixes - EODHD db error, analytics metrics, new stories (#425)
+1260fe2cfe3c37232f7b3602030842b735225020 docs: Add bd-gpa7 Railpack frozen-lockfile feature request
+527641e29e8a0c0cda79e8e98aa262499f84a428 fix: Revert to NIXPACKS - Railpack frozen-lockfile cannot be overridden
+ca75094a107c5bafe9290b959564cc56c855458c fix: Use .npmrc frozen-lockfile=false for Railpack monorepo support
+e7bc3a3d700c7c14b87b90baec1f4d854a9b8ed2 fix: Switch to NIXPACKS builder to escape Railpack cache bug
+0695c09b9f05b584467d61ab7df1a34a637b9b93 fix: Bump frontend version to bust Railway cache
+d59e2ab59abb255f54c02c0774cd280b73d72512 fix: Completely regenerate pnpm-lock.yaml from scratch
+b021b6abc1a87ade648671e327b87b084b73ab18 fix: Add installCommand to bypass frozen-lockfile for monorepo
+23113a7a84e1071146fe8d3655fb818f88d2d7e6 chore: Trigger deploy with fixed lockfile
+53e0a77ea4ebfab6caeb9f1418febc452bab9166 fix: Regenerate pnpm-lock.yaml to fix Railway frontend deploy
+d3e18d378488f85a6218fb866590665d73dfaf42 chore: Disable Railway build cache to fix stale package.json
+342c1d349d9204948c8410ad7425b368e664b846 chore: Trigger Railway frontend rebuild
+7fd8dc6babed98f84bd9bf4e423fdebc63a883ac fix: Remove broken supabase symlinks from bin/
+82f1f7f372705ed6150c63a7e395923c5c95007d feat: MVP v1 Ship - CI Fix + llm-common Integration (bd-35hs) (#431)
+0bf0684e5b348d52631ac04cbe80be298a08fd4b fix: Add executable permission to setup-clerk-stub.sh
+1c642d6b6bd41f1f02319f1283f772fa22e28c3d fix: Add missing setup-clerk-stub.sh for CI
+575e6a6278d39eb7628795c5a73a21ee913d1beb fix: Skip Supabase checks in ci_doctor when USE_RAILWAY_DB=true
+c9b9bf752827138a113ba078174595c2cd8ce6c8 fix: Resolve Railway build failure (llm-common git dependency) (#430)
+19ec9925c9ab846cae629d91947eebba52cb3a58 fix: Resolve Railway P0 - Fundamentals (bd-qf94.9) and CORS (bd-qf94.6) (#429)
+4150fcc48a39457f319c62446b95577fbf4ea6a6 fix: Resolve Railway P0 blockers - CORS and DB schema (#428)
+4a442b20f92a7b17fd2b001be9f5ba3adee7f779 feat: Add realtime cron mode for intraday price updates (bd-qf94.2) (#427)
+f95284d807ec7c2ad20233577f5010de5cb7a359 fix: Replace Plotly placeholders with real charts in Analytics (bd-qf94.4) (#426)
+5e2a4116de5b9adc223d30e79e7a37128ecbd748 fix(frontend): replace Supabase JWT templates with Railway auth
+8205ddd58c4dc0c24a1bed379a3a642dbda08147 fix(deps): update frontend lockfile to match package.json
+9d57948f15987a3d53f6ba24d0f16910c38f2833 Merge remote master with beads sync
+ac72d6119068265bcd3e9a425eb8d517385312b9 chore(beads): sync issue status after MVP v1 ship
+65dc46c659a35ff0405ead36ebd683f735a7af0d feat(e2e): implement hybrid Playwright login for Railway auth (#424)
+c3230e419f1e8286980c25fc4d2bde1e7923e582 fix(backend): mount EODHD integrations router in v2 API (#423)
+6ca57b5fb8964df4545ed39237f45221d280ed43 fix(backend): add None check for eodhd_fundamentals attributes (#422)
+a849b0ec541b52eeb5004b8c6154f4c92686378d fix(backend): add ALL missing columns to Security model (47 total) (#421)
+8492216e8b6174ad90f08944c534c31a23670097 fix(backend): remove sedol column from Security model (#420)
+0cf14230181f8547d1b02e8dcbb9c40362755d4b hotfix: fix users.py import for get_db_session (bd-1n83) (#419)
+4f3af194dbc284d5dda8cace76124969e6d0d30d fix(backend): use get_db_session for FastAPI Depends injection (#418)
+1d4a37fcab772c7dcb3ebcba249db1f1d4ca3ed6 fix(backend): add missing Security model columns + migrate EODHD to Railway DB (#417)
+b565e402a65a6e981dd3983381bd498d8e4217f0 fix(ci): add supabase to mise install for Tier 1/3 jobs (bd-jbwr) (#416)
+34abd204f3efb268c301e50a831d60d2f18d94bc Merge pull request #415 from stars-end/feature-bd-jbwr-gap-closure
+fb4c8dc7250d6557b1cfb5de2c2b2ccbb32b73f0 feat(testing): Comprehensive MVP story verification - LOCAL 6/6 PASS
+14130d3f2bab6f9d1384ea8ab6c2ccce91756c34 Merge pull request #414 from stars-end/feature-bd-716k-mvp-gaps
+b725352468c717774ccf47abd3e844e18c2858b7 fix(testing): Fix business logic test selectors for Accounts and Research (bd-716k)
+c8a01e21dddcd2215b5fb348a3526c10e8ae0359 Merge pull request #413 from stars-end/feature-bd-xdk6.1-uismokeagent
+8402aa0aeec9a21978eb00dcf3bf43b1d24c25c5 feat(e2e): Add auth state persistence to UISmokeAgent (bd-xdk6.1)
+be5759675063cb7b38259743e7ca2f7823bd762b Merge pull request #412 from stars-end/feature-bd-xdk6-mvp-verification
+7e3274f4fd090f592d586bbe69375a209ad21952 feat(testing): Comprehensive MVP v1 verification - ALL 7/7 PASS
+48537b7c58d82d6a48b233af6c21d4103bfd6175 Merge pull request #411 from stars-end/feature-bd-svki-e2e-verify
+d8f8502d2d6c78d85180a2fccf2c5689dcf6a6dd feat(testing): Add auth state persistence to verification script
+430a36fc770d960253092083173fe273f8a6c8a4 fix(frontend): Fix broken imports after Supabase removal
+d7009f593558f8cc02735a44b6ca6c1d8f55a9c4 Merge pull request #410 from stars-end/feature-bd-0kzq-ai-sdk-optionb
+08c03c590943efe9d5169786aec3db982ce081db docs: Option B AI SDK chat gateway epic
+ef6c3784ff5715093120ce1c5859a313228fe127 feat(plaid): Add sandbox integration verification script (#409)
+cae6f26354c939d835018b76c90686f2b80929cb feat(eodhd): Add scheduled workflow for daily/weekly/monthly data refresh (#408)
+c8e5eee739ded0b8d77b6cb59365e7402e8f00ee fix(api): Move /analytics/user route before /{account_id} to fix 500 error (#407)
+24b6742c8e38e96a8fb1a4ab20247f0428466088 Docs: Dexter refresh optional enhancements (#406)
+a71af3faee04d4fb25cbf9357dd1550a02140522 Merge pull request #405 from stars-end/chore/supabase-cleanup
+7e110a36294159f385b2140b743d8509d0f8d671 Merge pull request #404 from stars-end/chore/script-audit
+faf40a389d6d790e8cb636c9a11bd4690df2023d Merge pull request #403 from stars-end/fix-lockfile
+fc6d563d3e58de375859658d2a3868d83f721dcd fix(ci): add setup-node to lockfile check
+2633f1d07a23802de1cb24fab8fc4777d2ef209c fix(ci): add setup-node to lockfile check
+69e072760ee2dcebc5ec9d2ca79f4c45137eeced chore: audit scripts (jules bd-mfz3)
+eaf6de827e7c4474a49b7c47fa8f1c32851f8128 fix(ci): add .local/bin to PATH and apply bd-g9mp path fix
+d555efdc8cb0282727365cfee80e7087e85830a1 fix(ci): use --break-system-packages for poetry
+0dac1fd131e116c2626a6188482d4abba8996f9b fix(ci): use pipx for poetry
+01d8b33b4c940c8efd934f51d73b645a017af2a4 fix(backend): update poetry.lock
+3f290ebc22acd2c3bf2e8684e0eb73b3135e8edb Merge pull request #402 from stars-end/fix-login-route
+86dc40ee87df91fdb5e212e744fee435d4af715a Merge pull request #401 from stars-end/chore-refactor-agents
+983774020397a8b0dd1ee40f4e359349b10ab3e0 Merge pull request #400 from stars-end/feat-bd-vc6k-supabase-audit-6552768176177872506
+6ccb2783e2232e2c8acdb4f387ab39c27af7a82e fix(frontend): add /sign-in route for E2E testing
+23d54d9446b9389afa054d98c706819d774cc849 chore(agents): refactor to use llm-common v0.5.0
+7267ce16f21382429e2dd5dcc9bfdf56537db408 feat: Create Supabase audit report
+2c0f790f99c34a8cfb226b6c888341625e037159 Merge pull request #399 from stars-end/fix-base-url-protocol
+20d532c2dde48613b399e4c59ad69aadd4268fd8 fix(e2e): add https:// prefix to frontend URL if missing
+5d4bb5eff6fbf7e8a375b11a4b5afeb86eee28bb Merge pull request #398 from stars-end/fix-url-validation-and-debug
+1c831cbfe54734c329c254ae1b97cfe54c6f4e10 fix(e2e): add base URL validation and logging
+5f50fd804522086b44991529924d6a63a65cc4bd Merge pull request #397 from stars-end/fix-glm-coding-endpoint-and-story-loader
+01efd20ba5ca952ec8c3e7102300803fa7ab8cef fix(e2e): use Z.AI coding endpoint for GLM
+57ad06a50a87a4d9e7bff695a2c460730eaace09 Merge pull request #396 from stars-end/fix-e2e-secrets-and-continue-error
+7542dbf1473cce1f9fa831f8a8bc40980246ec78 fix(ci): use correct secret names and add bun setup
+11c44bd7a680fcb3a83658101ef9d73b1045ad0c Merge pull request #395 from stars-end/fix-ci-remove-supabase-dead-code
+46bb8a41eca69e06dc11962421613b34d4d359af fix(ci): remove dead supabase code breaking Tier 1 and Tier 2
+d70671cd2cb153cec56f305d4a18e5b9ab7e1c3c Merge pull request #394 from stars-end/fix-e2e-relative-imports
+9200871a110ef723a30815466feb03b874effd62 fix(e2e): use absolute imports for script execution
+60cf2dfbe292a1459da894f10d2c528442c3293c Merge pull request #393 from stars-end/feature-bd-92i4-smoke-agent
+4a6cac19f8b5e3c46325ee83e7ea267f016f466f Merge pull request #392 from stars-end/feature-bd-g9mp-fix_ci_doctor_path_resolution
+ca2e396246feeed700fcce94f772e64c92f73e05 Merge remote-tracking branch 'origin/master' into feature-bd-92i4-smoke-agent
+ece359be46670352322d1ce609f573c469d32fbd feat(e2e): implement UISmokeAgent with GLM-4.6V vision
+3751e1462879eef4a9b4b7506201d42668ded3eb Merge remote-tracking branch 'origin/master' into feature-bd-g9mp-fix_ci_doctor_path_resolution
+b2c8043b41eba98c7ee344d6e9f66fe2b7745b61 fix: Correct ci_doctor path in package.json and REPO_ROOT logic
+fa52f7f18337f9b54b01e443d30894182069407e Merge pull request #391 from stars-end/fix-e2e-smoke-pip
+8fb1fecc12e9035161f99441f1f556eabe08cbbb fix(ci): use pip instead of poetry for setuptools-based llm-common
+fa8e23e68f0dd75505c7350e42b2c4f79c7723ca Merge pull request #390 from stars-end/feature-bd-0u81-advisor-ux
+96d9003093bfd01eb13c5aeef1731b9fe28c3355 feat(advisor): add shared AdvisorContext for unified UX
+5811d1e3dbeebc35cb179c3a5b150ac317a81211 Merge pull request #389 from stars-end/fix-e2e-smoke-poetry
+dd01de627712325b0e8aadd274cdab8d69e468ee fix(ci): remove invalid -E agents flag from E2E smoke workflow
+fa7a9afbc55e26a3814c3ff0d9ae1ab884e24ddc Merge pull request #388 from stars-end/fix-e2e-smoke-permissions
+c929635ac4f0b290043b7aa6ecd4408985343b24 fix(ci): add issues:write permission to E2E smoke workflow
+1f6cbc56a7ec1ad8a050b09bf83047c9ea81170a Merge pull request #387 from stars-end/fix-health-name-collision
+832a3c3e95cccc4f585eeaa9feb4ddb6a539a7bf fix(api): rename health() to health_check() to avoid shadowing health module
+4497ac57d319a021ff3482e432bc38f0e0a7d2cf Merge pull request #380 from stars-end/feat-jules-health-check-bd-4mot-2070043861974886822
+e84d22011e5b859b1a6164dbefdd90674bd46ed6 Merge pull request #385 from stars-end/fix-jules-dirty-tree
+860d7930e34b1d34c208a2e4d26b6c779e1eced5 fix(dx): clean up git tree after chmod in jules setup
+d6fa58f01e06721f0071dc82bd6ad434eb90a6b4 Merge pull request #384 from stars-end/fix-jules-backend-path
+a484f05e8215d8a0806bbc3e653ef23c6250e65c fix(dx): run jules setup in backend/ dir
+dac591869065d7202f79e56132b6fc5fd5482ee2 Merge pull request #383 from stars-end/fix-jules-mise-trust
+bb0acb6e1c30c4d6f2c4297b2bef37f1189bce27 Merge remote-tracking branch 'origin/master' into fix-jules-mise-trust
+3a49375e087918e965febf5a0359942b917da125 fix(dx): add 'mise trust' to jules_setup.sh (CI fix)
+96d1f27160ed6efefcd570031b69cf4b592af575 feat: Add Jules health check endpoint
+308307023f3bafdc9f37954a3dc9b4204bf24899 Merge pull request #379 from stars-end/fix-ci-failures
+bfe0e9b81477f48a1d37fdad38e0e161d27f41e4 fix(ci): Resolve CI failures and remove Supabase dependencies
+b889ed2c2aad796dff987d327a7bb617267a8153 Merge pull request #378 from stars-end/feature-bd-8ybv-plaid-refactor
+8f0900d2973d5a8570f9bb702f51d69ba800c2b1 refactor: Remove Supabase dependencies from PlaidAdapter and cleanup
+91aadab2e4f98c95c5af91754232f3546abddfbe Merge pull request #376 from stars-end/fix-ci-permissions-v2
+592ef4a2c9699a83f8ed01a672a43bbab690ff53 fix(ci): Fix yq and playwright permissions
+739d0dbd3e53afb2a5e9cb8fcb9e3b2d4cb1f376 Merge pull request #375 from stars-end/fix-master-ci-railway
+7b512ce87c524f09bfd1d517101383d0f3f23b42 fix(ci): Remove sudo requirement from Playwright and fix mise warnings
+6eb01b18e46c5999b91846084f1fc308532bbecf Feature bd ekv9 eodhd migration (#374)
+70738da84bc583aed7befebf7c31cc4e233360db fix(ci): Resolve CI failures and backend crash (#373)
+06b3486a914631487a8e0b0e0692691f2df6f4d1 chore: Remove legacy Supabase DAL and dependencies (#371)
+d1a3d1dab04497c91285b9cfc8fd68cd90b2c8bd Feature bd gr7l fix ci regressions (#372)
+4678d3cbe0fc23ece4f23fe3c8c48970d06d494b fix: Remove symlink pollution in skills-validation workflow
+c7fa04561594ba8918082b643e5b0ef7a3c35112 chore: remove debug-auth workflow
+d1668cc214fdb8c5dfbe53649455cb0641b2b2d6 chore: enable logging of token identity in debug-auth
+2fbc8e6496a5ec4daedc5bf0b6a1772ea7c228aa chore: add debug-auth workflow to diagnose PAT issues
+9a8cb9f1454cc7158aeb2b0a5a84a66fba7bc274 Filter accounts by brokerage_connection_id during cascade delete (#363)
+c3c22a38cbc67edff83b064631e62f9e635ff558 feat: show error message on holding save failure (#362)
+aedda8e255e10f6ee779c98e71b1cd304b6ff9c1 feat(frontend): Show error message on CSV upload failure (#361)
+8f17f23af39d402a42d0e00f91fc47e0bcc604bd fix(backend): filter account count by brokerage_connection_id (#360)
+58cd8534bc9d1ca16f399f81b9c68462b6fc9ef9 Implement cache invalidation in eodhd_legacy.py (#359)
+22fa6f728bf1e321af4a373f58b8a154c0488bcd ci: install PyYAML for guardrails jobs (#366)
+bfcc10a226d848114ff1fed455a6ae874e5ffac7 feat: pass REPO_WRITER_PAT to dx-auditor for Beads sync
+0947966c58a779e3bdd000053a679c6a3babcec7 feat: add issues:write for dx-audit GH Issue creation
+c2ef126599252a2ac7ad35203782049c5b4b82d4 fix: JSONL merge conflict loop (bd-jccy)
+6d0244686f786f48f1b18afbf6187ffc6f0251d4 fix: add actions:read permission to dx-audit for CI run API
+01ec525582266a055b16e19db087f60791ad39c2 fix: remove beads-cli pip install (not on PyPI)
+937b862ff48ea7cb8ab7df7dc8c28315a835d960 fix: add setup-python-mise to dx-audit for self-hosted runner
+dc901f3addd3ee4a18f958f13ac9dea9a7cb1dde fix: add setup-python-mise to dx-audit + remove write permissions
+80f87702b1014646c0c9f3cb33f38666d41d8a17 test: remove write permissions from dx-audit to debug 0 jobs
+a5897e38de904b120cad0340cb2ef98333501ad0 fix: add token to dx-audit agent-skills checkout
+1308948156a9c73cdc89b5810ab62b436441affc chore: workflow cleanup - fix e2e smoke, dx-audit, remove stale (#356)
+c205b969a428ca7a8d56bffe1e914a612b6dd331 fix: update remaining workflows to use self-hosted runners (#355)
+31c42ad23bd4ff134ac5a4e50f4552a3d1253e73 fix: use mise for Python on self-hosted runners (#353)
+c9fb6b6d5ae08d4713e4683ee40cfe50054470ef chore(dx): close bd-3871 epic (#354)
+0b9481546e64a0a6a28d0d139f51fd8b3f916b5e chore: close DX Beads issues - bd-vz68, bd-3871.*
+5d6ff812c717ad5d312a0ebb5800984eacbe7d37 refactor: Phase 4 cleanup - remove USE_RAILWAY_DB imports and replace checks with True
+7f3044b19a449c81d74237be46ef61bd3a8c85e1 chore: Switch GitHub Actions to self-hosted runners (#352)
+3a86a401ce38a8b464d32c95d065c2732e101611 Feature bd vz68.3 dx entrypoints (#351)
+3143debb39e4ba49f8255a264c92929a2f3da7c5 docs: Linux VM bootstrap spec (bd-vz68) (#350)
+138aaed81c274bacae5b90c51c5ac4b665d9871c chore: close completed DX tasks\n\nFeature-Key: bd-3871\nAgent: codex-cli\nRole: coordinator (#349)
+03905ba815f5eff60453dd2dda3b561d93c4ee72 [bd-65qg] Migrate core services/APIs from crud_supabase to SQLAlchemy/db_access (#347)
+cf35a178fed71251baa910d7ac8a4c59c6afcf4b docs: Railway Changelog #0268 (Audit Logs + railway dev) (#346)
+982bf2b65efcc5d4bffe2445764c9c697803ccd5 feat: Adopt V3 DX standards and restructure scripts (#345)
+232dd48002b87d1b9d4244a527e15f3c2499a00c bd-65qg: Fix CI Auth Stub Suite failure (#343)
+233381e42a93ebc2ec00c24cf078bc76062057ca docs(dx): Enforce Agent Mail as sole required MCP (#342)
+50b079cfc76cd78707d0414c8057c326c1fdb7d9 chore: improve dx_doctor next-steps output (#341)
+fcad7a9d7a335ccc743443ec1329dc23351bbd54 Merge pull request #340 from stars-end/feature-bd-3871.13-mcp-skip
+be9a6bdfb2856c4953a6ac732d8f3f9adf3a4732 chore: update Beads status
+d066c1c7e90828105e27132e984778f5c4db1f3c chore: allow skipping mcp-doctor
+7f351a99ed6374f0b6ff587b7de4457c0581d55c Merge pull request #339 from stars-end/feature-bd-3871.13-mcp-doctor
+706cd43dd51f52f9ed27136d27ae52f2c9325b1a chore: update Beads status
+bd1dfb0e6d648e790b1ed35c04d9cd41cf4356ba feat: add mcp-doctor + railway cli checks to dx-doctor
+2296753819c70eb78a3ad7b190c15f02f1b07aa5 Merge pull request #338 from stars-end/chore-close-bd-3871.2
+03b2337c7c029055707b7446e1779aea54aec197 chore: close bd-3871.2
+3c34fdc521959a900a4067a02f21a3416255cb0e Merge pull request #337 from stars-end/feature-bd-3871.2-agent-bootstrap
+67155924278de669d7b0ee486f24988c6f7e6e16 chore: update Beads status
+3986f187b4bfc9a4e4e493760a6aa851ef6f4f22 feat: dx-doctor bootstrap for Beads + agent-skills
+06b9f11bdf4c21ec6e4f3858aeedfb174b92dbe0 Merge pull request #336 from stars-end/fix-auth-stub-key
+c721e3dfc610c9add541699a69a089d8c45cd6bd fix(auth): Convert JWK dict to key object for PyJWT compatibility
+2bb9e1eea067712a00d2fa41a1f6ee19ac7ebc46 Merge pull request #335 from stars-end/feature-bd-3871.13-agent-mail-bootstrap
+c5b988e5782e8d517eca5c7c500dee57a4f5926c docs(dx): clarify cross-repo beads IDs for agent mail
+3850adda3f622a2c032a669e6bcf94e9f8e50066 Merge pull request #334 from stars-end/fix-frontend-e2e-selector
+6b10b2fc66500e44d0dc31744ca795aadf1ce034 test(e2e): Fix ambiguous navigation selector
+e05a57ae0c19f2cb46e2cb20edae5808cb6d4775 Merge pull request #333 from stars-end/fix-frontend-lint-v2
+c400869f93d729051336196e1357f8b823fd9b66 chore: Sync Beads JSONL
+aa12419be984a3ae97a101811d0966f99777c7c7 fix(e2e): Fix Playwright destructured arg pattern
+1c66aadd6c4e16b57f79361397305b7d03239fa4 Merge pull request #332 from stars-end/fix-frontend-lint
+9df266285ab4e2f47ee907c7b5894b73ab66be76 fix(e2e): Fix eslint empty object pattern
+63ba948fe029f16badbc522b111f59e24ae73d44 Merge pull request #331 from stars-end/fix-ci-clerk-stub
+e6b82b21aa26e0d027ab26fd6ca80f532cfa3ecd chore: Update Beads tracking
+c5c99098332c0ab4e1ce404eec2e8d7effb46dcf Merge master into fix-ci-clerk-stub
+a24de789551405f67f4e761fa66f469062de3fe0 chore: Fix CI failures (svix, imports, paths)

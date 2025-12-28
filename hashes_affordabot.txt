@@ -1,0 +1,250 @@
+b6566007730f85fa6f06bd26003cdb3cd65ebe8a ci(dx): deploy dx-audit workflow (every 3 days)
+03a851cca19c26a855150ccde30955b722958ef0 Use llm-common context pointers in PolicyAgent (#205)
+84249cd2b830980a7eed6f9c8523672c6560b8e5 docs(dx): update AGENTS.md with golden bootloader
+a5934e7bcf5eafa51ef2276c5da937a60a4f8c18 Pin llm-common to v0.7.0 (#204)
+ef21f8c0e1ad1cacdf0a7a32c437283eebf3faa5 docs(beads): add Jules TECH_PLAN files (#203)
+0ba332fccb77d925a193675b443e01f284e9753f docs(beads): SEO-first Next.js decision (#201)
+ad074543ec2ab37a95f8dcabbe42046129b1bbac Merge pull request #200 from stars-end/feature-affordabot-ahpb.fire-and-forget
+91978ca53c8f14c1eae8a8e52cdd67a42cac5e9a docs: add fire-and-forget packets for Jules
+c69207a31676c5cf8763836ebdae7bc7d3115c18 Merge pull request #199 from stars-end/feature-affordabot-ahpb.consultant-feedback
+f067e6f63bdf406063f58024d9be676072683c4c docs: incorporate consultant review into affordabot-ahpb spec
+e2bc3274b96d746b8a659dc74ed0f5fd3c882781 fix: Update PromptService to use correct Admin API endpoints (#198)
+6be3af308cc1dce93e84652464d0320149f43b4b Merge pull request #196 from stars-end/feature-affordabot-ahpb.jules-dispatch
+291fab7f9b8c13537a1c27e478698ddc3c176231 feat: Add /admin/jurisdiction/{id}/dashboard endpoint (#197)
+28166184cc6666752e5a819e821713a4c0683183 docs: add Jules dispatch packets for affordabot-ahpb
+ec1b961139d4c906cebbfdbc5c55848c51b785e1 fix: Use string UUID with SQL cast for count queries (#195)
+db29262a8a5d21175ece41b4ef1cda6d095fefd5 fix: Pass UUID directly to asyncpg without casting (#194)
+1fc04702bbd05d9af9187baee149a4b49ad64a8b Merge pull request #192 from stars-end/feature-affordabot-ahpb.8
+f14490a5da491c11092db42f7d0cef8542d806d0 fix: Cast UUID to string for jurisdiction count queries (#193)
+5bbfa9ba8ac43f5046cdf97146c48cb0700a1e2c merge: sync origin/master
+c9c0ae4772cad547b29a46f91190310eb4eb991e fix: raw_scrapes bill count must join via sources table (#191)
+9a5adf775cc812119ca4a69c1e0e232919ccbfcf docs: bundle Dexter ports (glm tool selection, context pointers)
+23d9df2daa6fc21b3ceabe6147cc2c423ff8f497 fix: Improve jurisdiction lookup to handle slugs (#190)
+70568fe3c96880a04aad71a9e1692f523baf7691 fix: Correct admin.py column names to match DB schema (#189)
+5c515220e9963da612d1976f43fff38a31be8d35 Merge pull request #188 from stars-end/feature-affordabot-ahpb.5
+8d8d900d1806155befef5f307c35ca15daad071d chore: keep beads JSONL in canonical format
+3a80b370aa5ec23b214075ea4690599945bd9414 feat: Add admin endpoints and story-driven verification (#187)
+70d637fe48d531fc61a5859cf23dfaeccc91147d docs: refresh Dexter audit and update rewrite spec
+9eb8383fb4719c9d4f88f9322f7f94a203080ef0 docs: Add admin console user stories for UISmokeAgent verification (#186)
+a91d5015948392d506983f595080f261070f8237 fix: verify-dev passes all phases (storage, llm-common, admin pipeline) (#184)
+959fcff2cd86b77b8df8e6fda3c85a881046537f Merge pull request #183 from stars-end/feature-affordabot-ahpb.1
+8a844ba29962dd1ba9a89a9c6b65f97773d1e0c6 chore: normalize beads issues.jsonl for PR
+c2b295f8302d264760c97dc1a4f1312f6b596807 bd sync: 2025-12-25 14:12:42
+cc8afe88a1393a133a6fdbd5c5f6e9b5528654e9 Merge remote-tracking branch 'origin/master' into feature-affordabot-ahpb.1
+61c6b0a21b843d820b83b7248d051d2cff423a9b chore: close affordabot-ahpb.1
+01f3263e118e94b5527481d7657ae973abbcecf9 chore: frontend unification spec mirror
+053f3627cb6c0e398a8c5960bebb3b446a1ada95 fix: Sprint 1 CI/DX stability fixes (#182)
+e39e73b47255da8e2dd593b5275b367fca109185 fix: Use frontend service URL (frontend-dev-5093) for UI tests (#181)
+03bb754b29a46a34707dc57c5175f2f17a065ffe fix: Use correct Railway domain in overnight verification (#180)
+0a70e7cef1f997ed5284b1c3951f1da2027395ed fix: Replace mocked unified_verify with admin_pipeline_agent (#179)
+3aaa8d37f8f28aab65023479f263b477ac60daeb fix: Fix YAML command continuation in verify-overnight.yml (#178)
+81d3e307cf9690f41000ed9ce0603353a3a517b0 fix: Mock failing verification tests for CI stability (#176)
+630ac398e992bcd87a051c6d2dfa050034271f14 fix: Poetry env use mise Python + clean old artifacts (#173)
+9799032ea4b94782ecda5b1e08e0a5f741cee18d fix: Use pre-installed mise + fix colon in filenames (#171)
+be7380cc7cfb4b14f53b5768b9d4b218077afb3e fix: Use mise toolkit for overnight CI (local/CI parity) (#169)
+bc44330c86be092927ecfbd72bb7279c46aa761a fix: Fix overnight CI - Python 3.13, add issues permission (#167)
+a90a89a9558280da637aa5810c04b47a062f359a feat: Harmonize Makefile targets (verify-dev, verify-local, verify-pr) (#166)
+b032fee13fe4dca8b6f84a771ce0c2a819d23c05 feat: Add WebReaderTool for Playwright deep content extraction (#165)
+fe34836c6ae7be6625a8e831ab7e87de45f32350 feat: Add verify-pr for Railway PR environment verification (#164)
+65312ebae748e2d59518bfe6c0a5602b946d9e6e fix: Resolve 27 Ruff linting errors (#163)
+3bd8c176119281ddcf977244c8c8bd6b92a785a1 feat: LLM-Powered Discovery + Unified CI Verification (#162)
+e9bfa4e1d3707a8dd2bea7afb710ead509d0fffe chore(affordabot): Upgrade GLM models to 4.7 (#161)
+c4f6cd0a0b7f21591d2fc03f1760be6c6290fe35 Merge pull request #158 from stars-end/fix/master-dependency-sync
+edd3c698db9bf28495e11f18b7c0b8d94db1334f fix(deps): Sync llm-common on master for CI Green
+340a2f1a0b5e5217b16f291fbb97589fbf42275b fix(p0): P0 Bug Fixes Blitz (v3) (#157)
+1ae3a2314fa3bb1e7cf21ac72bdc74a2683f7bd0 fix: Infrastructure fixes from Jules sessions (#156)
+34d1c5b7f5541821a40701938b98c1a968d73668 fix: P0 Bug Fixes - CI Green [affordabot-xxry] (#155)
+6fa0c43bca619fb59de0b1bb34d6a87da3e3e679 Merge pull request #154 from stars-end/feature-affordabot-wfxv-fix-deployment
+1354eaacc2d422d151d3613f71b00fb5a8b8a4e1 fix(deps): Switch llm-common to git dependency for Railway isolation
+cd6f429955679ec250c7948cb7d3b8aee33cad14 fix: Update railway commands for monorepo root context
+959458aa4c863e81fce0a562ba1050e11a4cbd18 fix: Initialize submodules in backend/railway.toml
+f0e05e9e83b1f2a559975b633b5c9f04be4bc603 Merge pull request #153 from stars-end/fix/migrations-final
+3bc5d4a8700d3ae243fa288324a5812e23516c35 fix(db): Add missing pipeline_runs table and rename document_chunks
+e90507b098253341f6eb9a5d5d67f9acab651733 Merge pull request #152 from stars-end/fix/test-mocks-final
+27fff2330d237b38a45b9f11b4681aa606f3168d fix(tests): Add missing AsyncMocks for DB methods in agentic pipeline test
+371fc1eed2d6a27e184f44b6051512fc4fc0cbd5 Merge pull request #151 from stars-end/fix/async-mock
+1324e0597ddaffacd9354a45bc8d1c755f5e1c43 fix(tests): Use AsyncMock for async chat_completion method
+c0dcbe23fb5054de58683c6dbfd4ff29a714e099 Merge pull request #150 from stars-end/fix/artifact-path
+12b5c9d6a1771b3ffab598f4e154c23ab7cb2e15 fix(audit): Use env var for ARTIFACT_DIR with temp fallback
+57f76124c136958f0bb86c5e9b642ffb13e79684 Merge pull request #149 from stars-end/fix/test-import
+31cf18a43861e28f5782f8264302de43d0b227d9 fix(tests): Correct import path for LegislationImpact
+56b6c8f4927e9ef732a5cb91e4d88d968e552742 Merge pull request #148 from stars-end/fix/lint-2
+b69652e59886a749330709ca8420413fa886fafb fix(lint): Resolve lingering unused import errors (Take 2)
+a7e606f78ce4a685b8719d0bc0514b75e26f84d3 Merge pull request #147 from stars-end/fix/lint
+6ffaf20485d35bc01af1009eb53e0a95b9ea16c9 fix(lint): Resolve all backend lint errors
+3ef9704f44f6d71ec5f9a38550ded6284f94b0eb Merge pull request #146 from stars-end/fix/backend-lock
+4f15a9a3ad5438b4751cebb75cf3a77dca301112 fix(deps): Sync backend poetry.lock with pyproject.toml
+e413db73bd397da0090c717baa4b4c7c79749fab Merge pull request #145 from stars-end/fix/ci-final-v2
+a4c651a946f337697744648c95ad13d63d57d9ac fix(deps): Point llm-common to valid remote commit
+75c3a23e92fa77aa9501e7858867b78b3dc16b53 Merge pull request #144 from stars-end/fix/ci-final
+aee8f4e6d9b0f85fc29444e459dcc89c5e3f6c25 fix(ci): Final CI stabilization
+129282a30bbaf1a7849973f03d8b9ca2e12f197e Merge pull request #143 from stars-end/fix/ci-dependencies
+b490527dd1315ad8c60fa98ea34c51517c286ac7 fix(ci): Resolve dependencies and submodules
+1dc89acc8b3cebec9a895225a8a8a2c247b3c762 Merge pull request #142 from stars-end/fix/workspace-v2
+de632b529697085349b23077aa72a2a6e8d61c8c fix(workspace): Add frontend-v2 to pnpm workspace
+84ab3056576624e59091cc2068f2978ab68ddff3 Merge pull request #141 from stars-end/fix/ci-modernization
+b2335822449d837e071ad1797b453e3cd8c5801e fix(ci): Target frontend-v2 and remove legacy E2E tests
+e13240cc1ec098ec01fbd54ab831d77c5fbbc3bd Merge pull request #140 from stars-end/feature/admin-audit-logs
+251e908a4d5c99c0a59a92e41228594aacba13c5 feat: Instrument MinIO and Embedding visibility for Admin UI
+7e12a0104796a1c13202642d96a77cd014324466 feat: Admin UI & Audit Logging (Epic affordabot-dgf/affordabot-prs)
+c441d2ebc24510861850f64364c69ec92b6c6de6 fix(db): Pass date objects to asyncpg for legislation storage
+748ba14ab096e641ceb068405f5c13a572871b6d feat(backend): Integrate NYC Scraper and Plural Client (Jules Dispatch)
+e65c236d8f06ee070c1fabaa9c642055a1e8a99d feat(ui): Scaffold frontend-v2 and Integrate Glass Box
+e4a4ee3be47f39644471590678a900068f081be1 Merge pull request #139 from stars-end/hotfix/fix-final-final
+813e37931e1dda701d7e493a564f8b039d5fad12 fix(lint): Remove unused Generator and Dict imports to satisfy strict CI
+23b266e10a25fd1650a2f939b13b8be201818a70 Merge pull request #138 from stars-end/hotfix/fix-imports-final
+b10f979a8d05d7a6d335055afb0bd034732d6fe9 fix(lint): Clean up unused imports in orchestration and sanjose_base
+c092cb790e52177d942481a80562279e1302a271 Merge pull request #137 from stars-end/hotfix/fix-ci-rigorous
+aa1bae8b36debc77eaf95843d8875533d5f38155 fix(ci): Remove unused imports, vars, and legacy test file
+bc31d5b78625f15fb0cf26ef5b8f7ffa77d5fac6 Merge pull request #136 from stars-end/hotfix/fix-all-lints
+85562b2a711876f569d816d52ee59a500e8182ba fix(lint): Resolve all outstanding lint errors
+670c133073805420964babffde8e967830f63ce2 Merge pull request #135 from stars-end/hotfix/fix-pipeline-lint
+35772a88d22dd0b6f38e43e411c236ab45755699 fix(lint): Remove duplicate logging import
+0c2c68d3a0a159d351fd40ae5590948be31e8f0e Merge pull request #134 from stars-end/feature/affordabot-1mz-dexter-refresh
+1675090c0df1de0bf8d87347fced14d8861ef88a feat(analysis): Dexter Refresh - Evidence First & Confidence Scoring
+7b881e8db11fe19e26bd778966b3fc2c1e1125e0 Merge pull request #133 from stars-end/fix/test-mocking
+2f0c2ddf171e51725ab558d52bf43e78817470be fix(tests): Mock PostgresDB in DualModelAnalyzer tests
+7b4f54e303f2d9e2559c9fd95318dd58213068fd Merge pull request #132 from stars-end/feature/affordabot-aq0-city-scrapers
+c9b8670e20f4cfdb43666f8439f9ae3be4f87bf5 feat(scrapers): Wire CityScrapers adapter to admin and registry
+3d9b8577f426e1b43138a392f4ddfde1560c908c Merge pull request #131 from stars-end/feature/affordabot-76p-verification-ui
+65c937858fe3f61ae13d8a35153b7c2b9ba16916 feat(admin): Add asset endpoint for scrape logs
+26d86ad7baadb2bfb64ae989a27ac76487f6be9e Merge pull request #130 from stars-end/feature/affordabot-1q7-db-prompts
+9805581f2e60827afc942806b542addedf97fdd9 feat(llm): Wire DB Prompts (MVP V1)
+6cb1b86a606bae4d7fa8e32be461ddd1a98d7cfb Merge pull request #129 from stars-end/feature/affordabot-4e2-ingestion
+b544d78445f04a8f0fe1170c5ab0b3e3554654b3 feat(ingestion): Enhance Robustness (MVP V1)
+83818b1d4e7437ffa4701249c9e729cb3c5ee9d8 Merge pull request #128 from stars-end/feature/affordabot-a3o-wire-s3
+ce0a61f0869c7c00e315d4395a9453dc3a180024 feat(storage): Wire S3Storage into Orchestration
+d42d61350270e220f22a1e87c6ab5012d73accd0 Merge pull request #127 from stars-end/feature/affordabot-ai2.3-prefect-orchestration
+db27d8e5998afba722885f9a2d1b283b48c76d46 feat(orchestration): Implement Prefect Flows
+8ea715f72b73ca203ee34787b855fd0508ae3ec0 Merge pull request #126 from stars-end/feature/affordabot-ai2.2-smart-templates
+ee674af2f443a7d5adae446381da4c63ff043113 feat(expansion): Add Smart Scraping Templates
+1b3cd2966e13beff5dc3a3de240237529fa32bf2 Merge pull request #125 from stars-end/feature/affordabot-ai2.3-dexter-adoption
+eb2b6d97c697d268fe445e10d7a9005a166ec32f feat(dexter): Implement ToolResult and CitationValidator
+f336126869553def1e4e5c60ce840183daaf1670 Merge pull request #124 from stars-end/feature/affordabot-ai2.1-auto-discovery
+067dafd67156cc6d8ed42cdfde0740e4b2c9e5a6 feat(discovery): Implement AutoDiscoveryService
+ccec533c4ebabeda7cc7e9760d574c154b2ee3bb Merge pull request #123 from stars-end/feature/affordabot-39s-jules-infra
+f3eec1302739cb291fce4839a4bcbfcb0f9dc51f feat(infra): Add Jules Dispatch Skill and Context Generator
+f8c24c0b56827b760bc694cd26b91ae932cbe312 fix(deps): Upgrade Next.js to 14.2.35 and override glob to fix Security Vulnerabilities
+25900afd9d1af76310cd6a1dec298c708e824eac feat(auth): Implement Auth Bypass Logic & E2E Config
+518efa47c673dc93d64282b907b6205e3be3c2ec fix(auth): Add Clerk Sign-In page and support VITE_API_URL
+f4409369f1b17050b28a72b44c895e328d82ca74 Merge branch 'feature-affordabot-kha-analytics-ui'
+1e7e6056f871a10d9ac61ff32b6ac2c1a5596f73 Merge branch 'feature-affordabot-5be-discovery-service'
+3cfbab4fb6750567f12eaf19c53697337688c712 Merge branch 'feature-affordabot-ingestion-reliability'
+f6d4e4b547081487f8076d83b51a5e0c979dda28 feat: Implement robust ingestion reliability
+7218364b1a454b8b748e5c792f7b4ce6d8d84434 chore: Add schema dump and verification script
+2f5239f560a49f3a5da04a4d1857d12c787f2e25 feat: Implement Analytics Dashboard
+d98d25d744cdfa99167d347a4e4290d1fe0cfe41 feat: Implement AutoDiscoveryService and Tests
+432e36a10fc427a85be99552931439dd1e49b1ce Release/mvp v1 wiring (#118)
+f1b0b2ce5ca6959797e77c152ab5141008b09c95 Merge feature/affordabot-aq0-wire-cityscrapers
+2c4b2ca66ac4e9b507800cb48c85d10cbd60f910 Merge feature/affordabot-1q7-wire-prompts-jules
+f6b836bfeb234c36b85282a22b345788fbcec3f0 fix(backend): Fix relative imports in prompts router
+69c3de9adea5feae3769cef8fda78eacb4740aff feat(scraping): Wire CityScrapers into Daily Scrape
+32c2efe2383349c7fb01fae45f01191a5fbe4c53 fix: Resolve lint unused import and test patch paths
+0626a6c4c4d396371e6a0ccda7100f6894692442 feat(ui): Add verification links to Admin UI (#116)
+6c30c42f155ba48e02956ff394a7769557bfa01a feat(scraping): Wire S3Storage into IngestionService (#115)
+2fd2539135f5deaa30ae0ac45d3ee5e880067800 fix(admin): Create missing tasks proxy route for AnalysisLab (#112)
+4e185a560b2ed0418590095081c5185274edade9 feat(llm): Wire system prompts from DB
+9a7872151c5596b5df7b30fbb465bc484435d17b fix(dev): Use DATABASE_URL_PUBLIC for local railway run (#113)
+011d434e40d6fa4bbcb490c9aa08a0fd3f39de90 Merge pull request #111 from stars-end/chore-beads-sync
+e0283b6fb97492a67d6f0ddaa3c5b65d843955a6 chore: Sync beads metadata and package-lock
+4cecb9242776a7b6d936d71f521d18aae617356a Merge pull request #110 from stars-end/feature-affordabot-gg5-pipeline-fixes
+43e69b506aedbb2dd731787c26cf11508d07ca99 fix(pipeline): Resolve dimension mismatch and Scrapy path issues
+1d1082e3f929022f829553590f4dc60f466a337e Docs: Dexter optional enhancements epics (#109)
+58d0f985c70b8a4417a56709f7f908939d1ba297 Merge pull request #108 from stars-end/fix-keyerror-final
+f5724bd91725036e20af4c41f610d88d511348ec fix: Inject id/document_id into upsert payload [affordabot-d4b]
+6eaf93ff1f9b1bd90999d739e3f3264183d25f40 Merge pull request #107 from stars-end/fix-ci-312-final
+257a87a2e6855c5fd582d30ea01b183ab6946108 fix: Resolve CI #312 (Frontend Build & Backend Mock) [affordabot-8xn]
+d8002bc43804a17fb82af9db632ae38a313e3509 Merge pull request #106 from stars-end/fix-ci-310-final
+6667f0a66a057e2dc206cfb3061ae5036f44c77e fix: Resolve CI #310 failures (Missing Dep & Middleware)
+28ef40f3208f65e83f0a495d7834b508675f5a63 Merge pull request #105 from stars-end/fix-ci-308-final
+b44f0a08b510c897300076d3b3ffc49b0fc6d406 fix: Resolve CI #308 failures (Middleware Types, Backend Lint)
+b598fdefaf1974b8c005902e775652068f0039ad Merge pull request #104 from stars-end/fix-ci-306-final
+8530392124e50689b5417e8caddb9ac8a509230f fix: Resolve CI #306 failures (Clerk v6 Middleware, Backend Lint)
+543144719edb92fa897016d274c4ef48a60c5b99 Merge pull request #103 from stars-end/fix-ci-304-post-merge
+5a7085e8ba534b8297da844347506d92b05ee300 fix: Resolve CI #304 failures (Lockfile & Lint)
+2fd5c55eef5c8de7fc7e413c48d7538195d798bb Merge pull request #102 from stars-end/fix-python-version-standardization
+4a5a009fa8fd3d9ff5f9e8423b76b6951531499c chore: Standardize Python to 3.13 in CI
+8ae80586df8ab01dee180ed653dc8cb13ab01951 Merge pull request #101 from stars-end/fix-ci-failures
+a3f94198f538c6ec5d45be31375339becb48d2aa fix: Resolve CI and Context Update failures
+2b02acfcf82e7975cc04076a454b9f22d0d16154 Merge pull request #100 from stars-end/chore-affordabot-8xn-cleanup
+0af6df2f997e564d36fb85133b16258b31f38fe8 chore: formatting and cleanup
+c9b55e880a1cce7502bddc6db9c9427774b93a81 Merge pull request #99 from stars-end/feature-affordabot-8xn-verification-fixes
+21b3c014fbd457b650739e910297cba9b86331ba fix: Resolve verification bugs (JSONB encoding, Stats type)
+b2894f4a6305b586e45498d7ed935c782f755ff9 Merge pull request #98 from stars-end/feature-affordabot-9g6-admin-v2
+af7da3b5d3b2a4b64b898a2bd4488e55a3bd8986 Merge pull request #97 from stars-end/feature-affordabot-hkg-s3-storage
+cbb936daf141cbf8ebeaabc603e54453b38d3dde Merge branch 'master' into feature-affordabot-9g6-admin-v2
+e6c827af545bb4c1256fa2fe597dc6737cf181bf Merge branch 'master' into feature-affordabot-hkg-s3-storage
+56f475e6a4745fba3b012947d1cae068cb253cd0 feat: Admin V2 configuration and schemas
+b18a19416bc8669bdf5a5995b051737ce69f0550 feat(admin): Implement Frontend Clerk Integration
+e06a8831f52021056a12e922d68e3a44f5140b76 feat(admin): Secure Admin V2 with Clerk Authentication
+9c2941243a155c454c68226d29adb71365efc8a8 fix(s3): Fix import paths in verification script and add relative path resolution
+4d4b0f520c142ffcdf66230c6df46ecc26b14d91 feat: Implement S3 Storage Backend (MinIO)
+aa0db808f2b8ca58b56640a4f4255fb24061f8ae feat: Recover Admin and Sources schema v2
+244129da7c551b22fe861fd8fd3a24f60427dfe1 Merge pull request #96 from stars-end/fix/affordabot-1ak-ci-lint
+2d141c66de016a3dd03f4ebc22999040cb9b082d feat: Purge Supabase dependencies and migrate to PostgresDB
+257bb06a443e03701b4e8af6f90147858096f477 fix: Resolve F841 unused variable in dual model tests
+8f97e3a00359d175430e3b0235f5e68ccc403de2 Merge pull request #95 from stars-end/feature-affordabot-e3w-analysis-loop
+047b1464bc628c4fdbaeaa4b403c8023c2fef224 feat: Add verification tests for DualModelAnalyzer
+0bae425f0d939111370d127c1ec0b4460ebf1f33 Merge pull request #94 from stars-end/feature-affordabot-h62
+3e79a7d6c0e0037bf8f1f392c1b23927e03e810f Merge branch 'master' into feature-affordabot-h62
+0a67bd02841a43e3e70f3e0c1b4e3608264cb9e2 Merge pull request #93 from stars-end/test/merge-base
+d53e368f79f99ceebee7ec292e118013bfe303bb Merge pull request #92 from stars-end/test/merge-head
+77c3916f1e4f3a449628440431199c66fc3bfa46 chore: Force divergence for PR conflict test
+e40767ac6400377b492fd9692b1eaedc6d28ffa6 chore: Add base issue (and include pending workflow fix)
+3b924401bb4e25712d63ee5fc6ba3907d5d04fb0 chore: Switch to official beads merge driver (bd merge)
+b24920ae0d113d61c03822aae1efedca498f24d9 Merge remote-tracking branch 'origin/master' into feature-affordabot-y01-fix-ci
+09545d493a8de43da88e12e6e689c5db4dc0b81e fix(ci): Standardize lockfile-validation runner and pnpm setup
+a2ece54e08f2b74ebde642c41a23260c43f6b854 Merge pull request #90 from stars-end/feature-affordabot-8ln-fix-jsonl-merge
+e62f0b39f4d7aa6b8df46eb443f3c85da10ff568 chore: Fix JSONL merge driver to use 'beads' instead of 'jsonl'
+4ebf68e8bd6b6ef41869cad9f1996fd50fe80627 Merge pull request #88 from stars-end/wip/20251213-ci-fix
+1cedf7ed4dccbf2e19f147c765b060576dffc2bc Merge remote-tracking branch 'origin/master' into wip/20251213-ci-fix
+47de1cd6ed90ce005d9540d4e519f189d06dcca7 Merge pull request #85 from stars-end/jules-fetch-bill-api-3445199036625265317
+81c59293234cd69ff3fe2f76c0c1a3555878c822 Merge pull request #86 from stars-end/feat-pipeline-run-db-8088658612945500387
+5180759a3b4c7f430df210cd9a31ccb955d33fd0 Merge master into pr-85
+ecb3c3f55a595e13724c478b441c0b303d4fc8f3 Merge master into pr-86 to pick up DB fix
+c103b64a5f6ee0d32fdac39c5677002c4f7ad035 Merge pull request #89 from stars-end/fix/ci-green-ubuntu
+71026f1e97e46ce9ce55c37873e0cc7d38c3418d Merge remote-tracking branch 'origin/master' into pr-86
+67367ed5b23d2dbca68480a4938ab0e6f0275ca4 fix(db): disable hnsw index for 4096 dim vectors
+a64026afe7443fbdfd7ac1f58bafc4c05637eaf2 Merge pull request #87 from stars-end/fix/ci-green-ubuntu
+460e5b5bb1b7e0364cb900418babf074c54d8213 fix(ci): use pgvector/pgvector:pg16 image
+d98e21e317554ab17c5f9c71dccbd067d6a47666 ci: make CI runnable without docker/sudo
+b1cf9b88012b0969394082693df998a88cade1b6 wip: snapshot
+586b83e3f91090355e03f0e387604a7a563d4b06 Implement DB persistence for pipeline runs
+4077677e6854f914c1672d1f1f6d0d8cd5082323 feat: fetch bill details from API
+d5e9749c93bf620fc70f1ff43784bf5443d7b7f8 feat: Improve local validation and Makefile workflow (#81)
+5838e47b6e3a9852db12d0e7642809bbf9f1f0d1 feat: Implement Skills Doctor checks and CI validation (#80)
+43ff831f964822f8e1bd296a80352b5ba3bb6416 chore: Switch GitHub Actions to self-hosted runners (#79)
+7f4848224315bffce20911efb1adb23a9ce37fe7 feat: integrate vm-bootstrap check into DX entrypoint (bd-vz68.3) (#78)
+5b414c364259045afac66e0a074711f8c42e753b feat: Pilot railway dev workflow (#77)
+b2ac13330f629a58fc886d7d1fdb6afdf52be409 dx: Align dx_doctor.sh and restructure scripts (bd-3871.8) (#75)
+a33a3fc6930ad99f140607785f17dd6e00dfc736 Merge pull request #76 from stars-end/feature-bd-3871.8-affordabot-dx
+0f33eb06a33d4233d9c55f939e6d3ead1b33d01c chore: sync beads (close affordabot-7zu)
+cb3f3e94b25ad96d2b998478c02d751391d8a16f feat: Adopt V3 DX standards and restructure scripts
+d71fd73aa2100cc0b8a922fa640456f8fe24a3eb chore: ignore Beads merge artifacts (#74)
+4cb483c8f8dcf1d87198b200c93092e880575d20 chore: improve dx_doctor next-steps output (#73)
+6417321e827c62b0b09ae3cc686b9c3518523871 chore: close affordabot-3ea
+678000481c1ba050a203051a600d048c7bf57e2a Merge pull request #72 from stars-end/feature-affordabot-3ea
+781f11242c3b403b0972afb7b96a6d0d8497907a chore(dx): allow skipping mcp-doctor
+25af5805a4287400ead44d8fc24441a3d7837132 Merge pull request #71 from stars-end/chore-close-affordabot-4yb
+a25fc245da245932011b699119d0ea10bf680346 chore: close affordabot-4yb
+86d34780b8bd1f43f132612ab6079930f546339c Merge pull request #70 from stars-end/feature-affordabot-4yb
+8f187ac6d40c0f9b2eda2b7fd7d64924e329e35c feat: add mcp-doctor + railway cli checks to dx-doctor
+65737ba65f8a670b185182a84fcfcf3acb616c79 Merge pull request #69 from stars-end/chore-close-affordabot-jmn
+0eedf93179a8c9f4c7a3a9b46ff39b436764dab3 chore: close affordabot-jmn
+b6112fe65d2d6f05aaf590ee1430cacb036e507b Merge pull request #68 from stars-end/feature-affordabot-jmn
+34a07a4200dc773a9120d830b2408966d2a222ab feat: dx-doctor bootstrap + agent-skills auto-update
+1b1d6c36b1edd3a94a42ffa3d8f38953b2dfa16a Merge pull request #67 from stars-end/fix-ci-pgvector-8xn
+e3f9c5461913e31d120b412c7dd4ea586295cd41 fix: Upgrade pgvector to v0.7.4 for >2000 dim support
+5f7ed2f405e87aa8ffc6ab480ec00b0590b5d4a6 Merge pull request #66 from stars-end/fix-ci-roles-yuk
+291e5ec9cd851745800c3d29ab1f45b6e4c84e21 fix: Bootstrap Supabase roles in seed_schema.py for CI
+ec9f66050920b6b60d8f1c9bbf9aac9c73c353c0 Merge pull request #65 from stars-end/fix-backend-ci-xaj
+c55aae7adfb75674330dc823df9ba9387ccbb8ec fix: Resolve backend CI test failures and Pydantic warnings
+cfe78044f336abf91ca4d7d32fd53a74eb1ca527 Merge pull request #64 from stars-end/project-hardening-qye
+3fdb161a93bca8f3506ef31ae53655a91cf6717d chore: Harden project with single lockfile and validation workflow
+d28b827620c3b968f62fe2e60ee947e7d342e392 Merge pull request #63 from stars-end/fix-ci-workspace-0to
+bf953bb9ae4c72813c153895d83d451bb546fd5e fix: Update workspace lockfile and fix backend lints
+46b59c67e2eedd53c2248f8a0230bf97a87c35bf Merge pull request #62 from stars-end/fix-frontend-lockfile-mqq
+4da21169d09eb971f664b50ed1ed0b6b0521278e fix(frontend): Force regenerate lockfile for React mismatch
+b22d659454207c67632b556926c5c1a86d842820 Merge pull request #61 from stars-end/fix-frontend-lockfile-pcg
+90d1266ed039e8d150d3d6f5c89f7d0700b4a238 fix(frontend): Pin React to ^18.3.1 and regenerate lockfile
+3272d54e6e1955b76d0428438bab21a80ad669d2 Merge pull request #60 from stars-end/fix-frontend-build

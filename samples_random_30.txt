@@ -1,0 +1,30 @@
+575e6a6278d39eb7628795c5a73a21ee913d1beb fix: Skip Supabase checks in ci_doctor when USE_RAILWAY_DB=true
+48537b7c58d82d6a48b233af6c21d4103bfd6175 Merge pull request #411 from stars-end/feature-bd-svki-e2e-verify
+3272d54e6e1955b76d0428438bab21a80ad669d2 Merge pull request #60 from stars-end/fix-frontend-build
+b021b6abc1a87ade648671e327b87b084b73ab18 fix: Add installCommand to bypass frozen-lockfile for monorepo
+08c03c590943efe9d5169786aec3db982ce081db docs: Option B AI SDK chat gateway epic
+2633f1d07a23802de1cb24fab8fc4777d2ef209c fix(ci): add setup-node to lockfile check
+c7cc37940d6b453b75124e056854dd80c4ff422c feat: Add DeepChat UI component with SSE streaming (#451)
+d1a3d1dab04497c91285b9cfc8fd68cd90b2c8bd Feature bd gr7l fix ci regressions (#372)
+3aaa8d37f8f28aab65023479f263b477ac60daeb fix: Fix YAML command continuation in verify-overnight.yml (#178)
+aa0db808f2b8ca58b56640a4f4255fb24061f8ae feat: Recover Admin and Sources schema v2
+1d4a37fcab772c7dcb3ebcba249db1f1d4ca3ed6 fix(backend): add missing Security model columns + migrate EODHD to Railway DB (#417)
+d71fd73aa2100cc0b8a922fa640456f8fe24a3eb chore: ignore Beads merge artifacts (#74)
+b544d78445f04a8f0fe1170c5ab0b3e3554654b3 feat(ingestion): Enhance Robustness (MVP V1)
+4cecb9242776a7b6d936d71f521d18aae617356a Merge pull request #110 from stars-end/feature-affordabot-gg5-pipeline-fixes
+e9bfa4e1d3707a8dd2bea7afb710ead509d0fffe chore(affordabot): Upgrade GLM models to 4.7 (#161)
+32c2efe2383349c7fb01fae45f01191a5fbe4c53 fix: Resolve lint unused import and test patch paths
+44a3c53b4c7eae554c4ec3f83ee8a328b3d94cb3 fix(test): Add useClerk mock to fix AppRouter unit tests
+6eaf93ff1f9b1bd90999d739e3f3264183d25f40 Merge pull request #107 from stars-end/fix-ci-312-final
+91978ca53c8f14c1eae8a8e52cdd67a42cac5e9a docs: add fire-and-forget packets for Jules
+7b4f54e303f2d9e2559c9fd95318dd58213068fd Merge pull request #132 from stars-end/feature/affordabot-aq0-city-scrapers
+6cb1b86a606bae4d7fa8e32be461ddd1a98d7cfb Merge pull request #129 from stars-end/feature/affordabot-4e2-ingestion
+1308948156a9c73cdc89b5810ab62b436441affc chore: workflow cleanup - fix e2e smoke, dx-audit, remove stale (#356)
+5aaeeb712c90849cbf92ce404a1cb22f62b3d0a0 docs: incorporate consultant review into bd-yn9g spec
+5f50fd804522086b44991529924d6a63a65cc4bd Merge pull request #397 from stars-end/fix-glm-coding-endpoint-and-story-loader
+27fff2330d237b38a45b9f11b4681aa606f3168d fix(tests): Add missing AsyncMocks for DB methods in agentic pipeline test
+4cb483c8f8dcf1d87198b200c93092e880575d20 chore: improve dx_doctor next-steps output (#73)
+e49081940bf56bb0ab835ce357e00b9766c7ff6a fix(ci): Add missing get_db import + switch to RAILPACK [bd-t9as] (#432)
+959fcff2cd86b77b8df8e6fda3c85a881046537f Merge pull request #183 from stars-end/feature-affordabot-ahpb.1
+9eb8383fb4719c9d4f88f9322f7f94a203080ef0 docs: Add admin console user stories for UISmokeAgent verification (#186)
+34abd204f3efb268c301e50a831d60d2f18d94bc Merge pull request #415 from stars-end/feature-bd-jbwr-gap-closure

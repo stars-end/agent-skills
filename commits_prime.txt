@@ -1,0 +1,300 @@
+ci(dx): update dx-audit frequency and assignee
+Use llm-common context pointer selection (v0.7.2) (#479)
+docs(dx): update AGENTS.md with golden bootloader
+style(dx): standardize stories directory casing to docs/testing/stories
+Pin llm-common to v0.7.0 (#478)
+chore(beads): fix prefix mismatch (wd0a) (#477)
+docs(beads): add Jules TECH_PLAN files (#476)
+Docs/Beads: dual-frontend decision + Beads prefix fix (#475)
+Merge pull request #474 from stars-end/feature-bd-yn9g.fire-and-forget
+docs: add fire-and-forget packets for Jules
+Merge pull request #473 from stars-end/feature-bd-yn9g.consultant-feedback
+docs: incorporate consultant review into bd-yn9g spec
+Merge pull request #472 from stars-end/feature-bd-yn9g.jules-dispatch
+docs: add Jules dispatch packets for bd-yn9g
+Merge pull request #471 from stars-end/feature-bd-yn9g.9
+docs: bundle Dexter ports (glm tool selection, context pointers)
+Merge pull request #470 from stars-end/feature-bd-yn9g.5
+docs: refresh Dexter audit and update rewrite spec
+Merge pull request #468 from stars-end/feature-bd-yn9g.1
+Merge remote-tracking branch 'origin/master' into feature-bd-yn9g.1
+chore: close bd-yn9g.1
+chore: frontend unification spec
+fix: Use frontend service URL (frontend-dev-f8a3) for UI tests (#467)
+fix: Use correct Railway domain in overnight verification (#466)
+fix: Add explicit playwright pip install before browser install (#465)
+fix: Rewrite unified_verify for real browser tests with screenshots (#463)
+fix: Make health check non-blocking for Railway cold starts (#462)
+fix: Poetry env use mise Python + clean old artifacts (#459)
+fix: Use pre-installed mise for CI (#457)
+fix: Use mise toolkit for overnight CI (local/CI parity) (#455)
+fix: Fix overnight CI - Python 3.13, permissions, remove orphan submodule (#453)
+feat: Harmonize Makefile targets (verify-dev, verify-local, verify-pr) (#452)
+feat: Add DeepChat UI component with SSE streaming (#451)
+feat: Add SSE /api/chat endpoint for Deep Chat streaming (#450)
+feat: Add verify-pr for Railway PR environment verification
+fix: Update llm-common to include verification module
+fix: Add missing tabs to verify-ci Makefile target
+docs: Add deep_chat_ui.yml test story for AI Advisor (#449)
+feat: Add unified CI verification framework (8 user stories) (#448)
+chore(prime-radiant): Upgrade glm-4.6 to glm-4.7 (#447)
+chore: close bd-9l3j after PR merge
+[bd-9l3j] Migrate EODHD refresh from GitHub Actions to Railway cron (#446)
+chore: Remove all Supabase references from CI after Railway migration (#441)
+Merge pull request #440 from stars-end/chore/cleanup-orphaned-submodule
+chore: Remove orphaned llm-common submodule and CI config
+Merge pull request #439 from stars-end/fix/railway-llm-common-git-dep
+fix(railway): Revert llm-common to git dependency for deployment
+Merge pull request #438 from stars-end/fix/pnpm-version-alignment
+fix(ci): Align packageManager to pnpm@10.17.0
+Merge pull request #437 from stars-end/hotfix/ci-submodules-all-backend-jobs
+fix(ci): Add submodules: recursive to ALL backend checkout steps
+Merge pull request #436 from stars-end/fix/ci-submodules-1220
+fix(ci): Add submodules: recursive to backend checkout steps
+Merge pull request #435 from stars-end/feature/llm-common-hybrid-dep
+chore: merge master after PR #434
+Merge pull request #434 from stars-end/feature/provenance-feedback-round-2
+chore: Migrate llm-common to Hybrid Path Dependency
+chore: remove incorrectly indexed llm-common files before submodule add
+chore: resolve merge conflict in registry.py (PR #434)
+fix: add missing ToolResult import to registry.py
+fix: address PR feedback for provenance framework
+fix: address PR feedback for provenance framework
+fix: bug-fixes-1220-1018 P0 stability and P1 Dexter grounding (#433)
+chore(ci): Delete unused Supabase check script
+chore(ci): Cleanup legacy logic (P2 complete)
+fix(test): Simplify profile Step 2 to avoid MUI click interception
+fix(ci): Enable Vite proxy to fix CORS localhost/127.0.0.1 mismatch
+fix(test): Final flaky test fixes for Tier 2 E2E suite
+fix(test): Make existing E2E tests more resilient to CI environment
+fix(test): Make new E2E tests resilient to backend 500 errors
+fix(test): Add useClerk mock to fix AppRouter unit tests
+fix(ci): Add missing get_db import + switch to RAILPACK [bd-t9as] (#432)
+[bd-qf94] fix: PRD gap fixes - EODHD db error, analytics metrics, new stories (#425)
+docs: Add bd-gpa7 Railpack frozen-lockfile feature request
+fix: Revert to NIXPACKS - Railpack frozen-lockfile cannot be overridden
+fix: Use .npmrc frozen-lockfile=false for Railpack monorepo support
+fix: Switch to NIXPACKS builder to escape Railpack cache bug
+fix: Bump frontend version to bust Railway cache
+fix: Completely regenerate pnpm-lock.yaml from scratch
+fix: Add installCommand to bypass frozen-lockfile for monorepo
+chore: Trigger deploy with fixed lockfile
+fix: Regenerate pnpm-lock.yaml to fix Railway frontend deploy
+chore: Disable Railway build cache to fix stale package.json
+chore: Trigger Railway frontend rebuild
+fix: Remove broken supabase symlinks from bin/
+feat: MVP v1 Ship - CI Fix + llm-common Integration (bd-35hs) (#431)
+fix: Add executable permission to setup-clerk-stub.sh
+fix: Add missing setup-clerk-stub.sh for CI
+fix: Skip Supabase checks in ci_doctor when USE_RAILWAY_DB=true
+fix: Resolve Railway build failure (llm-common git dependency) (#430)
+fix: Resolve Railway P0 - Fundamentals (bd-qf94.9) and CORS (bd-qf94.6) (#429)
+fix: Resolve Railway P0 blockers - CORS and DB schema (#428)
+feat: Add realtime cron mode for intraday price updates (bd-qf94.2) (#427)
+fix: Replace Plotly placeholders with real charts in Analytics (bd-qf94.4) (#426)
+fix(frontend): replace Supabase JWT templates with Railway auth
+fix(deps): update frontend lockfile to match package.json
+Merge remote master with beads sync
+chore(beads): sync issue status after MVP v1 ship
+feat(e2e): implement hybrid Playwright login for Railway auth (#424)
+fix(backend): mount EODHD integrations router in v2 API (#423)
+fix(backend): add None check for eodhd_fundamentals attributes (#422)
+fix(backend): add ALL missing columns to Security model (47 total) (#421)
+fix(backend): remove sedol column from Security model (#420)
+hotfix: fix users.py import for get_db_session (bd-1n83) (#419)
+fix(backend): use get_db_session for FastAPI Depends injection (#418)
+fix(backend): add missing Security model columns + migrate EODHD to Railway DB (#417)
+fix(ci): add supabase to mise install for Tier 1/3 jobs (bd-jbwr) (#416)
+Merge pull request #415 from stars-end/feature-bd-jbwr-gap-closure
+feat(testing): Comprehensive MVP story verification - LOCAL 6/6 PASS
+Merge pull request #414 from stars-end/feature-bd-716k-mvp-gaps
+fix(testing): Fix business logic test selectors for Accounts and Research (bd-716k)
+Merge pull request #413 from stars-end/feature-bd-xdk6.1-uismokeagent
+feat(e2e): Add auth state persistence to UISmokeAgent (bd-xdk6.1)
+Merge pull request #412 from stars-end/feature-bd-xdk6-mvp-verification
+feat(testing): Comprehensive MVP v1 verification - ALL 7/7 PASS
+Merge pull request #411 from stars-end/feature-bd-svki-e2e-verify
+feat(testing): Add auth state persistence to verification script
+fix(frontend): Fix broken imports after Supabase removal
+Merge pull request #410 from stars-end/feature-bd-0kzq-ai-sdk-optionb
+docs: Option B AI SDK chat gateway epic
+feat(plaid): Add sandbox integration verification script (#409)
+feat(eodhd): Add scheduled workflow for daily/weekly/monthly data refresh (#408)
+fix(api): Move /analytics/user route before /{account_id} to fix 500 error (#407)
+Docs: Dexter refresh optional enhancements (#406)
+Merge pull request #405 from stars-end/chore/supabase-cleanup
+Merge pull request #404 from stars-end/chore/script-audit
+Merge pull request #403 from stars-end/fix-lockfile
+fix(ci): add setup-node to lockfile check
+fix(ci): add setup-node to lockfile check
+chore: audit scripts (jules bd-mfz3)
+fix(ci): add .local/bin to PATH and apply bd-g9mp path fix
+fix(ci): use --break-system-packages for poetry
+fix(ci): use pipx for poetry
+fix(backend): update poetry.lock
+Merge pull request #402 from stars-end/fix-login-route
+Merge pull request #401 from stars-end/chore-refactor-agents
+Merge pull request #400 from stars-end/feat-bd-vc6k-supabase-audit-6552768176177872506
+fix(frontend): add /sign-in route for E2E testing
+chore(agents): refactor to use llm-common v0.5.0
+feat: Create Supabase audit report
+Merge pull request #399 from stars-end/fix-base-url-protocol
+fix(e2e): add https:// prefix to frontend URL if missing
+Merge pull request #398 from stars-end/fix-url-validation-and-debug
+fix(e2e): add base URL validation and logging
+Merge pull request #397 from stars-end/fix-glm-coding-endpoint-and-story-loader
+fix(e2e): use Z.AI coding endpoint for GLM
+Merge pull request #396 from stars-end/fix-e2e-secrets-and-continue-error
+fix(ci): use correct secret names and add bun setup
+Merge pull request #395 from stars-end/fix-ci-remove-supabase-dead-code
+fix(ci): remove dead supabase code breaking Tier 1 and Tier 2
+Merge pull request #394 from stars-end/fix-e2e-relative-imports
+fix(e2e): use absolute imports for script execution
+Merge pull request #393 from stars-end/feature-bd-92i4-smoke-agent
+Merge pull request #392 from stars-end/feature-bd-g9mp-fix_ci_doctor_path_resolution
+Merge remote-tracking branch 'origin/master' into feature-bd-92i4-smoke-agent
+feat(e2e): implement UISmokeAgent with GLM-4.6V vision
+Merge remote-tracking branch 'origin/master' into feature-bd-g9mp-fix_ci_doctor_path_resolution
+fix: Correct ci_doctor path in package.json and REPO_ROOT logic
+Merge pull request #391 from stars-end/fix-e2e-smoke-pip
+fix(ci): use pip instead of poetry for setuptools-based llm-common
+Merge pull request #390 from stars-end/feature-bd-0u81-advisor-ux
+feat(advisor): add shared AdvisorContext for unified UX
+Merge pull request #389 from stars-end/fix-e2e-smoke-poetry
+fix(ci): remove invalid -E agents flag from E2E smoke workflow
+Merge pull request #388 from stars-end/fix-e2e-smoke-permissions
+fix(ci): add issues:write permission to E2E smoke workflow
+Merge pull request #387 from stars-end/fix-health-name-collision
+fix(api): rename health() to health_check() to avoid shadowing health module
+Merge pull request #380 from stars-end/feat-jules-health-check-bd-4mot-2070043861974886822
+Merge pull request #385 from stars-end/fix-jules-dirty-tree
+fix(dx): clean up git tree after chmod in jules setup
+Merge pull request #384 from stars-end/fix-jules-backend-path
+fix(dx): run jules setup in backend/ dir
+Merge pull request #383 from stars-end/fix-jules-mise-trust
+Merge remote-tracking branch 'origin/master' into fix-jules-mise-trust
+fix(dx): add 'mise trust' to jules_setup.sh (CI fix)
+feat: Add Jules health check endpoint
+Merge pull request #379 from stars-end/fix-ci-failures
+fix(ci): Resolve CI failures and remove Supabase dependencies
+Merge pull request #378 from stars-end/feature-bd-8ybv-plaid-refactor
+refactor: Remove Supabase dependencies from PlaidAdapter and cleanup
+Merge pull request #376 from stars-end/fix-ci-permissions-v2
+fix(ci): Fix yq and playwright permissions
+Merge pull request #375 from stars-end/fix-master-ci-railway
+fix(ci): Remove sudo requirement from Playwright and fix mise warnings
+Feature bd ekv9 eodhd migration (#374)
+fix(ci): Resolve CI failures and backend crash (#373)
+chore: Remove legacy Supabase DAL and dependencies (#371)
+Feature bd gr7l fix ci regressions (#372)
+fix: Remove symlink pollution in skills-validation workflow
+chore: remove debug-auth workflow
+chore: enable logging of token identity in debug-auth
+chore: add debug-auth workflow to diagnose PAT issues
+Filter accounts by brokerage_connection_id during cascade delete (#363)
+feat: show error message on holding save failure (#362)
+feat(frontend): Show error message on CSV upload failure (#361)
+fix(backend): filter account count by brokerage_connection_id (#360)
+Implement cache invalidation in eodhd_legacy.py (#359)
+ci: install PyYAML for guardrails jobs (#366)
+feat: pass REPO_WRITER_PAT to dx-auditor for Beads sync
+feat: add issues:write for dx-audit GH Issue creation
+fix: JSONL merge conflict loop (bd-jccy)
+fix: add actions:read permission to dx-audit for CI run API
+fix: remove beads-cli pip install (not on PyPI)
+fix: add setup-python-mise to dx-audit for self-hosted runner
+fix: add setup-python-mise to dx-audit + remove write permissions
+test: remove write permissions from dx-audit to debug 0 jobs
+fix: add token to dx-audit agent-skills checkout
+chore: workflow cleanup - fix e2e smoke, dx-audit, remove stale (#356)
+fix: update remaining workflows to use self-hosted runners (#355)
+fix: use mise for Python on self-hosted runners (#353)
+chore(dx): close bd-3871 epic (#354)
+chore: close DX Beads issues - bd-vz68, bd-3871.*
+refactor: Phase 4 cleanup - remove USE_RAILWAY_DB imports and replace checks with True
+chore: Switch GitHub Actions to self-hosted runners (#352)
+Feature bd vz68.3 dx entrypoints (#351)
+docs: Linux VM bootstrap spec (bd-vz68) (#350)
+chore: close completed DX tasks\n\nFeature-Key: bd-3871\nAgent: codex-cli\nRole: coordinator (#349)
+[bd-65qg] Migrate core services/APIs from crud_supabase to SQLAlchemy/db_access (#347)
+docs: Railway Changelog #0268 (Audit Logs + railway dev) (#346)
+feat: Adopt V3 DX standards and restructure scripts (#345)
+bd-65qg: Fix CI Auth Stub Suite failure (#343)
+docs(dx): Enforce Agent Mail as sole required MCP (#342)
+chore: improve dx_doctor next-steps output (#341)
+Merge pull request #340 from stars-end/feature-bd-3871.13-mcp-skip
+chore: update Beads status
+chore: allow skipping mcp-doctor
+Merge pull request #339 from stars-end/feature-bd-3871.13-mcp-doctor
+chore: update Beads status
+feat: add mcp-doctor + railway cli checks to dx-doctor
+Merge pull request #338 from stars-end/chore-close-bd-3871.2
+chore: close bd-3871.2
+Merge pull request #337 from stars-end/feature-bd-3871.2-agent-bootstrap
+chore: update Beads status
+feat: dx-doctor bootstrap for Beads + agent-skills
+Merge pull request #336 from stars-end/fix-auth-stub-key
+fix(auth): Convert JWK dict to key object for PyJWT compatibility
+Merge pull request #335 from stars-end/feature-bd-3871.13-agent-mail-bootstrap
+docs(dx): clarify cross-repo beads IDs for agent mail
+Merge pull request #334 from stars-end/fix-frontend-e2e-selector
+test(e2e): Fix ambiguous navigation selector
+Merge pull request #333 from stars-end/fix-frontend-lint-v2
+chore: Sync Beads JSONL
+fix(e2e): Fix Playwright destructured arg pattern
+Merge pull request #332 from stars-end/fix-frontend-lint
+fix(e2e): Fix eslint empty object pattern
+Merge pull request #331 from stars-end/fix-ci-clerk-stub
+chore: Update Beads tracking
+Merge master into fix-ci-clerk-stub
+chore: Fix CI failures (svix, imports, paths)
+chore: Fix CI failures (svix, imports, paths)
+fix: Add svix dependency and fix rag_service import
+fix(ci): Update setup-clerk-stub.sh path to scripts/legacy/ (#330)
+fix(ci): Update setup-clerk-stub.sh path in run-local-ci.sh
+fix(ci): Update setup-clerk-stub.sh path to scripts/legacy/
+feat: UX Smoke Agent Reference Implementation (bd-92i4) (#329)
+fix: P0 CI guardrails + lockfile refresh (#328)
+feat: organize and document scripts directory (#327)
+fix(deploy): repair backend import and frontend lockfile
+fix(deploy): repair backend import and frontend lockfile
+feat(rag): Integrate generic PgVectorBackend (bd-nxvn) (#326)
+chore: Final beads sync - bd-k9tw epic complete
+chore: Sync beads JSONL
+feat(db): Phase 2 - Add registry verification script (bd-k9tw.2)
+chore: Sync beads JSONL
+feat(db): Phase 1 migrations cleanup - bd-k9tw.1
+fix: Export get_registry from metrics_registry package
+chore: Sync beads JSONL
+fix: Correct import - get_async_supabase_db not get_supabase_db
+chore: Update beads JSONL
+feat(ci): Add Tier 1 Service Health job and metrics E2E tests
+ci: Add backend import validation to CI Lite
+fix: Backend import error and frontend lockfile mismatch
+Merge pull request #325 from stars-end/feature-bd-px8-analytics-metrics
+test: Add unit tests for advanced portfolio metrics
+chore: Sync Beads JSONL
+feat: Implement advanced portfolio metrics (Return, Drawdown, Beta, Sharpe)
+feat: Add Repository pattern for DB access (bd-oqup) (#324)
+feat: Migrate CI schema workflows to Railway DATABASE_URL (bd-fehr) (#323)
+bd-ij9c: Comprehensive Testing Strategy Implementation (#321)
+chore: Sync Beads - closed bd-or7y
+fix: Validate root pnpm-lock.yaml for workspace builds (bd-or7y) (#322)
+chore: Sync Beads - closed bd-7ee, updated issue states
+chore: Sync Beads (closed bd-tdar, bd-rlwk, created bd-or7y)
+feat: Enable USE_RAILWAY_DB=true by default (bd-rlwk) (#320)
+fix: Patch USE_RAILWAY_DB=False in Plaid holdings snapshot tests (#319)
+fix: Update llm-common to v0.4.2 with pgvector extras (#318)
+docs: comprehensive analytics sandbox research report
+fix: Make PgVectorBackend import optional in rag_service (#317)
+hotfix: Fix llm_common namespace collision crashing Railway backend (#316)
+fix: Add llm-common dependency for portfolio_agent imports (#315)
+fix(ci): Standardize Python 3.13 across all GitHub workflows (#314)
+feat(bd-fehr): Migrate CI/CD from Supabase to Railway DB (#313)
+feat(bd-iojb): PlaidAdapter USE_RAILWAY_DB Migration (#312)
+fix: Use lazy initialization for db engine to fix CI (#311)
+feat: Supabase Decom Phases 2-4 - Service Layer Migration (#310)
+feature bd psql migration docs (#309)
+fix(frontend): validate pnpm lockfile for Railway (#308)
+fix(ci): ensure Supabase env check script is executable (#307)
+Feature bd w1mw (#306)

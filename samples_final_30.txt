@@ -1,0 +1,30 @@
+01ec525582266a055b16e19db087f60791ad39c2 fix: remove beads-cli pip install (not on PyPI)
+bfe0e9b81477f48a1d37fdad38e0e161d27f41e4 fix(ci): Resolve CI failures and remove Supabase dependencies
+57ad06a50a87a4d9e7bff695a2c460730eaace09 Merge pull request #396 from stars-end/fix-e2e-secrets-and-continue-error
+c9b8670e20f4cfdb43666f8439f9ae3be4f87bf5 feat(scrapers): Wire CityScrapers adapter to admin and registry
+c7ae394d645814a3ca3175e474452c6f41d51f49 docs: bundle Dexter ports (glm tool selection, context pointers)
+63ba948fe029f16badbc522b111f59e24ae73d44 Merge pull request #331 from stars-end/fix-ci-clerk-stub
+06b3486a914631487a8e0b0e0692691f2df6f4d1 chore: Remove legacy Supabase DAL and dependencies (#371)
+860d7930e34b1d34c208a2e4d26b6c779e1eced5 fix(dx): clean up git tree after chmod in jules setup
+56b6c8f4927e9ef732a5cb91e4d88d968e552742 Merge pull request #148 from stars-end/fix/lint-2
+9a7872151c5596b5df7b30fbb465bc484435d17b fix(dev): Use DATABASE_URL_PUBLIC for local railway run (#113)
+75c3a23e92fa77aa9501e7858867b78b3dc16b53 Merge pull request #144 from stars-end/fix/ci-final
+a4c651a946f337697744648c95ad13d63d57d9ac fix(deps): Point llm-common to valid remote commit
+1b3cd2966e13beff5dc3a3de240237529fa32bf2 Merge pull request #125 from stars-end/feature/affordabot-ai2.3-dexter-adoption
+08c03c590943efe9d5169786aec3db982ce081db docs: Option B AI SDK chat gateway epic
+053f3627cb6c0e398a8c5960bebb3b446a1ada95 fix: Sprint 1 CI/DX stability fixes (#182)
+3bd8c176119281ddcf977244c8c8bd6b92a785a1 feat: LLM-Powered Discovery + Unified CI Verification (#162)
+9d57948f15987a3d53f6ba24d0f16910c38f2833 Merge remote master with beads sync
+d555efdc8cb0282727365cfee80e7087e85830a1 fix(ci): use --break-system-packages for poetry
+3272d54e6e1955b76d0428438bab21a80ad669d2 Merge pull request #60 from stars-end/fix-frontend-build
+ce0a61f0869c7c00e315d4395a9453dc3a180024 feat(storage): Wire S3Storage into Orchestration
+bb0acb6e1c30c4d6f2c4297b2bef37f1189bce27 Merge remote-tracking branch 'origin/master' into fix-jules-mise-trust
+34a07a4200dc773a9120d830b2408966d2a222ab feat: dx-doctor bootstrap + agent-skills auto-update
+af7da3b5d3b2a4b64b898a2bd4488e55a3bd8986 Merge pull request #97 from stars-end/feature-affordabot-hkg-s3-storage
+d066c1c7e90828105e27132e984778f5c4db1f3c chore: allow skipping mcp-doctor
+3cca833ef6e000fff936ff42771c28ee9ea1744d Merge pull request #470 from stars-end/feature-bd-yn9g.5
+781f11242c3b403b0972afb7b96a6d0d8497907a chore(dx): allow skipping mcp-doctor
+91978ca53c8f14c1eae8a8e52cdd67a42cac5e9a docs: add fire-and-forget packets for Jules
+b2ac13330f629a58fc886d7d1fdb6afdf52be409 dx: Align dx_doctor.sh and restructure scripts (bd-3871.8) (#75)
+0dac1fd131e116c2626a6188482d4abba8996f9b fix(ci): use pipx for poetry
+23113a7a84e1071146fe8d3655fb818f88d2d7e6 chore: Trigger deploy with fixed lockfile

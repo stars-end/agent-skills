@@ -1,0 +1,30 @@
+97e7d394451174878a05c7a56baf471d8593786b Fix holdings schema parity drift (closed_at) (#244)
+6ea72e89ad5583d75e261f6b3a6297ac06724ac0 feat: Add e2e testing infrastructure with Playwright and local CI
+e3f9c5461913e31d120b412c7dd4ea586295cd41 fix: Upgrade pgvector to v0.7.4 for >2000 dim support
+d0504fe6c43abbc55942025d6355671e96ad3c3c chore: Update dx-bootstrap templates to current standards
+91aadab2e4f98c95c5af91754232f3546abddfbe Merge pull request #376 from stars-end/fix-ci-permissions-v2
+00843b6705bc8f09897774b0287bc06ea4cb7921 Merge pull request #41 from stars-end/feature-affordabot-71b
+d31af2f99df3207b45d45b7bd25229c4f0fc1b5a Merge pull request #4 from stars-end/feature-affordabot-x1u
+b889ed2c2aad796dff987d327a7bb617267a8153 Merge pull request #378 from stars-end/feature-bd-8ybv-plaid-refactor
+37c527c3097b75d54db5e9d2ca9569e313900948 fix: Railway deployment - inline llm-common dependencies
+fb4c8dc7250d6557b1cfb5de2c2b2ccbb32b73f0 feat(testing): Comprehensive MVP story verification - LOCAL 6/6 PASS
+8790ebea925bcb9fec356bad54924782e65d2cec feat: Implement OpenRouter Embeddings (Phase 4 Done)
+70d637fe48d531fc61a5859cf23dfaeccc91147d docs: refresh Dexter audit and update rewrite spec
+7e12a0104796a1c13202642d96a77cd014324466 feat: Admin UI & Audit Logging (Epic affordabot-dgf/affordabot-prs)
+cfe8d7e1d331188642a02b5e909105aa7872cd24 feat: Add Repository pattern for DB access (bd-oqup) (#324)
+b0c3db4545deba74fdda3d8ae7edf3c693fa33a5 Merge pull request #439 from stars-end/fix/railway-llm-common-git-dep
+d816920ef91e7a8076536a46245390e4db6d0d5d ci: fix clerk fixture paths
+4964d8feae434e946d58aa2002ec53ff081a685f fix: Export get_registry from metrics_registry package
+b361f8493e8061832d31a5f83fd8a3d808b98bb6 chore: update Beads JSONL and add cloud prompt for bd-7ee
+3fd70a0f14693bd8f0dab373117b0445847be4f5 feat: Infra Hardening (DB Schema & Registry Sync)
+6dcc5de6205b648bdfe902554c449dde032e78a4 fix: use NIXPACKS_INSTALL_CMD for reliable git auth
+9805581f2e60827afc942806b542addedf97fdd9 feat(llm): Wire DB Prompts (MVP V1)
+6b7fd6bfb6af7c2aa904fe5bfa1af053777b44b5 hotfix: add explicit storage=None to ClientOptions for supabase 2.24.0
+b032fee13fe4dca8b6f84a771ce0c2a819d23c05 feat: Add WebReaderTool for Playwright deep content extraction (#165)
+61c6b0a21b843d820b83b7248d051d2cff423a9b chore: close affordabot-ahpb.1
+aee8f4e6d9b0f85fc29444e459dcc89c5e3f6c25 fix(ci): Final CI stabilization
+6b10b2fc66500e44d0dc31744ca795aadf1ce034 test(e2e): Fix ambiguous navigation selector
+9000995999d35daad1206afbc6b93c9d5d333014 docs: refresh Dexter audit and update rewrite spec
+940128a1660cb99c787db0bc9c4692b18d5ec4f0 fix(ci): Resolve lockfile sync and backend lint errors
+dd01de627712325b0e8aadd274cdab8d69e468ee fix(ci): remove invalid -E agents flag from E2E smoke workflow
+e40767ac6400377b492fd9692b1eaedc6d28ffa6 chore: Add base issue (and include pending workflow fix)
