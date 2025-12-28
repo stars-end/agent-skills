@@ -8,7 +8,7 @@ inputs:
     description: 'Whether to auto-commit fixes (Requires label "lockfile-autofix")'
     default: 'false'
   backend-directory:
-    description: 'Path to backend (poetry) root'
+    description: "Path to backend (poetry) root. For multi-root, verify manually or call action twice."
     default: 'backend'
   frontend-directory:
     description: 'Path to frontend (pnpm) root'
