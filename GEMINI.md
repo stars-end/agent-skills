@@ -1,1 +1,1 @@
-/home/feng/agent-skills/AGENTS.md
+AGENTS.md

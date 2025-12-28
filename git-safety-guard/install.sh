@@ -152,9 +152,9 @@ fi
 # --- 4. Native Links ---
 if [[ "$INSTALL_TYPE" == "project" ]]; then
     mkdir -p .git/hooks
-    ln -sf"../../.claude/hooks/pre-push" .git/hooks/pre-push
-    ln -sf"../../.claude/hooks/state-recovery" .git/hooks/post-merge
-    ln -sf"../../.claude/hooks/state-recovery" .git/hooks/post-checkout
-    ln -sf"../../.claude/hooks/permission-sentinel" .git/hooks/pre-commit
+    ln -sf "../../.claude/hooks/pre-push" .git/hooks/pre-push
+    ln -sf "../../.claude/hooks/state-recovery" .git/hooks/post-merge
+    ln -sf "../../.claude/hooks/state-recovery" .git/hooks/post-checkout
+    ln -sf "../../.claude/hooks/permission-sentinel" .git/hooks/pre-commit
     echo -e "${GREEN}✓${NC} Linked hooks to .git/hooks/"
 fi
