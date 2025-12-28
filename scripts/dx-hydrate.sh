@@ -45,42 +45,33 @@ cat > "$HOME/.cass/settings.json" <<EOF
 }
 EOF
 
-# 5. Install Hooks (Anti-Corruption)
-echo -e "${GREEN} -> Installing Git Hooks...${RESET}"
-HOOK_SCRIPT="$AGENTS_ROOT/scripts/validate_beads.py"
+# 5. Install Hooks (The Physics)
+echo -e "${GREEN} -> Installing Git Hooks & Safety Guard...${RESET}"
 
-# Enforce GEMINI.md -> AGENTS.md symlink
-if [ -f "AGENTS.md" ]; then
-    echo -e "${GREEN} -> Linking GEMINI.md...${RESET}"
-    ln -sf AGENTS.md GEMINI.md
-fi
+# Install Claude Hook globally
+"$AGENTS_ROOT/git-safety-guard/install.sh" --global
 
-install_hook() {
-    REPO_PATH="$1"
-    if [ -d "$REPO_PATH/.git" ]; then
-        echo "   Installing pre-commit in $REPO_PATH"
-        HOOK_FILE="$REPO_PATH/.git/hooks/pre-commit"
-        echo "#!/bin/bash" > "$HOOK_FILE"
-        echo "# Hydrated by dx-hydrate.sh" >> "$HOOK_FILE"
-        echo "python3 \"$HOOK_SCRIPT\"" >> "$HOOK_FILE"
-        chmod +x "$HOOK_FILE"
-    else
-        echo "   Skipping $REPO_PATH (not a git repo)"
+# Install Native Hooks per repo
+for repo in "$HOME/prime-radiant-ai" "$HOME/affordabot" "$HOME/llm-common" "$AGENTS_ROOT"; do
+    if [ -d "$repo/.git" ]; then
+        echo "   Installing hooks in $repo..."
+        (cd "$repo" && "$AGENTS_ROOT/git-safety-guard/install.sh")
     fi
-}
+done
 
-install_hook "$HOME/prime-radiant-ai"
-install_hook "$HOME/affordabot"
-
-# 6. Tool Check
-echo -e "${GREEN} -> Checking for required tools...${RESET}"
-if ! command -v universal-skills >/dev/null 2>&1; then
-    echo -e "${YELLOW}⚠️  universal-skills not found in PATH.${RESET}"
-    echo "   Recommended: npm install -g universal-skills"
-fi
-
-# 7. Refresh Environment
-echo -e "${GREEN} -> Refreshing environment...${RESET}"
+# Enforce GEMINI.md -> AGENTS.md symlink (Relative)
+for repo in "$HOME/prime-radiant-ai" "$HOME/affordabot" "$HOME/llm-common" "$AGENTS_ROOT"; do
+    if [ -f "$repo/AGENTS.md" ]; then
+        # Use a subshell to change dir safely
+        (
+            cd "$repo"
+            # Remove existing if it's an absolute link or broken
+            [ -L GEMINI.md ] && rm GEMINI.md
+            ln -sf AGENTS.md GEMINI.md
+            echo "   Linked GEMINI.md -> AGENTS.md in $repo"
+        )
+    fi
+done
 
 configure_shell() {
     RC_FILE="$1"
