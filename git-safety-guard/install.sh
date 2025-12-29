@@ -136,6 +136,7 @@ if [ -n "$FILES" ]; then
     for file in $FILES; do
         if head -n 1 "$file" | grep -q "^#!" 2>/dev/null; then
             chmod +x "$file"
+            # Only re-add the specific file
             git add "$file"
         fi
     done
