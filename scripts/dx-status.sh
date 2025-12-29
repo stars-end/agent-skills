@@ -12,6 +12,11 @@ RESET='\033[0m'
 echo -e "${BLUE}🩺 Checking Agent Health...${RESET}"
 ERRORS=0
 
+# Cross-platform realpath
+resolve_path() {
+    python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1" 2>/dev/null || echo "$1"
+}
+
 check_file() {
     if [ -f "$1" ] || [ -L "$1" ]; then
         echo -e "${GREEN}✅ Found $1${RESET}"
@@ -57,7 +62,7 @@ if [ -e "$PRIME_HOOK" ]; then
     
     # Method A: V3 Symlink
     if [ -L "$PRIME_HOOK" ]; then
-        TARGET=$(readlink -f "$PRIME_HOOK")
+        TARGET=$(resolve_path "$PRIME_HOOK")
         if [[ "$TARGET" == *"permission-sentinel"* ]]; then
             IS_VALID=1
         fi
@@ -76,7 +81,7 @@ if [ -e "$PRIME_HOOK" ]; then
         echo -e "${GREEN}✅ Hook installed in prime-radiant-ai${RESET}"
     else
         echo -e "${RED}❌ Hook invalid in prime-radiant-ai${RESET}"
-        echo "   Target: $(readlink -f $PRIME_HOOK 2>/dev/null || echo 'None')"
+        echo "   Target: $(resolve_path $PRIME_HOOK)"
         echo "   Fix: Run ~/agent-skills/git-safety-guard/install.sh"
         ERRORS=$((ERRORS+1))
     fi

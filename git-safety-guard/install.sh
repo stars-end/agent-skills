@@ -16,11 +16,14 @@ NC='\033[0m' # No Color
 # Determine installation location
 if [[ "${1:-}" == "--global" ]]; then
     INSTALL_DIR="$HOME/.claude"
-    HOOK_PATH="\$HOME/.claude/hooks/git_safety_guard.py"
+    # No backslash for global path in settings.json usually, but we keep it literal for expansion by tool if needed?
+    # Actually, global install usually expands $HOME.
+    HOOK_PATH="$HOME/.claude/hooks/git_safety_guard.py"
     INSTALL_TYPE="global"
     echo -e "${BLUE}Installing globally to ~/.claude/${NC}"
 else
     INSTALL_DIR=".claude"
+    # Project install uses var expansion
     HOOK_PATH="\$CLAUDE_PROJECT_DIR/.claude/hooks/git_safety_guard.py"
     INSTALL_TYPE="project"
     echo -e "${BLUE}Installing to current project (.claude/)${NC}"
@@ -31,7 +34,8 @@ mkdir -p "$INSTALL_DIR/hooks"
 # Helper: Write file only if not tracked by git (in project mode)
 safe_write() {
     local target="$1"
-    local content="$2"
+    # Read content from stdin
+    local content=$(cat)
     
     if [[ "$INSTALL_TYPE" == "project" ]]; then
         # Check if file is tracked
@@ -47,7 +51,8 @@ safe_write() {
 
 # --- 1. Python Safety Guard ---
 GUARD_SCRIPT="$INSTALL_DIR/hooks/git_safety_guard.py"
-GUARD_CONTENT='#!/usr/bin/env python3
+safe_write "$GUARD_SCRIPT" << 'EOF'
+#!/usr/bin/env python3
 import json
 import re
 import sys
@@ -84,71 +89,86 @@ def main():
 
 if __name__ == "__main__":
     main()
-'
-safe_write "$GUARD_SCRIPT" "$GUARD_CONTENT"
+EOF
 chmod +x "$GUARD_SCRIPT"
 
 # --- 2. Git Hooks ---
 
 # 2.1 Pre-push
 PRE_PUSH="$INSTALL_DIR/hooks/pre-push"
-PRE_PUSH_CONTENT='#!/bin/bash
-if [ -f Makefile ] && grep -q "ci-lite:" Makefile; then
+safe_write "$PRE_PUSH" << 'EOF'
+#!/bin/bash
+if [ -f Makefile ] && grep -q "ci-lite:" Makefile;
+then
     echo "🧪 Running make ci-lite..."
-    if ! make ci-lite; then
+    if ! make ci-lite;
+    then
         echo "❌ PUSH BLOCKED: CI-Lite failed."
         exit 1
     fi
 fi
-exit 0'
-safe_write "$PRE_PUSH" "$PRE_PUSH_CONTENT"
+exit 0
+EOF
 chmod +x "$PRE_PUSH"
 
 # 2.2 State Recovery
 STATE_REC="$INSTALL_DIR/hooks/state-recovery"
-STATE_REC_CONTENT='#!/bin/bash
+safe_write "$STATE_REC" << 'EOF'
+#!/bin/bash
 echo "🔄 [dx-hooks] Checking environment integrity..."
-if [ -f .beads/issues.jsonl ] && command -v bd &> /dev/null; then
+if [ -f .beads/issues.jsonl ] && command -v bd &> /dev/null;
+then
     bd import 2>/dev/null || true
 fi
-if [ -f pnpm-lock.yaml ] && command -v pnpm &> /dev/null; then
-    if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q "pnpm-lock.yaml"; then
+if [ -f pnpm-lock.yaml ] && command -v pnpm &> /dev/null;
+then
+    if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q "pnpm-lock.yaml";
+then
         echo "🔄 [dx] pnpm-lock changed. Installing..."
         pnpm install --frozen-lockfile >/dev/null 2>&1 || echo "⚠️ pnpm install failed."
     fi
 fi
-if [ -f .gitmodules ]; then
-    if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q "packages/llm-common"; then
+if [ -f .gitmodules ];
+then
+    if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q "packages/llm-common";
+then
         echo "🔄 [dx] Submodules changed. Updating..."
         git submodule update --init --recursive >/dev/null 2>&1 || true
     fi
 fi
-exit 0'
-safe_write "$STATE_REC" "$STATE_REC_CONTENT"
+exit 0
+EOF
 chmod +x "$STATE_REC"
 
 # 2.3 Permission Sentinel
 PERM_SENTINEL="$INSTALL_DIR/hooks/permission-sentinel"
-PERM_SENTINEL_CONTENT='#!/bin/bash
+safe_write "$PERM_SENTINEL" << 'EOF'
+#!/bin/bash
 # Only target scripts/ and bin/ directories
 FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E "^(scripts|bin)/.*\.(sh|py)$")
 if [ -n "$FILES" ]; then
-    for file in $FILES; do
-        if head -n 1 "$file" | grep -q "^#!" 2>/dev/null; then
+    for file in $FILES;
+    do
+        if head -n 1 "$file" | grep -q "^#!" 2>/dev/null;
+        then
             chmod +x "$file"
-            # Only re-add the specific file
             git add "$file"
         fi
     done
 fi
-exit 0'
-safe_write "$PERM_SENTINEL" "$PERM_SENTINEL_CONTENT"
+exit 0
+EOF
 chmod +x "$PERM_SENTINEL"
 
 # --- 3. Settings JSON ---
 SETTINGS_FILE="$INSTALL_DIR/settings.json"
 if [[ ! -f "$SETTINGS_FILE" ]]; then
-    SETTINGS_CONTENT='{
+    # Use printf to avoid echo -e interpretation issues and handle quotes cleanly
+    # We want "command": "$HOOK_PATH" where $HOOK_PATH is substituted.
+    # If project mode, HOOK_PATH contains $CLAUDE_PROJECT_DIR literal.
+    
+    cat > "$SETTINGS_FILE" << EOF
+{
   "hooks": {
     "PreToolUse": [
       {
@@ -156,14 +176,15 @@ if [[ ! -f "$SETTINGS_FILE" ]]; then
         "hooks": [
           {
             "type": "command",
-            "command": "'$HOOK_PATH'"
+            "command": "$HOOK_PATH"
           }
         ]
       }
     ]
   }
-}'
-    safe_write "$SETTINGS_FILE" "$SETTINGS_CONTENT"
+}
+EOF
+    echo -e "${GREEN}✓${NC} Created $SETTINGS_FILE"
 fi
 
 # --- 4. Native Links ---
