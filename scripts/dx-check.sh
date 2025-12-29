@@ -17,7 +17,15 @@ if "${SCRIPT_DIR}/dx-status.sh"; then
     echo -e "${GREEN}✨ Environment is healthy.${RESET}"
 else
     echo -e "${RED}⚠️  Environment unhealthy.${RESET}"
-    read -p "Run auto-fix (hydrate)? [Y/n]: " run_fix
+    
+    # Check for TTY or NO_PROMPT override
+    if [ -t 0 ] && [ "${DX_CHECK_NO_PROMPT:-0}" != "1" ]; then
+        read -p "Run auto-fix (hydrate)? [Y/n]: " run_fix
+    else
+        echo -e "${BLUE}ℹ Non-interactive mode detected. Auto-fixing...${RESET}"
+        run_fix="y"
+    fi
+
     if [[ $run_fix =~ ^[Yy] ]] || [[ -z $run_fix ]]; then
         "${SCRIPT_DIR}/dx-hydrate.sh"
         echo -e "${BLUE}🔄 Re-checking status...${RESET}"
