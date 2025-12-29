@@ -12,6 +12,11 @@ RESET='\033[0m'
 echo -e "${BLUE}🩺 Checking Agent Health...${RESET}"
 ERRORS=0
 
+# Cross-platform realpath
+resolve_path() {
+    python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1" 2>/dev/null || echo "$1"
+}
+
 check_file() {
     if [ -f "$1" ] || [ -L "$1" ]; then
         echo -e "${GREEN}✅ Found $1${RESET}"
@@ -37,38 +42,52 @@ check_file "$HOME/.ntm.yaml"
 check_file "$HOME/.serena/config.toml"
 check_file "$HOME/.cass/settings.json"
 
-if [ -L "GEMINI.md" ] && [ "$(readlink GEMINI.md)" = "AGENTS.md" ]; then
-    echo -e "${GREEN}✅ GEMINI.md -> AGENTS.md linked${RESET}"
-else
-    echo -e "${RED}❌ GEMINI.md symlink missing or invalid${RESET}"
-    ERRORS=$((ERRORS+1))
+# Check local GEMINI symlink if we are inside a repo
+if [ -f AGENTS.md ]; then
+    if [ -L "GEMINI.md" ] && [ "$(readlink GEMINI.md)" = "AGENTS.md" ]; then
+        echo -e "${GREEN}✅ GEMINI.md -> AGENTS.md linked${RESET}"
+    else
+        echo -e "${YELLOW}⚠️  GEMINI.md symlink missing or invalid in current dir${RESET}"
+        # Warn only, as we might be running from /tmp
+    fi
 fi
 
-# 2. Check Hooks
+# 2. Check Hooks (V3 Logic)
 echo "--- Git Hooks ---"
-if [ -f .git/hooks/pre-push ]; then
-    echo -e "${GREEN}✅ Native hooks installed${RESET}"
-else
-    echo -e "${RED}❌ Native hooks missing. Run 'hydrate'.${RESET}"
-    ERRORS=$((ERRORS+1))
-fi
+PRIME_HOOK="$HOME/prime-radiant-ai/.git/hooks/pre-commit"
 
-HOOK_FILE="$HOME/prime-radiant-ai/.git/hooks/pre-commit"
-SCRIPT_FILE="$HOME/agent-skills/scripts/validate_beads.py"
+# Check if hook exists (symlink or file)
+if [ -e "$PRIME_HOOK" ]; then
+    IS_VALID=0
+    
+    # Method A: V3 Symlink
+    if [ -L "$PRIME_HOOK" ]; then
+        TARGET=$(resolve_path "$PRIME_HOOK")
+        if [[ "$TARGET" == *"permission-sentinel"* ]]; then
+            IS_VALID=1
+        fi
+    fi
+    
+    # Method B: Legacy/Content Check
+    if [ $IS_VALID -eq 0 ] && [ -f "$PRIME_HOOK" ]; then
+        if grep -q "validate_beads" "$PRIME_HOOK" 2>/dev/null; then
+            IS_VALID=1
+        elif grep -q "permission-sentinel" "$PRIME_HOOK" 2>/dev/null; then
+            IS_VALID=1
+        fi
+    fi
 
-if [ ! -f "$SCRIPT_FILE" ]; then
-    echo -e "${RED}❌ Critical: validate_beads.py missing in agent-skills${RESET}"
-    echo "   Fix: cd ~/agent-skills && git pull origin master"
-    ERRORS=$((ERRORS+1))
-elif [ -f "$HOOK_FILE" ]; then
-    if grep -q "validate_beads" "$HOOK_FILE"; then
+    if [ $IS_VALID -eq 1 ]; then
         echo -e "${GREEN}✅ Hook installed in prime-radiant-ai${RESET}"
     else
         echo -e "${RED}❌ Hook invalid in prime-radiant-ai${RESET}"
+        echo "   Target: $(resolve_path $PRIME_HOOK)"
+        echo "   Fix: Run ~/agent-skills/git-safety-guard/install.sh"
         ERRORS=$((ERRORS+1))
     fi
 else
     echo -e "${RED}❌ Hook missing in prime-radiant-ai${RESET}"
+    echo "   Fix: Run ~/agent-skills/git-safety-guard/install.sh"
     ERRORS=$((ERRORS+1))
 fi
 
