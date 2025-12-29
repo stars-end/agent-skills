@@ -1,0 +1,15 @@
+[server]
+log_level = "info"
+
+[tools]
+enable_replace = true
+enable_insert = true
+enable_delete = true
+
+[languages]
+python = { command = "pyright-langserver", args = ["--stdio"] }
+typescript = { command = "typescript-language-server", args = ["--stdio"] }
+
+[index]
+max_file_size = 1048576 
+exclude = ["**/node_modules/**", "**/__pycache__/**", "**/.git/**"]

@@ -1,0 +1,19 @@
+name: agent-cockpit
+root: ~/prime-radiant-ai
+windows:
+  - name: dispatch
+    layout: main-vertical
+    panes:
+      - shell_command: tail -f /var/log/syslog
+      - shell_command: jules
+      - shell_command: bv
+  - name: architect
+    layout: tiled
+    panes:
+      - shell_command: gemini-cli
+      - shell_command: vim docs/ARCHITECTURE.md
+  - name: code-deep
+    layout: tiled
+    panes:
+      - shell_command: claude
+      - shell_command: antigravity

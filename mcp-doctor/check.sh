@@ -149,6 +149,20 @@ echo "OPTIONAL CLI tools:"
 
 if command -v railway >/dev/null 2>&1; then
   echo "✅ railway ($(railway --version 2>/dev/null | head -1 || echo installed))"
+  
+  # Check Login Status
+  if ! railway whoami >/dev/null 2>&1; then
+    echo "⚠️  railway: NOT LOGGED IN. Run 'railway login'."
+    missing_optional=$((missing_optional+1))
+  fi
+
+  # Check Railway Shell Context
+  if [[ -z "${RAILWAY_PROJECT_ID:-}" ]] && [[ -z "${RAILWAY_ENVIRONMENT:-}" ]]; then
+    echo "⚠️  railway: NOT IN SHELL. Most commands require 'railway shell'."
+    missing_optional=$((missing_optional+1))
+  else
+    echo "✅ railway: inside active shell context"
+  fi
 else
   echo "⚠️  railway (not installed) — optional"
   missing_optional=$((missing_optional+1))
