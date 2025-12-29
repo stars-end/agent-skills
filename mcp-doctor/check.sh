@@ -108,32 +108,41 @@ fi
 echo ""
 echo "Agent-skills repo freshness:"
 
-# Check if ~/agent-skills is a git repo and compare with origin/main
+# Check if ~/agent-skills is a git repo and compare with trunk (origin/HEAD → origin/master → origin/main)
 if [[ -d "$AGENT_SKILLS_DIR/.git" ]]; then
   cd "$AGENT_SKILLS_DIR" || true
   # Fetch only if this is a fresh check (optional, avoid network on every run)
-  # git fetch origin main >/dev/null 2>&1 || true
+  # git fetch origin >/dev/null 2>&1 || true
+
+  TRUNK_REF="$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  if [[ -z "$TRUNK_REF" ]]; then
+    if git show-ref --verify --quiet refs/remotes/origin/master; then
+      TRUNK_REF="origin/master"
+    elif git show-ref --verify --quiet refs/remotes/origin/main; then
+      TRUNK_REF="origin/main"
+    fi
+  fi
 
   LOCAL_HASH=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
-  REMOTE_HASH=$(git rev-parse origin/main 2>/dev/null || echo "unknown")
+  REMOTE_HASH=$(git rev-parse "$TRUNK_REF" 2>/dev/null || echo "unknown")
 
-  if [[ "$LOCAL_HASH" == "unknown" ]] || [[ "$REMOTE_HASH" == "unknown" ]]; then
+  if [[ -z "${TRUNK_REF:-}" ]] || [[ "$LOCAL_HASH" == "unknown" ]] || [[ "$REMOTE_HASH" == "unknown" ]]; then
     echo "⚠️  ~/agent-skills: unable to check repo freshness"
     missing_optional=$((missing_optional+1))
   elif [[ "$LOCAL_HASH" == "$REMOTE_HASH" ]]; then
-    echo "✅ ~/agent-skills: up to date with origin/main"
+    echo "✅ ~/agent-skills: up to date with $TRUNK_REF"
   else
     # Check if local is behind
-    if git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
-      BEHIND_COUNT=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "?")
-      echo "⚠️  ~/agent-skills: behind origin/main by $BEHIND_COUNT commits"
-      echo "   Run: cd ~/agent-skills && git pull origin main"
+    if git merge-base --is-ancestor HEAD "$TRUNK_REF" 2>/dev/null; then
+      BEHIND_COUNT=$(git rev-list --count HEAD.."$TRUNK_REF" 2>/dev/null || echo "?")
+      echo "⚠️  ~/agent-skills: behind $TRUNK_REF by $BEHIND_COUNT commits"
+      echo "   Run: cd ~/agent-skills && git pull origin ${TRUNK_REF#origin/}"
       missing_optional=$((missing_optional+1))
-    elif git merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
-      AHEAD_COUNT=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo "?")
-      echo "✅ ~/agent-skills: ahead of origin/main by $AHEAD_COUNT commits"
+    elif git merge-base --is-ancestor "$TRUNK_REF" HEAD 2>/dev/null; then
+      AHEAD_COUNT=$(git rev-list --count "$TRUNK_REF"..HEAD 2>/dev/null || echo "?")
+      echo "✅ ~/agent-skills: ahead of $TRUNK_REF by $AHEAD_COUNT commits"
     else
-      echo "⚠️  ~/agent-skills: diverged from origin/main (needs rebase or merge)"
+      echo "⚠️  ~/agent-skills: diverged from $TRUNK_REF (needs rebase or merge)"
       echo "   Run: cd ~/agent-skills && git status"
       missing_optional=$((missing_optional+1))
     fi
