@@ -10,7 +10,7 @@ WorkingDirectory=%h/agent-skills
 Restart=always
 RestartSec=30
 # Ensure we have the path to 'bd', 'cass', and standard tools
-Environment="PATH=%h/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
 StandardOutput=journal
 StandardError=journal
 
