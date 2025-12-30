@@ -32,6 +32,17 @@ echo -e "${GREEN} -> Installing Smart Tools...${RESET}"
 ln -sf "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"
 chmod +x "$AGENTS_ROOT/tools/run"
 
+# 3.1 Install Hive Tools
+echo -e "${GREEN} -> Installing Hive Mind Tools...${RESET}"
+ln -sf "$AGENTS_ROOT/hive/orchestrator/hive-status.py" "$BIN_DIR/hive-status"
+ln -sf "$AGENTS_ROOT/hive/orchestrator/monitor.py" "$BIN_DIR/hive-monitor"
+ln -sf "$AGENTS_ROOT/hive/node/cleanup.sh" "$BIN_DIR/hive-cleanup"
+ln -sf "$AGENTS_ROOT/hive/node/hive-queen.py" "$BIN_DIR/hive-queen"
+chmod +x "$AGENTS_ROOT/hive/orchestrator/hive-status.py"
+chmod +x "$AGENTS_ROOT/hive/orchestrator/monitor.py"
+chmod +x "$AGENTS_ROOT/hive/node/cleanup.sh"
+chmod +x "$AGENTS_ROOT/hive/node/hive-queen.py"
+
 # 4. Setup Cass (Memory)
 echo -e "${GREEN} -> Configuring Cass Memory...${RESET}"
 mkdir -p "$HOME/.cass"

@@ -1,11 +1,52 @@
 #!/usr/bin/env bash
+# hive/pods/create.sh
+# Isolation Engine: Creates a secure, ephemeral workspace for an agent.
+
 set -euo pipefail
-SESSION_ID="$1"; REPOS_ARG="$3"
+
+SESSION_ID=$1
+REPOS=${2:-"agent-skills"} # Comma-separated list
+
 POD_DIR="/tmp/pods/$SESSION_ID"
-mkdir -p "$POD_DIR"/{worktrees,context,logs,state}
-chmod 700 "$POD_DIR"
-IFS=',' read -ra REPO_LIST <<< "$REPOS_ARG"
-for REPO in "${REPO_LIST[@]}"; do
-    (cd ~/repos/$REPO && git fetch origin && git worktree add -b "feat/agent-$SESSION_ID" "$POD_DIR/worktrees/$REPO" origin/master)
+WORKTREES_DIR="$POD_DIR/worktrees"
+CONTEXT_DIR="$POD_DIR/context"
+LOGS_DIR="$POD_DIR/logs"
+
+echo "📦 Creating Pod: $SESSION_ID"
+
+# 1. Create Structure
+mkdir -p "$WORKTREES_DIR" "$CONTEXT_DIR" "$LOGS_DIR" "$POD_DIR/state"
+
+# 2. Provision Worktrees
+IFS=',' read -ra REPO_LIST <<< "$REPOS"
+for REPO_NAME in "${REPO_LIST[@]}"; do
+    REPO_PATH="$HOME/repos/$REPO_NAME"
+    TARGET_WT="$WORKTREES_DIR/$REPO_NAME"
+    
+    if [ ! -d "$REPO_PATH" ]; then
+        echo "   ⚠️ Repository $REPO_NAME not found in ~/repos. Skipping."
+        continue
+    fi
+
+    echo "   -> Provisioning worktree: $REPO_NAME"
+    (
+        cd "$REPO_PATH"
+        git fetch origin master --quiet
+        git worktree add -b "hive/$SESSION_ID/$REPO_NAME" "$TARGET_WT" origin/master --quiet
+    )
+    
+    # Install local hooks for safety
+    if [ -f "$HOME/agent-skills/git-safety-guard/install.sh" ]; then
+        (cd "$TARGET_WT" && "$HOME/agent-skills/git-safety-guard/install.sh" --quiet)
+    fi
 done
-echo "✅ Pod Created: $SESSION_ID"
+
+# 3. Inject Context (The Briefcase)
+# This will be populated by prompts.py / hive-queen.py
+touch "$CONTEXT_DIR/00_MISSION.md"
+touch "$CONTEXT_DIR/01_CONTEXT.json"
+
+# 4. Permissions
+chmod -R 700 "$POD_DIR"
+
+echo "✨ Pod creation complete: $POD_DIR"
