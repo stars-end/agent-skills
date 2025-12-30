@@ -70,9 +70,21 @@ def dispatch_bead(bead):
     subprocess.run(["bd", "update", bead['id'], "--status", "in_progress", "--label-add", f"hive-session-{session_id}"], check=True)
     print(f"✅ Dispatched {session_id} for {bead['id']}")
 
+def sync_repo():
+    """Pulls the latest changes from the remote to see new tasks."""
+    try:
+        # We only pull if the repo is clean to avoid conflicts
+        subprocess.run(["git", "pull", "--rebase", "--autostash"], 
+                       cwd=os.path.expanduser("~/agent-skills"),
+                       capture_output=True, check=True)
+    except Exception as e:
+        # Don't crash on network blips, just log
+        print(f"⚠️  Sync failed: {e}")
+
 def main():
     print("🐝 Hive Queen is alive and polling...")
     while True:
+        sync_repo() # Sync state from git (The Hive Mind)
         beads = get_ready_beads()
         for bead in beads:
             try:
