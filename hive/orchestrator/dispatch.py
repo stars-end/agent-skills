@@ -33,41 +33,23 @@ claude --dangerously-skip-permissions --model glm-4.7 -p "$1"
 """)
     os.chmod(wrapper_path, 0o755)
 
-    # We use zsh -c to run the wrapper via 'script' to provide a fake TTY
+    # We use systemd-run to launch the agent as a background service
+    # Direct file logging via systemd properties ensures logs are captured robustly.
     agent_cmd = [
         "systemd-run",
         "--user",
         f"--unit={unit_name}",
         "--description=Hive Agent Session",
-        "--scope",
+        f"--property=StandardOutput=file:{log_path}",
+        f"--property=StandardError=file:{log_path}",
+        # We still use 'script' to provide a fake TTY for tools that require one.
         "script", "-q", "-e", "-c", f"{wrapper_path} '{safe_prompt}'"
     ]
     
     print(f"🚀 Dispatching Agent {session_id}...")
+    subprocess.run(agent_cmd, check=True)
     
-    with open(log_path, "w") as f:
-        # We start the process and let it run in the background via systemd-run --scope
-        # Actually, --scope is synchronous, but systemd-run --unit=... would be background.
-        # We want it to be asynchronous so the Queen can keep polling.
-        # But we also want to capture the output.
-        
-        # Change cwd to the primary worktree if possible
-        worktrees_dir = os.path.join(pod_dir, "worktrees")
-        cwd = pod_dir
-        if os.path.exists(worktrees_dir):
-            dirs = os.listdir(worktrees_dir)
-            if dirs:
-                cwd = os.path.join(worktrees_dir, dirs[0])
-
-        process = subprocess.Popen(
-            agent_cmd,
-            stdout=f,
-            stderr=subprocess.STDOUT,
-            cwd=cwd,
-            preexec_fn=os.setsid
-        )
-        
-    return process.pid
+    return 0 # systemd-run handled the backgrounding
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
