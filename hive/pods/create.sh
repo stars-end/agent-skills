@@ -48,6 +48,11 @@ for REPO_NAME in "${REPO_LIST[@]}"; do
 
     # Link context into worktree for agent visibility
     ln -sf "../../context" "$TARGET_WT/context"
+
+    # Trust mise config if present
+    if [ -f "$TARGET_WT/.mise.toml" ] || [ -f "$TARGET_WT/mise.toml" ]; then
+        (cd "$TARGET_WT" && mise trust --yes)
+    fi
 done
 
 # 3. Inject Context (The Briefcase)

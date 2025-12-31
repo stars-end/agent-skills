@@ -17,13 +17,14 @@ def run_agent(session_id, system_prompt):
     
     # We use zsh -c to source .zshrc and use the cc-glm function
     # The system_prompt is passed as the main instruction.
+    # We wrap in 'script' to provide a fake TTY for tools that require one.
     agent_cmd = [
         "systemd-run",
         "--user",
         f"--unit={unit_name}",
         "--description=Hive Agent Session",
         "--scope",
-        "zsh", "-c", f"source ~/.zshrc && cc-glm -p '{safe_prompt}'"
+        "zsh", "-c", f"source ~/.zshrc && script -q -e -c \"cc-glm -p '{safe_prompt}'\" /dev/null"
     ]
     
     print(f"🚀 Dispatching Agent {session_id}...")
