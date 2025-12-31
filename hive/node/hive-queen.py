@@ -37,11 +37,27 @@ def get_ready_beads():
 
 def dispatch_bead(bead):
     """Workflow for a single task."""
+    # Skip if already in progress to prevent duplicate dispatches
+    if bead.get('status') == 'in_progress':
+        return
+
     session_id = str(uuid.uuid4())[:8]
-    repos = bead.get('repos', ['agent-skills'])
-    if isinstance(repos, str): repos = [repos]
     
-    print(f"🐝 Found Task: {bead['id']} - {bead['title']}")
+    # Repo Detection: 1. labels (repo:name), 2. 'repo' field, 3. 'repos' field, 4. default
+    repos = []
+    labels = bead.get('labels', [])
+    for label in labels:
+        if label.startswith('repo:'):
+            repos.append(label.replace('repo:', ''))
+    
+    if not repos and bead.get('repo'):
+        repos.append(bead['repo'])
+    if not repos and bead.get('repos'):
+        repos = bead['repos'] if isinstance(bead['repos'], list) else [bead['repos']]
+    if not repos:
+        repos = ['agent-skills']
+    
+    print(f"🐝 Found Task: {bead['id']} - {bead['title']} (Repos: {repos})")
     
     # 1. Create Pod
     create_script = os.path.expanduser("~/agent-skills/hive/pods/create.sh")
