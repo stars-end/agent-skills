@@ -24,8 +24,14 @@ for REPO_NAME in "${REPO_LIST[@]}"; do
     TARGET_WT="$WORKTREES_DIR/$REPO_NAME"
     
     if [ ! -d "$REPO_PATH" ]; then
-        echo "   ⚠️ Repository $REPO_NAME not found in ~/repos. Skipping."
-        continue
+        echo "   ⚠️ Repository $REPO_NAME not found. Attempting auto-clone..."
+        # Try to clone from stars-end org
+        if git clone "git@github.com:stars-end/$REPO_NAME.git" "$REPO_PATH"; then
+             echo "   ✅ Cloned $REPO_NAME successfully."
+        else
+             echo "   ❌ Failed to clone $REPO_NAME. Skipping."
+             continue
+        fi
     fi
 
     echo "   -> Provisioning worktree: $REPO_NAME"
