@@ -24,7 +24,13 @@ def get_ready_beads():
         res = subprocess.run(["bd", "list", "--label", "hive-ready", "--json"], 
                              capture_output=True, text=True)
         if res.returncode == 0:
-            return json.loads(res.stdout)
+            output = res.stdout.strip()
+            if not output: return []
+            try:
+                return json.loads(output)
+            except json.JSONDecodeError:
+                print(f"⚠️  Invalid JSON from beads: {output}")
+                return []
     except Exception as e:
         print(f"Error polling beads: {e}")
     return []
