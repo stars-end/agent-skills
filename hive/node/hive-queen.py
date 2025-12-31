@@ -21,7 +21,7 @@ except ImportError:
 def get_ready_beads():
     """Polls Beads for issues labeled 'hive-ready'."""
     try:
-        res = subprocess.run(["bd", "list", "--label", "hive-ready", "--format", "json"], 
+        res = subprocess.run(["bd", "list", "--label", "hive-ready", "--json"], 
                              capture_output=True, text=True)
         if res.returncode == 0:
             return json.loads(res.stdout)
@@ -67,7 +67,7 @@ def dispatch_bead(bead):
     dispatch.run_agent(session_id, system_prompt)
     
     # 4. Update Bead Status
-    subprocess.run(["bd", "update", bead['id'], "--status", "in_progress", "--label-add", f"hive-session-{session_id}"], check=True)
+    subprocess.run(["bd", "update", bead['id'], "--status", "in_progress"], check=True)
     print(f"✅ Dispatched {session_id} for {bead['id']}")
 
 def sync_repo():
