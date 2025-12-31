@@ -34,39 +34,20 @@ claude --dangerously-skip-permissions --model glm-4.7 -p "$1"
 """)
     os.chmod(wrapper_path, 0o755)
 
-    # We use systemd-run --scope so we can redirect stdout/stderr easily via Python
-    # while still benefitng from systemd unit isolation and accounting.
-    # We use 'stdbuf' to attempt to force line-buffering.
+    # We use systemd-run to launch the agent as a background service.
+    # We use 'script' to provide a fake TTY and tell it to write directly to our log file.
     agent_cmd = [
         "systemd-run",
         "--user",
         f"--unit={unit_name}",
         "--description=Hive Agent Session",
-        "--scope",
-        "stdbuf", "-oL", "-eL", wrapper_path, f"{safe_prompt}"
+        "script", "-q", "-e", "-c", f"{wrapper_path} '{safe_prompt}'", log_path
     ]
     
     print(f"🚀 Dispatching Agent {session_id}...")
+    subprocess.run(agent_cmd, check=True)
     
-    with open(log_path, "w") as f:
-        # Start the agent in the background
-        # cwd should be the first worktree
-        worktrees_dir = os.path.join(pod_dir, "worktrees")
-        cwd = pod_dir
-        if os.path.exists(worktrees_dir):
-            dirs = os.listdir(worktrees_dir)
-            if dirs:
-                cwd = os.path.join(worktrees_dir, dirs[0])
-
-        process = subprocess.Popen(
-            agent_cmd,
-            stdout=f,
-            stderr=subprocess.STDOUT,
-            cwd=cwd,
-            preexec_fn=os.setsid
-        )
-    
-    return process.pid
+    return 0
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
