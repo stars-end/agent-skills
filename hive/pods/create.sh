@@ -45,6 +45,9 @@ for REPO_NAME in "${REPO_LIST[@]}"; do
     if [ -f "$HOME/agent-skills/git-safety-guard/install.sh" ]; then
         (cd "$TARGET_WT" && "$HOME/agent-skills/git-safety-guard/install.sh" --quiet)
     fi
+
+    # Link context into worktree for agent visibility
+    ln -sf "../../context" "$TARGET_WT/context"
 done
 
 # 3. Inject Context (The Briefcase)
