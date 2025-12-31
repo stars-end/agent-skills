@@ -40,7 +40,7 @@ claude --dangerously-skip-permissions --model glm-4.7 -p "$1"
         f"--unit={unit_name}",
         "--description=Hive Agent Session",
         "--scope",
-        "script", "-q", "-e", "-c", f"{wrapper_path} '{safe_prompt}'", "/dev/null"
+        "script", "-q", "-e", "-c", f"{wrapper_path} '{safe_prompt}'"
     ]
     
     print(f"🚀 Dispatching Agent {session_id}...")
