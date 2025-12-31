@@ -36,13 +36,14 @@ claude --dangerously-skip-permissions --model glm-4.7 -p "$1"
 
     # We use systemd-run --scope so we can redirect stdout/stderr easily via Python
     # while still benefitng from systemd unit isolation and accounting.
+    # We use 'stdbuf' to attempt to force line-buffering.
     agent_cmd = [
         "systemd-run",
         "--user",
         f"--unit={unit_name}",
         "--description=Hive Agent Session",
         "--scope",
-        "script", "-q", "-e", "-c", f"{wrapper_path} '{safe_prompt}'"
+        "stdbuf", "-oL", "-eL", wrapper_path, f"{safe_prompt}"
     ]
     
     print(f"🚀 Dispatching Agent {session_id}...")
