@@ -20,6 +20,7 @@ def run_agent(session_id, system_prompt):
     with open(wrapper_path, "w") as f:
         f.write(f"""#!/usr/bin/env zsh
 # Auto-generated Hive Agent Wrapper
+export PATH="/home/feng/.local/bin:/usr/local/bin:/usr/bin:/bin"
 export ANTHROPIC_AUTH_TOKEN="42d8398609024e4b8ed68895a3feabdd.14a8um9X0PiC49iZ"
 export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
 export ANTHROPIC_DEFAULT_OPUS_MODEL="glm-4.7"
