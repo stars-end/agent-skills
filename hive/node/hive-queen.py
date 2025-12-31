@@ -19,21 +19,32 @@ except ImportError:
     pass
 
 def get_ready_beads():
-    """Polls Beads for issues labeled 'hive-ready'."""
+    """Polls for issues labeled 'hive-ready' by reading .beads/issues.jsonl directly."""
+    issues = []
+    jsonl_path = os.path.expanduser("~/agent-skills/.beads/issues.jsonl")
+    
+    if not os.path.exists(jsonl_path):
+        return []
+
     try:
-        res = subprocess.run(["bd", "list", "--label", "hive-ready", "--json"], 
-                             capture_output=True, text=True)
-        if res.returncode == 0:
-            output = res.stdout.strip()
-            if not output: return []
-            try:
-                return json.loads(output)
-            except json.JSONDecodeError:
-                print(f"⚠️  Invalid JSON from beads: {output}")
-                return []
+        with open(jsonl_path, 'r') as f:
+            for line in f:
+                if not line.strip(): continue
+                try:
+                    task = json.loads(line)
+                    # Filter: Status must be open, Label must contain hive-ready
+                    if task.get('status') != 'open':
+                        continue
+                    
+                    labels = task.get('labels', [])
+                    if 'hive-ready' in labels:
+                        issues.append(task)
+                except json.JSONDecodeError:
+                    continue
     except Exception as e:
-        print(f"Error polling beads: {e}")
-    return []
+        print(f"Error reading issues.jsonl: {e}")
+    
+    return issues
 
 def dispatch_bead(bead):
     """Workflow for a single task."""
