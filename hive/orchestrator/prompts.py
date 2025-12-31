@@ -3,7 +3,7 @@
 import os
 import json
 
-def get_system_prompt(session_id, repos):
+def get_system_prompt(session_id, repos, mission_text):
     """
     Generates the 'Golden Path' system prompt for the agent.
     """
@@ -23,6 +23,9 @@ Operational Guidelines:
 Safety:
 - You are running in a git worktree. Your changes are isolated.
 - Do NOT attempt to access files outside the pod or your worktrees.
+
+YOUR MISSION:
+{mission_text}
 """
     return prompt
 

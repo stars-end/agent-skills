@@ -94,7 +94,7 @@ def dispatch_bead(bead):
     prompts.prepare_briefcase(pod_dir, mission, memory)
     
     # 3. Dispatch Agent
-    system_prompt = prompts.get_system_prompt(session_id, repos)
+    system_prompt = prompts.get_system_prompt(session_id, repos, mission)
     
     import dispatch
     dispatch.run_agent(session_id, system_prompt)

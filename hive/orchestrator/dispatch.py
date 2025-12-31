@@ -12,6 +12,9 @@ def run_agent(session_id, system_prompt):
     log_path = os.path.join(pod_dir, "logs", "agent.log")
     unit_name = f"hive-agent-{session_id}"
     
+    # Escape single quotes for shell safety
+    safe_prompt = system_prompt.replace("'", "'\\''")
+    
     # We use zsh -c to source .zshrc and use the cc-glm function
     # The system_prompt is passed as the main instruction.
     agent_cmd = [
@@ -20,7 +23,7 @@ def run_agent(session_id, system_prompt):
         f"--unit={unit_name}",
         "--description=Hive Agent Session",
         "--scope",
-        "zsh", "-c", f"source ~/.zshrc && cc-glm -p '{system_prompt}'"
+        "zsh", "-c", f"source ~/.zshrc && cc-glm -p '{safe_prompt}'"
     ]
     
     print(f"🚀 Dispatching Agent {session_id}...")
