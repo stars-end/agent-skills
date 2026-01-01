@@ -125,7 +125,7 @@ runs:
         # Prepare API request
         API_URL="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}/v1/messages"
         MODEL="${ANTHROPIC_DEFAULT_SONNET_MODEL:-claude-sonnet-4-20250514}"
-
+        
         # Create prompt with ultrathink for deep analysis
         PROMPT="You are an elite DX (Developer Experience) analyst. <ultrathink>
 
@@ -164,6 +164,9 @@ runs:
         - [MEDIUM] <medium impact recommendation>
         - [LOW] <lower priority recommendation>"
 
+        # Escape prompt for JSON using Python (reliable on all runners)
+        ESCAPED_PROMPT=$(echo "$PROMPT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
+
         # Call Claude API with timeout and error handling and capture HTTP code
         echo "Calling API at: $API_URL with model: $MODEL"
         RESPONSE_BODY=$(mktemp)
@@ -171,7 +174,7 @@ runs:
           -H "Content-Type: application/json" \
           -H "x-api-key: $ANTHROPIC_API_KEY" \
           -H "anthropic-version: 2023-06-01" \
-          -d "{\"model\":\"$MODEL\",\"max_tokens\":2048,\"messages\":[{\"role\":\"user\",\"content\":$(echo "$PROMPT" | jq -Rs .)}]}" \
+          -d "{\"model\":\"$MODEL\",\"max_tokens\":2048,\"messages\":[{\"role\":\"user\",\"content\":$ESCAPED_PROMPT}]}" \
         ) || CURL_EXIT=$?
 
         RESPONSE=$(cat "$RESPONSE_BODY")
