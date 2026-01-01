@@ -164,16 +164,18 @@ runs:
         - [MEDIUM] <medium impact recommendation>
         - [LOW] <lower priority recommendation>"
 
-        # Call Claude API with timeout and error handling
+        # Call Claude API with timeout and error handling and capture HTTP code
         echo "Calling API at: $API_URL with model: $MODEL"
-        RESPONSE=""
-        CURL_EXIT=0
-        RESPONSE=$(curl -s --max-time 60 -X POST "$API_URL" \
+        RESPONSE_BODY=$(mktemp)
+        HTTP_CODE=$(curl -s -w "%{http_code}" -o "$RESPONSE_BODY" --max-time 60 -X POST "$API_URL" \
           -H "Content-Type: application/json" \
           -H "x-api-key: $ANTHROPIC_API_KEY" \
           -H "anthropic-version: 2023-06-01" \
           -d "{\"model\":\"$MODEL\",\"max_tokens\":2048,\"messages\":[{\"role\":\"user\",\"content\":$(echo "$PROMPT" | jq -Rs .)}]}" \
         ) || CURL_EXIT=$?
+
+        RESPONSE=$(cat "$RESPONSE_BODY")
+        rm -f "$RESPONSE_BODY"
 
         if [ "$CURL_EXIT" -ne 0 ]; then
           echo "⚠️  curl failed with exit code: $CURL_EXIT"
@@ -182,6 +184,13 @@ runs:
           TOP_PATTERN="unknown"
           ROOT_CAUSE="LLM API unreachable"
           RECOMMENDATIONS="- Unable to reach LLM API (curl exit $CURL_EXIT)"
+        elif [ "$HTTP_CODE" -ne 200 ]; then
+          echo "⚠️  API returned HTTP $HTTP_CODE"
+          echo "Response: $RESPONSE"
+          TOIL_FRACTION="unknown"
+          TOP_PATTERN="unknown"
+          ROOT_CAUSE="LLM API error $HTTP_CODE"
+          RECOMMENDATIONS="- LLM API error $HTTP_CODE"
         else
           # Parse response
           CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text' 2>/dev/null || echo "")
