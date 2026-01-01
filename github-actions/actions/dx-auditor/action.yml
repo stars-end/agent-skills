@@ -170,6 +170,7 @@ runs:
         # Call Claude API with timeout and error handling and capture HTTP code
         echo "Calling API at: $API_URL with model: $MODEL"
         RESPONSE_BODY=$(mktemp)
+        CURL_EXIT=0
         HTTP_CODE=$(curl -s -w "%{http_code}" -o "$RESPONSE_BODY" --max-time 60 -X POST "$API_URL" \
           -H "Content-Type: application/json" \
           -H "x-api-key: $ANTHROPIC_API_KEY" \
@@ -196,7 +197,7 @@ runs:
           RECOMMENDATIONS="- LLM API error $HTTP_CODE"
         else
           # Parse response using Python (no jq dependency)
-          CONTENT=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['content'][0]['text'])" 2>/dev/null || echo "")
+          CONTENT=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['content'][0]['text'])" || echo "")
 
           if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
             echo "⚠️  Claude API returned empty response"
