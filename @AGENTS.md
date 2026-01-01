@@ -1,27 +1,16 @@
-# AGENTS.md — Agent Skills V3 DX
+# Agent Instructions
 
-**Start Here**
-1. **Initialize**: `source ~/.bashrc && dx-check || curl -fsSL https://raw.githubusercontent.com/stars-end/agent-skills/master/scripts/dx-hydrate.sh | bash`
-2. **Check Environment**: `dx-check` checks git, Beads, and Skills.
+This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
-**Core Tools**:
-- **Beads**: Issue tracking. Use `bd` CLI.
-- **Skills**: Automated workflows.
+## Quick Reference
 
-**Daily Workflow**:
-1. `start-feature bd-xxx` - Start work.
-2. Code...
-3. `sync-feature "message"` - Save work.
-4. `finish-feature` - Verify & PR.
-
----
-
-**Repo Context: Skills Registry**
-- **Purpose**: Central store for all agent skills, scripts, and configurations.
-- **Rules**:
-  - Scripts must be idempotent.
-  - `dx-hydrate.sh` is the single source of truth for setup.
-
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --status in_progress  # Claim work
+bd close <id>         # Complete work
+bd sync               # Sync with git
+```
 
 ## Landing the Plane (Session Completion)
 
@@ -48,3 +37,4 @@
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
+

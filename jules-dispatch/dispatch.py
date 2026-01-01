@@ -20,6 +20,8 @@ import subprocess
 import sys
 import argparse
 import os
+import re
+import time
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -27,6 +29,16 @@ from typing import List, Dict, Optional
 BEADS_FILE = ".beads/issues.jsonl"
 DOCS_DIR = "docs"
 LABEL_TRIGGER = "jules-ready"
+
+QUOTA_ERROR_PATTERNS: List[re.Pattern[str]] = [
+    re.compile(r"\bRESOURCE_EXHAUSTED\b", re.IGNORECASE),
+    re.compile(r"\ball sessions failed to create\b", re.IGNORECASE),
+    re.compile(r"\bquota\b", re.IGNORECASE),
+]
+
+
+def _looks_like_quota_error(output: str) -> bool:
+    return any(p.search(output) for p in QUOTA_ERROR_PATTERNS)
 
 
 def find_repo_root() -> Optional[Path]:
@@ -135,7 +147,7 @@ DEFINITION OF DONE (REQUIRED):
     return prompt
 
 
-def dispatch(issue: Dict, repo_name: str, repo_root: Path, dry_run: bool = True):
+def dispatch(issue: Dict, repo_name: str, repo_root: Path, dry_run: bool = True) -> bool:
     """Dispatch a single issue to Jules."""
     issue_id = issue['id']
     title = issue['title']
@@ -159,16 +171,42 @@ def dispatch(issue: Dict, repo_name: str, repo_root: Path, dry_run: bool = True)
         print(f"  [DRY RUN] Would execute:")
         print(f"  jules remote new --repo {repo_name} --session \"...\"")
         print(f"  [Prompt Length]: {len(prompt)} chars")
-        return
+        return True
 
     try:
         print(f"🚀 Dispatching to Jules...")
-        subprocess.run(cmd, check=True)
+        result = subprocess.run(
+            cmd,
+            text=True,
+            capture_output=True,
+        )
+        combined = (result.stdout or "") + "\n" + (result.stderr or "")
+
+        if _looks_like_quota_error(combined):
+            print(f"❌ Jules quota/rate-limit error detected while dispatching {issue_id}.")
+            if combined.strip():
+                print("---- Jules output ----")
+                print(combined.rstrip())
+                print("----------------------")
+            print("Stopping further dispatches to avoid burning quota.")
+            return False
+
+        if result.returncode != 0:
+            print(f"❌ Failed to dispatch {issue_id}. Exit code: {result.returncode}")
+            if combined.strip():
+                print("---- Jules output ----")
+                print(combined.rstrip())
+                print("----------------------")
+            return False
+
         print(f"✅ Dispatched {issue_id} successfully.")
+        return True
     except subprocess.CalledProcessError as e:
         print(f"❌ Failed to dispatch {issue_id}. Error: {e}")
+        return False
     except FileNotFoundError:
         print("❌ 'jules' CLI not found. Is it installed?")
+        return False
 
 
 def main():
@@ -181,6 +219,18 @@ def main():
     parser.add_argument("--force", action="store_true", help="[Dispatch] Ignore 'jules-ready' label check")
     parser.add_argument("--issue", type=str, help="[Dispatch] Dispatch specific issue only")
     parser.add_argument("--repo", type=str, help="Override auto-detected repo (owner/name)")
+    parser.add_argument(
+        "--max-sessions-per-run",
+        type=int,
+        default=0,
+        help="[Dispatch] Max number of issues to dispatch in this run (0 = no limit)",
+    )
+    parser.add_argument(
+        "--sleep-between",
+        type=float,
+        default=0.0,
+        help="[Dispatch] Sleep N seconds between dispatches (helps avoid rate limits)",
+    )
     
     # Pull args
     parser.add_argument("--session", type=str, help="[Pull] Session ID to pull")
@@ -252,8 +302,16 @@ def main():
         return
 
     print(f"Found {len(candidates)} candidates.")
-    for issue in candidates:
-        dispatch(issue, repo_name, repo_root, dry_run=args.dry_run)
+    if args.max_sessions_per_run and args.max_sessions_per_run > 0:
+        candidates = candidates[: args.max_sessions_per_run]
+        print(f"Limiting to {len(candidates)} candidates due to --max-sessions-per-run.")
+
+    for idx, issue in enumerate(candidates):
+        ok = dispatch(issue, repo_name, repo_root, dry_run=args.dry_run)
+        if not ok:
+            sys.exit(1)
+        if args.sleep_between and idx < len(candidates) - 1:
+            time.sleep(args.sleep_between)
 
 
 def list_sessions(repo_name: str):
@@ -305,4 +363,3 @@ def pull_session(session_id: str, repo_root: Path):
 
 if __name__ == "__main__":
     main()
-
