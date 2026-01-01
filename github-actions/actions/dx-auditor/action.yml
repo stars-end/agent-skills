@@ -71,8 +71,8 @@ runs:
           --jq '.workflow_runs[] | {id, conclusion, created_at, head_commit}' \
           2>/dev/null | head -n "$LOOKBACK_RUNS" > ${RUNNER_TEMP}/ci-runs.json || true
 
-        TOTAL=$(jq -s 'length' ${RUNNER_TEMP}/ci-runs.json 2>/dev/null || echo "0")
-        FAILED=$(jq -s '[.[] | select(.conclusion == "failure")] | length' ${RUNNER_TEMP}/ci-runs.json 2>/dev/null || echo "0")
+        TOTAL=$(python3 -c "import sys, json; print(sum(1 for line in sys.stdin if line.strip()))" < ${RUNNER_TEMP}/ci-runs.json 2>/dev/null || echo "0")
+        FAILED=$(python3 -c "import sys, json; print(sum(1 for line in sys.stdin if line.strip() and json.loads(line).get('conclusion') == 'failure'))" < ${RUNNER_TEMP}/ci-runs.json 2>/dev/null || echo "0")
 
         echo "total-runs=$TOTAL" >> $GITHUB_OUTPUT
         echo "failed-runs=$FAILED" >> $GITHUB_OUTPUT
@@ -195,8 +195,8 @@ runs:
           ROOT_CAUSE="LLM API error $HTTP_CODE"
           RECOMMENDATIONS="- LLM API error $HTTP_CODE"
         else
-          # Parse response
-          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text' 2>/dev/null || echo "")
+          # Parse response using Python (no jq dependency)
+          CONTENT=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['content'][0]['text'])" 2>/dev/null || echo "")
 
           if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
             echo "⚠️  Claude API returned empty response"
