@@ -112,17 +112,27 @@ while true; do
         "https://slack.com/api/conversations.replies?channel=$CHANNEL&ts=$THREAD_TS&limit=5")
     
     # Check if HUMAN replied "yes" (case insensitive)
-    # We look for a message from HUMAN_ID that contains "yes"
-    IS_APPROVED=$(echo "$REPLIES" | jq -r --arg user "$HUMAN_ID" \
-        '.messages[] | select(.user == $user) | select(.text | ascii_downcase | contains("yes")) | .ts')
+    # We capture the FIRST valid approval message
+    # Use jq -c to get a compact JSON object line
+    APPROVED_MSG=$(echo "$REPLIES" | jq -c --arg user "$HUMAN_ID" \
+        '.messages[] | select(.user == $user) | select(.text | ascii_downcase | contains("yes")) | {ts: .ts, text: .text}' | head -n 1)
 
-    if [ -n "$IS_APPROVED" ]; then
+    if [ -n "$APPROVED_MSG" ]; then
+        APPROVED_TS=$(echo "$APPROVED_MSG" | jq -r '.ts')
+        APPROVED_TEXT=$(echo "$APPROVED_MSG" | jq -r '.text')
+        
         echo "✅ Approval received!" >&2
+        
+        # Save context (everything the user said) for the agent
+        echo "$APPROVED_TEXT" > "latest_context.txt"
+        echo "📝 Context saved to latest_context.txt" >&2
+        
         curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
             -d "channel=$CHANNEL" \
             --data-urlencode "username=$AGENT_NAME" \
             --data-urlencode "icon_emoji=$ICON_EMOJI" \
-            --data-urlencode "text=🚀 Starting $NEXT_TASK_ID..." \
+            --data-urlencode "text=🚀 Starting $NEXT_TASK_ID...
+(Context captured: \"$APPROVED_TEXT\")" \
             -d "thread_ts=$THREAD_TS" \
             "https://slack.com/api/chat.postMessage" > /dev/null
             
