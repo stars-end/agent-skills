@@ -42,7 +42,12 @@ echo "First Post Result: $FIRST_RES" >&2
 # Assumes 'bd' CLI is available and configured
 # Use 'open' status to capture all candidate tasks.
 # Parse text output (ID is first column) because JSON format is unreliable on some hosts
-NEXT_TASK_ID=$(bd list --status open --limit 1 2>/dev/null | grep -v "Warning" | grep -v "INFO" | grep -E '^[a-z]+-[0-9a-zA-Z]+' | head -n 1 | awk '{print $1}')
+# Capture ID and Summary. Text format: ID STATUS PRIORITY SUMMARY
+NEXT_TASK_LINE=$(bd list --status open --limit 1 2>/dev/null | grep -v "Warning" | grep -v "INFO" | grep -E '^[a-z]+-[0-9a-zA-Z]+' | head -n 1)
+NEXT_TASK_ID=$(echo "$NEXT_TASK_LINE" | awk '{print $1}')
+NEXT_TASK_SUMMARY=$(echo "$NEXT_TASK_LINE" | awk '{$1=""; $2=""; $3=""; print $0}' | sed 's/^[ \t]*//')
+
+if [ -z "$NEXT_TASK_SUMMARY" ]; then NEXT_TASK_SUMMARY="(No description available)"; fi
 
 if [ -z "$NEXT_TASK_ID" ]; then
     echo "ℹ️  No open tasks found in queue." >&2
@@ -61,8 +66,10 @@ if [ -z "$NEXT_TASK_ID" ]; then
 fi
 
 # 3. Ask for Approval
-ECHO_MSG="📋 *Next Task Ready: $NEXT_TASK_ID* [Host: $(hostname)]
-<@$HUMAN_ID> Should I continue? Reply 'yes' within appropriate timeframe."
+ECHO_MSG="📋 *Next Task: $NEXT_TASK_ID*
+> _$NEXT_TASK_SUMMARY_
+[Host: $(hostname)]
+<@$HUMAN_ID> Should I continue? Reply 'yes'."
 echo "❓ Asking for approval for $NEXT_TASK_ID..." >&2
 
 POST_RES=$(curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
