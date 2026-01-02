@@ -14,8 +14,8 @@ COMPLETED_TASK=$1
 PR_NUM=$2
 CHANNEL=${SLACK_CHANNEL:-"C09MQGMFKDE"}
 TIMEOUT=${SLACK_APPROVAL_TIMEOUT:-300}
-HUMAN_ID=${HUMAN_SLACK_ID:-"U01234567"} # Default placeholder
-POLL_INTERVAL=10
+HUMAN_ID=${HUMAN_SLACK_ID:-"U09LSQ5JEQ5"} # Default placeholder
+POLL_INTERVAL=5
 
 if [ -z "$SLACK_MCP_XOXP_TOKEN" ]; then
     echo "❌ SLACK_MCP_XOXP_TOKEN not set" >&2
@@ -29,12 +29,14 @@ echo "✅ Announcing completion of $COMPLETED_TASK..." >&2
 AGENT_NAME="Agent ($(hostname))"
 ICON_EMOJI=":robot_face:" # Can customize per host if needed
 
-curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
+FIRST_RES=$(curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
     -d "channel=$CHANNEL" \
-    -d "username=$AGENT_NAME" \
-    -d "icon_emoji=$ICON_EMOJI" \
-    -d "text=✅ *Task Completed: $COMPLETED_TASK* (PR #$PR_NUM)\nChecking queue for next task..." \
-    "https://slack.com/api/chat.postMessage" > /dev/null
+    --data-urlencode "username=$AGENT_NAME" \
+    --data-urlencode "icon_emoji=$ICON_EMOJI" \
+    --data-urlencode "text=✅ *Task Completed: $COMPLETED_TASK* (PR #$PR_NUM)
+Checking queue for next task..." \
+    "https://slack.com/api/chat.postMessage")
+echo "First Post Result: $FIRST_RES" >&2
 
 # 2. Check Beads for Next Task
 # Assumes 'bd' CLI is available and configured
@@ -45,35 +47,36 @@ NEXT_TASK_ID=$(bd list --status open --limit 1 2>/dev/null | grep -v "Warning" |
 if [ -z "$NEXT_TASK_ID" ]; then
     echo "ℹ️  No open tasks found in queue." >&2
     # Verify we can find ANY tasks to differentiate "queue empty" from "bd failed"
-    # Actually if bd failed, NEXT_TASK_ID is empty.
-    # We should log if bd failed.
     if ! command -v bd &> /dev/null; then
          echo "❌ 'bd' command not found." >&2
          exit 1
     fi
     curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
         -d "channel=$CHANNEL" \
-        -d "username=$AGENT_NAME" \
-        -d "icon_emoji=$ICON_EMOJI" \
-        -d "text=🏁 Queue empty. Session ending." \
+        --data-urlencode "username=$AGENT_NAME" \
+        --data-urlencode "icon_emoji=$ICON_EMOJI" \
+        --data-urlencode "text=🏁 Queue empty. Session ending." \
         "https://slack.com/api/chat.postMessage" > /dev/null
     exit 1
 fi
 
 # 3. Ask for Approval
-ECHO_MSG="📋 *Next Task Ready: $NEXT_TASK_ID*\n<@$HUMAN_ID> Should I continue? Reply 'yes' within $((TIMEOUT/60)) min."
+ECHO_MSG="📋 *Next Task Ready: $NEXT_TASK_ID* [Host: $(hostname)]
+<@$HUMAN_ID> Should I continue? Reply 'yes' within appropriate timeframe."
 echo "❓ Asking for approval for $NEXT_TASK_ID..." >&2
 
 POST_RES=$(curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
     -d "channel=$CHANNEL" \
-    -d "username=$AGENT_NAME" \
-    -d "icon_emoji=$ICON_EMOJI" \
-    -d "text=$ECHO_MSG" \
+    --data-urlencode "username=$AGENT_NAME" \
+    --data-urlencode "icon_emoji=$ICON_EMOJI" \
+    --data-urlencode "text=$ECHO_MSG" \
     "https://slack.com/api/chat.postMessage")
 
+echo "Second Post Result: $POST_RES" >&2
+
 THREAD_TS=$(echo "$POST_RES" | jq -r '.ts')
-if [ "$THREAD_TS" == "null" ]; then
-    echo "❌ Failed to post message to Slack" >&2
+if [ "$THREAD_TS" == "null" ] || [ "$THREAD_TS" == "" ]; then
+    echo "❌ Failed to post message to Slack. Response: $POST_RES" >&2
     exit 1
 fi
 
@@ -89,9 +92,9 @@ while true; do
         echo "⏱️  Timeout reached ($TIMEOUT s)." >&2
         curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
             -d "channel=$CHANNEL" \
-            -d "username=$AGENT_NAME" \
-            -d "icon_emoji=$ICON_EMOJI" \
-            -d "text=⏱️ No response. Ending session gracefully." \
+            --data-urlencode "username=$AGENT_NAME" \
+            --data-urlencode "icon_emoji=$ICON_EMOJI" \
+            --data-urlencode "text=⏱️ No response after 60+ mins. Ending session." \
             -d "thread_ts=$THREAD_TS" \
             "https://slack.com/api/chat.postMessage" > /dev/null
         exit 1
@@ -110,9 +113,9 @@ while true; do
         echo "✅ Approval received!" >&2
         curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
             -d "channel=$CHANNEL" \
-            -d "username=$AGENT_NAME" \
-            -d "icon_emoji=$ICON_EMOJI" \
-            -d "text=🚀 Starting $NEXT_TASK_ID..." \
+            --data-urlencode "username=$AGENT_NAME" \
+            --data-urlencode "icon_emoji=$ICON_EMOJI" \
+            --data-urlencode "text=🚀 Starting $NEXT_TASK_ID..." \
             -d "thread_ts=$THREAD_TS" \
             "https://slack.com/api/chat.postMessage" > /dev/null
             
@@ -129,13 +132,44 @@ while true; do
          echo "🛑 Request denied." >&2
          curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
             -d "channel=$CHANNEL" \
-            -d "username=$AGENT_NAME" \
-            -d "icon_emoji=$ICON_EMOJI" \
-            -d "text=🛑 Understood. Stopping session." \
+            --data-urlencode "username=$AGENT_NAME" \
+            --data-urlencode "icon_emoji=$ICON_EMOJI" \
+            --data-urlencode "text=🛑 Understood. Stopping session." \
             -d "thread_ts=$THREAD_TS" \
             "https://slack.com/api/chat.postMessage" > /dev/null
          exit 1
     fi
 
+    # Backoff logic: 1/2/4/8/16/32 minutes
+    # If we just waited 32 mins (1920s), the next POLL_INTERVAL would be 64m.
+    # We exit gracefully if the NEXT interval exceeds the 32m step.
+    
+    echo "Sleeping for $POLL_INTERVAL seconds..." >&2
     sleep $POLL_INTERVAL
+    
+    POLL_INTERVAL=$((POLL_INTERVAL * 2))
+    
+    # Cap logic / Exit logic
+    # If standard doubling pattern exceeds 32 mins (1920s) -> 3840s (64m)
+    # We don't want to wait 64 mins. We check this AT START of next loop via TIMEOUT
+    # OR we can exit here if we strictly want the sequence and then stop.
+    
+    # The user said "and then it just ends". 
+    # Current loop: Checked, Slept X. Update X to 2X. 
+    # If 2X > 1920 (32 mins), then we have Done 32mins -> Next is 64mins.
+    # Actually, if we just slept 32 mins, we check one last time. 
+    # Then we prepare to sleep 64 mins.
+    # We should catch it here.
+    
+    if [ $POLL_INTERVAL -gt 2000 ]; then
+        echo "⏱️  Max backoff reached. Ending session." >&2
+        curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
+            -d "channel=$CHANNEL" \
+            --data-urlencode "username=$AGENT_NAME" \
+            --data-urlencode "icon_emoji=$ICON_EMOJI" \
+            --data-urlencode "text=⏱️ No response after sequence (Last wait: 32m). Session ending." \
+            -d "thread_ts=$THREAD_TS" \
+            "https://slack.com/api/chat.postMessage" > /dev/null
+        exit 1
+    fi
 done
