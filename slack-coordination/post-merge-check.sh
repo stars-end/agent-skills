@@ -38,7 +38,8 @@ curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
 
 # 2. Check Beads for Next Task
 # Assumes 'bd' CLI is available and configured
-NEXT_TASK_ID=$(bd list --status ready --limit 1 --format json 2>/dev/null | jq -r '.[0].id // empty')
+# Use 'open' status to capture all candidate tasks. Sort by priority/created defaults.
+NEXT_TASK_ID=$(bd list --status open --limit 1 --format json 2>/dev/null | jq -r '.[0].id // empty')
 
 if [ -z "$NEXT_TASK_ID" ]; then
     echo "ℹ️  No 'ready' tasks found in queue." >&2
