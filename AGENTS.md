@@ -16,6 +16,48 @@
 
 ---
 
+## Claude CLI: Always Use `cc-glm`
+
+**`cc-glm`** is a pre-configured Claude Code alias (defined in `~/.zshrc`) that:
+- Uses the correct model configuration
+- Handles authentication automatically
+- Supports all standard `claude` flags
+
+```bash
+# Interactive session
+cc-glm
+
+# Non-interactive (one-shot)
+cc-glm -p "Your prompt here"
+
+# With output format
+cc-glm -p "Prompt" --output-format text
+
+# Resume session
+cc-glm --resume <session-id>
+```
+
+**RULE:** Always use `cc-glm` instead of raw `claude` command.
+
+---
+
+## Slack MCP Integration
+
+Agents have native Slack access via MCP tools:
+- `conversations_add_message` - Post to channels/threads
+- `conversations_history` - Read channel history
+- `conversations_replies` - Read thread replies
+
+**Config:** Set in `~/.claude.json` → `mcpServers.slack`
+**Env vars:** `SLACK_MCP_XOXP_TOKEN`, `SLACK_MCP_ADD_MESSAGE_TOOL=true`
+
+**Test:**
+```bash
+cc-glm -p "Use conversations_add_message to post 'Test' to #social"
+```
+
+---
+
 **Repo Context: Skills Registry**
 - **Purpose**: Central store for all agent skills, scripts, and configurations.
 - **Rules**:
