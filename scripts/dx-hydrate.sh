@@ -15,12 +15,14 @@ AGENTS_ROOT="$HOME/agent-skills"
 BIN_DIR="$HOME/bin"
 mkdir -p "$BIN_DIR"
 
-# 1. Symlink Configuration (NTM, Serena)
+# 1. Symlink Configuration (NTM)
+# NOTE: Serena removed due to 99% CPU runaway issues (2026-01-03)
 echo -e "${GREEN} -> Linking configurations...${RESET}"
 mkdir -p "$AGENTS_ROOT/configs/ntm"
 ln -sf "$AGENTS_ROOT/configs/ntm/cockpit.yaml" "$HOME/.ntm.yaml"
-mkdir -p "$HOME/.serena"
-ln -sf "$AGENTS_ROOT/configs/serena/config.toml" "$HOME/.serena/config.toml"
+# Serena disabled - causing MCP server to consume 99% CPU
+# mkdir -p "$HOME/.serena"
+# ln -sf "$AGENTS_ROOT/configs/serena/config.toml" "$HOME/.serena/config.toml"
 
 # 2. Setup ~/.agent/skills Invariant
 echo -e "${GREEN} -> Setting up skills mount (~/.agent/skills)...${RESET}"

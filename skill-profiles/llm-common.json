@@ -17,7 +17,6 @@
     ],
     "optional": [
       "universal-skills",
-      "serena",
       "z.ai-search"
     ]
   }
