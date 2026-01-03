@@ -49,11 +49,22 @@ Agents have native Slack access via MCP tools:
 - `conversations_replies` - Read thread replies
 
 **Config:** Set in `~/.claude.json` → `mcpServers.slack`
-**Env vars:** `SLACK_MCP_XOXP_TOKEN`, `SLACK_MCP_ADD_MESSAGE_TOOL=true`
 
-**Test:**
+**Token Setup (in `~/.zshenv` for non-interactive shells):**
 ```bash
-cc-glm -p "Use conversations_add_message to post 'Test' to #social"
+# For bot tokens (xoxb-...)
+export SLACK_MCP_XOXB_TOKEN="xoxb-..."
+export SLACK_MCP_ADD_MESSAGE_TOOL=true
+
+# For user tokens (xoxp-...)
+export SLACK_MCP_XOXP_TOKEN="xoxp-..."
+```
+
+**Important:** After adding bot, invite it to channels: `/invite @YourBotName`
+
+**Test (use explicit session ID when other sessions running):**
+```bash
+cc-glm --session-id $(uuidgen) -p "Use conversations_add_message to post 'Test' to #social"
 ```
 
 ---
