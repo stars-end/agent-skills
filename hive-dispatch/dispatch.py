@@ -99,7 +99,11 @@ def get_issue(issue_id: str) -> Optional[Dict]:
             text=True,
             check=True
         )
-        return json.loads(result.stdout)
+        data = json.loads(result.stdout)
+        # bd show --json returns a list, get first item
+        if isinstance(data, list) and len(data) > 0:
+            return data[0]
+        return data
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         print(f"❌ Failed to get issue {issue_id}: {e}")
         return None
@@ -159,8 +163,8 @@ def dispatch(issue_id: str, dry_run: bool = False) -> bool:
     prompt = build_prompt(issue)
     safe_prompt = shlex.quote(prompt)
     
-    # Remote command
-    remote_cmd = f"cd {REPO_PATH} && claude --dangerously-skip-permissions -p {safe_prompt}"
+    # Remote command - source zshrc for mise PATH
+    remote_cmd = f"source ~/.zshrc && cd {REPO_PATH} && claude --dangerously-skip-permissions -p {safe_prompt}"
     
     if dry_run:
         print(f"[DRY RUN] Would execute:")

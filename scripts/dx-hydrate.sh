@@ -51,6 +51,23 @@ if [ -f "$AGENTS_ROOT/scripts/slack-mcp-setup.sh" ]; then
     source "$AGENTS_ROOT/scripts/slack-mcp-setup.sh"
 fi
 
+# 3.3 Install OpenCode Server (Systemd)
+echo -e "${GREEN} -> Installing OpenCode systemd service...${RESET}"
+mkdir -p "$HOME/.config/systemd/user"
+if [ -f "$AGENTS_ROOT/systemd/opencode-server.service" ]; then
+    cp "$AGENTS_ROOT/systemd/opencode-server.service" "$HOME/.config/systemd/user/"
+    
+    # Adjust WorkingDirectory for the current user
+    sed -i "s|WorkingDirectory=/home/feng|WorkingDirectory=$HOME|g" "$HOME/.config/systemd/user/opencode-server.service"
+    
+    # Reload and enable (but don't start - let user do that)
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable opencode-server 2>/dev/null || true
+    echo "   OpenCode service installed. Start with: systemctl --user start opencode-server"
+else
+    echo "   OpenCode service file not found, skipping..."
+fi
+
 # 4. Setup Cass (Memory)
 echo -e "${GREEN} -> Configuring Cass Memory...${RESET}"
 mkdir -p "$HOME/.cass"

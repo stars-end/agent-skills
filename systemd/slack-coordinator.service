@@ -1,0 +1,14 @@
+[Unit]
+Description=Slack Coordinator for Agent Communication
+After=network.target opencode-server.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/home/feng/.zshenv
+ExecStart=/home/feng/agent-skills/slack-coordination/.venv/bin/python /home/feng/agent-skills/slack-coordination/slack-coordinator.py
+Restart=always
+RestartSec=10
+WorkingDirectory=/home/feng/agent-skills/slack-coordination
+
+[Install]
+WantedBy=default.target

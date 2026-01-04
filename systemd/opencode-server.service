@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenCode Server for Agent Coordination
+After=network.target
+
+[Service]
+Type=simple
+Environment="PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin"
+ExecStart=/home/linuxbrew/.linuxbrew/bin/opencode serve --port 4105 --hostname 0.0.0.0
+Restart=always
+RestartSec=5
+WorkingDirectory=/home/feng
+MemoryMax=4G
+
+[Install]
+WantedBy=default.target
