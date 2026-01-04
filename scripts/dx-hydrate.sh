@@ -68,6 +68,45 @@ else
     echo "   OpenCode service file not found, skipping..."
 fi
 
+# 3.4 Install Slack Coordinator (Systemd)
+echo -e "${GREEN} -> Installing Slack Coordinator service...${RESET}"
+if [ -f "$AGENTS_ROOT/systemd/slack-coordinator.service" ]; then
+    cp "$AGENTS_ROOT/systemd/slack-coordinator.service" "$HOME/.config/systemd/user/"
+    
+    # Adjust paths for current user
+    sed -i "s|/home/feng|$HOME|g" "$HOME/.config/systemd/user/slack-coordinator.service"
+    
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable slack-coordinator 2>/dev/null || true
+    echo "   Coordinator service installed. Start with: systemctl --user start slack-coordinator"
+    
+    # Create env file if not exists
+    if [ ! -f "$HOME/.config/slack-coordinator.env" ]; then
+        cat > "$HOME/.config/slack-coordinator.env" <<EOF
+OPENCODE_URL=http://localhost:4105
+AGENT_NAME=$(hostname -s)
+EOF
+        echo "   Created coordinator env file: ~/.config/slack-coordinator.env"
+    fi
+else
+    echo "   Coordinator service file not found, skipping..."
+fi
+
+# 3.5 Create Worktree Directories
+echo -e "${GREEN} -> Creating worktree directories...${RESET}"
+mkdir -p "$HOME/affordabot-worktrees"
+mkdir -p "$HOME/prime-radiant-worktrees"
+mkdir -p "$HOME/agent-skills-worktrees"
+
+# 3.6 Configure Beads Merge Driver
+echo -e "${GREEN} -> Configuring Beads merge driver...${RESET}"
+if command -v bd >/dev/null 2>&1; then
+    git config --global merge.beads.driver "bd merge %O %A %B %L %P" 2>/dev/null || true
+    echo "   Beads merge driver configured globally"
+else
+    echo "   Beads CLI not found, skipping merge driver setup"
+fi
+
 # 4. Setup Cass (Memory)
 echo -e "${GREEN} -> Configuring Cass Memory...${RESET}"
 mkdir -p "$HOME/.cass"
