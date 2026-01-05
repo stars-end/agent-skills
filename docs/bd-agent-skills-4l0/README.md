@@ -116,9 +116,19 @@ systemctl --user status slack-coordinator
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| P0 | 🔴 TODO | Worktree creation + session cwd |
-| P1 | 🔴 TODO | Multi-VM routing (@macmini) |
-| P2 | 🟡 Partial | dx-* integration |
-| P3 | 🔴 TODO | Agent-to-agent communication |
-| P4 | 🔴 TODO | Testing automation |
-| P5 | 🟡 Code Exists | Jules + HITL testing |
+| P0 | ✅ DONE | Worktree creation + session cwd |
+| P1 | ✅ DONE | Multi-VM routing (@macmini, @epyc6) |
+| P2 | ✅ DONE | dx-* integration |
+| P3 | ✅ DONE | Agent-to-agent communication |
+| P4 | ✅ DONE | Testing automation (11 unit + 6 E2E) |
+| P5 | ✅ DONE | Jules three-gate routing |
+| **P6** | 🔴 TODO | **Multi-VM Orchestration** (see [P6_MULTI_VM_ORCHESTRATION.md](P6_MULTI_VM_ORCHESTRATION.md)) |
+
+### P6: Multi-VM Orchestration (NEW)
+
+- [ ] P6.1: Create `~/.agent-skills/vm-endpoints.json` config
+- [ ] P6.2: Implement `dx-dispatch` script
+- [ ] P6.3: Add Slack audit to dispatches (dual-write pattern)
+- [ ] P6.4: Test multi-VM routing (homedesktop, macmini, epyc6)
+- [ ] P6.5: Integration tests for full orchestrator flow
+

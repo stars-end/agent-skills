@@ -62,6 +62,8 @@ CHANNEL_REPO_MAP = {
     "affordabot-agents": "affordabot",
     "prime-radiant-agents": "prime-radiant-ai",
     "agent-coordination": None,  # Cross-repo
+    "social": "affordabot",  # Test channel
+    "dev-agent-tasks": "affordabot",  # Dev channel
 }
 
 # Session registry (in-memory, thread_ts -> session info)
