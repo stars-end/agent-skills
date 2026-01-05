@@ -1,0 +1,20 @@
+#!/bin/bash
+# dx-dispatch - Dispatch tasks to remote OpenCode agents
+# Part of agent-skills dx-* workflow
+#
+# Usage:
+#   dx-dispatch <vm> "task description" [options]
+#   dx-dispatch --list
+#   dx-dispatch --help
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_SCRIPT="${SCRIPT_DIR}/dx-dispatch.py"
+
+# Check if Python script exists
+if [[ ! -f "$PYTHON_SCRIPT" ]]; then
+    echo "❌ dx-dispatch.py not found at $PYTHON_SCRIPT"
+    exit 1
+fi
+
+# Run Python script with all arguments
+python3 "$PYTHON_SCRIPT" "$@"
