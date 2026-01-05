@@ -220,7 +220,7 @@ def format_agent_message(message: str, vm: str = None) -> str:
 
 
 # Jules Integration (Three-Gate Routing)
-JULES_DISPATCH_SCRIPT = "/home/feng/agent-skills/jules-dispatch/dispatch.py"
+JULES_DISPATCH_SCRIPT = str(Path.home() / "agent-skills" / "jules-dispatch" / "dispatch.py")
 
 
 def should_route_to_jules(text: str, issue_id: Optional[str]) -> bool:
@@ -260,9 +260,9 @@ def should_route_to_jules(text: str, issue_id: Optional[str]) -> bool:
     
     # Gate 3: Check for docs/bd-xxxx/ spec directory
     # Check in likely repo locations
-    for repo in ["/home/feng/affordabot", "/home/feng/prime-radiant-ai"]:
-        spec_path = os.path.join(repo, "docs", issue_id)
-        if os.path.isdir(spec_path):
+    for repo_name in ["affordabot", "prime-radiant-ai"]:
+        spec_path = Path.home() / repo_name / "docs" / issue_id
+        if spec_path.is_dir():
             return True
     
     return False
@@ -276,7 +276,7 @@ async def dispatch_to_jules(issue_id: str, repo: str) -> Optional[str]:
         result = subprocess.run(
             ["python3", JULES_DISPATCH_SCRIPT, issue_id, "--repo", repo],
             capture_output=True, text=True, timeout=30,
-            cwd=f"/home/feng/{repo}"
+            cwd=str(Path.home() / repo)
         )
         if result.returncode == 0:
             return result.stdout

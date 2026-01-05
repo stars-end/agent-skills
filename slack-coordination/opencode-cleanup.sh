@@ -7,7 +7,8 @@ set -e
 
 OPENCODE_URL="${OPENCODE_URL:-http://localhost:4105}"
 MAX_AGE_HOURS=24
-LOG_FILE="/var/log/opencode-cleanup.log"
+LOG_FILE="$HOME/.local/log/opencode-cleanup.log"
+mkdir -p "$(dirname "$LOG_FILE")"
 
 cleanup() {
     echo "[$(date -Iseconds)] Starting OpenCode session cleanup..." >> "$LOG_FILE"
