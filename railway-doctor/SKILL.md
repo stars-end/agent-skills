@@ -1,3 +1,8 @@
+---
+name: railway-doctor
+description: Pre-flight checks for Railway deployments to catch failures BEFORE deploying.
+---
+
 # railway-doctor
 
 ## Description

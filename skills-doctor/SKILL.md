@@ -1,3 +1,8 @@
+---
+name: skills-doctor
+description: Validate that the current VM has the right `agent-skills` installed for the repo you’re working in.
+---
+
 # skills-doctor
 
 ## Description

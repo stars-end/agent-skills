@@ -1,3 +1,8 @@
+---
+name: agent-mail-guide
+description: Guide for installing and using MCP Agent Mail across heterogeneous agent tools/VMs.
+---
+
 # agent-mail-guide
 
 Guide for installing and using MCP Agent Mail across heterogeneous agent tools/VMs.

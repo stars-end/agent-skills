@@ -1,3 +1,8 @@
+---
+name: coordinator-dx
+description: Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists.
+---
+
 # coordinator-dx
 
 Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists.

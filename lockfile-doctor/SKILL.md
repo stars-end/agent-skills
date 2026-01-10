@@ -1,3 +1,8 @@
+---
+name: lockfile-doctor
+description: Check and fix lockfile drift across Poetry (Python) and pnpm (Node.js) projects.
+---
+
 # lockfile-doctor
 
 ## Description

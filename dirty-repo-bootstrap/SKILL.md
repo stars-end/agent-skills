@@ -1,3 +1,8 @@
+---
+name: dirty-repo-bootstrap
+description: Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch
+---
+
 # dirty-repo-bootstrap
 
 ## Description

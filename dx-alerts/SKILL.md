@@ -1,3 +1,8 @@
+---
+name: dx-alerts
+description: Lightweight “news wire” implemented **via Agent Mail threads**, not a separate bespoke system.
+---
+
 # dx-alerts
 
 Lightweight “news wire” implemented **via Agent Mail threads**, not a separate bespoke system.

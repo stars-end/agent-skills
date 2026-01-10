@@ -1,3 +1,8 @@
+---
+name: bd-doctor
+description: Check and fix common Beads workflow issues across all repos.
+---
+
 # bd-doctor
 
 ## Description

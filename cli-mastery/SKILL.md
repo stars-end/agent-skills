@@ -1,3 +1,8 @@
+---
+name: cli-mastery
+description: **Tags:** #tools #cli #railway #github #env
+---
+
 # CLI Mastery & Environment Protocol
 
 **Tags:** #tools #cli #railway #github #env

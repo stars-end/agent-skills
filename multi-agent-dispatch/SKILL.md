@@ -1,3 +1,8 @@
+---
+name: multi-agent-dispatch
+description: Dispatch tasks to remote VMs for parallel execution or specialized work.
+---
+
 # Multi-Agent Dispatch
 
 Dispatch tasks to remote VMs for parallel execution or specialized work.

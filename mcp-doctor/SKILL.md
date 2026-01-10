@@ -1,3 +1,8 @@
+---
+name: mcp-doctor
+description: Soft doctor to verify the **canonical MCP servers** are discoverable/configured on the current VM/tooling.
+---
+
 # mcp-doctor
 
 ## Description
