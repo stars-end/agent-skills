@@ -16,6 +16,26 @@
 
 ---
 
+## Multi-Agent Dispatch
+
+**When to use**: Tasks needing specific VMs (GPU work → epyc6, macOS → macmini), parallel execution, or status notifications.
+
+```bash
+dx-dispatch epyc6 "Run make test in ~/affordabot"
+dx-dispatch macmini "Build iOS app"
+dx-dispatch --list   # Check VM status
+```
+
+**Add Slack notifications** to long tasks:
+```
+After completing, use slack_conversations_add_message 
+to post summary to channel C09MQGMFKDE.
+```
+
+📖 **Full guide**: [docs/MULTI_AGENT_COMMS.md](docs/MULTI_AGENT_COMMS.md)
+
+
+
 ## Claude CLI: Always Use `cc-glm`
 
 **`cc-glm`** is a pre-configured Claude Code alias (defined in `~/.zshrc`) that:
