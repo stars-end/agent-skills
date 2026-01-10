@@ -16,6 +16,30 @@
 
 ---
 
+## Skills (agentskills.io Format)
+
+Skills are stored in `~/agent-skills/*/SKILL.md` using the [agentskills.io](https://agentskills.io) open standard.
+
+**Agent Skill Discovery:**
+
+| Agent | Discovery Method |
+|-------|------------------|
+| Claude Code | Native `/skill <name>` command |
+| OpenCode | Native `skill <name>` tool |
+| Codex CLI | Native skill loading |
+| Antigravity | universal-skills MCP → `load_skill()` |
+| Gemini CLI | universal-skills MCP → `load_skill()` |
+
+**Available Skills:**
+- `multi-agent-dispatch` - Cross-VM task dispatch
+- `beads-workflow` - Issue tracking
+- `sync-feature-branch` - Git workflows
+- `fix-pr-feedback` - PR iteration
+
+---
+
+
+
 ## Multi-Agent Dispatch
 
 **When to use**: Tasks needing specific VMs (GPU work → epyc6, macOS → macmini), parallel execution, or status notifications.
