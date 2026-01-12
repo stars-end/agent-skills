@@ -5,10 +5,12 @@ description: |
   Use when user says "verify pipeline", "check my work", "run tests", or "validate changes".
   Wraps `make verify-pipeline` (E2E), `make verify-analysis` (Logic), or `make verify-all`.
   Ensures environment constraints (e.g. Railway Shell) are met.
-tags: [workflow, testing, verification, makefile]
+tags: [workflow, testing, verification, makefile, railway]
 allowed-tools:
   - Bash(make verify-*)
   - Bash(railway run *)
+  - Bash(railway:*)
+  - Bash(curl:*)
   - Read
 ---
 
@@ -53,9 +55,23 @@ Common targets:
 
 ### 2. Check Environment
 
-**Railway Shell:**
-If the project uses Railway (e.g. `RAILWAY_ENV.md` exists), ensure commands are run in `railway shell` or using `railway run`.
-*Note: The Makefile usually enforces this, but the agent should be aware.*
+**Railway Projects:**
+
+If the project uses Railway (e.g., `RAILWAY_ENV.md` or `railway.toml` exists):
+
+1. **Validate Railway environment** (optional but recommended):
+   ```bash
+   ~/.agent/skills/devops-dx/scripts/validate_railway_env.sh
+   ```
+   This checks:
+   - Project linkage
+   - Service configuration
+   - Staged (unapplied) changes
+   - Required environment variables
+
+2. **Ensure Railway Shell or `railway run` is used:**
+   Commands should be run in `railway shell` or using `railway run`.
+   *Note: The Makefile usually enforces this, but the agent should be aware.*
 
 ### 3. Run Verification
 

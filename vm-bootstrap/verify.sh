@@ -139,6 +139,47 @@ verify_gh_auth() {
     fi
 }
 
+verify_railway_cli_version() {
+    if ! check_cmd railway; then
+        return 1
+    fi
+
+    local version
+    version=$(railway --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "0.0.0")
+
+    if [[ "$version" == "0.0.0" ]]; then
+        warn "Railway CLI version check failed"
+        return 1
+    fi
+
+    # Minimum version for GraphQL API support
+    local min_version="3.0.0"
+
+    # Simple version comparison
+    if [[ "$version" < "$min_version" ]]; then
+        warn "Railway CLI $version < $min_version (GraphQL API requires >= $min_version)"
+        warn "  Update: mise use -g railway@latest"
+        return 1
+    fi
+
+    success "Railway CLI version: $version (>= $min_version)"
+    return 0
+}
+
+verify_railway_auth() {
+    if ! check_cmd railway; then
+        return 1
+    fi
+
+    if railway status >/dev/null 2>&1; then
+        success "Railway auth: authenticated"
+        return 0
+    else
+        warn "Railway auth: not authenticated (run 'railway login')"
+        return 1
+    fi
+}
+
 verify_skills_mount() {
     local skills_path="$HOME/.agent/skills"
     if [[ -L "$skills_path" ]]; then
@@ -205,7 +246,14 @@ main() {
     # CLI tools
     verify_required "gh (GitHub CLI)" "gh --version"
     verify_gh_auth
+
+    echo ""
+
+    # Railway (version + auth specific checks)
     verify_mise_tool "railway" "railway" "--version"
+    verify_railway_cli_version
+    verify_railway_auth
+
     verify_required "bd (Beads)" "bd --version"
     
     echo ""
