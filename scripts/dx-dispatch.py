@@ -19,7 +19,8 @@ Options:
     --session <id>    Resume existing session
     --slack           Post audit trail to Slack
     --no-slack        Skip Slack audit (default: audit enabled)
-    --repo <name>     Specify repo context
+    --repo <name>     Target repository (e.g. prime-radiant-ai)
+    --beads <id>      Beads ID for tracking (e.g. bd-123)
     --wait            Wait for completion
     --timeout <sec>   Timeout for --wait (default: 300)
 """
@@ -145,6 +146,33 @@ def create_session(opencode_url: str, title: str, ssh: str = None) -> str:
     return None
 
 
+def setup_worktree(ssh: str, beads_id: str, repo: str) -> str:
+    """Create isolated worktree for agent."""
+    # Assuming worktree-setup.sh is in ~/bin/
+    cmd = f"~/bin/worktree-setup.sh {beads_id} {repo}"
+    
+    # Try SSH run
+    if ssh:
+        try:
+            result = subprocess.run(
+                ["ssh", ssh, cmd],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                worktree_path = result.stdout.strip()
+                # Validate output looks like a path
+                if worktree_path.startswith("/"):
+                     return worktree_path
+            
+            # If failed, log stderr
+            log(f"Worktree setup failed: {result.stderr}", "ERROR")
+            
+        except Exception as e:
+            log(f"Worktree setup error: {e}", "ERROR")
+    
+    return None
+
+
 def send_to_session(opencode_url: str, session_id: str, prompt: str, timeout: int = 300, ssh: str = None) -> dict:
     """Send prompt to OpenCode session."""
     # Try direct HTTP first
@@ -178,6 +206,100 @@ def send_to_session(opencode_url: str, session_id: str, prompt: str, timeout: in
             log(f"SSH send failed: {e}", "ERROR")
     
     return {"error": "Failed to send"}
+
+
+def send_to_session_shell(opencode_url: str, session_id: str, command: str, timeout: int = 300, ssh: str = None) -> dict:
+    """Send direct shell command to OpenCode session (bypassing agent tool loop)."""
+    # Try direct HTTP first
+    try:
+        resp = httpx.post(
+            f"{opencode_url}/session/{session_id}/shell",
+            json={"agent": "build", "command": command},
+            timeout=timeout
+        )
+        return resp.json()
+    except Exception:
+        pass  # Fall through to SSH
+    
+    if ssh:
+        try:
+            # Payload for curl to read from stdin
+            payload = json.dumps({"agent": "build", "command": command})
+            
+            # When running via SSH on the target, use localhost relative to that target
+            # (The external URL might be tailscale/DNS which is not resolvable or bound locally)
+            from urllib.parse import urlparse
+            parsed = urlparse(opencode_url)
+            port = parsed.port or 4105
+            local_url = f"http://localhost:{port}"
+
+            cmd = [
+                "ssh", ssh,
+                f"curl -v -X POST {local_url}/session/{session_id}/shell -H 'Content-Type: application/json' -d @-"
+            ]
+            
+            # Pass payload via stdin to avoid shell quoting hell
+            result = subprocess.run(cmd, input=payload, capture_output=True, text=True, timeout=timeout)
+            
+            if result.returncode == 0:
+                return json.loads(result.stdout) if result.stdout.strip() else {"ok": True}
+            else:
+                log(f"SSH stderr: {result.stderr}", "ERROR")
+        except subprocess.TimeoutExpired:
+            return {"ok": True, "note": "Shell command dispatched (SSH timeout, still running)"}
+        except Exception as e:
+            log(f"SSH shell send failed: {e}", "ERROR")
+
+    return {"error": "Failed to send shell command"}
+
+
+
+def get_resource_config(beads_id: str) -> dict:
+    """Generate isolated resource config from beads ID."""
+    # Deterministic port based on hash
+    # Use simple sum of chars or similar for stability
+    # (hash() in python is randomized per process unless configured)
+    import hashlib
+    h = hashlib.md5(beads_id.encode()).hexdigest()
+    port_offset = int(h, 16) % 2000  # 0-1999
+    port = 3000 + port_offset
+    
+    # Schema name (sanitize for SQL)
+    schema = beads_id.replace("-", "_").lower()
+    
+    return {"port": port, "schema": schema}
+
+def send_task_with_context(opencode_url: str, session_id: str, user_input: str, worktree: str, beads_id: str, timeout: int = 300, ssh: str = None, shell_mode: bool = False) -> dict:
+    """Send task with directory context and resource isolation instructions."""
+    resources = get_resource_config(beads_id)
+    port = resources["port"]
+    schema = resources["schema"]
+
+    if shell_mode:
+        # Construct compound shell command for direct execution
+        # We export env vars for the duration of the subshell/command chain
+        command = (
+            f"export PORT={port} && "
+            f"export DB_SCHEMA='{schema}' && "
+            f"cd {worktree} && "
+            f"{user_input}"
+        )
+        return send_to_session_shell(opencode_url, session_id, command, timeout=timeout, ssh=ssh)
+
+    # API doesn't support directory, so we wrap the prompt
+    context_prompt = (
+        f"IMPORTANT: You are working in an isolated worktree at: {worktree}\n"
+        f"You MUST use `cd {worktree} && pwd` as your first command (to verify location and ensure output).\n"
+        f"All your work (edits, commits) must happen in this directory.\n"
+        f"DO NOT work in the default repo location.\n\n"
+        f"RESOURCE ISOLATION REQUIRED:\n"
+        f"- You MUST run your dev server on PORT={port}\n"
+        f"- You MUST use Database Schema: '{schema}' (create if needed)\n"
+        f"- Do NOT use default ports (3000, 8000) or public schemas.\n"
+        f"- IMPORTANT: Env vars do NOT persist between tool calls. Set them in every command or use a .env file.\n\n"
+        f"Task:\n{user_input}"
+    )
+    return send_to_session(opencode_url, session_id, context_prompt, timeout=timeout, ssh=ssh)
 
 
 def list_vms(config: dict):
@@ -235,6 +357,18 @@ def dispatch(args, config: dict):
         audit_msg = f"[{hostname}] 📤 Dispatching to {vm_name}:\n```\n{task[:200]}{'...' if len(task) > 200 else ''}\n```"
         if post_to_slack(config, audit_msg):
             log("Posted audit to Slack")
+
+    # Setup Worktree if beads ID provided
+    worktree_path = None
+    if args.beads and args.repo:
+        log(f"Setting up isolated worktree for {args.beads}...", "INFO")
+        worktree_path = setup_worktree(ssh, args.beads, args.repo)
+        
+        if worktree_path:
+            log(f"Worktree created at: {worktree_path}", "INFO")
+        else:
+            log("Failed to setup worktree. Aborting to prevent conflicts.", "ERROR")
+            sys.exit(1)
     
     # Create or resume session
     if args.session:
@@ -248,14 +382,18 @@ def dispatch(args, config: dict):
             sys.exit(1)
         log(f"Created session: {session_id}")
     
-    # Build prompt with context
-    prompt = task
-    if args.repo:
-        prompt = f"Repo: {args.repo}\n\n{task}"
-    
     # Send task
     log(f"Sending task to {vm_name}...")
-    result = send_to_session(opencode_url, session_id, prompt, args.timeout, ssh=ssh)
+    
+    if worktree_path:
+        # Pass beads_id for resource calculation
+        result = send_task_with_context(opencode_url, session_id, task, worktree_path, args.beads, args.timeout, ssh=ssh, shell_mode=args.shell)
+    else:
+        # Legacy/Simple mode
+        prompt = task
+        if args.repo:
+            prompt = f"Repo: {args.repo}\n\n{task}"
+        result = send_to_session(opencode_url, session_id, prompt, args.timeout, ssh=ssh)
     
     if "error" in result:
         log(f"Task failed: {result['error']}", "ERROR")
@@ -295,64 +433,67 @@ def dispatch_all(args, config: dict):
         except SystemExit:
             results[vm_name] = {"success": False}
     
-    # Summary
     print("\n📊 Dispatch Summary:")
-    for vm_name, result in results.items():
-        status = "✅" if result.get("success") else "❌"
-        session = result.get("session", "N/A")
-        print(f"   {status} {vm_name}: {session}")
+    for vm, res in results.items():
+        status = "✅" if res["success"] else "❌"
+        sess = res.get("session", "")
+        print(f"{status} {vm}: {sess}")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Dispatch tasks to remote OpenCode agents",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__
-    )
+    parser = argparse.ArgumentParser(description="Dispatch tasks to OpenCode agents")
     
-    parser.add_argument("vm", nargs="?", help="Target VM (or --list)")
-    parser.add_argument("task", nargs="?", help="Task to dispatch")
-    parser.add_argument("--list", action="store_true", help="List available VMs")
-    parser.add_argument("--status", metavar="VM", help="Check VM status")
+    # Direct dispatch (default)
+    parser.add_argument("vm", nargs="?", help="Target VM name (e.g. epyc6)")
+    parser.add_argument("task", nargs="?", help="Task description")
     parser.add_argument("--session", help="Resume existing session")
-    parser.add_argument("--slack", action="store_true", default=True, help="Post to Slack (default)")
-    parser.add_argument("--no-slack", action="store_true", help="Skip Slack audit")
-    parser.add_argument("--repo", help="Repo context")
+    parser.add_argument("--slack", action="store_true", help="Audit via Slack (deprecated, on by default)")
+    parser.add_argument("--no-slack", action="store_true", help="Disable Slack audit")
     parser.add_argument("--all", action="store_true", help="Dispatch to all VMs")
-    parser.add_argument("--timeout", type=int, default=300, help="Request timeout")
+    parser.add_argument("--repo", help="Target repository (e.g. prime-radiant-ai)")
+    parser.add_argument("--beads", help="Beads ID for tracking (e.g. bd-123)")
+    parser.add_argument("--wait", action="store_true", help="Wait for completion")
+    parser.add_argument("--timeout", type=int, default=300, help="Timeout in seconds")
+    parser.add_argument("--shell", action="store_true", help="Run task as direct shell command (bypassing agent reasoning)")
+    
+    # Commands
+    parser.add_argument("--list", action="store_true", help="List available VMs")
+    parser.add_argument("--status", help="Check status of specific VM")
     
     args = parser.parse_args()
-    
-    # Load config
     config = load_config()
     
-    # Handle commands
     if args.list:
         list_vms(config)
         return
-    
+        
     if args.status:
-        vm = config.get("vms", {}).get(args.status)
-        if not vm:
-            print(f"Unknown VM: {args.status}")
+        args.vm = args.status
+        # Just check health
+        vm_name = args.vm
+        if vm_name not in config.get("vms", {}):
+            log(f"Unknown VM: {vm_name}", "ERROR")
             sys.exit(1)
-        health = check_vm_health(vm["opencode"])
-        print(json.dumps(health, indent=2))
+            
+        vm = config["vms"][vm_name]
+        health = check_vm_health(vm.get("opencode"), ssh=vm.get("ssh"))
+        status = "✅ Online" if health.get("healthy") else "❌ Offline"
+        print(f"{vm_name}: {status} (v{health.get('version', 'N/A')})")
+        if not health.get("healthy"):
+            print(f"Error: {health.get('error')}")
         return
-    
-    if args.all and args.task:
-        args.vm = None  # Will be set per-VM
+
+    if args.all:
+        if not args.task:
+            print("Error: Task is required for --all")
+            sys.exit(1)
         dispatch_all(args, config)
         return
-    
+
     if not args.vm or not args.task:
         parser.print_help()
-        print("\n💡 Examples:")
-        print('   dx-dispatch epyc6 "Run make test"')
-        print('   dx-dispatch macmini "Fix linting" --repo affordabot')
-        print("   dx-dispatch --list")
         sys.exit(1)
-    
+        
     dispatch(args, config)
 
 
