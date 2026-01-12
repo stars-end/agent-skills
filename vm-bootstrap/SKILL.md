@@ -39,7 +39,7 @@ Verify and optionally install required tools for a standardized Linux developmen
 | `node` | frontend + tooling | mise (per repo) | `mise exec -- node --version` |
 | `pnpm` | monorepo installs | mise / corepack | `mise exec -- pnpm --version` |
 | `gh` | PRs + auth | brew | `gh --version && gh auth status` |
-| `railway` | env/shell/deploy | mise (`@railway/cli`) | `mise exec -- railway --version` |
+| `railway` | env/shell/deploy | mise (`@railway/cli`) | `mise exec -- railway --version` + `railway status` + version >= 3.0.0 |
 | `bd` | Beads tasks | Beads installer | `bd --version` |
 
 ## Optional Tools (warn-only)

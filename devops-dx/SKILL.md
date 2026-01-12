@@ -3,16 +3,41 @@ name: devops-dx
 description: |
   GitHub/Railway housekeeping for CI env/secret management and DX maintenance.
   Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, or fixing CI failures due to missing env.
-tags: [devops, github, env, ci]
+tags: [devops, github, env, ci, railway]
 allowed-tools:
   - Bash(gh:*)
   - Bash(railway:*)
+  - Bash(curl:*)
   - Read
+  - Bash(jq:*)
 ---
 
 # DevOps DX Helper
 
 Lightweight playbook for CI/Railway env hygiene. Examples use this repo's Beads prefix (bd-); swap for your repo.
+
+## Railway GraphQL Integration (NEW)
+
+For comprehensive Railway environment validation, use the GraphQL-based validation script:
+
+```bash
+# Validate linked Railway project
+~/.agent/skills/devops-dx/scripts/validate_railway_env.sh
+
+# Validate specific project
+~/.agent/skills/devops-dx/scripts/validate_railway_env.sh --project-id <PROJECT_ID>
+
+# Validate specific service
+~/.agent/skills/devops-dx/scripts/validate_railway_env.sh --service <SERVICE_NAME>
+```
+
+**Features:**
+- Fetches full environment configuration via GraphQL API
+- Detects staged (unapplied) changes
+- Validates required environment variables
+- Checks for build/start command conflicts
+- Lists all services and their configuration
+- Cross-agent compatible (works with skills-native and MCP agents)
 
 ## Common Tasks
 

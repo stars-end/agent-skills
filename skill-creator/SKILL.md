@@ -58,14 +58,22 @@ Ask user which type:
 - Duration: Hours to days of manual work → Seconds
 - Pattern: Discovery → Action → Validation → Commit
 
-**B. Specialist Work (USE SUBAGENTS, NOT SKILLS)**
+**B. Platform Integration Skill** (NEW)
+- Integrates with external platforms (Railway, GitHub, AWS, etc.)
+- Examples: railway-integration, github-actions, terraform
+- Duration: Configuration → Operations → Monitoring
+- Pattern: Auth → Query → Mutate → Validate
+- Uses platform's official skill patterns where available
+- Follows agentskills.io format with GraphQL/API patterns
+
+**C. Specialist Work (USE SUBAGENTS, NOT SKILLS)**
 - Domain expertise for complex tasks - use Task tool with subagents
 - Examples: Task(subagent_type="backend-engineer"), Task(subagent_type="frontend-engineer"), Task(subagent_type="security-engineer")
 - Subagents available in `.claude/agents/` directory
 - Duration: Minutes to hours of research/implementation
 - Pattern: Launch subagent → Isolated context → Return results
 
-**C. Meta Skill**
+**D. Meta Skill**
 - Skills that create/manage other skills
 - Examples: skill-creator (this skill!)
 - Duration: Variable
@@ -439,6 +447,81 @@ Real scenarios
 ```
 
 **Full template:** See `resources/examples/workflow-skill-template.md`
+
+### Platform Integration Skill Template (NEW)
+
+```markdown
+---
+name: platform-integration
+description: |
+  Platform integration for [Platform Name]. Use when [operations].
+tags: [platform-integration, infrastructure]
+allowed-tools:
+  - Bash(platform:*)
+  - Bash(curl:*)
+  - Read
+  - Write
+  - Edit
+---
+
+# Platform Integration Skill
+
+[Platform Name] deployment and configuration management.
+
+## Purpose
+Automate [Platform] operations using GraphQL/API + CLI patterns.
+
+## When to Use This Skill
+- Deploying to [Platform]
+- Managing [Platform] resources
+- Configuring environments
+
+## Workflow
+
+### 1. Check Prerequisites
+- Platform CLI installed
+- Platform authenticated
+- Project linked
+
+### 2. Execute Operation
+- Use GraphQL API for config queries
+- Use CLI for deployments
+- Use GraphQL for mutations
+
+### 3. Validate Results
+- Check deployment status
+- Verify configuration
+
+## GraphQL Pattern
+
+Cross-agent compatible pattern:
+```bash
+SKILLS_ROOT="${CLAUDE_PLUGIN_ROOT:-$HOME/.agent/skills}"
+LIB_SCRIPT="$SKILLS_ROOT/lib/platform-api.sh"
+
+bash <<'SCRIPT'
+${LIB_SCRIPT} \
+  'query { ... }' \
+  '{"var": "value"}'
+SCRIPT
+```
+
+## Common Operations
+- Deploy code
+- Manage environment variables
+- Create services
+- View deployment status
+
+## Integration Points
+- Pre-flight validation skills
+- Environment management skills
+- Multi-agent dispatch
+
+## Agent Compatibility
+Works across skills-native and MCP-dependent agents.
+```
+
+**Full template:** See `resources/examples/railway-integration-skill.md`
 
 ### Specialist Skill Template
 
