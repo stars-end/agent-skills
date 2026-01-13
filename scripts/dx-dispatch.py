@@ -148,8 +148,8 @@ def create_session(opencode_url: str, title: str, ssh: str = None) -> str:
 
 def setup_worktree(ssh: str, beads_id: str, repo: str) -> str:
     """Create isolated worktree for agent."""
-    # Assuming worktree-setup.sh is in ~/bin/
-    cmd = f"~/bin/worktree-setup.sh {beads_id} {repo}"
+    # Source .zshenv to get LLM API keys, then run worktree setup
+    cmd = f"source ~/.zshenv 2>/dev/null; ~/bin/worktree-setup.sh {beads_id} {repo}"
     
     # Try SSH run
     if ssh:
