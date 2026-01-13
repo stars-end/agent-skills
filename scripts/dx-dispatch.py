@@ -302,6 +302,50 @@ def send_task_with_context(opencode_url: str, session_id: str, user_input: str, 
     return send_to_session(opencode_url, session_id, context_prompt, timeout=timeout, ssh=ssh)
 
 
+def run_agent_task(ssh: str, opencode_url: str, worktree: str, task: str, timeout: int = 300) -> dict:
+    """Run agent task via SSH using opencode run --attach to the running server.
+    
+    This is the most reliable method as it:
+    1. Uses the already-running OpenCode server
+    2. Attaches a temporary agent to execute the task
+    3. Returns when the task completes
+    """
+    from urllib.parse import urlparse
+    parsed = urlparse(opencode_url)
+    port = parsed.port or 4105
+    local_url = f"http://localhost:{port}"
+    
+    # Build the command - source env, cd to worktree, run with attach
+    escaped_task = task.replace("'", "'\\''")  # Escape single quotes
+    cmd = (
+        f"source ~/.zshenv 2>/dev/null; "
+        f"cd {worktree} && "
+        f"opencode run --attach {local_url} '{escaped_task}'"
+    )
+    
+    try:
+        result = subprocess.run(
+            ["ssh", ssh, cmd],
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        
+        if result.returncode == 0:
+            log(f"Agent task completed successfully", "INFO")
+            return {"success": True, "output": result.stdout}
+        else:
+            log(f"Agent task failed: {result.stderr[:200]}", "ERROR")
+            return {"success": False, "error": result.stderr}
+            
+    except subprocess.TimeoutExpired:
+        log(f"Agent task timed out after {timeout}s", "ERROR")
+        return {"success": False, "error": "timeout"}
+    except Exception as e:
+        log(f"Agent task error: {e}", "ERROR")
+        return {"success": False, "error": str(e)}
+
+
 def list_vms(config: dict):
     """List available VMs with status."""
     print("\n📍 Available VMs:\n")
@@ -385,7 +429,17 @@ def dispatch(args, config: dict):
     # Send task
     log(f"Sending task to {vm_name}...")
     
-    if worktree_path:
+    # Use --attach method (most reliable for remote execution)
+    if getattr(args, 'attach', False) and ssh and worktree_path:
+        log("Using opencode run --attach method...", "INFO")
+        result = run_agent_task(ssh, opencode_url, worktree_path, task, timeout=args.timeout)
+        if result.get("success"):
+            log("✅ Task dispatched successfully", "INFO")
+            session_id = f"attach-{args.beads}"  # Synthetic session ID for attach mode
+        else:
+            log(f"Task failed: {result.get('error', 'unknown')}", "ERROR")
+            sys.exit(1)
+    elif worktree_path:
         # Pass beads_id for resource calculation
         result = send_task_with_context(opencode_url, session_id, task, worktree_path, args.beads, args.timeout, ssh=ssh, shell_mode=args.shell)
     else:
@@ -455,6 +509,7 @@ def main():
     parser.add_argument("--wait", action="store_true", help="Wait for completion")
     parser.add_argument("--timeout", type=int, default=300, help="Timeout in seconds")
     parser.add_argument("--shell", action="store_true", help="Run task as direct shell command (bypassing agent reasoning)")
+    parser.add_argument("--attach", action="store_true", help="Use opencode run --attach (most reliable for remote execution)")
     
     # Commands
     parser.add_argument("--list", action="store_true", help="List available VMs")
