@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 fleet-dispatch.py — thin CLI wrapper around lib.fleet.FleetDispatcher
 
@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 
-AGENT_SKILLS_ROOT = Path("/Users/fengning/agent-skills")
+AGENT_SKILLS_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_prompt(args: argparse.Namespace) -> str:
