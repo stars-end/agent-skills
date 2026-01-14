@@ -110,6 +110,7 @@ class OpenCodeBackend(BackendBase):
         beads_id: str, 
         prompt: str, 
         worktree_path: str,
+        repo: str | None = None,
         system_prompt: str | None = None
     ) -> str:
         """
@@ -140,8 +141,9 @@ class OpenCodeBackend(BackendBase):
             {"noReply": True, "parts": [{"type": "text", "text": context}]},
         )
         
-        # 3. Send task asynchronously
-        self.continue_session(session_id, prompt)
+        if prompt:
+            # 3. Send task asynchronously
+            self.continue_session(session_id, prompt)
         
         return session_id
 
@@ -153,16 +155,6 @@ class OpenCodeBackend(BackendBase):
         except Exception:
             # Best-effort: fall back to blocking message if prompt_async isn't available.
             self._http_post(f"/session/{session_id}/message", {"parts": [{"type": "text", "text": prompt}]})
-    
-    def continue_session(self, session_id: str, prompt: str) -> None:
-        """Send a follow-up prompt to an existing session."""
-        try:
-            self._http_post(f"/session/{session_id}/prompt_async", {
-                "parts": [{"type": "text", "text": prompt}]
-            })
-        except Exception:
-            # prompt_async returns 204, which may error on some HTTP libs if parsing JSON response
-            pass
     
     def get_session_status(self, session_id: str) -> SessionInfo:
         """Get session status from bulk endpoint."""

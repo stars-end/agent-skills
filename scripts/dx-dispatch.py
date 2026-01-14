@@ -176,9 +176,15 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
     
     # Dispatch via FleetDispatcher
     log(f"Dispatching to {vm_name}...")
+    
+    # For smoke PR, suppress prompt to avoid race with finalize_pr
+    prompt_to_send = task
+    if getattr(args, "smoke_pr", False):
+        prompt_to_send = ""
+
     result = dispatcher.dispatch(
         beads_id=args.beads or f"dispatch-{datetime.now().strftime('%H%M%S')}",
-        prompt=task,
+        prompt=prompt_to_send,
         repo=args.repo or "agent-skills",
         mode=mode,
         preferred_backend=vm_name,
