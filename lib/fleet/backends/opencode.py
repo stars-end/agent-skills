@@ -92,7 +92,9 @@ class OpenCodeBackend(BackendBase):
         """Check if the OpenCode server is healthy."""
         try:
             response = self._http_get("/global/health")
-            if response.get("status") == "ok":
+            # Observed in practice: {"healthy": true, "version": "..."}
+            # (Docs may evolve; tolerate both shapes.)
+            if response.get("healthy") is True or response.get("status") == "ok":
                 return HealthStatus.HEALTHY
             return HealthStatus.SERVER_UNHEALTHY
         except Exception as e:
@@ -116,56 +118,72 @@ class OpenCodeBackend(BackendBase):
         Creates a new session and sends the prompt asynchronously.
         """
         # 1. Create session
-        create_data = {"cwd": worktree_path}
-        if system_prompt:
-            create_data["systemPrompt"] = system_prompt
-        
+        # Server docs: POST /session supports { parentID?, title? }. Do not rely on cwd fields.
+        create_data: dict[str, Any] = {"title": beads_id}
         create_response = self._http_post("/session", create_data)
         session_id = create_response.get("id")
         
         if not session_id:
             raise RuntimeError(f"Failed to create session: {create_response}")
         
-        # 2. Send system context (optional)
+        # 2. Send worktree/system context (non-blocking; no agent reply expected).
+        context = (
+            f"IMPORTANT: You are working in an isolated worktree at:\n{worktree_path}\n\n"
+            f"You MUST run `cd {worktree_path} && pwd` as your first command.\n"
+            f"All edits/commits must happen in that directory.\n\n"
+            f"Beads issue: {beads_id}\n"
+        )
         if system_prompt:
-            self._http_post(f"/session/{session_id}/message", {
-                "parts": [{
-                    "type": "text",
-                    "text": f"System context:\nBeads issue: {beads_id}\n\n{system_prompt}"
-                }]
-            })
+            context += f"\nSystem context:\n{system_prompt}\n"
+        self._http_post(
+            f"/session/{session_id}/message",
+            {"noReply": True, "parts": [{"type": "text", "text": context}]},
+        )
         
-        # 3. Send task asynchronously (prompt_async returns 204 immediately)
+        # 3. Send task asynchronously
+        self.continue_session(session_id, prompt)
+        
+        return session_id
+
+    def continue_session(self, session_id: str, prompt: str) -> None:
+        """Send a follow-up prompt to an existing session (async)."""
+        # Prefer prompt_async to avoid blocking.
+        try:
+            self._http_post(f"/session/{session_id}/prompt_async", {"parts": [{"type": "text", "text": prompt}]})
+        except Exception:
+            # Best-effort: fall back to blocking message if prompt_async isn't available.
+            self._http_post(f"/session/{session_id}/message", {"parts": [{"type": "text", "text": prompt}]})
+    
+    def continue_session(self, session_id: str, prompt: str) -> None:
+        """Send a follow-up prompt to an existing session."""
         try:
             self._http_post(f"/session/{session_id}/prompt_async", {
                 "parts": [{"type": "text", "text": prompt}]
             })
         except Exception:
-            # prompt_async returns 204, which may error on some HTTP libs
+            # prompt_async returns 204, which may error on some HTTP libs if parsing JSON response
             pass
-        
-        return session_id
     
     def get_session_status(self, session_id: str) -> SessionInfo:
         """Get session status from bulk endpoint."""
         try:
+            # Observed in practice: /session/status returns ONLY busy sessions:
+            # { "<id>": {"type": "busy"} }
             all_status = self._http_get("/session/status")
-            session_data = all_status.get(session_id, {})
-            
-            status_str = session_data.get("status", "unknown")
-            if status_str == "idle":
-                status = SessionStatus.IDLE
-            elif status_str == "error":
-                status = SessionStatus.ERROR
-            elif status_str in ("running", "busy"):
-                status = SessionStatus.RUNNING
-            else:
-                status = SessionStatus.UNKNOWN
-            
+            session_data = all_status.get(session_id)
+            if session_data:
+                return SessionInfo(session_id=session_id, status=SessionStatus.RUNNING)
+
+            # If not present, treat as idle if the session exists.
+            details = self._http_get(f"/session/{session_id}")
+            updated_ms = (details.get("time") or {}).get("updated")
+            last_activity_ts = None
+            if isinstance(updated_ms, int):
+                last_activity_ts = datetime.utcfromtimestamp(updated_ms / 1000).isoformat()
             return SessionInfo(
                 session_id=session_id,
-                status=status,
-                last_activity_ts=session_data.get("last_activity"),
+                status=SessionStatus.IDLE,
+                last_activity_ts=last_activity_ts,
             )
         except Exception as e:
             return SessionInfo(
@@ -194,7 +212,7 @@ class OpenCodeBackend(BackendBase):
                 for part in parts:
                     if part.get("type") == "tool":
                         state = part.get("state", {})
-                        last_tool_name = part.get("name")
+                        last_tool_name = part.get("tool") or part.get("name")
                         last_tool_status = state.get("status")
                         time_info = state.get("time", {})
                         last_tool_started = time_info.get("start")
@@ -213,10 +231,16 @@ class OpenCodeBackend(BackendBase):
             elif last_tool_status == "error":
                 status = SessionStatus.ERROR
             
+            last_activity_ts = None
+            if isinstance(last_tool_started, int):
+                last_activity_ts = datetime.utcfromtimestamp(last_tool_started / 1000).isoformat()
+            elif isinstance(last_tool_started, str):
+                last_activity_ts = last_tool_started
+
             return SessionInfo(
                 session_id=session_id,
                 status=status,
-                last_activity_ts=last_tool_started,
+                last_activity_ts=last_activity_ts,
                 last_tool_name=last_tool_name,
                 last_tool_status=last_tool_status,
                 output_snippet=output_snippet,
@@ -242,7 +266,22 @@ class OpenCodeBackend(BackendBase):
             "agent": agent,
             "command": command
         })
-        return response.get("output", "")
+        # Server returns {info, parts:[{type:'tool', state:{status, output, error?}}]}
+        parts = response.get("parts", []) if isinstance(response, dict) else []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") != "tool":
+                continue
+            state = part.get("state") or {}
+            status = state.get("status")
+            if status == "error":
+                err = (state.get("error") or {}).get("message") or state.get("output") or "shell error"
+                raise RuntimeError(str(err))
+            output = state.get("output")
+            if isinstance(output, str):
+                return output
+        return ""
     
     def finalize_pr(
         self, 
@@ -252,9 +291,14 @@ class OpenCodeBackend(BackendBase):
     ) -> str | None:
         """Create a PR from session changes."""
         # Stage and commit
+        commit_cmd = (
+            f"git add -A && git commit --allow-empty -m 'chore({beads_id}): smoke dispatch'"
+            if smoke_mode
+            else f"git add -A && git commit -m 'fix({beads_id}): automated fix'"
+        )
         self.shell_command(
             session_id, 
-            f"git add -A && git commit -m 'fix({beads_id}): automated fix'"
+            commit_cmd
         )
         
         # Push (with or without verification)
@@ -279,7 +323,10 @@ class OpenCodeBackend(BackendBase):
     def get_diff(self, session_id: str) -> str:
         """Get cumulative changes from the session."""
         try:
-            response = self._http_get(f"/session/{session_id}/diff")
-            return response.get("diff", "")
+            diffs = self._http_get(f"/session/{session_id}/diff")
+            # Docs: returns FileDiff[]. Keep it simple and JSON-dump as fallback.
+            if isinstance(diffs, str):
+                return diffs
+            return json.dumps(diffs)[:2000]
         except Exception:
             return ""

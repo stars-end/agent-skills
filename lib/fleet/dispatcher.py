@@ -145,23 +145,33 @@ class FleetDispatcher:
         if not backend_config.ssh:
             raise RuntimeError(f"OpenCode backend {backend_config.name} has no SSH target")
         
-        worktree_path = f"/tmp/agents/{beads_id}"
-        
-        # Try canonical script first
+        # Try canonical script first (preferred, repo-aware).
         try:
             result = subprocess.run(
                 ["ssh", backend_config.ssh, f"~/bin/worktree-setup.sh {beads_id} {repo}"],
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
             )
             if result.returncode == 0:
-                return worktree_path
+                script_path = (result.stdout or "").strip()
+                if script_path.startswith("/"):
+                    # Best-effort: trust mise config inside the worktree.
+                    subprocess.run(
+                        ["ssh", backend_config.ssh, f"mise trust --yes {script_path}/.mise.toml 2>/dev/null || true"],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    return script_path
         except Exception:
             pass
-        
+
         # Fallback: inline worktree setup
+        # NOTE: This assumes a bare repo clone exists at ~/{repo}; in your stack the
+        # canonical script is the source of truth (and is strongly preferred).
         repo_path = f"~/{repo}"
+        worktree_path = f"/tmp/agents/{beads_id}/{repo}"
         commands = [
             f"cd {repo_path} && git worktree add {worktree_path} -b {beads_id}",
             f"mise trust --yes {worktree_path}/.mise.toml 2>/dev/null || true",
@@ -295,6 +305,26 @@ class FleetDispatcher:
             vm_url=backend_config.url,
             worktree_path=worktree_path,
         )
+    
+    def continue_session(self, session_id: str, prompt: str) -> bool:
+        """
+        Send a follow-up prompt to an existing session.
+        Returns True if successful, False if session/backend not found.
+        """
+        record = self.state_store.find_by_session_id(session_id)
+        if not record:
+            return False
+        
+        backend = self._backends.get(record.backend_name)
+        if not backend:
+            return False
+        
+        try:
+            backend.continue_session(session_id, prompt)
+            return True
+        except Exception as e:
+            print(f"Error continuing session: {e}")
+            return False
     
     def get_status(self, session_id: str) -> dict:
         """

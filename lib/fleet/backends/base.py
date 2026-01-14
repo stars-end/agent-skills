@@ -66,6 +66,17 @@ class BackendBase(ABC):
         pass
     
     @abstractmethod
+    def continue_session(
+        self,
+        session_id: str,
+        prompt: str
+    ) -> None:
+        """
+        Send a follow-up prompt to an existing session.
+        """
+        pass
+    
+    @abstractmethod
     def get_session_status(self, session_id: str) -> SessionInfo:
         """Get the status of a session."""
         pass

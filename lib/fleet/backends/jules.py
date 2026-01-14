@@ -82,6 +82,15 @@ class JulesBackend(BackendBase):
         
         # Fallback: return timestamp-based ID
         return f"jules-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+
+    def continue_session(self, session_id: str, prompt: str) -> None:
+        """
+        Send a follow-up prompt to an existing Jules session.
+
+        Jules CLI does not currently expose a stable "send message to session" primitive
+        in this repo’s usage. Keep the method for interface completeness.
+        """
+        raise NotImplementedError("JulesBackend.continue_session is not supported (no jules CLI subcommand found).")
     
     def get_session_status(self, session_id: str) -> SessionInfo:
         """Get session status from jules remote list."""
