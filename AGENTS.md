@@ -68,16 +68,63 @@ Skills are stored in `~/agent-skills/*/SKILL.md` using the [agentskills.io](http
 | Claude Code | Native `/skill <name>` command |
 | OpenCode | Native `skill <name>` tool |
 | Codex CLI | Native skill loading |
-| Antigravity | universal-skills MCP → `load_skill()` |
-| Gemini CLI | universal-skills MCP → `load_skill()` |
+| Antigravity | Native slash commands |
+| Gemini CLI | Native skill loading |
 
 **Available Skills:**
 - `multi-agent-dispatch` - Cross-VM task dispatch
-- `beads-workflow` - Issue tracking
+- `beads-workflow` - Issue tracking with dependency management
 - `sync-feature-branch` - Git workflows
 - `fix-pr-feedback` - PR iteration
+- `dcg-safety` - Destructive command guard (blocks dangerous git/rm commands)
+- `bv-integration` - Beads Viewer and robot-plan API
+- `cass-search` - Search past agent sessions
 
 ---
+
+## Safety Tools
+
+**DCG (Destructive Command Guard)**: Blocks dangerous commands before execution.
+
+```bash
+# Test DCG blocking
+dcg explain "git reset --hard"
+
+# What it blocks: git reset --hard, rm -rf /, git push --force
+# What it allows: git status, git diff, rm temp files
+```
+
+**Installed on**: homedesktop-wsl, macmini (epyc6 uses fallback)
+
+---
+
+## Smart Task Selection
+
+Use **BV** for intelligent task prioritization:
+
+```bash
+# Get next highest-impact task
+bv --robot-plan | jq '.summary.highest_impact'
+
+# Or via lib/fleet:
+python3 -c "from lib.fleet import FleetDispatcher; print(FleetDispatcher().auto_select_task('affordabot'))"
+```
+
+---
+
+## Session Search
+
+Use **CASS** to search past agent work:
+
+```bash
+# Find how something was solved before
+cass search "authentication oauth"
+
+# Check indexed sessions
+cass stats
+```
+
+**Installed on**: homedesktop-wsl, macmini (epyc6 blocked by GLIBC)
 
 
 
@@ -123,34 +170,6 @@ cc-glm --resume <session-id>
 ```
 
 **RULE:** Always use `cc-glm` instead of raw `claude` command.
-
----
-
-## Slack MCP Integration
-
-Agents have native Slack access via MCP tools:
-- `conversations_add_message` - Post to channels/threads
-- `conversations_history` - Read channel history
-- `conversations_replies` - Read thread replies
-
-**Config:** Set in `~/.claude.json` → `mcpServers.slack`
-
-**Token Setup (in `~/.zshenv` for non-interactive shells):**
-```bash
-# For bot tokens (xoxb-...)
-export SLACK_MCP_XOXB_TOKEN="xoxb-..."
-export SLACK_MCP_ADD_MESSAGE_TOOL=true
-
-# For user tokens (xoxp-...)
-export SLACK_MCP_XOXP_TOKEN="xoxp-..."
-```
-
-**Important:** After adding bot, invite it to channels: `/invite @YourBotName`
-
-**Test (use explicit session ID when other sessions running):**
-```bash
-cc-glm --session-id $(uuidgen) -p "Use conversations_add_message to post 'Test' to #social"
-```
 
 ---
 
