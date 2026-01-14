@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 fleet-dispatch.py — thin CLI wrapper around lib.fleet.FleetDispatcher
 
