@@ -8,7 +8,6 @@ description: |
   issue management, dependencies, work tracking, or Beads workflow operations.
 tags: [workflow, beads, issue-tracking, git]
 allowed-tools:
-  - mcp__plugin_beads_beads__*
   - Bash(bd:*)
   - Bash(scripts/bd-*:*)
   - Bash(git:*)
@@ -43,6 +42,43 @@ Beads provides persistent task memory across sessions, enabling:
 - **Creating epics with automatic branch setup**
 - **Creating features with automatic branch setup**
 
+## ⚠️ CRITICAL: Always Set Dependencies
+
+**Problem**: Without dependencies, `bd ready` and BV graph analysis can't identify blocked tasks or critical paths.
+
+**Rule**: When creating ANY issue, ALWAYS ask yourself:
+1. **Does this block something?** → Add `--dep` with `blocks` type
+2. **Does this depend on something?** → Add `--dep` with the blocker ID
+3. **Is this discovered from parent work?** → Link with `discovered-from`
+4. **Is this an epic subtask?** → Link with `parent-child`
+
+### Dependency Commands
+
+```bash
+# When creating with dependency
+bd create --title "Impl: OAuth" --type feature --dep "bd-research-task"
+
+# Add dependency to existing issue
+bd dep bd-new-feature bd-required-api --type blocks
+
+# Discovery: I found a bug while working on a feature
+bd dep bd-discovered-bug bd-parent-feature --type discovered-from
+
+# Epic subtask
+bd dep bd-subtask bd-epic --type parent-child
+```
+
+### Dependency Types
+
+| Type | Meaning | Affects Ready Queue? |
+|------|---------|---------------------|
+| `blocks` | Hard blocker | ✅ Yes |
+| `related` | Soft connection | ❌ No |
+| `parent-child` | Epic hierarchy | ❌ No |
+| `discovered-from` | Found during work | ❌ No |
+
+**Only `blocks` prevents a task from appearing in `bd ready`.**
+
 ## Epic Creation Workflow (AUTOMATED)
 
 **When:** User confirms this is epic-level work (weeks, multiple phases)
@@ -58,64 +94,34 @@ Beads provides persistent task memory across sessions, enabling:
 8. Confirm to user
 
 **Example execution:**
-```typescript
-// 1. Set context
-mcp__plugin_beads_beads__set_context(workspace_root="/path/to/project")
+```bash
+# 1. Check context
+scripts/bd-context
 
-// 2. Create epic
-epic = mcp__plugin_beads_beads__create({
-  title: "AUTHENTICATION_SYSTEM",
-  issue_type: "epic",
-  priority: 1,
-  design: "OAuth + JWT + sessions + 2FA + testing",
-  assignee: "claude-code"
-})
+# 2. Create epic
+# Use bd create with JSON or flags
+bd create --title "AUTHENTICATION_SYSTEM" --type epic --priority 1 --desc "OAuth + JWT..."
 
-// 3. Create phase tasks with auto-assigned IDs
-research = mcp__plugin_beads_beads__create({
-  title: "Research: OAuth providers and session management",
-  issue_type: "task",
-  priority: 1,
-  deps: [],
-  id: epic.id + ".1"  // bd-xyz.1
-})
+# Output: Created issue bd-xyz (AUTHENTICATION_SYSTEM)
 
-spec = mcp__plugin_beads_beads__create({
-  title: "Spec: Authentication flow design",
-  issue_type: "task",
-  priority: 1,
-  deps: [research.id],
-  id: epic.id + ".2"  // bd-xyz.2
-})
+# 3. Create phase tasks
+bd create --title "Research: OAuth" --type task --priority 1
+# bd-xyz.1
 
-impl = mcp__plugin_beads_beads__create({
-  title: "Implementation: OAuth + JWT + Sessions",
-  issue_type: "feature",
-  priority: 1,
-  deps: [spec.id],
-  id: epic.id + ".3"
-})
+bd create --title "Spec: Auth flow" --type task --priority 1 --dep "bd-xyz.1"
+# bd-xyz.2
 
-testing = mcp__plugin_beads_beads__create({
-  title: "Testing: E2E auth flows",
-  issue_type: "task",
-  priority: 1,
-  deps: [impl.id],
-  id: epic.id + ".4"
-})
+bd create --title "Impl: OAuth" --type feature --priority 1 --dep "bd-xyz.2"
+# bd-xyz.3
 
-// 4. Create and checkout branch
-bash: git checkout -b feature-AUTHENTICATION_SYSTEM
+# 4. Create and checkout branch
+git checkout -b feature-AUTHENTICATION_SYSTEM
 
-// 5. Start first task
-mcp__plugin_beads_beads__update(research.id, status="in_progress")
+# 5. Start first task
+bd update bd-xyz.1 status=in_progress
 
-// 6. Confirm
-echo "✅ Created epic bd-xyz with 4 phase tasks
-✅ Created branch feature-AUTHENTICATION_SYSTEM
-📍 Starting bd-xyz.1: Research
-
-Next: Begin research phase"
+# 6. Confirm
+echo "✅ Created epic bd-xyz with phase tasks"
 ```
 
 **Branch naming:** `feature-<TITLE>` where TITLE is sanitized (uppercase, underscores, no spaces)
@@ -133,31 +139,22 @@ Next: Begin research phase"
 6. Confirm to user
 
 **Example execution:**
-```typescript
-// 1. Set context
-mcp__plugin_beads_beads__set_context(workspace_root="/path/to/project")
+```bash
+# 1. Check context
+scripts/bd-context
 
-// 2. Create feature
-feature = mcp__plugin_beads_beads__create({
-  title: "OAUTH_LOGIN_BUTTON",
-  issue_type: "feature",
-  priority: 2,
-  design: "Single OAuth login component with Google integration",
-  assignee: "claude-code"
-})
+# 2. Create feature
+bd create --title "OAUTH_LOGIN_BUTTON" --type feature --priority 2 --desc "Single OAuth login component..."
+# Output: Created issue bd-abc
 
-// 3. Create and checkout branch
-bash: git checkout -b feature-OAUTH_LOGIN_BUTTON
+# 3. Create and checkout branch
+git checkout -b feature-OAUTH_LOGIN_BUTTON
 
-// 4. Start feature
-mcp__plugin_beads_beads__update(feature.id, status="in_progress")
+# 4. Start feature
+bd update bd-abc status=in_progress
 
-// 5. Confirm
-echo "✅ Created feature bd-abc
-✅ Created branch feature-OAUTH_LOGIN_BUTTON
-📍 Ready to implement
-
-Next: Begin implementation"
+# 5. Confirm
+echo "✅ Created feature bd-abc"
 ```
 
 ## Quick Reference
@@ -165,13 +162,13 @@ Next: Begin implementation"
 ### Find Work
 
 **Ready tasks (no blockers):**
-```
-mcp__plugin_beads_beads__ready()
+```bash
+bd ready
 ```
 
 **All issues:**
-```
-mcp__plugin_beads_beads__list(status="open")
+```bash
+bd list --status open
 ```
 
 **Current context:**
@@ -182,37 +179,25 @@ scripts/bd-context
 ### Track Work
 
 **Show issue:**
-```
-mcp__plugin_beads_beads__show(issue_id="bd-abc123")
+```bash
+bd show bd-abc123
 ```
 
 **Update status:**
-```
-mcp__plugin_beads_beads__update(
-  issue_id="bd-abc123",
-  status="in_progress",
-  notes="Working on X"
-)
+```bash
+bd update bd-abc123 status=in_progress notes="Working on X"
 ```
 
 **Complete:**
-```
-mcp__plugin_beads_beads__close(
-  issue_id="bd-abc123",
-  reason="Completed: X"
-)
+```bash
+bd close bd-abc123 reason="Completed: X"
 ```
 
 ### Create Work
 
 **New issue:**
-```
-mcp__plugin_beads_beads__create(
-  title="Feature description",
-  issue_type="feature",
-  priority=2,
-  description="Details..."
-)
+```bash
+bd create --title "Description" --type feature --priority 2
 ```
 
 **Link to PR:**
@@ -223,21 +208,13 @@ scripts/bd-link-pr <pr-number>
 ### Manage Dependencies
 
 **Add blocker:**
-```
-mcp__plugin_beads_beads__dep(
-  issue_id="bd-new-feature",
-  depends_on_id="bd-required-api",
-  dep_type="blocks"
-)
+```bash
+bd dep bd-new-feature bd-required-api --type blocks
 ```
 
 **Track discovery:**
-```
-mcp__plugin_beads_beads__dep(
-  issue_id="bd-discovered-bug",
-  depends_on_id="bd-parent-feature",
-  dep_type="discovered-from"
-)
+```bash
+bd dep bd-discovered-bug bd-parent-feature --type discovered-from
 ```
 
 ## Integration with Workflow Skills
@@ -498,21 +475,20 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 ❌ Closing without reason/context
 
 ## Troubleshooting
-
-**MCP tools not available:**
-- Check: /mcp list
-- Restart Claude Code if needed
-- Verify bd CLI in PATH
-
+ 
+**Beads CLI not found:**
+- Check: `which bd`
+- Ensure `~/bin` or `scripts/` in PATH
+ 
 **Database out of sync:**
-- Run: bd sync
-- Check: git status .beads/issues.jsonl
+- Run: `bd sync`
+- Check: `git status .beads/issues.jsonl`
 - Verify git hooks installed
-
+ 
 **Issue not found:**
-- List all: mcp__plugin_beads_beads__list()
-- Check ID format: bd-abc123 (not just abc123)
-- Verify beads initialized: ls .beads/
+- List all: `bd list --status open`
+- Check ID format: `bd-abc123` (not just abc123)
+- Verify beads initialized: `ls .beads/`
 
 ---
 
