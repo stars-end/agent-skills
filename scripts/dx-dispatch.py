@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 dx-dispatch - Dispatch tasks to remote OpenCode agents
 
 Part of the agent-skills dx-* workflow.
+Now uses lib/fleet for unified dispatch logic.
 
 Usage:
     dx-dispatch <vm> <task> [options]
@@ -23,43 +24,31 @@ Options:
     --beads <id>      Beads ID for tracking (e.g. bd-123)
     --wait            Wait for completion
     --timeout <sec>   Timeout for --wait (default: 300)
+    --smoke-pr        Create an empty PR for smoke testing (requires --repo + --beads)
 """
 
 import os
 import sys
 import json
 import argparse
-import subprocess
 from pathlib import Path
 from datetime import datetime
 
+# Add lib to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 try:
-    import httpx
+    from lib.fleet import FleetDispatcher, DispatchResult
+    from lib.fleet.backends.base import HealthStatus
+    FLEET_AVAILABLE = True
 except ImportError:
-    print("Installing httpx...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "httpx", "-q"])
-    import httpx
+    FLEET_AVAILABLE = False
+    print("Warning: lib/fleet not available, using legacy mode")
 
 try:
     from slack_sdk import WebClient
 except ImportError:
-    print("Installing slack-sdk...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "slack-sdk", "-q"])
-    from slack_sdk import WebClient
-
-# Configuration
-CONFIG_PATH = Path.home() / ".agent-skills" / "vm-endpoints.json"
-
-
-def load_config():
-    """Load VM endpoints configuration."""
-    if not CONFIG_PATH.exists():
-        print(f"❌ Config not found: {CONFIG_PATH}")
-        print("Run: dx-hydrate to create config")
-        sys.exit(1)
-    
-    with open(CONFIG_PATH) as f:
-        return json.load(f)
+    WebClient = None
 
 
 def log(msg: str, level: str = "INFO"):
@@ -70,6 +59,9 @@ def log(msg: str, level: str = "INFO"):
 
 def post_to_slack(config: dict, message: str) -> bool:
     """Post message to Slack audit channel."""
+    if WebClient is None:
+        return False
+    
     token_env = config.get("slack_bot_token_env", "SLACK_BOT_TOKEN")
     token = os.environ.get(token_env) or os.environ.get("SLACK_MCP_XOXP_TOKEN")
     
@@ -83,7 +75,7 @@ def post_to_slack(config: dict, message: str) -> bool:
         return False
     
     try:
-        client = WebClient(token=token)
+        client = WebClient(token=token, timeout=5)
         client.chat_postMessage(channel=channel, text=message)
         return True
     except Exception as e:
@@ -91,410 +83,244 @@ def post_to_slack(config: dict, message: str) -> bool:
         return False
 
 
-def check_vm_health(opencode_url: str, ssh: str = None) -> dict:
-    """Check OpenCode server health."""
-    # Try direct HTTP first
-    try:
-        resp = httpx.get(f"{opencode_url}/global/health", timeout=5)
-        if resp.status_code == 200:
-            return resp.json()
-    except Exception:
-        pass  # Fall through to SSH
+def load_legacy_config() -> dict:
+    """Load VM endpoints configuration (legacy)."""
+    config_path = Path.home() / ".agent-skills" / "vm-endpoints.json"
+    if not config_path.exists():
+        return {"vms": {}}
     
-    # Try SSH if available
-    if ssh:
-        try:
-            result = subprocess.run(
-                ["ssh", ssh, "curl -s http://localhost:4105/global/health"],
-                capture_output=True, text=True, timeout=10
-            )
-            if result.returncode == 0:
-                return json.loads(result.stdout)
-        except Exception as e:
-            return {"healthy": False, "error": f"SSH failed: {e}"}
-    
-    return {"healthy": False, "error": "Unreachable"}
+    with open(config_path) as f:
+        return json.load(f)
 
 
-def create_session(opencode_url: str, title: str, ssh: str = None) -> str:
-    """Create a new OpenCode session."""
-    # Try direct HTTP first
-    try:
-        resp = httpx.post(
-            f"{opencode_url}/session",
-            json={"title": title},
-            timeout=10
-        )
-        data = resp.json()
-        return data.get("id")
-    except Exception:
-        pass  # Fall through to SSH
-    
-    # Try SSH if available
-    if ssh:
-        try:
-            result = subprocess.run(
-                ["ssh", ssh, f'curl -s -X POST http://localhost:4105/session -H "Content-Type: application/json" -d \'{{"title":"{title}"}}\''],
-                capture_output=True, text=True, timeout=15
-            )
-            if result.returncode == 0:
-                data = json.loads(result.stdout)
-                return data.get("id")
-        except Exception as e:
-            log(f"SSH session creation failed: {e}", "ERROR")
-    
-    return None
-
-
-def setup_worktree(ssh: str, beads_id: str, repo: str) -> str:
-    """Create isolated worktree for agent."""
-    # Assuming worktree-setup.sh is in ~/bin/
-    cmd = f"~/bin/worktree-setup.sh {beads_id} {repo}"
-    
-    # Try SSH run
-    if ssh:
-        try:
-            result = subprocess.run(
-                ["ssh", ssh, cmd],
-                capture_output=True, text=True, timeout=30
-            )
-            if result.returncode == 0:
-                worktree_path = result.stdout.strip()
-                # Validate output looks like a path
-                if worktree_path.startswith("/"):
-                     return worktree_path
-            
-            # If failed, log stderr
-            log(f"Worktree setup failed: {result.stderr}", "ERROR")
-            
-        except Exception as e:
-            log(f"Worktree setup error: {e}", "ERROR")
-    
-    return None
-
-
-def send_to_session(opencode_url: str, session_id: str, prompt: str, timeout: int = 300, ssh: str = None) -> dict:
-    """Send prompt to OpenCode session."""
-    # Try direct HTTP first
-    try:
-        resp = httpx.post(
-            f"{opencode_url}/session/{session_id}/message",
-            json={"parts": [{"type": "text", "text": prompt}]},
-            timeout=timeout
-        )
-        return resp.json()
-    except Exception:
-        pass  # Fall through to SSH
-    
-    # Try SSH if available - use async approach
-    if ssh:
-        try:
-            # Escape the prompt for shell
-            escaped_prompt = prompt.replace('"', '\\"').replace("'", "'\\''")
-            payload = json.dumps({"parts": [{"type": "text", "text": prompt}]})
-            payload_escaped = payload.replace('"', '\\"')
-            
-            result = subprocess.run(
-                ["ssh", ssh, f'curl -s -X POST http://localhost:4105/session/{session_id}/message -H "Content-Type: application/json" -d \'{payload}\''],
-                capture_output=True, text=True, timeout=timeout
-            )
-            if result.returncode == 0:
-                return json.loads(result.stdout) if result.stdout.strip() else {"ok": True}
-        except subprocess.TimeoutExpired:
-            return {"ok": True, "note": "Task dispatched (SSH timeout, still running)"}
-        except Exception as e:
-            log(f"SSH send failed: {e}", "ERROR")
-    
-    return {"error": "Failed to send"}
-
-
-def send_to_session_shell(opencode_url: str, session_id: str, command: str, timeout: int = 300, ssh: str = None) -> dict:
-    """Send direct shell command to OpenCode session (bypassing agent tool loop)."""
-    # Try direct HTTP first
-    try:
-        resp = httpx.post(
-            f"{opencode_url}/session/{session_id}/shell",
-            json={"agent": "build", "command": command},
-            timeout=timeout
-        )
-        return resp.json()
-    except Exception:
-        pass  # Fall through to SSH
-    
-    if ssh:
-        try:
-            # Payload for curl to read from stdin
-            payload = json.dumps({"agent": "build", "command": command})
-            
-            # When running via SSH on the target, use localhost relative to that target
-            # (The external URL might be tailscale/DNS which is not resolvable or bound locally)
-            from urllib.parse import urlparse
-            parsed = urlparse(opencode_url)
-            port = parsed.port or 4105
-            local_url = f"http://localhost:{port}"
-
-            cmd = [
-                "ssh", ssh,
-                f"curl -v -X POST {local_url}/session/{session_id}/shell -H 'Content-Type: application/json' -d @-"
-            ]
-            
-            # Pass payload via stdin to avoid shell quoting hell
-            result = subprocess.run(cmd, input=payload, capture_output=True, text=True, timeout=timeout)
-            
-            if result.returncode == 0:
-                return json.loads(result.stdout) if result.stdout.strip() else {"ok": True}
-            else:
-                log(f"SSH stderr: {result.stderr}", "ERROR")
-        except subprocess.TimeoutExpired:
-            return {"ok": True, "note": "Shell command dispatched (SSH timeout, still running)"}
-        except Exception as e:
-            log(f"SSH shell send failed: {e}", "ERROR")
-
-    return {"error": "Failed to send shell command"}
-
-
-
-def get_resource_config(beads_id: str) -> dict:
-    """Generate isolated resource config from beads ID."""
-    # Deterministic port based on hash
-    # Use simple sum of chars or similar for stability
-    # (hash() in python is randomized per process unless configured)
-    import hashlib
-    h = hashlib.md5(beads_id.encode()).hexdigest()
-    port_offset = int(h, 16) % 2000  # 0-1999
-    port = 3000 + port_offset
-    
-    # Schema name (sanitize for SQL)
-    schema = beads_id.replace("-", "_").lower()
-    
-    return {"port": port, "schema": schema}
-
-def send_task_with_context(opencode_url: str, session_id: str, user_input: str, worktree: str, beads_id: str, timeout: int = 300, ssh: str = None, shell_mode: bool = False) -> dict:
-    """Send task with directory context and resource isolation instructions."""
-    resources = get_resource_config(beads_id)
-    port = resources["port"]
-    schema = resources["schema"]
-
-    if shell_mode:
-        # Construct compound shell command for direct execution
-        # We export env vars for the duration of the subshell/command chain
-        command = (
-            f"export PORT={port} && "
-            f"export DB_SCHEMA='{schema}' && "
-            f"cd {worktree} && "
-            f"{user_input}"
-        )
-        return send_to_session_shell(opencode_url, session_id, command, timeout=timeout, ssh=ssh)
-
-    # API doesn't support directory, so we wrap the prompt
-    context_prompt = (
-        f"IMPORTANT: You are working in an isolated worktree at: {worktree}\n"
-        f"You MUST use `cd {worktree} && pwd` as your first command (to verify location and ensure output).\n"
-        f"All your work (edits, commits) must happen in this directory.\n"
-        f"DO NOT work in the default repo location.\n\n"
-        f"RESOURCE ISOLATION REQUIRED:\n"
-        f"- You MUST run your dev server on PORT={port}\n"
-        f"- You MUST use Database Schema: '{schema}' (create if needed)\n"
-        f"- Do NOT use default ports (3000, 8000) or public schemas.\n"
-        f"- IMPORTANT: Env vars do NOT persist between tool calls. Set them in every command or use a .env file.\n\n"
-        f"Task:\n{user_input}"
-    )
-    return send_to_session(opencode_url, session_id, context_prompt, timeout=timeout, ssh=ssh)
-
-
-def list_vms(config: dict):
+def list_vms(dispatcher: FleetDispatcher):
     """List available VMs with status."""
-    print("\n📍 Available VMs:\n")
-    print(f"{'VM':<15} {'Status':<12} {'URL':<45} {'Description'}")
-    print("-" * 90)
+    print("\n📡 Available VMs:\n")
     
-    for name, vm in config.get("vms", {}).items():
-        url = vm.get("opencode", "N/A")
-        ssh = vm.get("ssh")
-        desc = vm.get("description", "")
-        
-        health = check_vm_health(url, ssh=ssh)
-        if health.get("healthy"):
-            status = "✅ Online"
-            version = health.get("version", "")
-        else:
-            status = "❌ Offline"
-            version = ""
-        
-        default = " (default)" if name == config.get("default_vm") else ""
-        print(f"{name:<15} {status:<12} {url:<45} {desc}{default}")
+    for backend in dispatcher._backends.values():
+        if backend.backend_type == "opencode":
+            health = backend.check_health()
+            status = "🟢" if health == HealthStatus.HEALTHY else "🔴"
+            print(f"  {status} {backend.name}")
+            if health != HealthStatus.HEALTHY:
+                print(f"      └── Status: {health.value}")
+    
+    # Show Jules
+    jules = dispatcher._backends.get("jules-cloud")
+    if jules:
+        health = jules.check_health()
+        status = "🟢" if health == HealthStatus.HEALTHY else "⚪"
+        print(f"  {status} jules-cloud (cloud)")
     
     print()
 
 
-def dispatch(args, config: dict):
-    """Dispatch task to VM."""
+def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
+    """Dispatch using FleetDispatcher."""
     vm_name = args.vm
     task = args.task
     
-    # Get VM config
-    vms = config.get("vms", {})
-    if vm_name not in vms:
-        log(f"Unknown VM: {vm_name}. Available: {', '.join(vms.keys())}", "ERROR")
-        sys.exit(1)
-    
-    vm = vms[vm_name]
-    opencode_url = vm.get("opencode")
-    ssh = vm.get("ssh")
-    
-    # Check health
-    log(f"Checking {vm_name} health...")
-    health = check_vm_health(opencode_url, ssh=ssh)
-    if not health.get("healthy"):
-        log(f"{vm_name} is not healthy: {health.get('error')}", "ERROR")
-        sys.exit(1)
-    
-    log(f"✅ {vm_name} is healthy (v{health.get('version', 'unknown')})")
-    
+    # Handle session resume
+    if args.session:
+        session_id = args.session
+        # If vm argument looks like tasks (not a known VM), treat it as task part?
+        # But simpler: check if we have a task. If task is None, maybe vm is task?
+        if not task and vm_name and not dispatcher.get_backend(vm_name):
+             task = vm_name
+             vm_name = None # Derived from session
+        
+        # If still no task, default to "Continue"
+        if not task:
+            task = "Continue"
+
+        log(f"Resuming session: {session_id}")
+        log(f"Prompt: {task}")
+        
+        if dispatcher.continue_session(session_id, task):
+             log("✅ Prompt sent to session")
+             
+             # Wait if requested
+             if args.wait:
+                 log(f"Waiting for completion (timeout: {args.timeout}s)...")
+                 status = dispatcher.wait_for_completion(
+                     session_id,
+                     poll_interval_sec=10,
+                     max_polls=args.timeout // 10
+                 )
+                 if status.get("status") == "completed":
+                     log("✅ Task completed successfully")
+                     if status.get("pr_url"):
+                         print(f"PR: {status['pr_url']}")
+                 else:
+                     log(f"Task ended with status: {status.get('status')}", "WARN")
+             
+             return session_id
+        else:
+             log("Failed to resume session (not found or backend unavailable)", "ERROR")
+             sys.exit(1)
+
+    # Standard dispatch
+    if not vm_name:
+         log("Target VM required for new dispatch", "ERROR")
+         sys.exit(1)
+
     # Audit to Slack (if enabled)
     hostname = os.uname().nodename
     if not args.no_slack:
         audit_msg = f"[{hostname}] 📤 Dispatching to {vm_name}:\n```\n{task[:200]}{'...' if len(task) > 200 else ''}\n```"
         if post_to_slack(config, audit_msg):
             log("Posted audit to Slack")
+    
+    # Determine mode
+    mode = "smoke" if getattr(args, "smoke_pr", False) else "real"
+    
+    # Dispatch via FleetDispatcher
+    log(f"Dispatching to {vm_name}...")
+    
+    # For smoke PR, suppress prompt to avoid race with finalize_pr
+    prompt_to_send = task
+    if getattr(args, "smoke_pr", False):
+        prompt_to_send = ""
 
-    # Setup Worktree if beads ID provided
-    worktree_path = None
-    if args.beads and args.repo:
-        log(f"Setting up isolated worktree for {args.beads}...", "INFO")
-        worktree_path = setup_worktree(ssh, args.beads, args.repo)
-        
-        if worktree_path:
-            log(f"Worktree created at: {worktree_path}", "INFO")
-        else:
-            log("Failed to setup worktree. Aborting to prevent conflicts.", "ERROR")
-            sys.exit(1)
+    result = dispatcher.dispatch(
+        beads_id=args.beads or f"dispatch-{datetime.now().strftime('%H%M%S')}",
+        prompt=prompt_to_send,
+        repo=args.repo or "agent-skills",
+        mode=mode,
+        preferred_backend=vm_name,
+    )
     
-    # Create or resume session
-    if args.session:
-        session_id = args.session
-        log(f"Resuming session: {session_id}")
-    else:
-        title = f"{args.repo or 'task'}-{datetime.now().strftime('%H%M%S')}"
-        session_id = create_session(opencode_url, title, ssh=ssh)
-        if not session_id:
-            log("Failed to create session", "ERROR")
-            sys.exit(1)
-        log(f"Created session: {session_id}")
-    
-    # Send task
-    log(f"Sending task to {vm_name}...")
-    
-    if worktree_path:
-        # Pass beads_id for resource calculation
-        result = send_task_with_context(opencode_url, session_id, task, worktree_path, args.beads, args.timeout, ssh=ssh, shell_mode=args.shell)
-    else:
-        # Legacy/Simple mode
-        prompt = task
-        if args.repo:
-            prompt = f"Repo: {args.repo}\n\n{task}"
-        result = send_to_session(opencode_url, session_id, prompt, args.timeout, ssh=ssh)
-    
-    if "error" in result:
-        log(f"Task failed: {result['error']}", "ERROR")
-        # Audit failure
+    if not result.success:
+        log(f"Dispatch failed: {result.error}", "ERROR")
+        if result.failure_code:
+            log(f"Failure code: {result.failure_code}", "ERROR")
         if not args.no_slack:
-            post_to_slack(config, f"[{vm_name}] ❌ Task failed: {result['error']}")
+            post_to_slack(config, f"[{vm_name}] ❌ Dispatch failed: {result.error}")
         sys.exit(1)
     
-    # Success
-    log(f"✅ Task dispatched successfully")
-    log(f"Session ID: {session_id}")
+    if result.was_duplicate:
+        log(f"Found existing session: {result.session_id}", "INFO")
+    else:
+        log(f"✅ Task dispatched successfully")
+    
+    log(f"Session ID: {result.session_id}")
+    log(f"Backend: {result.backend_name} ({result.backend_type})")
+    
+    # Handle smoke PR
+    if getattr(args, "smoke_pr", False):
+        log("Creating smoke PR...")
+        pr_url = dispatcher.finalize_pr(
+            result.session_id, 
+            args.beads, 
+            smoke_mode=True
+        )
+        if pr_url:
+            log(f"✅ Smoke PR created: {pr_url}")
+            print(pr_url)
+        else:
+            log("Failed to create smoke PR", "ERROR")
+            sys.exit(1)
+        return result.session_id
+    
+    # Wait for completion if requested
+    if args.wait:
+        log(f"Waiting for completion (timeout: {args.timeout}s)...")
+        status = dispatcher.wait_for_completion(
+            result.session_id,
+            poll_interval_sec=10,
+            max_polls=args.timeout // 10
+        )
+        
+        if status.get("status") == "completed":
+            log("✅ Task completed successfully")
+            if status.get("pr_url"):
+                print(f"PR: {status['pr_url']}")
+        else:
+            log(f"Task ended with status: {status.get('status')}", "WARN")
+            if status.get("failure_code"):
+                log(f"Failure: {status.get('failure_code')}", "ERROR")
     
     # Audit completion
     if not args.no_slack:
-        post_to_slack(config, f"[{vm_name}] ✅ Session {session_id} - task dispatched")
+        post_to_slack(config, f"[{vm_name}] ✅ Session {result.session_id} - task dispatched")
     
     # Print session info for follow-up
     print(f"\n📋 Session Info:")
-    print(f"   VM: {vm_name}")
-    print(f"   Session: {session_id}")
-    print(f"   Resume: dx-dispatch {vm_name} \"continue\" --session {session_id}")
+    print(f"   VM: {result.backend_name}")
+    print(f"   Session: {result.session_id}")
+    print(f"   Status: dx-dispatch --status {result.backend_name}")
+    print(f"   Resume: dx-dispatch {result.backend_name} \"continue\" --session {result.session_id}")
     
-    return session_id
+    return result.session_id
 
 
-def dispatch_all(args, config: dict):
-    """Dispatch task to all VMs."""
-    vms = config.get("vms", {})
-    results = {}
+def check_status(args, dispatcher: FleetDispatcher):
+    """Check status of a VM or session."""
+    vm_name = args.status
     
-    for vm_name in vms:
-        log(f"Dispatching to {vm_name}...")
-        args.vm = vm_name
-        try:
-            session_id = dispatch(args, config)
-            results[vm_name] = {"success": True, "session": session_id}
-        except SystemExit:
-            results[vm_name] = {"success": False}
+    backend = dispatcher.get_backend(vm_name)
+    if not backend:
+        log(f"Unknown VM: {vm_name}", "ERROR")
+        sys.exit(1)
     
-    print("\n📊 Dispatch Summary:")
-    for vm, res in results.items():
-        status = "✅" if res["success"] else "❌"
-        sess = res.get("session", "")
-        print(f"{status} {vm}: {sess}")
+    health = backend.check_health()
+    if health == HealthStatus.HEALTHY:
+        print(f"🟢 {vm_name} is healthy")
+    else:
+        print(f"🔴 {vm_name} is {health.value}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Dispatch tasks to OpenCode agents")
+    parser = argparse.ArgumentParser(
+        description="Dispatch tasks to remote OpenCode agents",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__
+    )
     
-    # Direct dispatch (default)
-    parser.add_argument("vm", nargs="?", help="Target VM name (e.g. epyc6)")
+    parser.add_argument("vm", nargs="?", help="Target VM (e.g. epyc6, macmini)")
     parser.add_argument("task", nargs="?", help="Task description")
+    parser.add_argument("--list", action="store_true", help="List available VMs")
+    parser.add_argument("--status", metavar="VM", help="Check VM status")
     parser.add_argument("--session", help="Resume existing session")
-    parser.add_argument("--slack", action="store_true", help="Audit via Slack (deprecated, on by default)")
-    parser.add_argument("--no-slack", action="store_true", help="Disable Slack audit")
-    parser.add_argument("--all", action="store_true", help="Dispatch to all VMs")
-    parser.add_argument("--repo", help="Target repository (e.g. prime-radiant-ai)")
-    parser.add_argument("--beads", help="Beads ID for tracking (e.g. bd-123)")
+    parser.add_argument("--slack", action="store_true", help="Post to Slack (default: enabled)")
+    parser.add_argument("--no-slack", action="store_true", help="Skip Slack audit")
+    parser.add_argument("--repo", help="Target repository")
+    parser.add_argument("--beads", help="Beads ID for tracking")
     parser.add_argument("--wait", action="store_true", help="Wait for completion")
     parser.add_argument("--timeout", type=int, default=300, help="Timeout in seconds")
-    parser.add_argument("--shell", action="store_true", help="Run task as direct shell command (bypassing agent reasoning)")
-    
-    # Commands
-    parser.add_argument("--list", action="store_true", help="List available VMs")
-    parser.add_argument("--status", help="Check status of specific VM")
+    parser.add_argument("--smoke-pr", action="store_true", help="Create smoke PR")
+    parser.add_argument("--all", action="store_true", help="Dispatch to all VMs")
+    parser.add_argument("--shell", action="store_true", help="Use shell mode (legacy)")
+    parser.add_argument("--attach", action="store_true", help="Use attach mode (legacy)")
     
     args = parser.parse_args()
-    config = load_config()
     
+    # Load config
+    config = load_legacy_config()
+    
+    # Initialize FleetDispatcher
+    if not FLEET_AVAILABLE:
+        log("lib/fleet not available. Please ensure it's installed.", "ERROR")
+        sys.exit(1)
+    
+    dispatcher = FleetDispatcher()
+    
+    # Handle commands
     if args.list:
-        list_vms(config)
+        list_vms(dispatcher)
         return
-        
+    
     if args.status:
-        args.vm = args.status
-        # Just check health
-        vm_name = args.vm
-        if vm_name not in config.get("vms", {}):
-            log(f"Unknown VM: {vm_name}", "ERROR")
-            sys.exit(1)
-            
-        vm = config["vms"][vm_name]
-        health = check_vm_health(vm.get("opencode"), ssh=vm.get("ssh"))
-        status = "✅ Online" if health.get("healthy") else "❌ Offline"
-        print(f"{vm_name}: {status} (v{health.get('version', 'N/A')})")
-        if not health.get("healthy"):
-            print(f"Error: {health.get('error')}")
+        check_status(args, dispatcher)
         return
-
-    if args.all:
-        if not args.task:
-            print("Error: Task is required for --all")
-            sys.exit(1)
-        dispatch_all(args, config)
-        return
-
-    if not args.vm or not args.task:
+    
+    # Validate args
+    if not args.session and (not args.vm or not args.task):
         parser.print_help()
         sys.exit(1)
-        
-    dispatch(args, config)
+    
+    # Dispatch
+    dispatch_with_fleet(args, config, dispatcher)
 
 
 if __name__ == "__main__":
