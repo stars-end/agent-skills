@@ -125,6 +125,36 @@ class FleetDispatcher:
         
         return None
     
+    def auto_select_task(self, repo: str = "affordabot") -> str | None:
+        """Use BV robot-plan to select next task for auto-dispatch.
+        
+        Returns the Beads ID of the highest-impact unblocked task,
+        or None if BV is not installed or fails.
+        
+        Usage:
+            dispatcher = FleetDispatcher()
+            next_task = dispatcher.auto_select_task("affordabot")
+            if next_task:
+                dispatcher.dispatch(beads_id=next_task, ...)
+        """
+        import json
+        
+        try:
+            result = subprocess.run(
+                ["bv", "--robot-plan"],
+                capture_output=True, 
+                text=True, 
+                timeout=10,
+                cwd=str(Path.home() / repo)
+            )
+            if result.returncode == 0:
+                plan = json.loads(result.stdout)
+                return plan.get("summary", {}).get("highest_impact")
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+            # BV not installed or failed - gracefully degrade
+            pass
+        return None
+    
     def setup_worktree(
         self, 
         backend: BackendBase, 
