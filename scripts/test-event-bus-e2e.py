@@ -15,9 +15,17 @@ import subprocess
 import sys
 import time
 import threading
+import os
 from datetime import datetime
 
-SLACK_MCP_CMD = ["/Users/fengning/go/bin/slack-mcp-server", "--transport", "stdio"]
+# Find slack-mcp-server binary (cross-platform)
+SLACK_MCP_BIN = os.path.expanduser("~/go/bin/slack-mcp-server")
+if not os.path.exists(SLACK_MCP_BIN):
+    SLACK_MCP_BIN = "/home/linuxbrew/.linuxbrew/bin/slack-mcp-server"
+if not os.path.exists(SLACK_MCP_BIN):
+    SLACK_MCP_BIN = "slack-mcp-server"  # Hope it's in PATH
+
+SLACK_MCP_CMD = [SLACK_MCP_BIN, "--transport", "stdio"]
 FLEET_EVENTS_CHANNEL = "C0A8YU9JW06"  # #fleet-events (ID)
 
 class MCPClient:
