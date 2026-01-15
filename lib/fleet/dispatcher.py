@@ -25,6 +25,7 @@ from .backends.jules import JulesBackend
 from .config import FleetConfig, BackendConfig
 from .state import FleetStateStore, DispatchRecord
 from .monitor import FleetMonitor, StuckStatus, MonitorResult
+from .event_emitter import EventEmitter
 
 
 @dataclass
@@ -60,6 +61,7 @@ class FleetDispatcher:
         self.config = config or FleetConfig()
         self.state_store = state_store or FleetStateStore()
         self.monitor = FleetMonitor(config=self.config, state_store=self.state_store)
+        self.event_emitter = EventEmitter(sender="fleet-dispatcher")
         self._backends: dict[str, BackendBase] = {}
         self._init_backends()
     
@@ -296,6 +298,24 @@ class FleetDispatcher:
             slack_thread_ts=slack_thread_ts,
         )
         self.state_store.save_dispatch(record)
+        
+        # 7. Emit DISPATCH_REQUEST event to Agent Event Bus
+        try:
+            self.event_emitter.emit(
+                event_type="DISPATCH_REQUEST",
+                repo=repo,
+                beads_id=beads_id,
+                payload={
+                    "backend": f"{backend_config.type}:{backend_config.name}",
+                    "session_id": session_id,
+                    "prompt": prompt[:200],  # Truncate for event
+                    "mode": mode,
+                },
+                thread_ts=slack_thread_ts,
+            )
+        except Exception as e:
+            # Don't fail dispatch if event emission fails
+            print(f"Warning: Failed to emit DISPATCH_REQUEST event: {e}")
         
         return DispatchResult(
             success=True,
