@@ -9,11 +9,10 @@ description: |
   "branch ahead of master", PR creation, opening pull requests, deployment preparation, or submitting for team review.
 tags: [workflow, github, pr, beads, review]
 allowed-tools:
-  - mcp__plugin_beads_beads__*
   - Bash(git:*)
   - Bash(gh:*)
   - Bash(bd:*)
-  - Bash(scripts/bd-link-pr:*)
+  - Bash(scripts/bd-*:*)
 ---
 
 # Create Pull Request
@@ -84,20 +83,17 @@ FEATURE_KEY=$(echo "$CURRENT_BRANCH" | sed 's/^feature-//')
 - Educates on Issue-First workflow
 
 ### 2. Get Beads Context
-Use MCP tool:
-```
-mcp__plugin_beads_beads__set_context(workspace_root="/path/to/project")
-issue = mcp__plugin_beads_beads__show(issue_id=<FEATURE_KEY>)
+Use `bd` CLI:
+```bash
+scripts/bd-context
+
+# Get issue details
+issue=$(bd show <FEATURE_KEY> --json)
 ```
 
 If not found, create proactively:
-```
-mcp__plugin_beads_beads__create(
-  title=<FEATURE_KEY>,
-  issue_type="feature",
-  id=<FEATURE_KEY>,
-  priority=2
-)
+```bash
+bd create --title <FEATURE_KEY> --type feature --priority 2 --id <FEATURE_KEY>
 ```
 
 **Detect epic vs feature:**
@@ -409,12 +405,8 @@ PR_NUMBER=$(gh pr view --json number -q .number)
 # Use helper script if available
 scripts/bd-link-pr $PR_NUMBER
 
-# Or update via MCP
-mcp__plugin_beads_beads__update(
-  issue_id=<FEATURE_KEY>,
-  status="in_progress",
-  external_ref="PR#{PR_NUMBER}"
-)
+# Or update via CLI
+bd update <FEATURE_KEY> status=in_progress --external-ref "PR#${PR_NUMBER}"
 ```
 
 ### 6. Confirm to User
