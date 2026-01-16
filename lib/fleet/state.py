@@ -29,6 +29,7 @@ class DispatchRecord:
     pr_url: str | None = None
     failure_code: str | None = None
     completed_ts: str | None = None
+    retry_count: int = 0  # Circuit breaker: max 2 retries before escalation
     
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -52,6 +53,7 @@ class DispatchRecord:
             pr_url=data.get("pr_url"),
             failure_code=data.get("failure_code"),
             completed_ts=data.get("completed_ts"),
+            retry_count=data.get("retry_count", 0),
         )
 
 
@@ -178,3 +180,32 @@ class FleetStateStore:
         state["active_dispatches"] = remaining
         self.save(state)
         return removed
+    
+    # --- Circuit Breaker (ADR-001) ---
+    MAX_RETRIES = 2
+    
+    def increment_retry_count(self, beads_id: str) -> tuple[int, bool]:
+        """
+        Increment retry count for a beads_id. Returns (new_count, should_escalate).
+        
+        Circuit breaker logic:
+        - After MAX_RETRIES (2), returns should_escalate=True.
+        - Caller is responsible for alerting human (Slack) when should_escalate is True.
+        """
+        state = self.load()
+        dispatches = state.get("active_dispatches", [])
+        
+        new_count = 0
+        for dispatch in dispatches:
+            if dispatch.get("beads_id") == beads_id:
+                current = dispatch.get("retry_count", 0)
+                new_count = current + 1
+                dispatch["retry_count"] = new_count
+                break
+        
+        state["active_dispatches"] = dispatches
+        self.save(state)
+        
+        should_escalate = new_count >= self.MAX_RETRIES
+        return new_count, should_escalate
+
