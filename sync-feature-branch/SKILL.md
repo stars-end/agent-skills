@@ -8,10 +8,10 @@ description: |
   commit operations, saving work, git workflows, or syncing changes.
 tags: [workflow, git, beads, commit]
 allowed-tools:
-  - mcp__plugin_beads_beads__*
   - Bash(git:*)
   - Bash(make:*)
   - Bash(bd:*)
+  - Bash(scripts/bd-*:*)
   - Read
 ---
 
@@ -22,8 +22,8 @@ Commit current work with Beads tracking + smart discovery handling + auto phase 
 ## Workflow
 
 ### 1. Set Beads Context
-```
-mcp__plugin_beads_beads__set_context(workspace_root="/path/to/project")
+```bash
+scripts/bd-context
 ```
 
 ### 2. Get Current Issue
@@ -32,20 +32,14 @@ git branch --show-current
 # Extract FEATURE_KEY from feature-<KEY> pattern
 ```
 
-Use MCP tool:
-```
-currentIssue = mcp__plugin_beads_beads__show(issue_id=<FEATURE_KEY>)
+Use `bd show`:
+```bash
+currentIssue=$(bd show <FEATURE_KEY> --json)
 ```
 
 If not found, auto-create as safety net:
-```
-mcp__plugin_beads_beads__create(
-  title=<FEATURE_KEY>,
-  issue_type="feature",
-  priority=2,
-  description="Auto-created during commit",
-  assignee="claude-code"
-)
+```bash
+bd create --title <FEATURE_KEY> --type feature --priority 2 --desc "Auto-created during commit"
 ```
 
 **Note:** Issue should ideally exist BEFORE coding (Issue-First Development), but this prevents orphaned commits.
@@ -68,19 +62,13 @@ Score risk level:
 ### 4. Handle Discoveries (if detected)
 
 If discovery found and risk <= "auto (notify)":
-```
-childIssue = mcp__plugin_beads_beads__create(
-  title="Bug: <detected-issue>",
-  type="bug",  // or "task" based on pattern
-  priority=1,   // or 2 based on severity
-  deps=[currentIssue.id],  // Creates discovered-from link
-  id=currentIssue.id + ".X"  // Auto-assigned child ID
-)
+```bash
+childIssueId=$(bd create --title "Bug: <detected-issue>" --type bug --priority 1 --dep ${currentIssueId} --json | jq -r .id)
 ```
 
 Close child issue BEFORE commit:
-```
-mcp__plugin_beads_beads__close(childIssue.id, reason="Fixed")
+```bash
+bd close $childIssueId --reason "Fixed"
 ```
 
 Force flush to JSONL:
@@ -174,8 +162,8 @@ If discovery handled, commit was already done in step 4.
 ### 7. Check for Phase Completion
 
 After commit, check if current issue should close:
-```
-currentIssue = mcp__plugin_beads_beads__show(currentIssue.id)
+```bash
+bd show $currentIssueId
 ```
 
 **Auto-close criteria:**
@@ -184,31 +172,21 @@ currentIssue = mcp__plugin_beads_beads__show(currentIssue.id)
 - User didn't say "work in progress" or "checkpoint"
 
 If should close:
-```
-mcp__plugin_beads_beads__close(
-  currentIssue.id,
-  reason="Completed in commit <hash>"
-)
+```bash
+bd close $currentIssueId --reason "Completed in commit <hash>"
 ```
 
 ### 8. Auto Phase Transition
 
 After closing current issue, find next ready task:
-```
-readyTasks = mcp__plugin_beads_beads__ready(priority=1)
-
-// Filter to dependents of parent epic
-nextTask = readyTasks.find(task =>
-  task.dependencies.includes(currentIssue.id)
-)
+```bash
+# Find ready tasks with priority 1
+bd ready --priority 1
 ```
 
 If next task found:
-```
-mcp__plugin_beads_beads__update(
-  nextTask.id,
-  status="in_progress"
-)
+```bash
+bd update $nextTaskId status=in_progress
 ```
 
 ### 9. Confirm to User

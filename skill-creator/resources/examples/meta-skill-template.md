@@ -24,7 +24,8 @@ allowed-tools:
   - Read
   - Write
   - Edit
-  - mcp__serena__*
+  - Bash(find:*)
+  - Bash(grep:*)
   - Bash(git:*)
 ---
 
@@ -65,17 +66,12 @@ Skill system operation: [What this changes] (<duration>).
 - What's the impact?
 
 **Analysis pattern:**
-```[language]
+```bash
 # Scan skill system
-skills = mcp__serena__list_dir(
-  relative_path=".claude/skills",
-  recursive=true
-)
+find agent-skills -name "SKILL.md"
 
 # Analyze each skill
-for skill in skills:
-  overview = mcp__serena__get_symbols_overview(skill)
-  # Gather metadata
+grep -r "pattern" agent-skills/
 ```
 
 ### 2. Design Change

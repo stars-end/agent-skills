@@ -23,8 +23,7 @@ tags: [workflow, [system], [operation-type]]
 allowed-tools:
   - Bash(git:*)
   - Bash(gh:*)
-  - mcp__plugin_beads_beads__*
-  - mcp__serena__*
+  - Bash(bd:*)
   - Read
   - Edit
 ---
@@ -122,30 +121,31 @@ Next: [What user should do next]
 
 ### With Beads
 
-[How this skill uses Beads MCP]
+[How this skill uses Beads CLI]
 
-- **Check context:** `mcp__plugin_beads_beads__show(issue_id)`
-- **Update status:** `mcp__plugin_beads_beads__update(issue_id, status)`
-- **Close on success:** `mcp__plugin_beads_beads__close(issue_id, reason)`
-- **Create discoveries:** `mcp__plugin_beads_beads__create(...)` with discovered-from link
+- **Check context:** `bd show <issue_id>`
+- **Update status:** `bd update <issue_id> status=<status>`
+- **Close on success:** `bd close <issue_id> reason="..."`
+- **Create discoveries:** `bd create ...`
 
 **Pattern:**
-```[language]
+```bash
 # Beads integration example
+bd update $ISSUE_ID status=in_progress
 ```
 
-### With Serena
+### With Code Search
 
-[How this skill uses Serena tools]
+[How this skill uses native search]
 
-- **Search:** `mcp__serena__search_for_pattern(...)`
-- **Navigate:** `mcp__serena__find_symbol(...)`
-- **Edit:** `mcp__serena__replace_symbol_body(...)`
-- **Insert:** `mcp__serena__insert_after_symbol(...)`
+- **Search:** `grep -r "pattern" .`
+- **Find Files:** `find . -name "pattern"`
+- **Navigate:** `read_file` tools
 
 **Pattern:**
-```[language]
-# Serena integration example
+```bash
+# Native search example (via Bash tool)
+grep -r "TODO" src/
 ```
 
 ### With Git
