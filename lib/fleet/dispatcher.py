@@ -174,30 +174,65 @@ class FleetDispatcher:
             # Jules handles its own workspace
             return f"/tmp/jules/{beads_id}"
         
+        # Determine script command
+        script_cmd = f"worktree-setup.sh {beads_id} {repo}"
+        # Try to find script in path or repo
         if not backend_config.ssh:
-            raise RuntimeError(f"OpenCode backend {backend_config.name} has no SSH target")
-        
-        # Try canonical script first (preferred, repo-aware).
-        try:
-            result = subprocess.run(
-                ["ssh", backend_config.ssh, f"~/bin/worktree-setup.sh {beads_id} {repo}"],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            if result.returncode == 0:
-                script_path = (result.stdout or "").strip()
-                if script_path.startswith("/"):
-                    # Best-effort: trust mise config inside the worktree.
-                    subprocess.run(
-                        ["ssh", backend_config.ssh, f"mise trust --yes {script_path}/.mise.toml 2>/dev/null || true"],
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                    )
-                    return script_path
-        except Exception:
-            pass
+            # Local execution
+            import shutil
+            script_path = shutil.which("worktree-setup.sh")
+            if not script_path:
+                # Fallback to repo path if running from repo
+                repo_script = Path(__file__).parent.parent.parent / "scripts" / "worktree-setup.sh"
+                if repo_script.exists():
+                    script_path = str(repo_script)
+                else:
+                    script_path = str(Path.home() / "bin" / "worktree-setup.sh")
+            
+            cmd = [script_path, beads_id, repo]
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                if result.returncode == 0:
+                    path = result.stdout.strip()
+                    # Trust mise locally
+                    subprocess.run(f"mise trust --yes {path}/.mise.toml", shell=True, check=False)
+                    return path
+                else:
+                    raise RuntimeError(f"Worktree setup failed: {result.stderr}")
+            except Exception as e:
+                raise RuntimeError(f"Local worktree setup failed: {e}")
+
+        else:
+            # Remote execution
+            if not backend_config.ssh:
+                 raise RuntimeError(f"OpenCode backend {backend_config.name} has no SSH target")
+
+            # Try canonical script first (preferred, repo-aware).
+            try:
+                result = subprocess.run(
+                    ["ssh", backend_config.ssh, f"~/bin/{script_cmd}"],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                if result.returncode == 0:
+                    script_path = (result.stdout or "").strip()
+                    if script_path.startswith("/"):
+                        # Best-effort: trust mise config inside the worktree.
+                        subprocess.run(
+                            ["ssh", backend_config.ssh, f"mise trust --yes {script_path}/.mise.toml 2>/dev/null || true"],
+                            capture_output=True,
+                            text=True,
+                            timeout=30,
+                        )
+                        return script_path
+            except Exception:
+                pass
 
         # Fallback: inline worktree setup
         # NOTE: This assumes a bare repo clone exists at ~/{repo}; in your stack the
