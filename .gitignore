@@ -2,3 +2,15 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+
+# Dispatch output files
+dispatch_*.json
+
+# Debug scripts
+debug_backends.py
+
+# Beads metadata
+.beads/last-touched
+
+# Reference checkouts
+mcp_agent_mail_reference/
