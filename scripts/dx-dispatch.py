@@ -193,7 +193,12 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
     if not result.success:
         log(f"Dispatch failed: {result.error}", "ERROR")
         if result.failure_code:
-            log(f"Failure code: {result.failure_code}", "ERROR")
+            # Make infra failures more visible
+            if result.failure_code in ("SERVER_UNREACHABLE", "SERVER_UNHEALTHY", "WORKTREE_FAILED"):
+                log(f"⚠️ INFRA ISSUE: {result.failure_code}", "ERROR")
+                log("Check VM health, network connectivity, and try again.", "WARN")
+            else:
+                log(f"Failure code: {result.failure_code}", "ERROR")
         if not args.no_slack:
             post_to_slack(config, f"[{vm_name}] ❌ Dispatch failed: {result.error}")
         sys.exit(1)
@@ -230,7 +235,7 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
             poll_interval_sec=10,
             max_polls=args.timeout // 10
         )
-        
+
         if status.get("status") == "completed":
             log("✅ Task completed successfully")
             if status.get("pr_url"):
@@ -238,7 +243,13 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
         else:
             log(f"Task ended with status: {status.get('status')}", "WARN")
             if status.get("failure_code"):
-                log(f"Failure: {status.get('failure_code')}", "ERROR")
+                failure = status.get('failure_code')
+                log(f"Failure code: {failure}", "ERROR")
+                # Highlight infra issues
+                if "INFRA" in str(status.get("recommendation", "")):
+                    log(f"⚠️ {status.get('recommendation', '')}", "ERROR")
+                elif status.get("recommendation"):
+                    log(f"Recommendation: {status.get('recommendation')}", "WARN")
     
     # Audit completion
     if not args.no_slack:

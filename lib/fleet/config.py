@@ -27,17 +27,23 @@ class BackendConfig:
 class MonitoringConfig:
     """Monitoring thresholds configuration."""
     poll_interval_seconds: int = 60
-    
+
+    # First activity timeout (session created but agent never starts)
+    # If no tool runs within this time, fail as INFRA issue
+    smoke_first_activity_minutes: int = 5
+    real_first_activity_minutes: int = 10
+    nightly_first_activity_minutes: int = 15
+
     # Mode-specific thresholds
     smoke_stale_minutes: int = 5
     smoke_timeout_minutes: int = 10
-    
+
     real_stale_minutes: int = 15
     real_timeout_minutes: int = 30
-    
+
     nightly_stale_minutes: int = 20
     nightly_timeout_minutes: int = 60
-    
+
     def get_thresholds(self, mode: str) -> tuple[int, int]:
         """Get (stale_threshold, timeout) for a given mode."""
         if mode == "smoke":
@@ -46,6 +52,15 @@ class MonitoringConfig:
             return (self.nightly_stale_minutes, self.nightly_timeout_minutes)
         else:  # real is default
             return (self.real_stale_minutes, self.real_timeout_minutes)
+
+    def get_first_activity_timeout(self, mode: str) -> int:
+        """Get first activity timeout for a given mode (fail if agent never starts)."""
+        if mode == "smoke":
+            return self.smoke_first_activity_minutes
+        elif mode == "nightly":
+            return self.nightly_first_activity_minutes
+        else:  # real is default
+            return self.real_first_activity_minutes
 
 
 @dataclass
@@ -90,9 +105,12 @@ class FleetConfig:
             smoke = mon.get("_smoke", {})
             real = mon.get("_real", {})
             nightly = mon.get("_nightly", {})
-            
+
             self.monitoring = MonitoringConfig(
                 poll_interval_seconds=mon.get("poll_interval_seconds", 60),
+                smoke_first_activity_minutes=smoke.get("first_activity_minutes", 5),
+                real_first_activity_minutes=real.get("first_activity_minutes", 10),
+                nightly_first_activity_minutes=nightly.get("first_activity_minutes", 15),
                 smoke_stale_minutes=smoke.get("stale_threshold_minutes", 5),
                 smoke_timeout_minutes=smoke.get("timeout_minutes", 10),
                 real_stale_minutes=real.get("stale_threshold_minutes", 15),

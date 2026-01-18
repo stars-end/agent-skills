@@ -89,13 +89,22 @@ class OpenCodeBackend(BackendBase):
             return json.loads(result.stdout)
     
     def check_health(self) -> HealthStatus:
-        """Check if the OpenCode server is healthy."""
+        """Check if the OpenCode server is healthy and can create sessions."""
         try:
             response = self._http_get("/global/health")
             # Observed in practice: {"healthy": true, "version": "..."}
             # (Docs may evolve; tolerate both shapes.)
             if response.get("healthy") is True or response.get("status") == "ok":
-                return HealthStatus.HEALTHY
+                # Additional check: verify we can list sessions (sanity check)
+                # This catches cases where server is "healthy" but can't create sessions
+                try:
+                    self._http_get("/session/status")
+                    return HealthStatus.HEALTHY
+                except Exception as e:
+                    # Health endpoint said OK but session endpoint failed
+                    # This indicates a partial failure (session service down)
+                    print(f"Warning: OpenCode health check passed but session API failed: {e}")
+                    return HealthStatus.SERVER_UNHEALTHY
             return HealthStatus.SERVER_UNHEALTHY
         except Exception as e:
             error_msg = str(e).lower()

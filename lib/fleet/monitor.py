@@ -94,8 +94,10 @@ class FleetMonitor:
         
         # Level 2: Tool-level stuck detection
         tool_info = backend.get_tool_status(dispatch.session_id)
-        
+
         minutes_since_activity = None
+        has_any_activity = tool_info.last_tool_name is not None or tool_info.output_snippet is not None
+
         if tool_info.last_activity_ts:
             try:
                 last_activity = datetime.fromisoformat(tool_info.last_activity_ts.replace("Z", "+00:00"))
@@ -105,10 +107,14 @@ class FleetMonitor:
                 minutes_since_activity = (now - last_activity).total_seconds() / 60
             except (ValueError, TypeError):
                 pass
-        
+
+        # Calculate total time since dispatch (needed for multiple checks)
+        started_ts = datetime.fromisoformat(dispatch.started_ts.replace("Z", "+00:00"))
+        total_minutes = (datetime.utcnow() - started_ts.replace(tzinfo=None)).total_seconds() / 60
+
         # Check for tool hang
-        if (tool_info.last_tool_status == "running" and 
-            minutes_since_activity and 
+        if (tool_info.last_tool_status == "running" and
+            minutes_since_activity and
             minutes_since_activity > stale_threshold_min):
             return MonitorResult(
                 session_id=dispatch.session_id,
@@ -117,18 +123,37 @@ class FleetMonitor:
                 minutes_since_activity=minutes_since_activity,
                 recommendation=f"Tool '{tool_info.last_tool_name}' hung for {minutes_since_activity:.1f}m. Abort via /abort, retry with /shell"
             )
-        
-        # Check for overall staleness
-        started_ts = datetime.fromisoformat(dispatch.started_ts.replace("Z", "+00:00"))
-        total_minutes = (datetime.utcnow() - started_ts.replace(tzinfo=None)).total_seconds() / 60
-        
+
+        # NEW: Check for "no activity at all" - session created but agent never started
+        # This catches the case where dispatch succeeds but agent never runs any tools
+        if not has_any_activity:
+            # Use a stricter timeout for first activity from config
+            first_activity_timeout_min = self.config.monitoring.get_first_activity_timeout(mode)
+            if total_minutes > first_activity_timeout_min:
+                return MonitorResult(
+                    session_id=dispatch.session_id,
+                    stuck_status=StuckStatus.TIMEOUT,
+                    session_info=tool_info,
+                    minutes_since_activity=total_minutes,
+                    recommendation=(f"⚠️ INFRA ISSUE: Session had NO activity for {total_minutes:.1f}m. "
+                                   f"Agent never started - possible OpenCode/connectivity issue. "
+                                   f"Check VM health and retry.")
+                )
+
+        # Check for overall timeout (after first activity check)
         if total_minutes > timeout_min:
+            # Make it clearer if there was some activity vs no activity
+            if not has_any_activity:
+                rec = (f"⚠️ INFRA ISSUE: Session ran for {total_minutes:.1f}m with NO agent activity. "
+                       f"Possible OpenCode/connectivity failure. Check VM logs and retry.")
+            else:
+                rec = f"Dispatch exceeded {timeout_min}m timeout after some activity. Abort and report partial progress"
             return MonitorResult(
                 session_id=dispatch.session_id,
                 stuck_status=StuckStatus.TIMEOUT,
                 session_info=tool_info,
                 minutes_since_activity=total_minutes,
-                recommendation=f"Dispatch exceeded {timeout_min}m timeout. Abort and report partial progress"
+                recommendation=rec
             )
         
         if minutes_since_activity and minutes_since_activity > stale_threshold_min:
