@@ -17,12 +17,21 @@ def run_agent(session_id, system_prompt):
     
     # Create a wrapper script inside the pod to handle environment and execution
     wrapper_path = os.path.join(pod_dir, "run_agent.sh")
+
+    # Load secrets from environment (fail fast if not set)
+    anthropic_token = os.environ.get("ANTHROPIC_AUTH_TOKEN")
+    if not anthropic_token:
+        raise RuntimeError("ANTHROPIC_AUTH_TOKEN must be set in environment. Load from 1Password: op run -- python3 ...")
+
+    anthropic_base_url = os.environ.get("ANTHROPIC_BASE_URL", "https://api.z.ai/api/anthropic")
+
     with open(wrapper_path, "w") as f:
         f.write(f"""#!/usr/bin/env zsh
 # Auto-generated Hive Agent Wrapper
+# Secrets injected from environment (loaded via op run or 1Password)
 export PATH="/home/feng/.local/bin:/usr/local/bin:/usr/bin:/bin"
-export ANTHROPIC_AUTH_TOKEN="42d8398609024e4b8ed68895a3feabdd.14a8um9X0PiC49iZ"
-export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+export ANTHROPIC_AUTH_TOKEN="{anthropic_token}"
+export ANTHROPIC_BASE_URL="{anthropic_base_url}"
 export ANTHROPIC_DEFAULT_OPUS_MODEL="glm-4.7"
 export ANTHROPIC_DEFAULT_SONNET_MODEL="glm-4.7"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.7"

@@ -24,7 +24,6 @@
       "agent-mail"
     ],
     "optional": [
-      "universal-skills",
       "z.ai-search"
     ]
   }

@@ -1,5 +1,5 @@
 [Unit]
-Description=Slack Coordination Service (V4.2.1 - Scoped Env)
+Description=OpenCode AI Server (V4.2.1 - Scoped Env)
 After=network.target
 
 [Service]
@@ -7,24 +7,25 @@ Type=simple
 Environment="PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin"
 
 # V4.2.1 Security: Load Encrypted Credential with fallback
+# Tries LoadCredentialEncrypted first (TPM-protected), falls back to LoadCredential (file-permission-only)
 LoadCredentialEncrypted=op_token:%h/.config/systemd/user/op_token.cred
 LoadCredential=op_token:%h/.config/systemd/user/op_token
 
 # Use SCOPED env file (not shared ~/.agent-env)
 # op run resolves op:// references at runtime
-ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run --env-file=%h/.config/slack-coordinator/.env -- %h/agent-skills/slack-coordination/.venv/bin/python slack-coordinator.py'
+ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run --env-file=%h/.config/opencode/.env -- /home/linuxbrew/.linuxbrew/bin/opencode serve --port 4105 --hostname 0.0.0.0'
 
 Restart=on-failure
 RestartSec=5
-WorkingDirectory=%h/agent-skills/slack-coordination
-MemoryMax=2G
+WorkingDirectory=%h/agent-skills
+MemoryMax=4G
 
 # Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=%h/.config/slack-coordinator %h/.local/state/slack-coordination
+ReadWritePaths=%h/.config/opencode %h/.local/state/opencode
 
 [Install]
 WantedBy=default.target

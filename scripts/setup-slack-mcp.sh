@@ -50,27 +50,8 @@ if [ -f "$CLAUDE_CONFIG" ]; then
     fi
 fi
 
-# 4. Configure Gemini CLI (~/.gemini/settings.json)
-GEMINI_CONFIG="$HOME/.gemini/settings.json"
-mkdir -p "$HOME/.gemini"
-if [ ! -f "$GEMINI_CONFIG" ] || ! grep -q '"slack"' "$GEMINI_CONFIG" 2>/dev/null; then
-    echo "Setting up Gemini CLI config..."
-    cat > "$GEMINI_CONFIG" << 'EOF'
-{
-  "mcpServers": {
-    "slack": {
-      "command": "slack-mcp-server",
-      "args": ["--transport", "stdio"]
-    }
-  }
-}
-EOF
-    echo "✅ Created Gemini CLI config with Slack MCP"
-else
-    echo "✅ Gemini CLI already has Slack MCP"
-fi
-
-# 5. Configure Antigravity IDE (~/.gemini/antigravity/mcp_config.json)
+# 4. Configure Antigravity IDE (~/.gemini/antigravity/mcp_config.json)
+# Note: Antigravity uses ~/.gemini/ config path (gemini-cli is deprecated but antigravity still uses this path)
 AG_CONFIG="$HOME/.gemini/antigravity/mcp_config.json"
 mkdir -p "$HOME/.gemini/antigravity"
 if [ ! -f "$AG_CONFIG" ] || ! grep -q '"slack"' "$AG_CONFIG" 2>/dev/null; then

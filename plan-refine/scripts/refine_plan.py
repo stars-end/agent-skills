@@ -5,15 +5,22 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Configuration matching cc-glm alias (extracted from environment inspection)
+# Configuration: Load from environment (1Password or set externally)
+# NEVER hardcode tokens in this file (triggers secret-scanning guardrail)
 ENV_VARS = {
-    "ANTHROPIC_AUTH_TOKEN": "42d8398609024e4b8ed68895a3feabdd.14a8um9X0PiC49iZ",
-    "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-4.7",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.7",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",
-    "API_TIMEOUT_MS": "3000000"
+    "ANTHROPIC_AUTH_TOKEN": os.environ.get("ANTHROPIC_AUTH_TOKEN"),
+    "ANTHROPIC_BASE_URL": os.environ.get("ANTHROPIC_BASE_URL", "https://api.z.ai/api/anthropic"),
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL", "glm-4.7"),
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", "glm-4.7"),
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": os.environ.get("ANTHROPIC_DEFAULT_HAIKU_MODEL", "glm-4.7"),
+    "API_TIMEOUT_MS": os.environ.get("API_TIMEOUT_MS", "3000000")
 }
+
+# Fail fast if required token is not provided
+if not ENV_VARS["ANTHROPIC_AUTH_TOKEN"]:
+    print("ERROR: ANTHROPIC_AUTH_TOKEN must be set in environment", file=sys.stderr)
+    print("Load from 1Password: op run -- python3 plan-refine/scripts/refine_plan.py ...", file=sys.stderr)
+    sys.exit(1)
 MODEL = "glm-4.7"
 
 def call_llm(prompt):

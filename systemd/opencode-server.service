@@ -5,7 +5,11 @@ After=network.target
 [Service]
 Type=simple
 Environment="PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin"
-ExecStart=/home/linuxbrew/.linuxbrew/bin/opencode serve --port 4105 --hostname 0.0.0.0
+# V4.2 Security: Load Encrypted Credential
+LoadCredentialEncrypted=op_token:%h/.config/systemd/user/op_token.cred
+LoadCredential=op_token:%h/.config/systemd/user/op_token
+# Shim token + op run to resolve secrets
+ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run --env-file=%h/.agent-env -- /home/linuxbrew/.linuxbrew/bin/opencode serve --port 4105 --hostname 0.0.0.0'
 Restart=always
 RestartSec=5
 WorkingDirectory=/home/feng

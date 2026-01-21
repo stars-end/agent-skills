@@ -39,7 +39,7 @@ check_binary() {
 # 1. Check Configs
 echo "--- Core Configs ---"
 check_file "$HOME/.ntm.yaml"
-check_file "$HOME/.serena/config.toml"
+# NOTE: serena is deprecated (V4.2.1) - removed from checks
 check_file "$HOME/.cass/settings.json"
 
 # Check local GEMINI symlink if we are inside a repo
@@ -93,7 +93,6 @@ fi
 
 # 3. Check Binaries
 echo "--- Required Tools ---"
-check_binary "universal-skills"
 check_binary "bd"
 check_binary "jules"
 if command -v cass >/dev/null 2>&1; then

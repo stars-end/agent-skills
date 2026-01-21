@@ -14,13 +14,13 @@ FILES=(
   "$REPO_ROOT/.claude/settings.json"
   "$REPO_ROOT/.vscode/mcp.json"
   "$REPO_ROOT/codex.mcp.json"
-  "$REPO_ROOT/gemini.mcp.json"
+  # NOTE: gemini is deprecated (V4.2.1) - canonical IDEs: antigravity, claude-code, codex-cli, opencode
   "$REPO_ROOT/.mcp.json"
   "$REPO_ROOT/opencode.json"
   "$HOME/.claude/settings.json"
   "$HOME/.claude.json"
   "$HOME/.codex/config.toml"
-  "$HOME/.gemini/settings.json"
+  # NOTE: gemini settings deprecated - removed from checks
 )
 
 have_in_files() {
@@ -41,13 +41,10 @@ missing_optional=0
 echo ""
 echo "REQUIRED MCP servers:"
 
-# 1) universal-skills (REQUIRED - skills plane)
-if f="$(have_in_files \"universal-skills\")" || f="$(have_in_files \"skills\")"; then
-  echo "✅ skills (universal-skills) (config seen in: $f)"
-else
-  echo "❌ skills (universal-skills) (no config found) — REQUIRED"
-  missing_required=$((missing_required+1))
-fi
+# 1) universal-skills (DEPRECATED)
+# No longer checked
+
+
 
 echo ""
 echo "OPTIONAL MCP servers:"
@@ -60,12 +57,12 @@ else
   missing_optional=$((missing_optional+1))
 fi
 
-# 3) serena (OPTIONAL)
+# 3) serena (DEPRECATED - V4.2.1)
 if f="$(have_in_files \"serena\")"; then
-  echo "✅ serena (config seen in: $f)"
-else
-  echo "⚠️  serena (no config found) — optional"
+  echo "⚠️  serena (config seen in: $f) — DEPRECATED, consider removing"
   missing_optional=$((missing_optional+1))
+else
+  echo "✅ serena (not configured — correctly removed)"
 fi
 
 # 4) z.ai search MCP (OPTIONAL)
@@ -156,18 +153,19 @@ fi
 echo ""
 echo "OPTIONAL CLI tools:"
 
+# Railway (per env-sources contract: optional in local dev, required in CI/CD)
 if command -v railway >/dev/null 2>&1; then
   echo "✅ railway ($(railway --version 2>/dev/null | head -1 || echo installed))"
-  
-  # Check Login Status
+
+  # Check Login Status (optional - may not be logged in during local dev)
   if ! railway whoami >/dev/null 2>&1; then
-    echo "⚠️  railway: NOT LOGGED IN. Run 'railway login'."
+    echo "⚠️  railway: NOT LOGGED IN (optional for local dev, run 'railway login' when needed)"
     missing_optional=$((missing_optional+1))
   fi
 
-  # Check Railway Shell Context
+  # Check Railway Shell Context (optional - not required for local development)
   if [[ -z "${RAILWAY_PROJECT_ID:-}" ]] && [[ -z "${RAILWAY_ENVIRONMENT:-}" ]]; then
-    echo "⚠️  railway: NOT IN SHELL. Most commands require 'railway shell'."
+    echo "⚠️  railway: NOT IN SHELL (optional for local dev, see ENV_SOURCES_CONTRACT.md)"
     missing_optional=$((missing_optional+1))
   else
     echo "✅ railway: inside active shell context"

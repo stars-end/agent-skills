@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dx-doctor.sh - Diagnose and repair multi-agent coordinator issues
-# Part of bd-agent-skills-4l0 implementation
+# Enhanced for cross-VM, cross-agent, and MCP verification (V4.2+)
 
 set -e
 
@@ -10,185 +10,147 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 RESET='\033[0m'
 
-echo -e "${BLUE}🩺 Multi-Agent Coordination Doctor${RESET}"
-echo ""
-
+TARGET_VM="${1:-local}"
 AGENTS_ROOT="${HOME}/agent-skills"
 ISSUES_FOUND=0
 
 # =============================================================================
-# Diagnose Slack Connection
+# Helper: Check MCP Servers
 # =============================================================================
-diagnose_slack() {
-    echo -e "${BLUE}=== Slack Connection ===${RESET}"
+check_mcp_servers() {
+    echo -e "${BLUE}=== MCP Servers (Claude) ===${RESET}"
     
-    if [[ -z "$SLACK_BOT_TOKEN" ]]; then
-        echo -e "${RED}❌ SLACK_BOT_TOKEN not set${RESET}"
-        echo "   Fix: Add to ~/.zshenv: export SLACK_BOT_TOKEN=xoxb-..."
-        ((ISSUES_FOUND++))
-    else
-        echo -e "${GREEN}✅ SLACK_BOT_TOKEN set${RESET}"
-    fi
-    
-    if [[ -z "$SLACK_APP_TOKEN" ]]; then
-        echo -e "${RED}❌ SLACK_APP_TOKEN not set${RESET}"
-        echo "   Fix: Add to ~/.zshenv: export SLACK_APP_TOKEN=xapp-..."
-        ((ISSUES_FOUND++))
-    else
-        echo -e "${GREEN}✅ SLACK_APP_TOKEN set${RESET}"
-    fi
-    
-    if [[ -z "$SLACK_MCP_XOXB_TOKEN" ]]; then
-        echo -e "${YELLOW}⚠️  SLACK_MCP_XOXB_TOKEN not set (needed for Slack MCP in sessions)${RESET}"
-    else
-        echo -e "${GREEN}✅ SLACK_MCP_XOXB_TOKEN set${RESET}"
-    fi
-}
+    # Get current MCP list
+    local mcp_list
+    mcp_list=$(claude mcp list 2>/dev/null || echo "")
 
-# =============================================================================
-# Diagnose OpenCode
-# =============================================================================
-diagnose_opencode() {
-    echo ""
-    echo -e "${BLUE}=== OpenCode Server ===${RESET}"
-    
-    if systemctl --user is-active opencode-server >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ OpenCode server: running${RESET}"
-        
-        # Check health
-        if curl -s http://localhost:4105/global/health 2>/dev/null | grep -q "healthy"; then
-            echo -e "${GREEN}✅ OpenCode health: OK${RESET}"
+    for mcp in "slack" "figma" "supermemory"; do
+        if echo "$mcp_list" | grep -q "$mcp"; then
+            if echo "$mcp_list" | grep "$mcp" | grep -q "✓"; then
+                echo -e "${GREEN}✅ MCP healthy: $mcp${RESET}"
+            else
+                echo -e "${RED}❌ MCP unhealthy: $mcp${RESET}"
+                ((ISSUES_FOUND++))
+            fi
         else
-            echo -e "${RED}❌ OpenCode health: failed${RESET}"
-            ((ISSUES_FOUND++))
-        fi
-        
-        # Count sessions
-        session_count=$(curl -s http://localhost:4105/session 2>/dev/null | jq 'length' 2>/dev/null || echo "?")
-        echo "   Active sessions: ${session_count}"
-    else
-        echo -e "${RED}❌ OpenCode server: not running${RESET}"
-        echo "   Fix: systemctl --user start opencode-server"
-        ((ISSUES_FOUND++))
-    fi
-}
-
-# =============================================================================
-# Diagnose Coordinator
-# =============================================================================
-diagnose_coordinator() {
-    echo ""
-    echo -e "${BLUE}=== Slack Coordinator ===${RESET}"
-    
-    if systemctl --user is-active slack-coordinator >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ Coordinator: running${RESET}"
-        
-        # Check recent logs for errors
-        error_count=$(journalctl --user -u slack-coordinator -n 50 --no-pager 2>/dev/null | grep -c "ERROR" || echo "0")
-        if [[ "$error_count" -gt 0 ]]; then
-            echo -e "${YELLOW}⚠️  Recent errors: ${error_count}${RESET}"
-            journalctl --user -u slack-coordinator -n 5 --no-pager | grep "ERROR" | head -3
-        else
-            echo -e "${GREEN}✅ No recent errors${RESET}"
-        fi
-    else
-        echo -e "${RED}❌ Coordinator: not running${RESET}"
-        echo "   Fix: systemctl --user start slack-coordinator"
-        ((ISSUES_FOUND++))
-    fi
-}
-
-# =============================================================================
-# Diagnose Beads
-# =============================================================================
-diagnose_beads() {
-    echo ""
-    echo -e "${BLUE}=== Beads Sync ===${RESET}"
-    
-    if command -v bd >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ Beads CLI: available${RESET}"
-    else
-        echo -e "${RED}❌ Beads CLI: not found${RESET}"
-        ((ISSUES_FOUND++))
-    fi
-    
-    # Check merge driver
-    if git config --global --get merge.beads.driver >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ Beads merge driver: configured${RESET}"
-    else
-        echo -e "${RED}❌ Beads merge driver: not configured${RESET}"
-        echo "   Fix: git config --global merge.beads.driver 'bd merge %O %A %B %L %P'"
-        ((ISSUES_FOUND++))
-    fi
-    
-    # Check for uncommitted beads changes
-    for repo in ~/affordabot ~/prime-radiant-ai ~/agent-skills; do
-        if [[ -d "$repo/.beads" ]]; then
-            if git -C "$repo" diff --name-only 2>/dev/null | grep -q ".beads/"; then
-                echo -e "${YELLOW}⚠️  Uncommitted Beads changes in $repo${RESET}"
+            if [[ "$mcp" == "figma" || "$mcp" == "supermemory" ]]; then
+                echo -e "${YELLOW}⚠️  Optional MCP missing: $mcp${RESET}"
+            else
+                echo -e "${RED}❌ Required MCP missing: $mcp${RESET}"
+                ((ISSUES_FOUND++))
             fi
         fi
     done
 }
 
 # =============================================================================
-# Diagnose Worktrees
+# Diagnose Local VM
 # =============================================================================
-diagnose_worktrees() {
+diagnose_local() {
+    # Load environment if available
+    if [[ -f "$HOME/.agent-env" ]]; then
+        source "$HOME/.agent-env"
+    fi
+
+    echo -e "${BLUE}🩺 Local System Doctor (${HOSTNAME})${RESET}"
     echo ""
-    echo -e "${BLUE}=== Git Worktrees ===${RESET}"
-    
-    for repo in affordabot prime-radiant-ai; do
-        wt_dir="${HOME}/${repo}-worktrees"
-        if [[ -d "$wt_dir" ]]; then
-            wt_count=$(find "$wt_dir" -maxdepth 1 -type d | wc -l)
-            wt_count=$((wt_count - 1))
-            echo "   ${repo}: ${wt_count} worktrees"
+
+    # 1. Slack Connection
+    echo -e "${BLUE}=== Slack Connection ===${RESET}"
+    for var in "SLACK_BOT_TOKEN" "SLACK_APP_TOKEN"; do
+        if [[ -z "${!var:-}" ]]; then
+            echo -e "${RED}❌ $var not set${RESET}"
+            ((ISSUES_FOUND++))
         else
-            echo "   ${repo}: no worktree directory"
+            echo -e "${GREEN}✅ $var set${RESET}"
         fi
     done
-}
 
-# =============================================================================
-# Repair Common Issues
-# =============================================================================
-repair_common() {
+    # 2. OpenCode
     echo ""
-    echo -e "${BLUE}=== Attempting Repairs ===${RESET}"
+    echo -e "${BLUE}=== OpenCode Server ===${RESET}"
     
-    # Restart coordinator
-    echo "   Restarting coordinator..."
-    systemctl --user restart slack-coordinator 2>/dev/null || true
-    
-    # Ensure worktree directories exist
-    mkdir -p ~/affordabot-worktrees
-    mkdir -p ~/prime-radiant-worktrees
-    
-    # Configure beads merge driver
-    git config --global merge.beads.driver "bd merge %O %A %B %L %P" 2>/dev/null || true
-    
-    echo -e "${GREEN}✅ Repairs attempted${RESET}"
+    if command -v systemctl >/dev/null 2>&1; then
+        # Linux/Systemd check
+        if systemctl --user is-active opencode.service >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ OpenCode server: running${RESET}"
+        else
+            echo -e "${RED}❌ OpenCode server: not running${RESET}"
+            ((ISSUES_FOUND++))
+        fi
+    elif command -v launchctl >/dev/null 2>&1; then
+        # macOS/Launchd check
+        if launchctl list | grep -q "com.agent.opencode-server"; then
+            echo -e "${GREEN}✅ OpenCode server: running (launchd)${RESET}"
+        else
+            echo -e "${RED}❌ OpenCode server: not running${RESET}"
+            ((ISSUES_FOUND++))
+        fi
+    fi
+
+    # Health check (common)
+    if curl -s http://localhost:4105/global/health 2>/dev/null | grep -q "healthy"; then
+        echo -e "${GREEN}✅ OpenCode health: OK${RESET}"
+    else
+        echo -e "${RED}❌ OpenCode health: failed${RESET}"
+        ((ISSUES_FOUND++))
+    fi
+
+    # 3. Coordinator
+    echo ""
+    echo -e "${BLUE}=== Slack Coordinator ===${RESET}"
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl --user is-active slack-coordinator.service >/dev/null 2>&1; then
+            echo -e "${GREEN}✅ Coordinator: running${RESET}"
+        else
+            echo -e "${RED}❌ Coordinator: not running${RESET}"
+            ((ISSUES_FOUND++))
+        fi
+    elif command -v launchctl >/dev/null 2>&1; then
+        if launchctl list | grep -q "com.starsend.slack-coordinator"; then
+            echo -e "${GREEN}✅ Coordinator: running (launchd)${RESET}"
+        else
+            echo -e "${RED}❌ Coordinator: not running${RESET}"
+            ((ISSUES_FOUND++))
+        fi
+    fi
+
+    # 4. MCP Servers
+    echo ""
+    check_mcp_servers
+
+    # 5. Beads
+    echo ""
+    echo -e "${BLUE}=== Beads ===${RESET}"
+    if command -v bd || command -v /home/feng/.local/bin/bd >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ Beads CLI available${RESET}"
+    else
+        echo -e "${RED}❌ Beads CLI missing${RESET}"
+        ((ISSUES_FOUND++))
+    fi
 }
 
 # =============================================================================
 # Main
 # =============================================================================
-diagnose_slack
-diagnose_opencode
-diagnose_coordinator
-diagnose_beads
-diagnose_worktrees
-
-echo ""
-if [[ "$ISSUES_FOUND" -eq 0 ]]; then
-    echo -e "${GREEN}✨ All systems healthy!${RESET}"
-else
-    echo -e "${YELLOW}Found ${ISSUES_FOUND} issue(s)${RESET}"
-    echo ""
-    read -p "Attempt automatic repairs? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        repair_common
+if [[ "$TARGET_VM" == "@all" ]]; then
+    # Read keys and ssh fields from json
+    while IFS="=" read -r key ssh_target; do
+        if [[ "$key" != "epyc6" ]]; then
+            echo -e "${BLUE}--- Checking $key ---${RESET}"
+            # Use the explicit SSH target (user@host) from json
+            ssh "$ssh_target" "bash -s" < "$0" "local" || echo -e "${RED}Failed to check $key${RESET}"
+            echo ""
+        fi
+    done < <(jq -r '.vms | to_entries[] | "\(.key)=\(.value.ssh)"' ~/.agent-skills/vm-endpoints.json)
+elif [[ "$TARGET_VM" == "local" || -z "$TARGET_VM" ]]; then
+    diagnose_local
+    if [[ "$ISSUES_FOUND" -eq 0 ]]; then
+        echo -e "\n${GREEN}✨ System healthy!${RESET}"
+    else
+        echo -e "\n${YELLOW}Found ${ISSUES_FOUND} issue(s)${RESET}"
     fi
+else
+    # Remote VM by name
+    ssh "$TARGET_VM" "bash -s" < "$0" "local"
 fi

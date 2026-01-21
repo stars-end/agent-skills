@@ -19,7 +19,7 @@ This document defines:
 
 This invariant ensures:
 1. **Consistency**: All agents see the same skills
-2. **Discoverability**: universal-skills MCP can find skills reliably
+2. **Discoverability**: Direct filesystem access enables skill discovery
 3. **Single source of truth**: Skills are managed in one place (`~/agent-skills`)
 4. **Git integration**: Skills are version-controlled and can be updated via git
 
@@ -49,54 +49,19 @@ ln -sfn ~/agent-skills ~/.agent/skills
 
 This is a symlink (preferred) or exact copy (fallback) that points to `~/agent-skills`.
 
-### 3. MCP Server: `universal-skills`
-
-The MCP server that makes skills discoverable to agent tools:
-
-```bash
-# Claude Code
-claude mcp add --transport stdio skills -- npx universal-skills mcp
-
-# Codex CLI
-codex mcp add skills -- npx universal-skills mcp
-
-# Gemini CLI / Antigravity
-gemini mcp add --transport stdio skills -- npx universal-skills mcp
-```
-
-The universal-skills MCP server:
-- Scans `~/.agent/skills/` for skill directories
-- Exposes skills as MCP resources
-- Provides skill metadata and documentation
-- Enables skill invocation via MCP tools
-
 ## Discovery Precedence
 
 When an agent tool looks for skills, the discovery order is:
 
-1. **MCP resources** (via universal-skills MCP server)
-   - Highest precedence
-   - Dynamic discovery
-   - Works across all agent tools
-
-2. **Direct filesystem** (`~/.agent/skills/`)
-   - Fallback if MCP not configured
+1. **Direct filesystem** (`~/.agent/skills/`)
+   - Primary method
    - Manual skill invocation
    - Used by helper scripts
 
-3. **Repo-specific skills** (`.claude/`, `.skills/`, etc.)
+2. **Repo-specific skills** (`.claude/`, `.skills/`, etc.)
    - Lowest precedence
    - Project-specific overrides
    - Not shared across projects
-
-**Example:**
-
-```
-Agent tool queries for "mcp-doctor" skill:
-  1. Check MCP resource://skills/mcp-doctor (via universal-skills)
-  2. If not found, check ~/.agent/skills/mcp-doctor/
-  3. If not found, check ./.claude/skills/mcp-doctor/ (repo-local)
-```
 
 ## Setup Instructions
 
@@ -129,26 +94,7 @@ Or use the helper script (auto-creates symlink):
 ~/agent-skills/scripts/ensure_agent_skills_mount.sh
 ```
 
-### Step 3: Configure universal-skills MCP
-
-For each agent tool on your host:
-
-**Claude Code:**
-```bash
-claude mcp add --transport stdio skills -- npx universal-skills mcp
-```
-
-**Codex CLI:**
-```bash
-codex mcp add skills -- npx universal-skills mcp
-```
-
-**Gemini CLI / Antigravity:**
-```bash
-gemini mcp add --transport stdio skills -- npx universal-skills mcp
-```
-
-### Step 4: Verify Setup
+### Step 3: Verify Setup
 
 ```bash
 ~/.agent/skills/mcp-doctor/check.sh
@@ -156,7 +102,6 @@ gemini mcp add --transport stdio skills -- npx universal-skills mcp
 
 Expected output:
 ```
-✅ skills (universal-skills) (config seen in: ...)
 ✅ ~/.agent/skills -> ~/agent-skills (symlink: ...)
 ✅ mcp-doctor: healthy
 ```
@@ -327,9 +272,8 @@ cd ~/llm-common && git pull origin master
 ```
 
 The mcp-doctor (part of dx-doctor) verifies:
-- ✅ universal-skills MCP is configured (REQUIRED)
 - ✅ ~/.agent/skills mount is correct (REQUIRED)
-- ⚠️  Optional MCPs (agent-mail, serena, z.ai)
+- ⚠️  Optional MCPs (Slack, Supermemory, etc.)
 - ⚠️  Optional CLIs (railway, gh)
 
 See [DX_BOOTSTRAP_CONTRACT.md](./DX_BOOTSTRAP_CONTRACT.md) for full details.
@@ -370,21 +314,6 @@ rm -rf old-skill/
 
 ## Troubleshooting
 
-### "universal-skills MCP not found"
-
-The universal-skills MCP server is not configured. Install it:
-
-```bash
-# Claude Code
-claude mcp add --transport stdio skills -- npx universal-skills mcp
-
-# Codex CLI
-codex mcp add skills -- npx universal-skills mcp
-
-# Verify
-~/.agent/skills/mcp-doctor/check.sh
-```
-
 ### "~/.agent/skills does not exist"
 
 The canonical mount point is missing. Create it:
@@ -413,20 +342,6 @@ ln -sfn ~/agent-skills ~/.agent/skills
 
 # Verify
 ls -la ~/.agent/skills
-```
-
-### "Skills not visible in MCP"
-
-The universal-skills MCP server might not be scanning the correct directory. Verify:
-
-```bash
-# Check mount point
-ls -la ~/.agent/skills
-
-# Check MCP configuration
-cat ~/.claude/settings.json | grep -A5 "universal-skills"
-
-# Restart agent tool (Claude Code, Codex CLI, etc.)
 ```
 
 ## Related Documentation

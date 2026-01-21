@@ -47,9 +47,6 @@ chmod +x "$AGENTS_ROOT/hive/node/hive-queen.py"
 
 # 3.2 Install Slack MCP
 echo -e "${GREEN} -> Setting up Slack MCP integration...${RESET}"
-if [ -f "$AGENTS_ROOT/scripts/slack-mcp-setup.sh" ]; then
-    source "$AGENTS_ROOT/scripts/slack-mcp-setup.sh"
-fi
 
 # 3.3 Install OpenCode Server (Systemd)
 echo -e "${GREEN} -> Installing OpenCode systemd service...${RESET}"

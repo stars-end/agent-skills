@@ -152,7 +152,6 @@ export GLM_API_KEY="..."
 - `agent-mail`: Multi-agent coordination, DX alerts, file leases
 
 **OPTIONAL** (recommended):
-- `universal-skills`: Skill discovery and management
 - `serena`: Advanced code search/edit
 - `z.ai search`: Web search capabilities
 

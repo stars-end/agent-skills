@@ -127,8 +127,8 @@ if [[ -d "$AGENT_SKILLS_DIR" ]] && [[ -e "$SKILLS_MOUNT" ]]; then
     echo ""
     echo "Next steps:"
     echo "  1. Verify MCP configuration: ~/.agent/skills/mcp-doctor/check.sh"
-    echo "  2. Configure universal-skills MCP in your agent tool"
-    echo "  3. See: ~/.agent/skills/mcp-doctor/SKILL.md for setup instructions"
+    echo "  2. See: ~/.agent/skills/SKILLS_PLANE.md for full documentation"
+    echo "  3. See: ~/.agent/skills/mcp-doctor/SKILL.md for MCP server setup"
     exit 0
   fi
 fi

@@ -14,3 +14,5 @@ debug_backends.py
 
 # Reference checkouts
 mcp_agent_mail_reference/
+.beads/interactions.jsonl
+.beads/interactions.jsonl
