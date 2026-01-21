@@ -100,9 +100,13 @@ allowed-tools:
 
 **Agents:** Gemini CLI, Antigravity, OpenAI Codex
 
+⚠️ **DEPRECATED**: universal-skills MCP server is deprecated (V4.2.1). MCP-dependent agents are no longer supported for Railway skills. Use skills-native agents (Claude Code, OpenCode, Codex CLI) instead.
+
 ### Architecture
 
-MCP-dependent agents use the **universal-skills MCP server**:
+**NOTE**: The following documentation is preserved for historical reference only. MCP-dependent agent support is deprecated.
+
+MCP-dependent agents previously used the **universal-skills MCP server**:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -138,12 +142,14 @@ MCP-dependent agents use the **universal-skills MCP server**:
 
 ### Railway Skills Installation
 
-**Setup universal-skills MCP:**
+⚠️ **DEPRECATED**: The following installation method is no longer supported. universal-skills MCP is deprecated (V4.2.1). Use skills-native agents instead.
+
+**[DEPRECATED] Setup universal-skills MCP:**
 ```bash
-# Gemini CLI
+# Gemini CLI (DEPRECATED - universal-skills is deprecated)
 gemini mcp add --transport stdio skills -- npx universal-skills mcp
 
-# Antigravity
+# Antigravity (DEPRECATED - universal-skills is deprecated)
 antigravity mcp add --transport stdio skills -- npx universal-skills mcp
 ```
 
@@ -184,12 +190,14 @@ MCP-dependent agents may **not enforce** `allowed-tools` restrictions:
 | Aspect | Skills-Native | MCP-Dependent |
 |--------|---------------|---------------|
 | **Installation** | Plugin marketplace OR manual copy | Manual copy to skills plane |
-| **Discovery** | Built-in skill scanner | universal-skills MCP server |
-| **Activation** | Automatic via triggers | `load_skill()` function call |
-| **Tool restrictions** | ✅ Enforced | ⚠️ Client-dependent |
-| **PreToolUse hooks** | ✅ Supported | ❌ Not via MCP |
-| **Updates** | `claude plugin update` | `git pull` in skills plane |
-| **Cross-platform** | Per-agent implementation | Universal via MCP |
+| **Discovery** | Built-in skill scanner | universal-skills MCP server (DEPRECATED) |
+| **Activation** | Automatic via triggers | `load_skill()` function call (DEPRECATED) |
+| **Tool restrictions** | ✅ Enforced | ⚠️ Client-dependent (DEPRECATED) |
+| **PreToolUse hooks** | ✅ Supported | ❌ Not via MCP (DEPRECATED) |
+| **Updates** | `claude plugin update` | `git pull` in skills plane (DEPRECATED) |
+| **Cross-platform** | Per-agent implementation | Universal via MCP (DEPRECATED) |
+
+⚠️ **Note**: MCP-Dependent column is deprecated (V4.2.1). Use skills-native agents only.
 
 ---
 

@@ -269,10 +269,13 @@ claude plugin install railway@railway-claude-plugin
 - ✅ PreToolUse hooks (auto-approve GraphQL)
 - ✅ Marketplace updates
 
-### Gemini CLI (MCP-Dependent)
+### Gemini CLI (MCP-Dependent) - DEPRECATED
+
+⚠️ **DEPRECATED (V4.2.1)**: universal-skills MCP is deprecated. Use skills-native agents (Claude Code, OpenCode, Codex CLI) instead.
 
 ```bash
-# Setup universal-skills MCP
+# [DEPRECATED] Setup universal-skills MCP
+# DO NOT USE - universal-skills is deprecated
 gemini mcp add --transport stdio skills -- npx universal-skills mcp
 
 # Railway skills available via load_skill()
@@ -280,10 +283,10 @@ load_skill("railway-deploy")
 ```
 
 **Features:**
-- ✅ Skill loading via MCP
-- ⚠️ Manual activation required
-- ⚠️ Tool restrictions not enforced
-- ❌ No auto-approve hooks
+- ✅ Skill loading via MCP (DEPRECATED)
+- ⚠️ Manual activation required (DEPRECATED)
+- ⚠️ Tool restrictions not enforced (DEPRECATED)
+- ❌ No auto-approve hooks (DEPRECATED)
 
 ### Codex CLI (Skills-Native)
 
