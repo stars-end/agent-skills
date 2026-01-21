@@ -344,14 +344,63 @@ ln -sfn ~/agent-skills ~/.agent/skills
 ls -la ~/.agent/skills
 ```
 
+## Railway Skills (Official Integration)
+
+Railway has created an official set of agent skills for interacting with their platform, now integrated as part of the core agent-skills repository.
+
+### Available Railway Skills
+
+| Skill | Description |
+|-------|-------------|
+| **status** | Check Railway project status |
+| **projects** | List, switch, and configure projects |
+| **new** | Create projects, services, databases |
+| **service** | Manage existing services |
+| **deploy** | Deploy local code |
+| **domain** | Manage service domains |
+| **environment** | Manage config (vars, commands, replicas) |
+| **deployment** | Manage deployments (list, logs, redeploy, remove) |
+| **database** | Add Railway databases |
+| **templates** | Deploy from marketplace |
+| **metrics** | Query resource usage |
+| **railway-docs** | Fetch up-to-date Railway documentation |
+
+### Installation
+
+Railway skills are included in `~/agent-skills/railway/`. No additional installation needed if you have agent-skills mounted at `~/.agent/skills`.
+
+### Usage
+
+Each skill has a `SKILL.md` file with detailed instructions. Example for `railway/status`:
+
+```bash
+# Check Railway project status
+~/.agent/skills/railway/status/SKILL.md
+```
+
+### External Source
+
+Railway skills are maintained by Railway at:
+- **Repository**: https://github.com/railwayapp/railway-skills
+- **Website**: https://railway.com/skills.sh
+
+The skills are synchronized periodically into agent-skills to ensure core integration.
+
 ## Related Documentation
 
+- [railway/status](./railway/status/SKILL.md) - Railway status checking
+- [railway/deploy](./railway/deploy/SKILL.md) - Railway deployment
 - [mcp-doctor](./mcp-doctor/SKILL.md) - MCP server health checks
 - [dirty-repo-bootstrap](./dirty-repo-bootstrap/SKILL.md) - WIP repo recovery (bd-3871.15)
 - [DX_BOOTSTRAP_CONTRACT.md](./DX_BOOTSTRAP_CONTRACT.md) - Session start requirements
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - How to contribute new skills
 
 ## Version History
+
+- **v1.1.0** (2025-01-21): Railway official skills integration
+  - Added Railway skills as core skill set (12 skills from railwayapp/railway-skills)
+  - Skills: status, projects, new, service, deploy, domain, environment, deployment, database, templates, metrics, railway-docs
+  - External source: https://github.com/railwayapp/railway-skills
 
 - **v1.0.0** (2025-12-13): Initial implementation
   - bd-3871.5: Shared profiles architecture
