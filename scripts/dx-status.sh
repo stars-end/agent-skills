@@ -148,6 +148,48 @@ else
     warn_only "canonical-targets.sh missing CANONICAL_REQUIRED_REPOS list (expected in $CANONICAL_TARGETS_SH)"
 fi
 
+# 2.6 Check for .beads/.local_version tracking (should be gitignored)
+echo ""
+echo "--- Beads .local_version Check ---"
+check_beads_local_version() {
+    local repo="$1"
+    local required="${2:-0}"
+    local repo_path="$HOME/$repo"
+
+    if [ ! -d "$repo_path/.git" ]; then
+        return 0
+    fi
+
+    if git -C "$repo_path" ls-files --error-unmatch .beads/.local_version >/dev/null 2>&1; then
+        if [ "$required" -eq 1 ]; then
+            echo -e "${RED}❌ $repo: .beads/.local_version is tracked in git${RESET}"
+            echo "   Fix: cd ~/$repo && echo '.local_version' >> .beads/.gitignore && git rm --cached .beads/.local_version && git commit -m 'fix(beads): stop tracking .local_version'"
+            ERRORS=$((ERRORS+1))
+        else
+            warn_only "$repo: .beads/.local_version is tracked in git (should be gitignored)"
+        fi
+    else
+        echo -e "${GREEN}✅ $repo: .beads/.local_version not tracked${RESET}"
+    fi
+}
+
+# Check all canonical repos
+ALL_REPOS=()
+if declare -p CANONICAL_REQUIRED_REPOS >/dev/null 2>&1; then
+    ALL_REPOS+=("${CANONICAL_REQUIRED_REPOS[@]}")
+fi
+if declare -p CANONICAL_OPTIONAL_REPOS >/dev/null 2>&1; then
+    ALL_REPOS+=("${CANONICAL_OPTIONAL_REPOS[@]}")
+fi
+
+for repo in "${ALL_REPOS[@]}"; do
+    if is_in_list "$repo" "${CANONICAL_REQUIRED_REPOS[@]:-}"; then
+        check_beads_local_version "$repo" 1
+    else
+        check_beads_local_version "$repo" 0
+    fi
+done
+
 # 2. Check Hooks (V3 Logic)
 echo "--- Git Hooks ---"
 PRIME_HOOK="$HOME/prime-radiant-ai/.git/hooks/pre-commit"
