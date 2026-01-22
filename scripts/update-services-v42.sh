@@ -98,7 +98,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%h/.config/opencode %h/.local/state/opencode
+ReadWritePaths=%h/.config/op %h/.config/opencode %h/.local/state/opencode
 
 [Install]
 WantedBy=default.target
@@ -133,7 +133,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%h/.config/slack-coordinator %h/.local/state/slack-coordinator
+ReadWritePaths=%h/.config/op %h/.config/slack-coordinator %h/.local/state/slack-coordinator
 
 [Install]
 WantedBy=default.target
@@ -242,7 +242,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%h/.config/opencode %h/.local/state/opencode
+ReadWritePaths=%h/.config/op %h/.config/opencode %h/.local/state/opencode
 
 [Install]
 WantedBy=default.target
@@ -276,7 +276,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%h/.config/slack-coordinator %h/.local/state/slack-coordinator
+ReadWritePaths=%h/.config/op %h/.config/slack-coordinator %h/.local/state/slack-coordinator
 
 [Install]
 WantedBy=default.target
