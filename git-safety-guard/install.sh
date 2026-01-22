@@ -83,7 +83,9 @@ echo -e "${GREEN}✓${NC} Linked hooks into $HOOK_DIR"
 
 # Cleanup: remove prior untracked .claude/hooks files created by older versions.
 if [[ -d ".claude/hooks" ]]; then
-  wip_dir=".claude/hooks.wip.$(timestamp)"
+  top_level="$(git rev-parse --show-toplevel)"
+  repo_name="$(basename -- "$top_level")"
+  wip_dir="$HOME/.cache/git-safety-guard/${repo_name}/claude-hooks.wip.$(timestamp)"
   moved=0
   for f in git_safety_guard.py pre-push state-recovery permission-sentinel; do
     if [[ -f ".claude/hooks/$f" ]] && ! git ls-files --error-unmatch ".claude/hooks/$f" >/dev/null 2>&1; then
@@ -94,6 +96,11 @@ if [[ -d ".claude/hooks" ]]; then
   done
   if [[ "$moved" == "1" ]]; then
     echo -e "${YELLOW}ℹ  Moved old untracked .claude/hooks files to $wip_dir${NC}"
+  fi
+
+  # If the hooks dir is now empty, remove it (keeps repos clean).
+  if [[ -d ".claude/hooks" ]] && [[ -z "$(ls -A ".claude/hooks" 2>/dev/null || true)" ]]; then
+    rmdir ".claude/hooks" 2>/dev/null || true
   fi
 fi
 
