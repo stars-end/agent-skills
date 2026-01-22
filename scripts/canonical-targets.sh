@@ -22,15 +22,15 @@
 export CANONICAL_TRUNK_BRANCH="master"
 
 export CANONICAL_VMS=(
-  "fengning@homedesktop-wsl:linux:WSL2 on Windows - Primary Linux dev environment"
-  "fengning@macmini:macOS:macOS Dev machine"
-  "fengning@v2202509262171386004:linux:VPS (local epyc6)"
+  "feng@epyc6:linux:Primary Linux dev host (this machine)"
+  "fengning@homedesktop-wsl:linux:WSL2 on Windows - Linux dev environment"
+  "fengning@macmini:macos:macOS Dev machine"
 )
 
 # Shorthand access to primary targets
-export CANONICAL_VM_LINUX="fengning@homedesktop-wsl"
+export CANONICAL_VM_PRIMARY="feng@epyc6"
+export CANONICAL_VM_WSL="fengning@homedesktop-wsl"
 export CANONICAL_VM_MACOS="fengning@macmini"
-export CANONICAL_VM_VPS="fengning@v2202509262171386004"
 
 # ------------------------------------------------------------
 # Canonical IDE Set
@@ -86,12 +86,8 @@ detect_host_key() {
     return 0
   fi
 
-  # Heuristic: VPS naming
-  case "$(hostname 2>/dev/null || true)" in
-    *v2202509262171386004*|*epyc6*) echo "vps" ; return 0 ;;
-  esac
-
-  echo "local"
+  # Default Linux host is epyc6
+  echo "epyc6"
 }
 
 export CANONICAL_HOST_KEY="$(detect_host_key)"
@@ -106,7 +102,7 @@ case "$CANONICAL_HOST_KEY" in
     export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" )
     export CANONICAL_OPTIONAL_REPOS=( "affordabot" "llm-common" )
     ;;
-  vps)
+  epyc6)
     export CANONICAL_REQUIRED_REPOS=( "agent-skills" )
     export CANONICAL_OPTIONAL_REPOS=( "prime-radiant-ai" "affordabot" "llm-common" )
     ;;
@@ -125,6 +121,10 @@ case "$CANONICAL_HOST_KEY" in
   macmini)
     export CANONICAL_REQUIRED_TOOLS=( "bd" )
     export CANONICAL_OPTIONAL_TOOLS=( "jules" "cass" "ru" "railway" "gh" )
+    ;;
+  epyc6)
+    export CANONICAL_REQUIRED_TOOLS=( "bd" "jules" )
+    export CANONICAL_OPTIONAL_TOOLS=( "cass" "ru" "railway" "gh" )
     ;;
   *)
     export CANONICAL_REQUIRED_TOOLS=( "bd" "jules" )

@@ -125,7 +125,7 @@ PY
 export DX_AGENT_ID="$(hostname -s)-claude-code"
 ```
 
-**Format**: `<magicdns-host>-<platform>` (e.g., `v2202509262171386004-claude-code`)
+**Format**: `<canonical-host>-<platform>` (e.g., `epyc6-claude-code`)
 **Status**: P2, warn-only. Provides stable identity for git trailers and Agent Mail.
 **Fallback**: Auto-detects from hostname + platform if not set.
 

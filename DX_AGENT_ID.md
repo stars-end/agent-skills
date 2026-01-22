@@ -15,7 +15,7 @@ DX_AGENT_ID=<magicdns-host>-<platform>
 ```
 
 **Examples:**
-- `v2202509262171386004-claude-code` (Linux VM, Claude Code)
+- `epyc6-claude-code` (Linux, Claude Code)
 - `macmini-codex-cli` (macOS, Codex CLI)
 - `epyc6-antigravity` (Linux VM, Antigravity)
 
@@ -30,7 +30,7 @@ DX_AGENT_ID=<magicdns-host>-<platform>
 **In your shell profile** (`~/.bashrc`, `~/.zshrc`, or `~/.profile`):
 
 ```bash
-export DX_AGENT_ID="v2202509262171386004-claude-code"
+export DX_AGENT_ID="epyc6-claude-code"
 ```
 
 **Or per-session** (temporary):
@@ -145,7 +145,7 @@ The `AGENT_NAME` environment variable is still supported as a fallback for backw
 
 ```bash
 # In ~/.bashrc
-export DX_AGENT_ID="v2202509262171386004-claude-code"
+export DX_AGENT_ID="epyc6-claude-code"
 ```
 
 ### Codex CLI (macOS)

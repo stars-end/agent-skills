@@ -8,7 +8,7 @@ This document defines the single source of truth for canonical VMs, IDEs, and co
 |------|-----|-------------|------------|
 | homedesktop-wsl | Linux (WSL2) | Primary Linux dev environment | `fengning@homedesktop-wsl` |
 | macmini | macOS | macOS Dev machine | `fengning@macmini` |
-| epyc6 | Linux | VPS (local) | `fengning@v2202509262171386004` |
+| epyc6 | Linux | Primary Linux dev host (this machine) | `feng@epyc6` |
 
 ## Canonical Git Trunk
 

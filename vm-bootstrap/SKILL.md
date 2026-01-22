@@ -79,7 +79,7 @@ export DX_AGENT_ID="$(hostname -s)-claude-code"
 ```
 
 **Format**: `<magicdns-host>-<platform>`
-**Examples**: `v2202509262171386004-claude-code`, `macmini-codex-cli`
+**Examples**: `epyc6-claude-code`, `macmini-codex-cli`
 
 **Why**: Provides stable identity for git trailers, Agent Mail coordination, and multi-repo workflows.
 

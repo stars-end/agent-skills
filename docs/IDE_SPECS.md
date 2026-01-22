@@ -71,7 +71,7 @@ opencode auth login
 The following VMs are defined in `scripts/canonical-targets.sh`:
 
 ### epyc6 (Production)
-- Location: `fengning@v2202509262171386004` (local VPS)
+- Location: `feng@epyc6` (primary Linux dev host)
 - Expected: All 4 canonical IDEs installed and configured
 - Verification: Run `dx-status` to check
 
@@ -123,4 +123,3 @@ See `~/agent-skills/scripts/setup-slack-mcp.sh` for verification commands per ID
 - **Last updated**: 2026-01-22 (V4.2.1 - Slack MCP support added, IDE specs verified)
 - **Canonical targets**: `~/agent-skills/scripts/canonical-targets.sh`
 - **See also**: `~/agent-skills/docs/CANONICAL_TARGETS.md`
-

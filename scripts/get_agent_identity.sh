@@ -7,7 +7,6 @@ set -euo pipefail
 # DX_AGENT_ID identity standard (bd-n1rv)
 # Format: <magicdns-host>-<platform>
 # Examples:
-#   - v2202509262171386004-claude-code
 #   - macmini-codex-cli
 #   - epyc6-antigravity
 
@@ -34,7 +33,19 @@ get_platform() {
 }
 
 get_hostname() {
-  # Try hostname -s first (short hostname), fallback to hostname
+  # Prefer canonical host key mapping (avoids provider hostnames like v220...).
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  CANONICAL_TARGETS_SH="$SCRIPT_DIR/canonical-targets.sh"
+  if [[ -f "$CANONICAL_TARGETS_SH" ]]; then
+    # shellcheck disable=SC1090
+    source "$CANONICAL_TARGETS_SH"
+    if command -v detect_host_key >/dev/null 2>&1; then
+      detect_host_key
+      return 0
+    fi
+  fi
+
+  # Fallback to hostname -s (short), then hostname
   hostname -s 2>/dev/null || hostname 2>/dev/null || echo "unknown"
 }
 
