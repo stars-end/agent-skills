@@ -3,7 +3,7 @@ name: git-safety-guard
 description: |
   Installs a Git safety guard hook for Claude Code to prevent destructive Git and filesystem commands.
   Blocks accidental data loss from commands like 'git checkout --', 'git reset --hard', 'git clean -f', 'git push --force', and 'rm -rf'.
-  Use this skill to set up safety rails in a new or existing repository, or globally for the agent.
+  Use this skill to set up safety rails globally (Claude hook) and per-repo (git hooks) without dirtying repos.
 tags: [git, safety, setup, hooks, protection]
 allowed-tools:
   - Bash(git-safety-guard/install.sh:*)
@@ -31,6 +31,8 @@ Protects only the current project.
 git-safety-guard/install.sh
 ```
 
+Note: per-project install only links `.git/hooks/*` (it does not write `.claude/` files into the repo).
+
 ## What It Blocks
 
 | Command Pattern | Why It's Dangerous |
@@ -49,11 +51,18 @@ git-safety-guard/install.sh
 
 ## Safety Mechanism
 
-The hook is a Python script (`git_safety_guard.py`) registered in `.claude/settings.json` (or `~/.claude/settings.json`).
+The Claude hook is a Python script (`git_safety_guard.py`) registered in `~/.claude/settings.json`.
 It runs before every Bash command execution.
 If a command matches a destructive pattern:
 1. The command is BLOCKED (never runs).
 2. The agent receives a "permissionDecision: deny" response with an explanation.
+
+The repo hooks (pre-push / pre-commit / post-checkout / post-merge) are linked into `.git/hooks/` so they do not affect repo cleanliness.
+
+## CI-lite Pre-push
+
+The pre-push hook is warn-only by default to avoid blocking pushes due to missing local tooling.
+To enforce `make ci-lite` when available, set `DX_CI_LITE_STRICT=1` in your shell before pushing.
 
 ## Important Notes
 
