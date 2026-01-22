@@ -2,8 +2,8 @@
 name: finish-feature
 description: |
   Complete epic with cleanup and archiving, or verify feature already closed. MUST BE USED when finishing epics/features.
-  For epics: Verifies children closed, archives docs, caches to memory (future: Supermemory), closes epic.
-  For features/tasks/bugs: Verifies already closed (from PR creation), archives docs, caches to memory (future: Supermemory).
+  For epics: Verifies children closed, archives docs, closes epic.
+  For features/tasks/bugs: Verifies already closed (from PR creation), archives docs.
   Non-epic issues must be closed at PR creation time (atomic merge pattern).
   Use when user says "I'm done with this epic", "finish the feature", "finish this epic", "archive this epic",
   or when user mentions epic completion, cleanup, archiving, feature finalization, or closing work.
@@ -14,7 +14,6 @@ allowed-tools:
   - Bash(gh:*)
   - Bash(bd:*)
   - Bash(make:*)
-  # Future: mcp__supermemory__cache_docs (when Supermemory is implemented)
   - Read
 ---
 
@@ -24,7 +23,7 @@ Complete epic or feature with verification, archiving, and cleanup (<2 minutes).
 
 ## Purpose
 
-Ensures **clean completion** of epics/features: Verify work done, archive docs, cache to memory (future: Supermemory), update Beads status.
+Ensures **clean completion** of epics/features: Verify work done, archive docs, update Beads status.
 
 **Philosophy:** Automated cleanup + Knowledge preservation + Clean slate
 
@@ -159,49 +158,17 @@ fi
 - Some epics serve as ongoing reference (keep in docs/)
 - Others are completed and should archive (move to archive/)
 
-### 5. Cache to Memory (Future: Supermemory)
+### 5. Memory Caching
 
-**NOTE**: Serena is deprecated (V4.2.1). Supermemory integration is planned but not yet implemented.
+**NOTE**: Memory caching is currently deferred.
 
 **Current behavior**: Skip memory caching step. Documentation remains in git for searchability.
 
-**Future (when Supermemory is implemented)**:
-```bash
-# TODO: Replace with Supermemory MCP integration
-# Example:
-# DOC_DIR="docs/$issueId"
-# ARCHIVE_DIR="docs/archive/$(date +%Y)-Q$(($(date +%-m)/3+1))/$issueId"
-#
-# # Check which location exists
-# if [ -d "$ARCHIVE_DIR" ]; then
-#   SOURCE_DIR="$ARCHIVE_DIR"
-# elif [ -d "$DOC_DIR" ]; then
-#   SOURCE_DIR="$DOC_DIR"
-# else
-#   echo "ℹ️  No docs to cache (Beads only)"
-#   SOURCE_DIR=""
-# fi
-#
-# if [ -n "$SOURCE_DIR" ]; then
-#   # Cache to Supermemory via MCP
-#   mcp__supermemory__cache_docs(
-#     issue_id="$issueId",
-#     source_dir="$SOURCE_DIR"
-#   )
-#   echo "💾 Cached to Supermemory: $issueId"
-# fi
-```
-
-**Why cache (when Supermemory is available)**:
-- Docs become searchable via Supermemory
-- Clearly marked as [CACHE] (not source of truth)
-- Enables fast lookup without reading git files
-- Useful for cross-epic references
-
-**Migration from Serena**:
-- Serena is deprecated - do not use mcp__serena__write_memory
-- Supermemory will replace Serena for memory caching
-- See Beads issue agent-skills-1pc for Supermemory implementation status
+**Migration status**:
+- Serena is DEPRECATED (V4.2.1) - do not use mcp__serena__write_memory
+- Supermemory is DEFERRED (de-scoped from V3.x)
+- No active memory caching system
+- Use git search for archival context
 
 ### 6. Close or Verify Beads Issue
 
@@ -322,7 +289,7 @@ if [ -n "$(git status --porcelain)" ]; then
   git commit -m "docs: archive $issueId on completion
 
 Moved docs to archive, closed issue.
-Note: Memory caching (Serena) deprecated in V4.2.1; Supermemory pending.
+Note: Memory caching deferred (Serena deprecated, Supermemory out of scope).
 
 Feature-Key: $issueId
 Agent: claude-code
@@ -477,7 +444,7 @@ Parent epic: ${parent_id}
 
 ✅ Always verify children closed before closing parent
 ✅ Archive completed work (frees up docs/ for active work)
-✅ Memory cache for searchability (future: Supermemory, currently disabled)
+✅ Memory cache for searchability (deferred; docs in git)
 ✅ Check commits merged before closing
 ✅ Commit archiving changes with Feature-Key
 ✅ Show parent epic progress for context
@@ -489,7 +456,7 @@ Parent epic: ${parent_id}
 ❌ Archive ongoing reference docs (keep in docs/ for access)
 ❌ Forget to commit cleanup changes
 ❌ Try to close non-epic issues (should already be closed from PR creation)
-❌ Memory caching: Supermemory not yet implemented (docs remain in git for searchability)
+❌ Memory caching: Deferred (documentation remains in git for searchability)
 
 ## Integration with Other Skills
 
@@ -512,7 +479,7 @@ Parent epic: ${parent_id}
 
 ✅ Verifies completion criteria (children closed, commits merged)
 ✅ Offers doc archiving (docs/ → docs/archive/YYYY-QQ/)
-✅ Memory cache for searchability (future: Supermemory, currently disabled)
+✅ Memory caching deferred (documentation remains in git)
 ✅ **For epics:** Closes epic if all children closed
 ✅ **For features/tasks/bugs:** Verifies already closed (from PR creation)
 ✅ Commits cleanup changes with Feature-Key
@@ -644,12 +611,12 @@ Next: bd ready
 
 **Memory caching (V4.2.1):**
 - Serena is DEPRECATED (do not use mcp__serena__write_memory)
-- Supermemory will replace Serena for memory caching (planned, see agent-skills-1pc)
+- Supermemory is DEFERRED (de-scoped from V3.x)
 - Current: Skip memory caching step (docs remain in git for searchability)
 
 ---
 
-**Last Updated:** 2026-01-21 (V4.2.1 - Serena removed, Supermemory pending)
+**Last Updated:** 2026-01-22 (V4.2.1 - Serena removed, Supermemory de-scoped)
 **Skill Type:** Workflow
 **Average Duration:** <2 minutes
 **Related Docs:**
