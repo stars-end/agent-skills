@@ -60,22 +60,6 @@ export CANONICAL_REPOS=(
 # ------------------------------------------------------------
 # Per-IDE Config Paths
 # ------------------------------------------------------------
-# Linux (including WSL2)
-declare -A CANONICAL_IDE_CONFIG_LINUX=(
-  ["antigravity"]="$HOME/.gemini/antigravity/mcp_config.json"
-  ["claude-code"]="$HOME/.claude/settings.json"
-  ["codex-cli"]="$HOME/.codex/config.toml"
-  ["opencode"]="$HOME/.opencode/config.json"
-)
-
-# macOS
-declare -A CANONICAL_IDE_CONFIG_MACOS=(
-  ["antigravity"]="$HOME/.gemini/antigravity/mcp_config.json"
-  ["claude-code"]="$HOME/.claude/settings.json"
-  ["codex-cli"]="$HOME/.codex/config.toml"
-  ["opencode"]="$HOME/.opencode/config.json"
-)
-
 # ------------------------------------------------------------
 # Helper Functions
 # ------------------------------------------------------------
@@ -84,16 +68,23 @@ declare -A CANONICAL_IDE_CONFIG_MACOS=(
 get_ide_config() {
   local ide="$1"
   local os="${2:-$(detect_os)}"
-  
+
   case "$os" in
-    linux)
-      echo "${CANONICAL_IDE_CONFIG_LINUX[$ide]}"
-      ;;
-    macos)
-      echo "${CANONICAL_IDE_CONFIG_MACOS[$ide]}"
+    linux|macos)
       ;;
     *)
       echo "Error: Unknown OS '$os'" >&2
+      return 1
+      ;;
+  esac
+
+  case "$ide" in
+    antigravity) echo "$HOME/.gemini/antigravity/mcp_config.json" ;;
+    claude-code) echo "$HOME/.claude/settings.json" ;;
+    codex-cli) echo "$HOME/.codex/config.toml" ;;
+    opencode) echo "$HOME/.opencode/config.json" ;;
+    *)
+      echo "Error: Unknown IDE '$ide'" >&2
       return 1
       ;;
   esac
