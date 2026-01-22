@@ -3,7 +3,10 @@ set -euo pipefail
 
 echo "[git-safety-guard] state recovery..."
 
-if [[ -f .beads/issues.jsonl ]] && command -v bd >/dev/null 2>&1; then
+# Intentionally does not run `bd import` by default because some repos track
+# `.beads/.local_version`, and auto-import can dirty the working tree.
+# Opt in per machine via: DX_BEADS_AUTO_IMPORT=1
+if [[ "${DX_BEADS_AUTO_IMPORT:-}" == "1" ]] && [[ -f .beads/issues.jsonl ]] && command -v bd >/dev/null 2>&1; then
   bd import 2>/dev/null || true
 fi
 
