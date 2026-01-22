@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "╔══════════════════════════════════════════╗"
-echo "║  V4.1 Pre-Flight Check Suite            ║"
+echo "║  V4.2.1 Pre-Flight Check Suite          ║"
 echo "║  Checking all 3 VMs before implementation ║"
 echo "╚══════════════════════════════════════════╝"
 echo
@@ -29,7 +29,7 @@ echo "╔═══════════════════════�
 echo "║  ✅ Pre-Flight Checks Complete            ║"
 echo "╚══════════════════════════════════════════╝"
 echo
-echo "Review results above before starting V4.1 implementation."
+echo "Review results above before starting V4.2.1 implementation."
 echo
 echo "BLOCKERS that must pass:"
 echo "  ✓ All 3 VMs reachable via SSH"

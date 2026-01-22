@@ -13,16 +13,17 @@ echo "=== Slack MCP Server Setup (V4.2.1) ==="
 echo "Target IDE: $TARGET_IDE"
 echo ""
 echo "NOTE: This script does NOT write to shell rc files."
-echo "Set environment variables in your shell profile or source them per-session."
+echo "Provide environment variables per-session (recommended) or via your secret manager."
 echo ""
 
-# 1. Check if already installed
-if command -v slack-mcp-server &> /dev/null; then
-    echo "✅ slack-mcp-server already installed: $(which slack-mcp-server)"
+# Prefer npx-based execution to avoid needing a globally installed binary.
+# This matches repo docs that use: npx -y slack-mcp-server@latest --transport stdio
+if command -v npx >/dev/null 2>&1; then
+    echo "✅ npx found: $(command -v npx)"
 else
-    echo "Installing slack-mcp-server via go..."
-    go install github.com/korotovsky/slack-mcp-server/mcp@latest
-    echo "✅ Installed slack-mcp-server"
+    echo "⚠️  npx not found"
+    echo "   Install Node.js/npm (e.g., via Homebrew/Linuxbrew), then re-run."
+    echo "   Fallback: build a slack-mcp-server binary (see scripts/slack-mcp-setup.sh)."
 fi
 
 # 2. Verify environment variables
@@ -50,11 +51,11 @@ configure_claude_code() {
         if ! grep -q '"slack"' "$CLAUDE_CONFIG"; then
             echo "Adding Slack MCP to Claude Code config..."
             if command -v jq &> /dev/null; then
-                jq '.mcpServers.slack = {"type": "stdio", "command": "slack-mcp-server", "args": ["--transport", "stdio"]}' "$CLAUDE_CONFIG" > /tmp/claude.json.tmp && mv /tmp/claude.json.tmp "$CLAUDE_CONFIG"
+                jq '.mcpServers.slack = {"type": "stdio", "command": "npx", "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"]}' "$CLAUDE_CONFIG" > /tmp/claude.json.tmp && mv /tmp/claude.json.tmp "$CLAUDE_CONFIG"
                 echo "✅ Added Slack MCP to Claude Code"
             else
                 echo "⚠️  jq not found, manually add to ~/.claude.json mcpServers:"
-                echo '    "slack": {"type": "stdio", "command": "slack-mcp-server", "args": ["--transport", "stdio"]}'
+                echo '    "slack": {"type": "stdio", "command": "npx", "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"]}'
             fi
         else
             echo "✅ Slack MCP already in Claude Code config"
@@ -75,8 +76,8 @@ configure_antigravity() {
 {
   "mcpServers": {
     "slack": {
-      "command": "slack-mcp-server",
-      "args": ["--transport", "stdio"]
+      "command": "npx",
+      "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"]
     }
   }
 }
@@ -99,8 +100,8 @@ configure_codex_cli() {
             cat > "$CODEX_CONFIG" << 'EOF'
 # Codex CLI MCP Configuration
 [mcpServers.slack]
-command = "slack-mcp-server"
-args = ["--transport", "stdio"]
+command = "npx"
+args = ["-y", "slack-mcp-server@latest", "--transport", "stdio"]
 EOF
             echo "✅ Created Codex CLI config with Slack MCP"
         else
@@ -108,8 +109,8 @@ EOF
             if ! grep -q "^\[mcpServers\]" "$CODEX_CONFIG"; then
                 echo "" >> "$CODEX_CONFIG"
                 echo "[mcpServers.slack]" >> "$CODEX_CONFIG"
-                echo 'command = "slack-mcp-server"' >> "$CODEX_CONFIG"
-                echo 'args = ["--transport", "stdio"]' >> "$CODEX_CONFIG"
+                echo 'command = "npx"' >> "$CODEX_CONFIG"
+                echo 'args = ["-y", "slack-mcp-server@latest", "--transport", "stdio"]' >> "$CODEX_CONFIG"
                 echo "✅ Added Slack MCP to Codex CLI config"
             else
                 echo "⚠️  Codex CLI config exists, manually add Slack MCP to ~/.codex/config.toml"
@@ -131,8 +132,8 @@ configure_opencode() {
 {
   "mcpServers": {
     "slack": {
-      "command": "slack-mcp-server",
-      "args": ["--transport", "stdio"]
+      "command": "npx",
+      "args": ["-y", "slack-mcp-server@latest", "--transport", "stdio"]
     }
   }
 }
@@ -175,9 +176,9 @@ echo "=== Setup Complete ==="
 echo "Configured IDE(s): $TARGET_IDE"
 echo ""
 echo "=== Environment Variables ==="
-echo "The following environment variables should be set in your shell profile:"
-echo "  export SLACK_MCP_XOXP_TOKEN='xoxp-...'"
-echo "  export SLACK_MCP_ADD_MESSAGE_TOOL=true"
+echo "Provide these per-session (recommended):"
+echo "  export SLACK_MCP_XOXP_TOKEN=...          # load from 1Password"
+echo "  export SLACK_MCP_ADD_MESSAGE_TOOL=true   # optional"
 echo ""
 echo "Load from 1Password (recommended):"
 echo "  export SLACK_MCP_XOXP_TOKEN=\$(op item get --vault dev Slack-MCP-Secrets --fields label=xoxp_token)"
@@ -191,6 +192,6 @@ echo "  codex-cli:   codex mcp list | grep slack"
 echo "  opencode:    opencode mcp list | grep slack"
 echo ""
 echo "=== Test Slack MCP Server Directly ==="
-echo "  slack-mcp-server --transport stdio"
+echo "  npx -y slack-mcp-server@latest --transport stdio"
 echo ""
 echo "For more information, see: ~/agent-skills/docs/slack-mcp-setup.md"
