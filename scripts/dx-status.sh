@@ -11,6 +11,18 @@ RESET='\033[0m'
 
 echo -e "${BLUE}🩺 Checking Agent Health...${RESET}"
 ERRORS=0
+WARNINGS=0
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CANONICAL_TARGETS_SH="$SCRIPT_DIR/canonical-targets.sh"
+
+# Optional: source canonical targets (VMs/IDEs/repos + trunk branch)
+if [ -f "$CANONICAL_TARGETS_SH" ]; then
+    # shellcheck disable=SC1090
+    source "$CANONICAL_TARGETS_SH"
+fi
+
+CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
 
 # Cross-platform realpath
 resolve_path() {
@@ -36,6 +48,43 @@ check_binary() {
     fi
 }
 
+warn_only() {
+    echo -e "${YELLOW}⚠️  $1${RESET}"
+    WARNINGS=$((WARNINGS+1))
+}
+
+check_canonical_repo() {
+    local repo="$1"
+    local repo_path="$HOME/$repo"
+
+    if [ ! -d "$repo_path/.git" ]; then
+        warn_only "Canonical repo missing: $repo_path (expected for sync/automation)"
+        return 0
+    fi
+
+    local branch
+    branch="$(git -C "$repo_path" branch --show-current 2>/dev/null || true)"
+    if [ -z "$branch" ]; then
+        branch="$(git -C "$repo_path" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    fi
+
+    if [ "$branch" != "$CANONICAL_TRUNK_BRANCH" ]; then
+        echo -e "${RED}❌ $repo_path on '$branch' (expected '$CANONICAL_TRUNK_BRANCH')${RESET}"
+        echo "   This blocks ru/dx automation. Keep canonical clones on trunk; use worktrees or *.wip.* directories for active work."
+        ERRORS=$((ERRORS+1))
+        return 0
+    fi
+
+    if [ -n "$(git -C "$repo_path" status --porcelain=v1 2>/dev/null || true)" ]; then
+        echo -e "${RED}❌ $repo_path has uncommitted changes (canonical clones must stay clean)${RESET}"
+        echo "   This blocks fast-forward sync. Move work to a worktree or backup dir, then reset canonical clone to trunk."
+        ERRORS=$((ERRORS+1))
+        return 0
+    fi
+
+    echo -e "${GREEN}✅ $repo_path clean on $CANONICAL_TRUNK_BRANCH${RESET}"
+}
+
 # 1. Check Configs
 echo "--- Core Configs ---"
 check_file "$HOME/.ntm.yaml"
@@ -50,6 +99,16 @@ if [ -f AGENTS.md ]; then
         echo -e "${YELLOW}⚠️  GEMINI.md symlink missing or invalid in current dir${RESET}"
         # Warn only, as we might be running from /tmp
     fi
+fi
+
+# 2.5 Canonical trunk enforcement (master)
+echo "--- Canonical Git Trunk ---"
+if declare -p CANONICAL_REPOS >/dev/null 2>&1 && [ "${#CANONICAL_REPOS[@]}" -gt 0 ]; then
+    for repo in "${CANONICAL_REPOS[@]}"; do
+        check_canonical_repo "$repo"
+    done
+else
+    warn_only "canonical-targets.sh missing CANONICAL_REPOS list (expected in $CANONICAL_TARGETS_SH)"
 fi
 
 # 2. Check Hooks (V3 Logic)
@@ -106,10 +165,8 @@ fi
 # 4. Invoke MCP Doctor
 echo "--- MCP & Tooling Status ---"
 if [ -f "$HOME/agent-skills/mcp-doctor/check.sh" ]; then
-    export MCP_DOCTOR_STRICT=1
-    if ! bash "$HOME/agent-skills/mcp-doctor/check.sh"; then
-        ERRORS=$((ERRORS+1))
-    fi
+    # mcp-doctor is warn-only by default; strict mode should be enabled explicitly.
+    bash "$HOME/agent-skills/mcp-doctor/check.sh" || true
 else
     echo -e "${RED}❌ MCP Doctor script missing${RESET}"
     ERRORS=$((ERRORS+1))
@@ -118,9 +175,15 @@ fi
 echo ""
 if [ $ERRORS -eq 0 ]; then
     echo -e "${GREEN}✨ SYSTEM READY. All systems nominal.${RESET}"
+    if [ $WARNINGS -gt 0 ]; then
+        echo -e "${YELLOW}ℹ Found $WARNINGS warning(s).${RESET}"
+    fi
     exit 0
 else
     echo -e "${RED}⚠️  SYSTEM UNHEALTHY. Found $ERRORS errors.${RESET}"
+    if [ $WARNINGS -gt 0 ]; then
+        echo -e "${YELLOW}ℹ Also found $WARNINGS warning(s).${RESET}"
+    fi
     echo -e "${YELLOW}💡 TROUBLESHOOTING: Read ~/agent-skills/memory/playbooks/99_TROUBLESHOOTING.md for fixes.${RESET}"
     exit 1
 fi

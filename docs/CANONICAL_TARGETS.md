@@ -10,6 +10,12 @@ This document defines the single source of truth for canonical VMs, IDEs, and co
 | macmini | macOS | macOS Dev machine | `fengning@macmini` |
 | epyc6 | Linux | VPS (local) | `fengning@v2202509262171386004` |
 
+## Canonical Git Trunk
+
+**Trunk branch**: `master`
+
+**Rule**: keep the canonical clones in `~/<repo>` on `master` and clean (no uncommitted changes). If you need to work on a feature branch, use a worktree (recommended) or a separate `*.wip.*` directory, so automation can still fast-forward the canonical clones.
+
 ### Environment Variables
 
 - `CANONICAL_VM_LINUX` = `fengning@homedesktop-wsl`
@@ -45,6 +51,17 @@ The following IDEs are officially supported for MCP and tooling integration:
 | claude-code | `~/.claude/settings.json` |
 | codex-cli | `~/.codex/config.toml` |
 | opencode | `~/.opencode/config.json` |
+
+## Canonical Repos
+
+These repos are expected to exist as canonical clones at:
+
+- `~/agent-skills`
+- `~/prime-radiant-ai`
+- `~/affordabot`
+- `~/llm-common`
+
+They should remain on `master` for cross-VM sync and DX verification.
 
 ## Usage
 

@@ -19,6 +19,8 @@
 # These are the primary VMs used for development and deployment.
 # Format: "user@hostname:OS:Description"
 
+export CANONICAL_TRUNK_BRANCH="master"
+
 export CANONICAL_VMS=(
   "fengning@homedesktop-wsl:linux:WSL2 on Windows - Primary Linux dev environment"
   "fengning@macmini:macOS:macOS Dev machine"
@@ -40,6 +42,19 @@ export CANONICAL_IDES=(
   "claude-code"
   "codex-cli"
   "opencode"
+)
+
+# ------------------------------------------------------------
+# Canonical Repos (Git)
+# ------------------------------------------------------------
+# These repos should stay on CANONICAL_TRUNK_BRANCH at their canonical paths,
+# so automation (ru, dx-check, pre-flight) can safely fast-forward and verify.
+
+export CANONICAL_REPOS=(
+  "agent-skills"
+  "prime-radiant-ai"
+  "affordabot"
+  "llm-common"
 )
 
 # ------------------------------------------------------------

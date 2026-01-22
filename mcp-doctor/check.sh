@@ -151,6 +151,53 @@ else
 fi
 
 echo ""
+echo "Git trunk alignment (canonical clones):"
+
+CANONICAL_TARGETS_SH="$SKILLS_DIR/scripts/canonical-targets.sh"
+if [[ -f "$CANONICAL_TARGETS_SH" ]]; then
+  # shellcheck disable=SC1090
+  source "$CANONICAL_TARGETS_SH"
+fi
+
+CANONICAL_TRUNK="${CANONICAL_TRUNK_BRANCH:-master}"
+
+repo_warns=0
+if declare -p CANONICAL_REPOS >/dev/null 2>&1 && [[ "${#CANONICAL_REPOS[@]}" -gt 0 ]]; then
+  for repo in "${CANONICAL_REPOS[@]}"; do
+    repo_path="$HOME/$repo"
+    if [[ ! -d "$repo_path/.git" ]]; then
+      echo "⚠️  $repo_path (missing repo) — expected canonical clone"
+      repo_warns=$((repo_warns+1))
+      continue
+    fi
+
+    current_branch="$(git -C "$repo_path" branch --show-current 2>/dev/null || echo "")"
+    if [[ -z "$current_branch" ]]; then
+      current_branch="$(git -C "$repo_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+    fi
+
+    if [[ "$current_branch" != "$CANONICAL_TRUNK" ]]; then
+      echo "⚠️  $repo_path: on '$current_branch' (expected '$CANONICAL_TRUNK') — keep canonical clones on trunk for automation"
+      repo_warns=$((repo_warns+1))
+    else
+      echo "✅ $repo_path: on $CANONICAL_TRUNK"
+    fi
+
+    if [[ -n "$(git -C "$repo_path" status --porcelain=v1 2>/dev/null || true)" ]]; then
+      echo "⚠️  $repo_path: working tree dirty — ru/dx automation will refuse to fast-forward"
+      repo_warns=$((repo_warns+1))
+    fi
+  done
+else
+  echo "⚠️  Canonical repo list not found (expected: $CANONICAL_TARGETS_SH)"
+  repo_warns=$((repo_warns+1))
+fi
+
+if [[ "$repo_warns" -gt 0 ]]; then
+  missing_optional=$((missing_optional+repo_warns))
+fi
+
+echo ""
 echo "OPTIONAL CLI tools:"
 
 # Railway (per env-sources contract: optional in local dev, required in CI/CD)
