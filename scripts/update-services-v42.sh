@@ -97,7 +97,7 @@ MemoryMax=4G
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=read-only
 ReadWritePaths=%h/.config/opencode %h/.local/state/opencode
 
 [Install]
@@ -132,7 +132,7 @@ MemoryMax=2G
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=read-only
 ReadWritePaths=%h/.config/slack-coordinator %h/.local/state/slack-coordinator
 
 [Install]
@@ -241,7 +241,7 @@ MemoryMax=4G
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=read-only
 ReadWritePaths=%h/.config/opencode %h/.local/state/opencode
 
 [Install]
@@ -275,7 +275,7 @@ MemoryMax=2G
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=read-only
 ReadWritePaths=%h/.config/slack-coordinator %h/.local/state/slack-coordinator
 
 [Install]

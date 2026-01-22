@@ -23,7 +23,7 @@ MemoryMax=2G
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=read-only
 ReadWritePaths=%h/.config/slack-coordinator %h/.local/state/slack-coordination
 
 [Install]
