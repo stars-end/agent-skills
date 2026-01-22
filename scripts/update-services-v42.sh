@@ -83,10 +83,9 @@ Environment="PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin"
 LoadCredentialEncrypted=op_token:%h/.config/systemd/user/op_token.cred
 LoadCredential=op_token:%h/.config/systemd/user/op_token
 
-# Use SCOPED env file (per-service, NOT shared ~/.agent-env)
+# Use SCOPED env file (not shared ~/.agent-env)
 # op run resolves op:// references at runtime
-EnvironmentFile=-%h/.config/opencode/.env
-ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run -- /home/linuxbrew/.linuxbrew/bin/opencode serve --port 4105 --hostname 0.0.0.0'
+ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run --env-file=%h/.config/opencode/.env -- /home/linuxbrew/.linuxbrew/bin/opencode serve --port 4105 --hostname 0.0.0.0'
 
 Restart=on-failure
 RestartSec=5
@@ -118,11 +117,10 @@ Environment="PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin"
 LoadCredentialEncrypted=op_token:%h/.config/systemd/user/op_token.cred
 LoadCredential=op_token:%h/.config/systemd/user/op_token
 
-# Use SCOPED env file (per-service, NOT shared ~/.agent-env)
+# Use SCOPED env file (not shared ~/.agent-env)
 # op run resolves op:// references at runtime
-EnvironmentFile=-%h/.config/slack-coordinator/.env
 WorkingDirectory=%h/agent-skills/slack-coordination
-ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run -- .venv/bin/python slack-coordinator.py'
+ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run --env-file=%h/.config/slack-coordinator/.env -- %h/agent-skills/slack-coordination/.venv/bin/python slack-coordinator.py'
 
 Restart=on-failure
 RestartSec=5
@@ -229,8 +227,7 @@ LoadCredentialEncrypted=op_token:%h/.config/systemd/user/op_token.cred
 LoadCredential=op_token:%h/.config/systemd/user/op_token
 
 # Use SCOPED env file (per-service, NOT shared ~/.agent-env)
-EnvironmentFile=-%h/.config/opencode/.env
-ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run -- /home/linuxbrew/.linuxbrew/bin/opencode serve --port 4105 --hostname 0.0.0.0'
+ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run --env-file=%h/.config/opencode/.env -- /home/linuxbrew/.linuxbrew/bin/opencode serve --port 4105 --hostname 0.0.0.0'
 
 Restart=on-failure
 RestartSec=5
@@ -262,10 +259,10 @@ Environment="PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin"
 LoadCredentialEncrypted=op_token:%h/.config/systemd/user/op_token.cred
 LoadCredential=op_token:%h/.config/systemd/user/op_token
 
-# Use SCOPED env file (per-service, NOT shared ~/.agent-env)
-EnvironmentFile=-%h/.config/slack-coordinator/.env
+# Use SCOPED env file (not shared ~/.agent-env)
+# op run resolves op:// references at runtime
 WorkingDirectory=%h/agent-skills/slack-coordination
-ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run -- .venv/bin/python slack-coordinator.py'
+ExecStart=/bin/bash -c 'export OP_SERVICE_ACCOUNT_TOKEN="$(cat $CREDENTIALS_DIRECTORY/op_token)"; exec /home/linuxbrew/.linuxbrew/bin/op run --env-file=%h/.config/slack-coordinator/.env -- %h/agent-skills/slack-coordination/.venv/bin/python slack-coordinator.py'
 
 Restart=on-failure
 RestartSec=5
