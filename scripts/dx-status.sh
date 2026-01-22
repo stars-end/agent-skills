@@ -39,12 +39,18 @@ check_file() {
 }
 
 check_binary() {
-    if command -v "$1" >/dev/null 2>&1; then
-         echo -e "${GREEN}✅ Binary found: $1${RESET}"
+    local bin="$1"
+    local required="${2:-1}"
+    if command -v "$bin" >/dev/null 2>&1; then
+         echo -e "${GREEN}✅ Binary found: $bin${RESET}"
     else
-         echo -e "${RED}❌ Binary missing: $1${RESET}"
-         echo "   Run: 'npm install -g $1' or check installation guide."
-         ERRORS=$((ERRORS+1))
+         if [ "$required" -eq 1 ]; then
+             echo -e "${RED}❌ Binary missing: $bin${RESET}"
+             echo "   Run: 'npm install -g $bin' or check installation guide."
+             ERRORS=$((ERRORS+1))
+         else
+             warn_only "Binary missing: $bin"
+         fi
     fi
 }
 
@@ -55,10 +61,17 @@ warn_only() {
 
 check_canonical_repo() {
     local repo="$1"
+    local required="${2:-0}"
     local repo_path="$HOME/$repo"
 
     if [ ! -d "$repo_path/.git" ]; then
-        warn_only "Canonical repo missing: $repo_path (expected for sync/automation)"
+        if [ "$required" -eq 1 ]; then
+            echo -e "${RED}❌ Canonical repo missing: $repo_path${RESET}"
+            echo "   Fix: clone it at $repo_path (and keep on $CANONICAL_TRUNK_BRANCH for automation)"
+            ERRORS=$((ERRORS+1))
+            return 0
+        fi
+        warn_only "Canonical repo missing: $repo_path (optional on this host)"
         return 0
     fi
 
@@ -69,20 +82,39 @@ check_canonical_repo() {
     fi
 
     if [ "$branch" != "$CANONICAL_TRUNK_BRANCH" ]; then
-        echo -e "${RED}❌ $repo_path on '$branch' (expected '$CANONICAL_TRUNK_BRANCH')${RESET}"
-        echo "   This blocks ru/dx automation. Keep canonical clones on trunk; use worktrees or *.wip.* directories for active work."
-        ERRORS=$((ERRORS+1))
+        if [ "$required" -eq 1 ]; then
+            echo -e "${RED}❌ $repo_path on '$branch' (expected '$CANONICAL_TRUNK_BRANCH')${RESET}"
+            echo "   This blocks ru/dx automation. Keep canonical clones on trunk; use worktrees or *.wip.* directories for active work."
+            ERRORS=$((ERRORS+1))
+        else
+            warn_only "$repo_path on '$branch' (expected '$CANONICAL_TRUNK_BRANCH' for canonical automation)"
+        fi
         return 0
     fi
 
     if [ -n "$(git -C "$repo_path" status --porcelain=v1 2>/dev/null || true)" ]; then
-        echo -e "${RED}❌ $repo_path has uncommitted changes (canonical clones must stay clean)${RESET}"
-        echo "   This blocks fast-forward sync. Move work to a worktree or backup dir, then reset canonical clone to trunk."
-        ERRORS=$((ERRORS+1))
+        if [ "$required" -eq 1 ]; then
+            echo -e "${RED}❌ $repo_path has uncommitted changes (canonical clones must stay clean)${RESET}"
+            echo "   This blocks fast-forward sync. Move work to a worktree or backup dir, then reset canonical clone to trunk."
+            ERRORS=$((ERRORS+1))
+        else
+            warn_only "$repo_path working tree dirty (canonical automation expects clean trunk)"
+        fi
         return 0
     fi
 
     echo -e "${GREEN}✅ $repo_path clean on $CANONICAL_TRUNK_BRANCH${RESET}"
+}
+
+is_in_list() {
+    local needle="$1"
+    shift
+    for item in "$@"; do
+        if [ "$item" = "$needle" ]; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 # 1. Check Configs
@@ -103,17 +135,28 @@ fi
 
 # 2.5 Canonical trunk enforcement (master)
 echo "--- Canonical Git Trunk ---"
-if declare -p CANONICAL_REPOS >/dev/null 2>&1 && [ "${#CANONICAL_REPOS[@]}" -gt 0 ]; then
-    for repo in "${CANONICAL_REPOS[@]}"; do
-        check_canonical_repo "$repo"
+if declare -p CANONICAL_REQUIRED_REPOS >/dev/null 2>&1 && [ "${#CANONICAL_REQUIRED_REPOS[@]}" -gt 0 ]; then
+    for repo in "${CANONICAL_REQUIRED_REPOS[@]}"; do
+        check_canonical_repo "$repo" 1
     done
+    if declare -p CANONICAL_OPTIONAL_REPOS >/dev/null 2>&1 && [ "${#CANONICAL_OPTIONAL_REPOS[@]}" -gt 0 ]; then
+        for repo in "${CANONICAL_OPTIONAL_REPOS[@]}"; do
+            check_canonical_repo "$repo" 0
+        done
+    fi
 else
-    warn_only "canonical-targets.sh missing CANONICAL_REPOS list (expected in $CANONICAL_TARGETS_SH)"
+    warn_only "canonical-targets.sh missing CANONICAL_REQUIRED_REPOS list (expected in $CANONICAL_TARGETS_SH)"
 fi
 
 # 2. Check Hooks (V3 Logic)
 echo "--- Git Hooks ---"
 PRIME_HOOK="$HOME/prime-radiant-ai/.git/hooks/pre-commit"
+PRIME_REQUIRED=0
+if declare -p CANONICAL_REQUIRED_REPOS >/dev/null 2>&1; then
+    if is_in_list "prime-radiant-ai" "${CANONICAL_REQUIRED_REPOS[@]}"; then
+        PRIME_REQUIRED=1
+    fi
+fi
 
 # Check if hook exists (symlink or file)
 if [ -e "$PRIME_HOOK" ]; then
@@ -139,27 +182,36 @@ if [ -e "$PRIME_HOOK" ]; then
     if [ $IS_VALID -eq 1 ]; then
         echo -e "${GREEN}✅ Hook installed in prime-radiant-ai${RESET}"
     else
-        echo -e "${RED}❌ Hook invalid in prime-radiant-ai${RESET}"
-        echo "   Target: $(resolve_path $PRIME_HOOK)"
-        echo "   Fix: Run ~/agent-skills/git-safety-guard/install.sh"
-        ERRORS=$((ERRORS+1))
+        if [ $PRIME_REQUIRED -eq 1 ]; then
+            echo -e "${RED}❌ Hook invalid in prime-radiant-ai${RESET}"
+            echo "   Target: $(resolve_path $PRIME_HOOK)"
+            echo "   Fix: Run ~/agent-skills/git-safety-guard/install.sh --global"
+            ERRORS=$((ERRORS+1))
+        else
+            warn_only "Hook invalid in prime-radiant-ai (optional on this host)"
+        fi
     fi
 else
-    echo -e "${RED}❌ Hook missing in prime-radiant-ai${RESET}"
-    echo "   Fix: Run ~/agent-skills/git-safety-guard/install.sh"
-    ERRORS=$((ERRORS+1))
+    if [ $PRIME_REQUIRED -eq 1 ]; then
+        echo -e "${RED}❌ Hook missing in prime-radiant-ai${RESET}"
+        echo "   Fix: Run ~/agent-skills/git-safety-guard/install.sh --global"
+        ERRORS=$((ERRORS+1))
+    else
+        warn_only "Hook missing in prime-radiant-ai (optional on this host)"
+    fi
 fi
 
 # 3. Check Binaries
 echo "--- Required Tools ---"
-check_binary "bd"
-check_binary "jules"
-if command -v cass >/dev/null 2>&1; then
-    echo -e "${GREEN}✅ Binary found: cass${RESET}"
-else
-    echo -e "${YELLOW}⚠️  Binary missing: cass${RESET}"
-    echo "   (Optional but recommended for memory retrieval)"
-    # Warn only
+if declare -p CANONICAL_REQUIRED_TOOLS >/dev/null 2>&1; then
+    for t in "${CANONICAL_REQUIRED_TOOLS[@]}"; do
+        check_binary "$t" 1
+    done
+fi
+if declare -p CANONICAL_OPTIONAL_TOOLS >/dev/null 2>&1; then
+    for t in "${CANONICAL_OPTIONAL_TOOLS[@]}"; do
+        check_binary "$t" 0
+    done
 fi
 
 # 4. Invoke MCP Doctor

@@ -58,6 +58,81 @@ export CANONICAL_REPOS=(
 )
 
 # ------------------------------------------------------------
+# Per-Host Requirements (repos + tools)
+# ------------------------------------------------------------
+# Some machines intentionally focus on a subset of repos/tools.
+# This keeps canonical automation strict where needed, but avoids
+# false failures on role-specific machines.
+#
+# Override detection (optional):
+#   export CANONICAL_HOST_KEY=homedesktop-wsl|macmini|vps|local
+#
+
+detect_host_key() {
+  # Explicit override wins
+  if [ -n "${CANONICAL_HOST_KEY:-}" ]; then
+    echo "$CANONICAL_HOST_KEY"
+    return 0
+  fi
+
+  case "$(uname -s 2>/dev/null || true)" in
+    Darwin*) echo "macmini" ; return 0 ;;
+    Linux*) ;;
+  esac
+
+  # Heuristic: WSL
+  if [ -r /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; then
+    echo "homedesktop-wsl"
+    return 0
+  fi
+
+  # Heuristic: VPS naming
+  case "$(hostname 2>/dev/null || true)" in
+    *v2202509262171386004*|*epyc6*) echo "vps" ; return 0 ;;
+  esac
+
+  echo "local"
+}
+
+export CANONICAL_HOST_KEY="$(detect_host_key)"
+
+# Required vs optional repos (by host role)
+case "$CANONICAL_HOST_KEY" in
+  homedesktop-wsl)
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "affordabot" "llm-common" )
+    export CANONICAL_OPTIONAL_REPOS=( "prime-radiant-ai" )
+    ;;
+  macmini)
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" )
+    export CANONICAL_OPTIONAL_REPOS=( "affordabot" "llm-common" )
+    ;;
+  vps)
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" )
+    export CANONICAL_OPTIONAL_REPOS=( "prime-radiant-ai" "affordabot" "llm-common" )
+    ;;
+  *)
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" "affordabot" "llm-common" )
+    export CANONICAL_OPTIONAL_REPOS=()
+    ;;
+esac
+
+# Required vs optional tools (by host role)
+case "$CANONICAL_HOST_KEY" in
+  homedesktop-wsl)
+    export CANONICAL_REQUIRED_TOOLS=( )
+    export CANONICAL_OPTIONAL_TOOLS=( "bd" "jules" "cass" "ru" "railway" "gh" )
+    ;;
+  macmini)
+    export CANONICAL_REQUIRED_TOOLS=( "bd" )
+    export CANONICAL_OPTIONAL_TOOLS=( "jules" "cass" "ru" "railway" "gh" )
+    ;;
+  *)
+    export CANONICAL_REQUIRED_TOOLS=( "bd" "jules" )
+    export CANONICAL_OPTIONAL_TOOLS=( "cass" "ru" "railway" "gh" )
+    ;;
+esac
+
+# ------------------------------------------------------------
 # Per-IDE Config Paths
 # ------------------------------------------------------------
 # ------------------------------------------------------------
