@@ -11,6 +11,10 @@ TARGET_IDE="${1:-all}"
 
 echo "=== Slack MCP Server Setup (V4.2.1) ==="
 echo "Target IDE: $TARGET_IDE"
+echo ""
+echo "NOTE: This script does NOT write to shell rc files."
+echo "Set environment variables in your shell profile or source them per-session."
+echo ""
 
 # 1. Check if already installed
 if command -v slack-mcp-server &> /dev/null; then
@@ -22,21 +26,21 @@ else
 fi
 
 # 2. Verify environment variables
-if [ -z "$SLACK_MCP_XOXP_TOKEN" ]; then
-    echo "❌ ERROR: SLACK_MCP_XOXP_TOKEN not set"
-    echo "Add to ~/.zshenv: export SLACK_MCP_XOXP_TOKEN='xoxp-...'"
-    exit 1
+if [ -z "${SLACK_MCP_XOXP_TOKEN:-}" ]; then
+    echo "⚠️  SLACK_MCP_XOXP_TOKEN not set (optional for config setup)"
+    echo "   Set in your shell profile: export SLACK_MCP_XOXP_TOKEN='xoxp-...'"
+    echo "   Or load from 1Password:"
+    echo "   export SLACK_MCP_XOXP_TOKEN=\$(op item get --vault dev Slack-MCP-Secrets --fields label=xoxp_token)"
 else
-    echo "✅ SLACK_MCP_XOXP_TOKEN set: ${SLACK_MCP_XOXP_TOKEN:0:15}..."
+    echo "✅ SLACK_MCP_XOXP_TOKEN is set"
 fi
 
-if [ -z "$SLACK_MCP_ADD_MESSAGE_TOOL" ]; then
-    echo "⚠️  SLACK_MCP_ADD_MESSAGE_TOOL not set, adding..."
-    echo 'export SLACK_MCP_ADD_MESSAGE_TOOL=true' >> ~/.zshenv
-    export SLACK_MCP_ADD_MESSAGE_TOOL=true
+if [ -z "${SLACK_MCP_ADD_MESSAGE_TOOL:-}" ]; then
+    echo "ℹ️  SLACK_MCP_ADD_MESSAGE_TOOL not set (optional)"
+    echo "   Set in your shell profile: export SLACK_MCP_ADD_MESSAGE_TOOL=true"
+else
+    echo "✅ SLACK_MCP_ADD_MESSAGE_TOOL=$SLACK_MCP_ADD_MESSAGE_TOOL"
 fi
-
-echo "✅ SLACK_MCP_ADD_MESSAGE_TOOL=$SLACK_MCP_ADD_MESSAGE_TOOL"
 
 # Function to configure Claude Code
 configure_claude_code() {
@@ -66,7 +70,7 @@ configure_antigravity() {
     local AG_CONFIG="$HOME/.gemini/antigravity/mcp_config.json"
     mkdir -p "$HOME/.gemini/antigravity"
     if [ ! -f "$AG_CONFIG" ] || ! grep -q '"slack"' "$AG_CONFIG" 2>/dev/null; then
-        echo "Setting up Antigravity IDE config..."
+        echo "Setting up Antigravity IDE config (no secrets written)..."
         cat > "$AG_CONFIG" << 'EOF'
 {
   "mcpServers": {
@@ -170,12 +174,23 @@ echo ""
 echo "=== Setup Complete ==="
 echo "Configured IDE(s): $TARGET_IDE"
 echo ""
-echo "Restart your IDE/CLI sessions for changes to take effect."
+echo "=== Environment Variables ==="
+echo "The following environment variables should be set in your shell profile:"
+echo "  export SLACK_MCP_XOXP_TOKEN='xoxp-...'"
+echo "  export SLACK_MCP_ADD_MESSAGE_TOOL=true"
 echo ""
-echo "Verification commands:"
-echo "  claude-code: claude mcp list"
-echo "  antigravity: antigravity mcp list"
-echo "  codex-cli:  codex mcp list"
-echo "  opencode:   opencode mcp list"
+echo "Load from 1Password (recommended):"
+echo "  export SLACK_MCP_XOXP_TOKEN=\$(op item get --vault dev Slack-MCP-Secrets --fields label=xoxp_token)"
 echo ""
-echo "Test server: slack-mcp-server --transport stdio"
+echo "=== Verification Commands ==="
+echo "After restarting your IDE/CLI session, verify Slack MCP is configured:"
+echo ""
+echo "  claude-code:  claude mcp list | grep slack"
+echo "  antigravity: antigravity mcp list | grep slack"
+echo "  codex-cli:   codex mcp list | grep slack"
+echo "  opencode:    opencode mcp list | grep slack"
+echo ""
+echo "=== Test Slack MCP Server Directly ==="
+echo "  slack-mcp-server --transport stdio"
+echo ""
+echo "For more information, see: ~/agent-skills/docs/slack-mcp-setup.md"

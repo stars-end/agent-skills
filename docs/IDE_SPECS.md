@@ -11,30 +11,34 @@
 ### 1. antigravity
 - **agentskills.io**: ✅ Native support
 - **Docs**: https://antigravity.google/docs/skills
-- **MCP Config**: ~/.gemini/antigravity/mcp_config.json (note: uses gemini config path)
-- **Verification**: antigravity mcp list
+- **MCP Config**: `~/.gemini/antigravity/mcp_config.json` (uses gemini config path)
+- **Verification**: `antigravity mcp list`
+- **Slack MCP**: Supported via `~/agent-skills/scripts/setup-slack-mcp.sh antigravity`
 - **Known Issues**: None
 
 ### 2. claude-code
 - **agentskills.io**: ✅ Native support
 - **Docs**: https://code.claude.com/docs/en/skills
-- **MCP Config**: ~/.claude.json
-- **Verification**: claude mcp list
+- **MCP Config**: `~/.claude.json`
+- **Verification**: `claude mcp list`
+- **Slack MCP**: Supported via `~/agent-skills/scripts/setup-slack-mcp.sh claude-code`
 - **Known Issues**: None
 
 ### 3. codex-cli
 - **agentskills.io**: ✅ Native support
 - **Docs**: https://developers.openai.com/codex/skills/
-- **MCP Config**: ~/.codex/config.toml (TODO - Epic G.6 in V4.2)
-- **Verification**: codex mcp list
-- **Known Issues**: Slack MCP not configured yet
+- **MCP Config**: `~/.codex/config.toml`
+- **Verification**: `codex mcp list`
+- **Slack MCP**: Supported via `~/agent-skills/scripts/setup-slack-mcp.sh codex-cli`
+- **Known Issues**: None (Slack MCP configuration now supported)
 
 ### 4. opencode
 - **agentskills.io**: ✅ Native support
 - **Docs**: https://opencode.ai/docs/skills/
-- **MCP Config**: ~/.opencode/config.json (TODO - Epic G.7 in V4.2)
-- **Verification**: opencode mcp list
-- **Known Issues**: Slack MCP not configured yet
+- **MCP Config**: `~/.opencode/config.json`
+- **Verification**: `opencode mcp list`
+- **Slack MCP**: Supported via `~/agent-skills/scripts/setup-slack-mcp.sh opencode`
+- **Known Issues**: None (Slack MCP configuration now supported)
 
 ## Installation Instructions
 
@@ -64,14 +68,22 @@ opencode auth login
 
 ## VM-Specific Configuration
 
+The following VMs are defined in `scripts/canonical-targets.sh`:
+
 ### epyc6 (Production)
-All 4 canonical IDEs installed and configured.
+- Location: `fengning@v2202509262171386004` (local VPS)
+- Expected: All 4 canonical IDEs installed and configured
+- Verification: Run `dx-status` to check
 
 ### macmini (Staging)
-All 4 canonical IDEs installed and configured.
+- Location: `fengning@macmini`
+- Expected: All 4 canonical IDEs installed and configured
+- Note: Uses native 1Password app (not systemd LoadCredentialEncrypted)
 
 ### homedesktop-wsl (Development)
-All 4 canonical IDEs installed and configured.
+- Location: `fengning@homedesktop-wsl`
+- Expected: All 4 canonical IDEs installed and configured
+- Verified: ✅ All services passing as of 2026-01-22
 
 ## agentskills.io Verification
 
@@ -91,9 +103,24 @@ If you were using gemini-cli (deprecated in V4.2.1):
 2. Migrate config: `cp ~/.gemini/settings.json ~/.gemini/antigravity/mcp_config.json`
 3. Update MCP configs to use antigravity instead of gemini-cli
 
+## Slack MCP Configuration
+
+To configure Slack MCP for all canonical IDEs:
+```bash
+# Configure all IDEs
+~/agent-skills/scripts/setup-slack-mcp.sh --all
+
+# Configure specific IDE
+~/agent-skills/scripts/setup-slack-mcp.sh claude-code
+```
+
+See `~/agent-skills/scripts/setup-slack-mcp.sh` for verification commands per IDE.
+
 ## Maintenance
 
 - **Update frequency**: Quarterly or when IDE releases major version
 - **Contact**: DX team
-- **Last updated**: 2026-01-21 (V4.2.1 - gemini-cli deprecated)
+- **Last updated**: 2026-01-22 (V4.2.1 - Slack MCP support added, IDE specs verified)
+- **Canonical targets**: `~/agent-skills/scripts/canonical-targets.sh`
+- **See also**: `~/agent-skills/docs/CANONICAL_TARGETS.md`
 

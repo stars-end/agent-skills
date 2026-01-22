@@ -29,8 +29,10 @@
 
 set -euo pipefail
 
-# Default mode from environment or auto-detect
-DEFAULT_MODE="${ENV_SOURCES_MODE:-auto}"
+# Default mode from environment (or local-dev).
+# Note: Avoid auto-detecting "automated" solely from missing TTY because
+# many tooling environments run non-interactively during local development.
+DEFAULT_MODE="${ENV_SOURCES_MODE:-local-dev}"
 
 # Parse arguments
 MODE=""
@@ -114,14 +116,10 @@ if [[ -z "$MODE" ]]; then
     MODE="$DEFAULT_MODE"
 fi
 
-# Auto-detect mode
+# Auto mode: only CI implies ci; otherwise default to local-dev.
 if [[ "$MODE" == "auto" ]]; then
-    # Check if we're in CI
     if [[ -n "${CI:-}" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]] || [[ -n "${RAILWAY_CI:-}" ]]; then
         MODE="ci"
-    # Check if we're being run non-interactively
-    elif [[ ! -t 0 ]] || [[ ! -t 1 ]]; then
-        MODE="automated"
     else
         MODE="local-dev"
     fi
@@ -163,8 +161,7 @@ echo ""
 RAILWAY_TOKEN_SET=false
 if [[ -n "${RAILWAY_TOKEN:-}" ]]; then
     RAILWAY_TOKEN_SET=true
-    TOKEN_MASKED="${RAILWAY_TOKEN:0:8}...${RAILWAY_TOKEN: -8}"
-    echo "✅ RAILWAY_TOKEN: Set ($TOKEN_MASKED)"
+    echo "✅ RAILWAY_TOKEN: Set"
 else
     echo "⚠️  RAILWAY_TOKEN: Not set"
     echo "   Load from 1Password:"

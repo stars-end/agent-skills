@@ -20,6 +20,9 @@ FILES=(
   "$HOME/.claude/settings.json"
   "$HOME/.claude.json"
   "$HOME/.codex/config.toml"
+  # Canonical IDE config paths (V4.2.1)
+  "$HOME/.gemini/antigravity/mcp_config.json"
+  "$HOME/.opencode/config.json"
   # NOTE: gemini settings deprecated - removed from checks
 )
 
@@ -201,6 +204,8 @@ echo ""
 echo "OPTIONAL CLI tools:"
 
 # Railway (per env-sources contract: optional in local dev, required in CI/CD)
+# NOTE: Railway hard-fail enforcement is handled by railway-requirements-check.sh
+# which is integrated into dx-status.sh. This check is informational only.
 if command -v railway >/dev/null 2>&1; then
   echo "✅ railway ($(railway --version 2>/dev/null | head -1 || echo installed))"
 
@@ -208,14 +213,20 @@ if command -v railway >/dev/null 2>&1; then
   if ! railway whoami >/dev/null 2>&1; then
     echo "⚠️  railway: NOT LOGGED IN (optional for local dev, run 'railway login' when needed)"
     missing_optional=$((missing_optional+1))
+  else
+    echo "✅ railway: authenticated (interactive session)"
   fi
 
-  # Check Railway Shell Context (optional - not required for local development)
-  if [[ -z "${RAILWAY_PROJECT_ID:-}" ]] && [[ -z "${RAILWAY_ENVIRONMENT:-}" ]]; then
-    echo "⚠️  railway: NOT IN SHELL (optional for local dev, see ENV_SOURCES_CONTRACT.md)"
-    missing_optional=$((missing_optional+1))
+  # Check Railway Shell Context (RAILWAY_TOKEN - per ENV_SOURCES_CONTRACT.md)
+  # This is the explicit token export for CI/CD and automated workflows
+  if [[ -n "${RAILWAY_TOKEN:-}" ]]; then
+    echo "✅ railway: RAILWAY_TOKEN set (shell context for automated workflows)"
+  elif [[ -n "${RAILWAY_PROJECT_ID:-}" ]] || [[ -n "${RAILWAY_ENVIRONMENT:-}" ]]; then
+    echo "✅ railway: inside Railway shell context (PROJECT_ID/ENVIRONMENT set)"
   else
-    echo "✅ railway: inside active shell context"
+    echo "⚠️  railway: NOT IN SHELL (optional for local dev, see ENV_SOURCES_CONTRACT.md)"
+    echo "   For CI/CD: export RAILWAY_TOKEN=\$(op item get --vault dev Railway-Delivery --fields label=token)"
+    missing_optional=$((missing_optional+1))
   fi
 else
   echo "⚠️  railway (not installed) — optional"
@@ -226,6 +237,65 @@ if command -v gh >/dev/null 2>&1; then
   echo "✅ gh ($(gh --version 2>/dev/null | head -1 || echo installed))"
 else
   echo "⚠️  gh (not installed) — optional"
+  missing_optional=$((missing_optional+1))
+fi
+
+echo ""
+echo "SLACK MCP configuration (canonical IDEs):"
+
+# Check for Slack MCP in canonical IDE configs
+# Canonical IDEs: antigravity, claude-code, codex-cli, opencode
+SLACK_MCP_CONFIGURED=false
+
+# Check antigravity config
+if [[ -f "$HOME/.gemini/antigravity/mcp_config.json" ]]; then
+  if grep -q '"slack"' "$HOME/.gemini/antigravity/mcp_config.json" 2>/dev/null || \
+     grep -q 'slack-mcp-server' "$HOME/.gemini/antigravity/mcp_config.json" 2>/dev/null; then
+    echo "✅ antigravity: Slack MCP configured"
+    SLACK_MCP_CONFIGURED=true
+  fi
+fi
+
+# Check claude-code config
+if [[ -f "$HOME/.claude.json" ]]; then
+  if grep -q '"slack"' "$HOME/.claude.json" 2>/dev/null || \
+     grep -q 'slack-mcp-server' "$HOME/.claude.json" 2>/dev/null; then
+    echo "✅ claude-code: Slack MCP configured"
+    SLACK_MCP_CONFIGURED=true
+  fi
+fi
+
+# Check codex-cli config
+if [[ -f "$HOME/.codex/config.toml" ]]; then
+  if grep -q "slack" "$HOME/.codex/config.toml" 2>/dev/null || \
+     grep -q "slack-mcp-server" "$HOME/.codex/config.toml" 2>/dev/null; then
+    echo "✅ codex-cli: Slack MCP configured"
+    SLACK_MCP_CONFIGURED=true
+  fi
+fi
+
+# Check opencode config
+if [[ -f "$HOME/.opencode/config.json" ]]; then
+  if grep -q '"slack"' "$HOME/.opencode/config.json" 2>/dev/null || \
+     grep -q 'slack-mcp-server' "$HOME/.opencode/config.json" 2>/dev/null; then
+    echo "✅ opencode: Slack MCP configured"
+    SLACK_MCP_CONFIGURED=true
+  fi
+fi
+
+if [[ "$SLACK_MCP_CONFIGURED" == "false" ]]; then
+  echo "⚠️  Slack MCP not configured in any canonical IDE"
+  echo "   Run: ~/agent-skills/scripts/setup-slack-mcp.sh --all"
+  missing_optional=$((missing_optional+1))
+fi
+
+echo ""
+echo "SSH Key Doctor:"
+if [[ -x "$HOME/agent-skills/ssh-key-doctor/check.sh" ]]; then
+  echo "✅ ssh-key-doctor installed"
+else
+  echo "⚠️  ssh-key-doctor not installed — optional"
+  echo "   Run: ~/agent-skills/ssh-key-doctor/check.sh"
   missing_optional=$((missing_optional+1))
 fi
 

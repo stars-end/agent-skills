@@ -16,6 +16,8 @@ echo
 echo
 "$SCRIPT_DIR/pre-flight-ssh-path.sh"
 echo
+"$SCRIPT_DIR/pre-flight-ssh-keys.sh"
+echo
 "$SCRIPT_DIR/pre-flight-ides.sh"
 echo
 "$SCRIPT_DIR/pre-flight-railway.sh"
@@ -35,6 +37,6 @@ echo "  ✓ op CLI >= 2.18.0 installed on all VMs"
 echo "  ✓ op CLI in SSH PATH on all VMs"
 echo
 echo "RECOMMENDED (pass OR document exceptions):"
-echo "  ✓ All 5 IDEs installed on all VMs"
+echo "  ✓ All 4 canonical IDEs installed (see docs/IDE_SPECS.md)"
 echo "  ✓ Railway CLI logged in on all VMs"
 echo "  ✓ GH CLI logged in on all VMs"

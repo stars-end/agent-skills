@@ -224,6 +224,49 @@ else
     ERRORS=$((ERRORS+1))
 fi
 
+# 5. SSH Key Doctor (warn-only by default)
+echo ""
+echo "--- SSH Key Doctor ---"
+SSH_DOCTOR="$HOME/agent-skills/ssh-key-doctor/check.sh"
+if [ -x "$SSH_DOCTOR" ]; then
+    # Local-only is fast and safe; remote checks are opt-in.
+    if ! "$SSH_DOCTOR" --local-only; then
+        WARNINGS=$((WARNINGS+1))
+    fi
+
+    if [ "${DX_SSH_DOCTOR_REMOTE:-0}" = "1" ]; then
+        if ! "$SSH_DOCTOR" --remote-only; then
+            WARNINGS=$((WARNINGS+1))
+        fi
+    else
+        echo "ℹ Remote SSH checks skipped (set DX_SSH_DOCTOR_REMOTE=1 to enable)."
+    fi
+else
+    echo -e "${YELLOW}⚠️  ssh-key-doctor not installed${RESET}"
+    echo "   Run: ~/agent-skills/ssh-key-doctor/check.sh"
+    WARNINGS=$((WARNINGS+1))
+fi
+
+# 6. Railway Requirements Check (hard-fail only when required by ENV_SOURCES_MODE)
+echo ""
+echo "--- Railway Requirements ---"
+if [ -f "$SCRIPT_DIR/railway-requirements-check.sh" ]; then
+    # Default to local-dev unless caller explicitly sets ENV_SOURCES_MODE
+    # (important: dx-status is often run in non-interactive tooling).
+    RAILWAY_MODE="${ENV_SOURCES_MODE:-}"
+    if [ -z "$RAILWAY_MODE" ] && [ -n "${CI:-}" ]; then
+        RAILWAY_MODE="ci"
+    fi
+    RAILWAY_MODE="${RAILWAY_MODE:-local-dev}"
+
+    if ! bash "$SCRIPT_DIR/railway-requirements-check.sh" --mode "$RAILWAY_MODE"; then
+        ERRORS=$((ERRORS+1))
+    fi
+else
+    echo -e "${YELLOW}⚠️  Railway requirements check script missing${RESET}"
+    WARNINGS=$((WARNINGS+1))
+fi
+
 echo ""
 if [ $ERRORS -eq 0 ]; then
     echo -e "${GREEN}✨ SYSTEM READY. All systems nominal.${RESET}"

@@ -109,4 +109,4 @@ When adding new VMs or IDEs:
 
 - `scripts/canonical-targets.sh` - Shell script with environment variables
 - `scripts/mcp-doctor/check.sh` - MCP doctor (should reference this registry)
-- `scripts/ssh-key-doctor/check.sh` - SSH key doctor (should reference this registry)
+- `ssh-key-doctor/check.sh` - SSH key doctor (should reference this registry)
