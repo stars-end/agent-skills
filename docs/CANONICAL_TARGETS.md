@@ -10,6 +10,14 @@ This document defines the single source of truth for canonical VMs, IDEs, and co
 | macmini | macOS | macOS Dev machine | `fengning@macmini` |
 | epyc6 | Linux | Primary Linux dev host (this machine) | `feng@epyc6` |
 
+**IMPORTANT: SSH Username Variations**
+- SSH targets use **username@host** format because usernames vary across machines
+- epyc6 uses `feng@` while WSL/macOS use `fengning@`
+- **Always use full `username@host` syntax** when SSH'ing between VMs
+- Bare hostnames (e.g., `ssh homedesktop-wsl`) rely on SSH config which may not be configured on all machines
+- Example: `ssh fengning@homedesktop-wsl "ru --version"` (CORRECT)
+- Example: `ssh homedesktop-wsl "ru --version"` (MAY FAIL if SSH config missing)
+
 ## Canonical Git Trunk
 
 **Trunk branch**: `master`
@@ -62,6 +70,65 @@ These repos are expected to exist as canonical clones at:
 - `~/llm-common`
 
 They should remain on `master` for cross-VM sync and DX verification.
+
+## Repo Sync with ru (repo_updater)
+
+**ru** is the canonical tool for keeping repositories synchronized across VMs.
+
+### Manual Sync (Recommended)
+
+```bash
+# Sync all configured repos
+ru sync
+
+# Check status without modifying
+ru status
+
+# Sync specific repo only
+ru sync stars-end/agent-skills
+```
+
+### Automated Sync (Optional)
+
+**Note: ru is manual-only by design.** For automated updates, use platform-specific scheduling:
+
+**Linux (cron):**
+```bash
+# Run every hour
+# crontab -e
+0 * * * * /usr/local/bin/ru sync --non-interactive --quiet
+```
+
+**macOS (launchd):**
+```xml
+<!-- ~/Library/LaunchAgents/ru.sync.plist -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ru.sync</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/ru</string>
+        <string>sync</string>
+        <string>--non-interactive</string>
+        <string>--quiet</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+</dict>
+</plist>
+```
+
+### ru vs bd sync
+
+| Tool | Purpose | Scope |
+|------|---------|-------|
+| `ru sync` | Git repo synchronization across VMs | All repos in ru config |
+| `bd sync` | Beads issue database persistence | `.beads/issues.jsonl` export/import |
+
+Both serve different purposes and should be used together.
 
 ## Usage
 

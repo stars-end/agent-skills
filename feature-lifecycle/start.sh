@@ -16,6 +16,19 @@ DOC_FILE="docs/${ISSUE_ID}.md"
 STORY_DIR="docs/testing/stories"
 STORY_FILE="${STORY_DIR}/story-${ISSUE_ID}.yml"
 
+# 0. Sync current repo before starting work
+# Get current repo name
+CURRENT_REPO=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null)
+if [[ -n "$CURRENT_REPO" ]]; then
+  echo "Syncing $CURRENT_REPO before starting work..."
+  if command -v ru >/dev/null 2>&1; then
+    ru sync "$CURRENT_REPO" --non-interactive --quiet 2>/dev/null || \
+      echo "Warning: sync skipped (dirty tree or error)"
+  else
+    echo "Warning: ru not found, skipping sync"
+  fi
+fi
+
 # 1. Create Branch
 if git show-ref --verify --quiet "refs/heads/${BRANCH_NAME}"; then
   echo "⚠️  Branch ${BRANCH_NAME} already exists. Switching..."
