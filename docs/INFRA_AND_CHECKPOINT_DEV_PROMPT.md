@@ -44,7 +44,7 @@ op service-account create --vault "Dev" --accounts "dx-dispatch" --description "
 
 # 4. Export tokens and save securely
 # NOTE: Do this immediately after creation - tokens are only shown once!
-op service-account list > /tmp/service-accounts.txt
+# Copy each token directly from 1Password UI (don't write to disk)
 
 # For each service account, click "Download token file" or copy the token
 # Save each token to: ~/.config/systemd/user/<service-account>-token
@@ -246,7 +246,8 @@ cat > ~/.config/secret-cache/secrets.env << 'EOF'
 # Created: $(date +%Y-%m-%d)
 # Rotation: 30 days
 
-ZAI_API_KEY=$(op read "op://dev/gz4ahkc3fldjqtdnack6rjzijy/o7i32t3d5qf25qsfii23x4fnyi")
+ZAI_API_KEY=REPLACE_WITH_ACTUAL_KEY_FROM_1PASSWORD
+# To get the key, run: op read "op://dev/Zhipu-Config/ZAI_API_KEY"
 EOF
 
 # 3. Set restrictive permissions

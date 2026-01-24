@@ -375,7 +375,24 @@ git push
 | At Rest (macOS) | ✅ FileVault enabled |
 | File Permissions | ✅ chmod 600 |
 | Service Injection | ✅ LoadCredential (memory-only) |
-| Git Exposure | ✅ .gitignore protection |
+| Git Exposure | ✅ Global .gitignore configured |
+| Secret Scanning | ✅ Pre-commit scan in auto-checkpoint.sh |
+
+**Disk Encryption Verification:**
+```bash
+# Check for LUKS on Linux VMs
+lsblk -f | grep -E "crypto_LUKS|dm-crypt" || echo "WARNING: No disk encryption"
+
+# Check FileVault on macOS
+fdesetup status  # Should show "On" for FileVault enabled
+```
+
+**Security Fixes Applied (Post-Review):**
+1. ✅ CRITICAL: Added secret scanning to auto-checkpoint.sh (blocks credential commits)
+2. ✅ HIGH: Fixed gitignore configuration (using ~/.gitignore_global)
+3. ✅ HIGH: Removed /tmp exposure from documentation
+4. ✅ MEDIUM: Added security warning about disk encryption
+5. ✅ MEDIUM: Fixed template to use placeholders instead of exposed paths
 
 ### Rollback Procedures
 **If auto-checkpoint causes issues:**
