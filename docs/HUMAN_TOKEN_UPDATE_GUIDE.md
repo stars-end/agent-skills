@@ -60,37 +60,53 @@ All VMs now use `op-<hostname>-token` convention:
 
 ### Quick Method (Recommended: Using Existing Scripts)
 
-The `agent-skills` repo has token management scripts that are now updated
-to use the hostname-based naming convention (`op-<hostname>-token`).
+The `agent-skills` repo has token management scripts that use the
+hostname-based naming convention (`op-<hostname>-token`).
 
 ```bash
-# Step 1: Create your service accounts EXTERNALLY in 1Password
-# (Use the 1Password app or CLI on your device, copy the tokens)
+# Step 1: Create 3 service accounts EXTERNALLY in 1Password
+# (Use the 1Password app or CLI on your device)
+# You'll get 3 unique tokens - one for each VM
 
-# Step 2: On EACH VM (epyc6, homedesktop-wsl, macmini), run:
+# Step 2: From ANY VM, run the distribution script:
 cd ~/agent-skills/scripts
-./create-op-credential.sh --force
-# Paste your service account token when prompted
-# This creates: ~/.config/systemd/user/op-<hostname>-token
+./distribute-unique-tokens.sh
+# The script will prompt for each token:
+# - Token for fengning@epyc6 (op-epyc6-token)
+# - Token for fengning@homedesktop-wsl (op-homedesktop-wsl-token)
+# - Token for fengning@macmini (op-macmini-token)
+# Paste each token when prompted.
 
-# Step 3: From epyc6, distribute to other VMs (optional backup):
-cd ~/agent-skills/scripts
-./distribute-op-credential.sh
-
-# Step 4: Verify services on each VM:
+# Step 3: Verify services on each VM:
 systemctl --user is-active opencode.service       # should print "active"
 systemctl --user is-active slack-coordinator.service  # should print "active"
 
-# Step 5: Close epic:
+# Step 4: Close epic:
 cd ~/agent-skills
 bd update agent-skills-5f2 --status closed
 bd sync
 git push
 ```
 
-**What these scripts do:**
-- `create-op-credential.sh`: Prompts for token, creates `op-<hostname>-token` file
-- `distribute-op-credential.sh`: Copies token from local VM to remote VMs
+**What this script does:**
+- `distribute-unique-tokens.sh`: Prompts for 3 unique tokens, distributes each to its VM
+  - Transfers over SSH (encrypted)
+  - Uses systemd-creds for host-bound encryption at rest (if available)
+  - Falls back to chmod 600 plaintext if systemd-creds missing
+
+**Alternative (run on each VM separately):**
+```bash
+# On epyc6:
+cd ~/agent-skills/scripts && ./create-op-credential.sh --force
+
+# On homedesktop-wsl:
+ssh fengning@homedesktop-wsl
+cd ~/agent-skills/scripts && ./create-op-credential.sh --force
+
+# On macmini:
+ssh fengning@macmini
+cd ~/agent-skills/scripts && ./create-op-credential.sh --force
+```
 
 ---
 
