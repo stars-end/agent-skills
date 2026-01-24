@@ -1,15 +1,15 @@
 #!/bin/bash
 # ============================================================
-# CREATE PROTECTED 1PASSWORD CREDENTIAL (V4.2)
+# CREATE PROTECTED 1PASSWORD CREDENTIAL (V4.3)
 # ============================================================
 #
 # Creates a protected (chmod 600) credential file for 1Password
-# service account. Uses standard file permissions instead of
-# systemd-creds encryption to ensure compatibility across all
-# VMs (including WSL where systemd-creds can fail).
+# service account. Uses hostname-based token naming convention.
 #
 # Usage: ./create-op-credential.sh [--force]
 #   --force: Overwrite existing credential
+#
+# Naming: op-<hostname>-token (e.g., op-epyc6-token)
 #
 # ============================================================
 
@@ -19,10 +19,14 @@ set -euo pipefail
 unset OP_SERVICE_ACCOUNT_TOKEN
 
 FORCE="${1:-}"
-CRED_PLAINTEXT="${HOME}/.config/systemd/user/op_token"
-CRED_ENCRYPTED="${HOME}/.config/systemd/user/op_token.cred"
+HOSTNAME=$(hostname)
+TOKEN_NAME="op-${HOSTNAME}-token"
+CRED_PLAINTEXT="${HOME}/.config/systemd/user/${TOKEN_NAME}"
+CRED_ENCRYPTED="${HOME}/.config/systemd/user/${TOKEN_NAME}.cred"
 
-echo "=== Creating Protected 1Password Credential (V4.2 - Portable) ==="
+echo "=== Creating Protected 1Password Credential (V4.3 - Hostname-Based) ==="
+echo "Hostname: $HOSTNAME"
+echo "Token file: $TOKEN_NAME"
 echo ""
 
 # Check if credential already exists (BOTH .cred and plaintext count)
@@ -94,7 +98,7 @@ if command -v systemd-creds >/dev/null 2>&1; then
     echo "🔒 Encrypting with systemd-creds (TPM/Host Key protection)..."
 
     # Encrypt to .cred file
-    echo -n "$OP_SERVICE_ACCOUNT_TOKEN" | systemd-creds encrypt --name=op_token - "${CRED_ENCRYPTED}"
+    echo -n "$OP_SERVICE_ACCOUNT_TOKEN" | systemd-creds encrypt --name="${TOKEN_NAME}" - "${CRED_ENCRYPTED}"
 
     # Remove plaintext if it exists (cleanup)
     rm -f "$CRED_PLAINTEXT"
