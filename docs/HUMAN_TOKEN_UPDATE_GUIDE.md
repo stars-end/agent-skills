@@ -56,6 +56,46 @@ All VMs now use `op-<hostname>-token` convention:
 1. ⏳ Wait for 1Password rate limit to reset (~18 hours)
 2. 📱 Have 1Password app open on your device
 
+---
+
+### Quick Method (Recommended: Using Existing Scripts)
+
+The `agent-skills` repo has token management scripts that are now updated
+to use the hostname-based naming convention (`op-<hostname>-token`).
+
+```bash
+# Step 1: Create your service accounts EXTERNALLY in 1Password
+# (Use the 1Password app or CLI on your device, copy the tokens)
+
+# Step 2: On EACH VM (epyc6, homedesktop-wsl, macmini), run:
+cd ~/agent-skills/scripts
+./create-op-credential.sh --force
+# Paste your service account token when prompted
+# This creates: ~/.config/systemd/user/op-<hostname>-token
+
+# Step 3: From epyc6, distribute to other VMs (optional backup):
+cd ~/agent-skills/scripts
+./distribute-op-credential.sh
+
+# Step 4: Verify services on each VM:
+systemctl --user is-active opencode.service       # should print "active"
+systemctl --user is-active slack-coordinator.service  # should print "active"
+
+# Step 5: Close epic:
+cd ~/agent-skills
+bd update agent-skills-5f2 --status closed
+bd sync
+git push
+```
+
+**What these scripts do:**
+- `create-op-credential.sh`: Prompts for token, creates `op-<hostname>-token` file
+- `distribute-op-credential.sh`: Copies token from local VM to remote VMs
+
+---
+
+### Manual Method (If Scripts Fail)
+
 ### Step 1: Create 3 Service Accounts in 1Password
 
 For each service account, create a new service account in 1Password:
