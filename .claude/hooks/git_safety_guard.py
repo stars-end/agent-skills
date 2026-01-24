@@ -91,7 +91,7 @@ SAFE_PATTERNS = [
     r"rm\s+-[a-z]*r[a-z]*f[a-z]*\s+/var/tmp/",    # /var/tmp/...
     r"rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\\$TMPDIR/",    # $TMPDIR/...
     r"rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\\\\\${TMPDIR",   # ${TMPDIR}/... or ${TMPDIR:-...}
-    r'rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\"$TMPDIR/",   # "$TMPDIR/..."
+    r'rm\s+-[a-z]*r[a-z]*f[a-z]*\s+"\$TMPDIR/',   # "$TMPDIR/..."
     r'rm\s+-[a-z]*r[a-z]*f[a-z]*\s+\\\"\\\\\${TMPDIR',  # "${TMPDIR}/..." or "${TMPDIR:-...}"
 ]
 
