@@ -69,29 +69,58 @@ for target in "${!TOKENS[@]}"; do
 
   echo "📤 Distributing to $target (as $token_name)..."
 
-  # Test connection first
-  if ! ssh -o ConnectTimeout=5 "$target" "hostname" >/dev/null 2>&1; then
-    echo "❌ Failed to connect to $target (skipping)"
-    continue
+  # Check if this is the local machine
+  local_hostname=$(hostname)
+  target_hostname=$(echo "$target" | cut -d@ -f2)
+  target_user=$(echo "$target" | cut -d@ -f1)
+  current_user=$(whoami)
+
+  is_local=false
+  if [[ "$local_hostname" == "$target_hostname" && "$current_user" == "$target_user" ]]; then
+      is_local=true
+      echo "   📍 Local machine detected (writing directly)"
   fi
 
-  # Create remote directory
-  ssh -o ConnectTimeout=5 "$target" "mkdir -p ~/.config/systemd/user/" || {
-      echo "❌ Failed to create directory on $target"
-      continue
-  }
+  if [[ "$is_local" == "true" ]]; then
+      # Write directly to local filesystem
+      mkdir -p ~/.config/systemd/user/
 
-  # Check if remote has systemd-creds
-  if ssh -o ConnectTimeout=5 "$target" "command -v systemd-creds >/dev/null"; then
-      echo "   🔒 Encrypting with remote systemd-creds..."
-      echo -n "$token_value" | ssh -o ConnectTimeout=5 "$target" "systemd-creds encrypt --name=${token_name} - ~/.config/systemd/user/${token_name}.cred"
-      # Remove plaintext if it exists (cleanup)
-      ssh -o ConnectTimeout=5 "$target" "rm -f ~/.config/systemd/user/${token_name}"
-      echo "   ✅ Encrypted to ${token_name}.cred (host-bound)"
+      if command -v systemd-creds >/dev/null 2>&1; then
+          echo "   🔒 Encrypting with systemd-creds..."
+          echo -n "$token_value" | systemd-creds encrypt --name="${token_name}" - ~/.config/systemd/user/${token_name}.cred
+          rm -f ~/.config/systemd/user/${token_name}
+          echo "   ✅ Encrypted to ${token_name}.cred (host-bound)"
+      else
+          echo "   ⚠️  systemd-creds not found. Using protected plaintext."
+          echo -n "$token_value" > ~/.config/systemd/user/${token_name}
+          chmod 600 ~/.config/systemd/user/${token_name}
+          echo "   ✅ Installed to ${token_name} (mode 600)"
+      fi
   else
-      echo "   ⚠️  Remote systemd-creds not found. Using protected plaintext."
-      echo -n "$token_value" | ssh -o ConnectTimeout=5 "$target" "cat > ~/.config/systemd/user/${token_name} && chmod 600 ~/.config/systemd/user/${token_name}"
-      echo "   ✅ Installed to ${token_name} (mode 600)"
+      # SSH to remote machine
+      if ! ssh -o ConnectTimeout=5 "$target" "hostname" >/dev/null 2>&1; then
+        echo "❌ Failed to connect to $target (skipping)"
+        continue
+      fi
+
+      # Create remote directory
+      ssh -o ConnectTimeout=5 "$target" "mkdir -p ~/.config/systemd/user/" || {
+          echo "❌ Failed to create directory on $target"
+          continue
+      }
+
+      # Check if remote has systemd-creds
+      if ssh -o ConnectTimeout=5 "$target" "command -v systemd-creds >/dev/null"; then
+          echo "   🔒 Encrypting with remote systemd-creds..."
+          echo -n "$token_value" | ssh -o ConnectTimeout=5 "$target" "systemd-creds encrypt --name=${token_name} - ~/.config/systemd/user/${token_name}.cred"
+          # Remove plaintext if it exists (cleanup)
+          ssh -o ConnectTimeout=5 "$target" "rm -f ~/.config/systemd/user/${token_name}"
+          echo "   ✅ Encrypted to ${token_name}.cred (host-bound)"
+      else
+          echo "   ⚠️  Remote systemd-creds not found. Using protected plaintext."
+          echo -n "$token_value" | ssh -o ConnectTimeout=5 "$target" "cat > ~/.config/systemd/user/${token_name} && chmod 600 ~/.config/systemd/user/${token_name}"
+          echo "   ✅ Installed to ${token_name} (mode 600)"
+      fi
   fi
 
   echo ""
