@@ -62,6 +62,34 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "All tokens collected. Distributing to VMs..."
 echo ""
 
+# Function to check if a hostname is the local machine
+is_local_machine() {
+    local target="$1"
+    local target_host=$(echo "$target" | cut -d@ -f2)
+
+    # Check if target hostname resolves to a local address
+    local target_ip=$(getent hosts "$target_host" 2>/dev/null | awk '{print $1}')
+    if [[ -z "$target_ip" ]]; then
+        # Can't resolve, try SSH test as fallback
+        return 1
+    fi
+
+    # Check if it's a loopback address
+    if [[ "$target_ip" == "127."* ]] || [[ "$target_ip" == "::1" ]]; then
+        return 0  # Is local
+    fi
+
+    # Check if it matches any local interface IP
+    local local_ips=$(hostname -I 2>/dev/null || echo "")
+    for local_ip in $local_ips; do
+        if [[ "$target_ip" == "$local_ip" ]]; then
+            return 0  # Is local
+        fi
+    done
+
+    return 1  # Is remote
+}
+
 # Distribute each token to its target
 for target in "${!TOKENS[@]}"; do
   token_value="${TOKENS[$target]}"
@@ -69,19 +97,10 @@ for target in "${!TOKENS[@]}"; do
 
   echo "📤 Distributing to $target (as $token_name)..."
 
-  # Check if this is the local machine
-  local_hostname=$(hostname)
-  target_hostname=$(echo "$target" | cut -d@ -f2)
-  target_user=$(echo "$target" | cut -d@ -f1)
-  current_user=$(whoami)
-
-  is_local=false
-  if [[ "$local_hostname" == "$target_hostname" && "$current_user" == "$target_user" ]]; then
-      is_local=true
+  if is_local_machine "$target"; then
+      # We're on the local machine - write directly
       echo "   📍 Local machine detected (writing directly)"
-  fi
 
-  if [[ "$is_local" == "true" ]]; then
       # Write directly to local filesystem
       mkdir -p ~/.config/systemd/user/
 
@@ -97,11 +116,12 @@ for target in "${!TOKENS[@]}"; do
           echo "   ✅ Installed to ${token_name} (mode 600)"
       fi
   else
-      # SSH to remote machine
+      # Remote machine - use SSH
       if ! ssh -o ConnectTimeout=5 "$target" "hostname" >/dev/null 2>&1; then
         echo "❌ Failed to connect to $target (skipping)"
         continue
       fi
+      echo "   🔌 SSH connection established"
 
       # Create remote directory
       ssh -o ConnectTimeout=5 "$target" "mkdir -p ~/.config/systemd/user/" || {
