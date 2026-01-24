@@ -18,3 +18,5 @@ Global DX skills shared across all VMs and projects.
 - DevOps (devops-dx)
 
 # test-1769214938
+=== Test 1: Dirty repo checkpoint === cd /home/feng/agent-skills echo # test-$(date +%s) /home/feng/.local/bin/auto-checkpoint.sh /home/feng/agent-skills
+# test-1769215020
