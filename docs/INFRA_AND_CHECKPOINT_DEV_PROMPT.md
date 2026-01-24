@@ -416,20 +416,23 @@ Rules:
 
 Message:"
 
-# Call GLM-4.5 FLASH (native API, not Anthropic endpoint)
+# Call GLM-4.5 FLASH via Anthropic-compatible endpoint
+# Note: claude-3-5-haiku-20241022 maps to GLM-4.5 Flash on z.ai
+# Critical: thinking mode must be disabled for GLM compatibility
 RESPONSE=$(curl -s --max-time "$TIMEOUT" \
-    -X POST "https://api.z.ai/api/paas/v4/chat/completions" \
+    -X POST "https://api.z.ai/api/anthropic/v1/messages" \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $ZAI_API_KEY" \
+    -H "x-api-key: $ZAI_API_KEY" \
+    -H "anthropic-version: 2023-06-01" \
     -d "{
-        \"model\": \"glm-4-flash\",
-        \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}],
+        \"model\": \"claude-3-5-haiku-20241022\",
         \"max_tokens\": 60,
-        \"temperature\": 0.3
+        \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}],
+        \"thinking\": {\"type\": \"disabled\"}
     }" 2>/dev/null || echo "")
 
-# Extract message
-MSG=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null || echo "")
+# Extract message (Anthropic format)
+MSG=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || echo "")
 
 # Validate and return
 if [[ -n "$MSG" && "$MSG" == \[AUTO\]* && ${#MSG} -le 72 ]]; then
