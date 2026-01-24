@@ -57,6 +57,54 @@ def log(msg: str, level: str = "INFO"):
     print(f"[{ts}] [{level}] {msg}")
 
 
+def run_sync_before_dispatch(repo: str = None) -> bool:
+    """Run ru sync before dispatching to ensure repos are fresh.
+
+    Args:
+        repo: Specific repo to sync (e.g., 'agent-skills', 'prime-radiant-ai')
+
+    Returns:
+        True if sync succeeded or was skipped (dirty tree), False on error
+    """
+    import subprocess
+
+    try:
+        # Build ru command
+        cmd = ["ru", "sync", "--non-interactive", "--quiet"]
+        if repo:
+            cmd.append(repo)
+
+        log(f"Syncing {repo or 'all repos'} before dispatch...")
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120  # 2 minute timeout
+        )
+
+        # Exit 0 = success, 1 = partial (some repos failed), 5 = interrupted
+        # We accept all of these - dirty trees are expected and skipped
+        if result.returncode in (0, 1, 5):
+            if result.returncode == 1:
+                log("Some repos skipped (likely dirty tree or network)", "WARN")
+            return True
+        else:
+            log(f"ru sync failed with exit code {result.returncode}", "WARN")
+            if result.stderr:
+                log(f"ru stderr: {result.stderr}", "DEBUG")
+            return False
+
+    except subprocess.TimeoutExpired:
+        log("ru sync timed out (120s)", "WARN")
+        return False
+    except FileNotFoundError:
+        log("ru not found in PATH (sync skipped)", "WARN")
+        return True  # Not an error - just skip
+    except Exception as e:
+        log(f"ru sync error: {e}", "WARN")
+        return True  # Don't block dispatch on sync failures
+
+
 def post_to_slack(config: dict, message: str) -> bool:
     """Post message to Slack audit channel."""
     if WebClient is None:
@@ -119,6 +167,14 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
     """Dispatch using FleetDispatcher."""
     vm_name = args.vm
     task = args.task
+
+    # Sync before dispatch to ensure repos are fresh
+    # Sync agent-skills first (highest churn)
+    run_sync_before_dispatch("agent-skills")
+
+    # If --repo specified, sync that too
+    if hasattr(args, 'repo') and args.repo:
+        run_sync_before_dispatch(args.repo)
     
     # Handle session resume
     if args.session:
