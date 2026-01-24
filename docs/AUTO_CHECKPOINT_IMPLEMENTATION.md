@@ -172,23 +172,22 @@ Rules:
 
 Message:"
 
-# Call GLM-4.5 FLASH via Anthropic-compatible endpoint
-# Note: claude-3-5-haiku-20241022 maps to GLM-4.5 Flash on z.ai
-# Critical: thinking mode must be disabled for GLM compatibility
+# Call GLM-4.5 via z.ai Coding endpoint (OpenAI-compatible)
+# Coding endpoint works with all 3 canonical models: glm-4.7, glm-4.6v, glm-4.5
+# Critical: thinking mode must be disabled to get content instead of reasoning_content
 RESPONSE=$(curl -s --max-time "$TIMEOUT" \
-    -X POST "https://api.z.ai/api/anthropic/v1/messages" \
+    -X POST "https://api.z.ai/api/coding/paas/v4/chat/completions" \
     -H "Content-Type: application/json" \
-    -H "x-api-key: $ZAI_API_KEY" \
-    -H "anthropic-version: 2023-06-01" \
+    -H "Authorization: Bearer $ZAI_API_KEY" \
     -d "{
-        \"model\": \"claude-3-5-haiku-20241022\",
+        \"model\": \"glm-4.5\",
         \"max_tokens\": 60,
         \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}],
         \"thinking\": {\"type\": \"disabled\"}
     }" 2>/dev/null || echo "")
 
-# Extract message (Anthropic format)
-MSG=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || echo "")
+# Extract message (OpenAI format)
+MSG=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null || echo "")
 
 # Validate and return
 if [[ -n "$MSG" && "$MSG" == \[AUTO\]* && ${#MSG} -le 72 ]]; then
@@ -299,12 +298,11 @@ source ~/.config/secret-cache/secrets.env
 | Diff stats | ✅ Yes | LOW | No content exposed |
 | File contents | ❌ No | - | Never sent |
 
-**LLM Provider:** z.ai (Anthropic-compatible endpoint)
-- Model: Claude 3.5 Haiku (via `claude-3-5-haiku-20241022`)
-- **Note:** On z.ai, `claude-3-5-haiku-20241022` maps to GLM-4.5 Flash
-- Endpoint: `https://api.z.ai/api/anthropic/v1/messages`
+**LLM Provider:** z.ai Coding endpoint (OpenAI-compatible)
+- Model: `glm-4.5` (quick/cheap model from canonical 3: glm-4.7, glm-4.6v, glm-4.5)
+- Endpoint: `https://api.z.ai/api/coding/paas/v4/chat/completions`
 - Purpose: Generate concise commit messages (max 72 chars)
-- **Critical:** `thinking: {type: "disabled"}` must be set for GLM compatibility
+- **Critical:** `thinking: {type: "disabled"}` must be set to get content instead of reasoning_content
 
 **Data Retention:** The LLM provider does not store prompts/responses for Haiku model.
 

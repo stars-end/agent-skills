@@ -8,7 +8,7 @@ This document defines the single source of truth for canonical VMs, IDEs, and co
 |------|-----|-------------|------------|
 | homedesktop-wsl | Linux (WSL2) | Primary Linux dev environment | `fengning@homedesktop-wsl` |
 | macmini | macOS | macOS Dev machine | `fengning@macmini` |
-| epyc6 | Linux | Primary Linux dev host (this machine) | `feng@epyc6` |
+| epyc6 | Linux | Primary Linux dev host | `feng@epyc6` |
 
 **IMPORTANT: SSH Username Variations**
 - SSH targets use **username@host** format because usernames vary across machines
@@ -17,6 +17,77 @@ This document defines the single source of truth for canonical VMs, IDEs, and co
 - Bare hostnames (e.g., `ssh homedesktop-wsl`) rely on SSH config which may not be configured on all machines
 - Example: `ssh fengning@homedesktop-wsl "ru --version"` (CORRECT)
 - Example: `ssh homedesktop-wsl "ru --version"` (MAY FAIL if SSH config missing)
+
+### SSH Connectivity Matrix
+
+Not all VMs can directly reach each other. Use this matrix for cross-VM operations:
+
+| From → To | homedesktop-wsl | macmini | epyc6 |
+|-----------|-----------------|---------|-------|
+| **homedesktop-wsl** | - | ✅ Direct | ✅ Direct (`feng@epyc6`) |
+| **macmini** | ✅ Direct | - | ❌ Use jump |
+| **epyc6** | ✅ Direct | ✅ Direct | - |
+| **VPS/cloud** | ✅ Direct | ✅ Direct | ❌ Use jump |
+
+**Jump Host Pattern** (when direct SSH fails):
+```bash
+# From VPS/cloud to epyc6, jump through homedesktop-wsl:
+ssh fengning@homedesktop-wsl 'ssh feng@epyc6 "command here"'
+
+# Or use ProxyJump:
+ssh -J fengning@homedesktop-wsl feng@epyc6
+```
+
+### Per-VM Tool Availability
+
+| Tool | homedesktop-wsl | macmini | epyc6 |
+|------|-----------------|---------|-------|
+| `jq` | ✅ | ✅ | ❌ (no sudo) |
+| `curl` | ✅ | ✅ | ✅ |
+| `git` | ✅ | ✅ | ✅ |
+| `bd` (beads) | ✅ | ✅ | ✅ |
+| `ru` (repo_updater) | ✅ | ✅ | ✅ |
+
+**Note:** epyc6 lacks `jq`. Scripts deployed there should use grep-based JSON parsing or avoid jq dependency.
+
+### Secret Cache Locations
+
+All VMs use the same tiered secret cache structure:
+
+```
+~/.config/secret-cache/
+└── secrets.env          # Tier 2 secrets (ZAI_API_KEY only)
+```
+
+| VM | Home Dir | secrets.env Path |
+|----|----------|------------------|
+| homedesktop-wsl | `/home/fengning` | `/home/fengning/.config/secret-cache/secrets.env` |
+| macmini | `/Users/fengning` | `/Users/fengning/.config/secret-cache/secrets.env` |
+| epyc6 | `/home/feng` | `/home/feng/.config/secret-cache/secrets.env` |
+
+**Permissions:** `chmod 700 ~/.config/secret-cache && chmod 600 ~/.config/secret-cache/secrets.env`
+
+### Auto-Checkpoint Scripts
+
+| Script | Location | Purpose |
+|--------|----------|---------|
+| `auto-checkpoint.sh` | `~/.local/bin/auto-checkpoint.sh` | Main checkpoint script |
+| `generate-commit-msg.sh` | `~/.local/bin/generate-commit-msg.sh` | GLM-4.5 commit message generation |
+
+**Endpoint:** `https://api.z.ai/api/coding/paas/v4/chat/completions`
+**Model:** `glm-4.5`
+
+### Deploying to All VMs
+
+```bash
+# Deploy a script to all canonical VMs:
+for target in "fengning@homedesktop-wsl" "fengning@macmini"; do
+  scp ~/.local/bin/my-script.sh "$target:~/.local/bin/"
+done
+
+# epyc6 may need jump host:
+ssh fengning@homedesktop-wsl 'scp ~/.local/bin/my-script.sh feng@epyc6:~/.local/bin/'
+```
 
 ## Canonical Git Trunk
 

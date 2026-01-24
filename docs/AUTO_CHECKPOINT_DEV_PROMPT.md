@@ -215,23 +215,22 @@ PROMPT="${PROMPT/CHANGES_PLACEHOLDER/$DIFF_STAT}"
 # Escape for JSON
 PROMPT_JSON=$(printf '%s' "$PROMPT" | jq -Rs .)
 
-# Call GLM-4.5 FLASH via Anthropic-compatible endpoint
-# Note: claude-3-5-haiku-20241022 maps to GLM-4.5 Flash on z.ai
-# Critical: thinking mode must be disabled for GLM compatibility
+# Call GLM-4.5 via z.ai Coding endpoint (OpenAI-compatible)
+# Coding endpoint works with all 3 canonical models: glm-4.7, glm-4.6v, glm-4.5
+# Critical: thinking mode must be disabled to get content instead of reasoning_content
 RESPONSE=$(curl -s --max-time "$TIMEOUT" \
-    -X POST "https://api.z.ai/api/anthropic/v1/messages" \
+    -X POST "https://api.z.ai/api/coding/paas/v4/chat/completions" \
     -H "Content-Type: application/json" \
-    -H "x-api-key: $ZAI_API_KEY" \
-    -H "anthropic-version: 2023-06-01" \
+    -H "Authorization: Bearer $ZAI_API_KEY" \
     -d "{
-        \"model\": \"claude-3-5-haiku-20241022\",
+        \"model\": \"glm-4.5\",
         \"max_tokens\": 60,
         \"messages\": [{\"role\": \"user\", \"content\": $PROMPT_JSON}],
         \"thinking\": {\"type\": \"disabled\"}
     }" 2>/dev/null) || exit 1
 
-# Extract message content (Anthropic format)
-MSG=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null) || exit 1
+# Extract message content (OpenAI format)
+MSG=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null) || exit 1
 
 # Validate response
 if [[ -z "$MSG" ]]; then

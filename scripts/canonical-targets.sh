@@ -133,6 +133,24 @@ case "$CANONICAL_HOST_KEY" in
 esac
 
 # ------------------------------------------------------------
+# Tool Availability Notes (per-host quirks)
+# ------------------------------------------------------------
+# epyc6: No jq (no sudo access). Scripts should use grep-based JSON parsing.
+# epyc6: User is 'feng' not 'fengning'.
+# epyc6: May not be directly reachable - use homedesktop-wsl as jump host.
+
+export CANONICAL_MISSING_TOOLS_EPYC6=( "jq" )
+
+# ------------------------------------------------------------
+# SSH Connectivity
+# ------------------------------------------------------------
+# Not all VMs can reach each other directly. Use jump hosts when needed.
+# From VPS/cloud: Use homedesktop-wsl as jump to reach epyc6
+#   ssh -J fengning@homedesktop-wsl feng@epyc6
+
+export CANONICAL_JUMP_HOST="fengning@homedesktop-wsl"
+
+# ------------------------------------------------------------
 # Per-IDE Config Paths
 # ------------------------------------------------------------
 # ------------------------------------------------------------
@@ -188,5 +206,39 @@ list_canonical_ides() {
   done
 }
 
+# SSH to a canonical VM (handles jump hosts automatically)
+ssh_canonical_vm() {
+  local target="$1"
+  shift
+  local cmd="$*"
+
+  # Try direct connection first with short timeout
+  if ssh -o ConnectTimeout=3 -o BatchMode=yes "$target" true 2>/dev/null; then
+    ssh "$target" "$cmd"
+  else
+    # Use jump host for unreachable targets
+    echo "[canonical-targets] Direct SSH failed, using jump host: $CANONICAL_JUMP_HOST" >&2
+    ssh "$CANONICAL_JUMP_HOST" "ssh $target \"$cmd\""
+  fi
+}
+
+# Deploy a file to all canonical VMs
+deploy_to_all_vms() {
+  local src="$1"
+  local dest="$2"
+
+  echo "Deploying $src to all canonical VMs..."
+
+  # Direct targets
+  for target in "fengning@homedesktop-wsl" "fengning@macmini"; do
+    echo "  → $target"
+    scp "$src" "$target:$dest" 2>/dev/null && echo "    ✅" || echo "    ❌ Failed"
+  done
+
+  # epyc6 via jump host
+  echo "  → feng@epyc6 (via jump)"
+  ssh fengning@homedesktop-wsl "scp $dest feng@epyc6:$dest" 2>/dev/null && echo "    ✅" || echo "    ❌ Failed"
+}
+
 # Export functions for use in subshells
-export -f get_ide_config detect_os list_canonical_vms list_canonical_ides
+export -f get_ide_config detect_os list_canonical_vms list_canonical_ides ssh_canonical_vm deploy_to_all_vms
