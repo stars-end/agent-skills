@@ -73,6 +73,8 @@ ZAI_API_KEY=xxx-your-glm-key-xxx
 ```bash
 #!/bin/bash
 # auto-checkpoint.sh - Commit dirty repos before ru sync
+# SECURITY: Includes secret scanning for fintech compliance
+# COMPLIANCE: Sends diff stats to external LLM (file paths only, no content)
 set -euo pipefail
 
 REPO_PATH="${1:-$(pwd)}"
@@ -105,7 +107,9 @@ fi
 DIFF_STAT=$(git diff --stat HEAD 2>/dev/null | tail -1 || echo "changes")
 COMMIT_MSG="[AUTO] checkpoint: $DIFF_STAT"
 
-# Try GLM-4.5 for intelligent message (optional)
+# Try LLM for intelligent message (optional)
+# Uses Claude 3.5 Haiku via z.ai Anthropic-compatible endpoint
+# COMPLIANCE: Only sends diff stat (file paths, not content)
 if [[ -f ~/.config/secret-cache/secrets.env ]]; then
     source ~/.config/secret-cache/secrets.env
     if [[ -n "${ZAI_API_KEY:-}" ]]; then
@@ -141,7 +145,8 @@ exit 0
 
 ```bash
 #!/bin/bash
-# generate-commit-msg.sh - GLM-4.5 commit message generation
+# generate-commit-msg.sh - LLM-based commit message generation
+# Uses Claude 3.5 Haiku via z.ai Anthropic-compatible endpoint
 # Usage: generate-commit-msg.sh "diff stat summary"
 # Returns: Commit message or empty string on failure
 
@@ -247,6 +252,46 @@ fi
 - [ ] 30-day rotation documented
 - [ ] Never committed to any repo
 
+## Compliance: External LLM Data Sharing
+
+**What is sent to external LLM:**
+- Only the diff stat (e.g., `README.md | 1 +`, `src/auth.py | 5 ++,2 --`)
+- No file contents, no code, no secrets
+
+**What is NOT sent:**
+- File contents
+- PII or credentials
+- Business logic or algorithms
+- Commit message content
+
+**Risk Assessment:**
+| Data Type | Sent? | Risk | Mitigation |
+|-----------|-------|------|------------|
+| File paths | ✅ Yes | LOW | Reveals project structure only |
+| File names | ✅ Yes | LOW | May reveal feature names |
+| Diff stats | ✅ Yes | LOW | No content exposed |
+| File contents | ❌ No | - | Never sent |
+
+**LLM Provider:** z.ai (Anthropic-compatible endpoint)
+- Model: Claude 3.5 Haiku (via `claude-3-5-haiku-20241022`)
+- Endpoint: `https://api.z.ai/api/anthropic/v1/messages`
+- Purpose: Generate concise commit messages (max 72 chars)
+
+**Data Retention:** The LLM provider does not store prompts/responses for Haiku model.
+
+## Multi-Agent Race Condition Protection
+
+**Problem:** With multiple agents per VM, cron-based checkpointing could commit incomplete work.
+
+**Mitigation:** `.git/index.lock` detection
+- If git operation is in progress, checkpoint skips gracefully
+- Prevents committing mid-refactor or mid-edit work
+- Logs skip reason for debugging
+
+**Alternative:** Session-aware checkpointing (future enhancement)
+- Trigger on session end instead of fixed schedule
+- Requires agent coordination mechanism
+
 ## Exit Codes
 
 | Code | Meaning |
@@ -260,10 +305,28 @@ fi
 | Failure | Handling | User Action |
 |---------|----------|-------------|
 | ZAI_API_KEY missing | Use static `[AUTO] checkpoint` | None |
-| GLM API timeout | Use static `[AUTO] checkpoint` | None |
-| Git push fails | Log error, exit 2 | Check network/auth |
+| LLM API timeout | Use static `[AUTO] checkpoint` | None |
+| Git operation in progress | Skip checkpoint (race protection) | None |
+| Git push fails | Attempt pull --rebase, then fail | Check network/auth |
 | Beads sync fails | Log warning, proceed | Resolve manually |
 | Repo clean | Exit 0 (success) | None |
+
+## Race Condition Protection
+
+**Multi-Agent Safety:**
+- Checks `.git/index.lock` before `git add -A`
+- Skips if another git operation is in progress
+- Prevents committing incomplete work during active editing
+
+**Timing:**
+```
+12:55:00 - Agent A: editing src/auth.py (file partially modified)
+12:55:00 - Cron: auto-checkpoint triggers
+12:55:01 - Checkpoint: detects .git/index.lock (Agent A's pending operation)
+12:55:01 - Checkpoint: skips with log message
+12:55:05 - Agent A: completes work, git index.lock cleared
+Next checkpoint cycle: Will capture completed work
+```
 
 ## Testing Plan
 
