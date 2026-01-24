@@ -138,10 +138,15 @@ for target in "${!TOKENS[@]}"; do
       # Check if remote has systemd-creds
       if ssh -o ConnectTimeout=5 "$target" "command -v systemd-creds >/dev/null"; then
           echo "   🔒 Encrypting with remote systemd-creds..."
-          echo -n "$token_value" | ssh -o ConnectTimeout=5 "$target" "systemd-creds encrypt --name=${token_name} - ~/.config/systemd/user/${token_name}.cred"
-          # Remove plaintext if it exists (cleanup)
-          ssh -o ConnectTimeout=5 "$target" "rm -f ~/.config/systemd/user/${token_name}"
-          echo "   ✅ Encrypted to ${token_name}.cred (host-bound)"
+          if echo -n "$token_value" | ssh -o ConnectTimeout=5 "$target" "systemd-creds encrypt --name=${token_name} - ~/.config/systemd/user/${token_name}.cred 2>/dev/null"; then
+              # Remove plaintext if it exists (cleanup)
+              ssh -o ConnectTimeout=5 "$target" "rm -f ~/.config/systemd/user/${token_name}"
+              echo "   ✅ Encrypted to ${token_name}.cred (host-bound)"
+          else
+              echo "   ⚠️  systemd-creds encryption failed. Using protected plaintext."
+              echo -n "$token_value" | ssh -o ConnectTimeout=5 "$target" "cat > ~/.config/systemd/user/${token_name} && chmod 600 ~/.config/systemd/user/${token_name}"
+              echo "   ✅ Installed to ${token_name} (mode 600)"
+          fi
       else
           echo "   ⚠️  Remote systemd-creds not found. Using protected plaintext."
           echo -n "$token_value" | ssh -o ConnectTimeout=5 "$target" "cat > ~/.config/systemd/user/${token_name} && chmod 600 ~/.config/systemd/user/${token_name}"
