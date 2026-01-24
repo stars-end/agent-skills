@@ -106,9 +106,15 @@ for target in "${!TOKENS[@]}"; do
 
       if command -v systemd-creds >/dev/null 2>&1; then
           echo "   🔒 Encrypting with systemd-creds..."
-          echo -n "$token_value" | systemd-creds encrypt --name="${token_name}" - ~/.config/systemd/user/${token_name}.cred
-          rm -f ~/.config/systemd/user/${token_name}
-          echo "   ✅ Encrypted to ${token_name}.cred (host-bound)"
+          if echo -n "$token_value" | systemd-creds encrypt --name="${token_name}" - ~/.config/systemd/user/${token_name}.cred 2>/dev/null; then
+              rm -f ~/.config/systemd/user/${token_name}
+              echo "   ✅ Encrypted to ${token_name}.cred (host-bound)"
+          else
+              echo "   ⚠️  systemd-creds encryption failed. Using protected plaintext."
+              echo -n "$token_value" > ~/.config/systemd/user/${token_name}
+              chmod 600 ~/.config/systemd/user/${token_name}
+              echo "   ✅ Installed to ${token_name} (mode 600)"
+          fi
       else
           echo "   ⚠️  systemd-creds not found. Using protected plaintext."
           echo -n "$token_value" > ~/.config/systemd/user/${token_name}
