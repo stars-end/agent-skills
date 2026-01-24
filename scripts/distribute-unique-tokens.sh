@@ -24,7 +24,7 @@ unset OP_SERVICE_ACCOUNT_TOKEN
 
 # Target VMs with their token names
 declare -A TARGETS
-TARGETS["fengning@epyc6"]="op-epyc6-token"
+TARGETS["feng@epyc6"]="op-epyc6-token"
 TARGETS["fengning@homedesktop-wsl"]="op-homedesktop-wsl-token"
 TARGETS["fengning@macmini"]="op-macmini-token"
 
