@@ -172,20 +172,23 @@ Rules:
 
 Message:"
 
-# Call GLM-4.5 FLASH
+# Call GLM-4.5 FLASH via Anthropic-compatible endpoint
+# Note: claude-3-5-haiku-20241022 maps to GLM-4.5 Flash on z.ai
+# Critical: thinking mode must be disabled for GLM compatibility
 RESPONSE=$(curl -s --max-time "$TIMEOUT" \
-    -X POST "https://api.z.ai/api/paas/v4/chat/completions" \
+    -X POST "https://api.z.ai/api/anthropic/v1/messages" \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $ZAI_API_KEY" \
+    -H "x-api-key: $ZAI_API_KEY" \
+    -H "anthropic-version: 2023-06-01" \
     -d "{
-        \"model\": \"glm-4-flash\",
-        \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}],
+        \"model\": \"claude-3-5-haiku-20241022\",
         \"max_tokens\": 60,
-        \"temperature\": 0.3
+        \"messages\": [{\"role\": \"user\", \"content\": $(echo "$PROMPT" | jq -Rs .)}],
+        \"thinking\": {\"type\": \"disabled\"}
     }" 2>/dev/null || echo "")
 
-# Extract message
-MSG=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null || echo "")
+# Extract message (Anthropic format)
+MSG=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || echo "")
 
 # Validate and return
 if [[ -n "$MSG" && "$MSG" == \[AUTO\]* && ${#MSG} -le 72 ]]; then
@@ -252,6 +255,30 @@ fi
 - [ ] 30-day rotation documented
 - [ ] Never committed to any repo
 
+### ZAI_API_KEY Refresh
+
+The cached ZAI_API_KEY may expire and need refresh. Symptoms:
+- `generate-commit-msg.sh` exits with code 1 (no output)
+- Auto-checkpoint falls back to static `[AUTO] checkpoint: <diff_stat>` messages
+- API returns "token expired or incorrect" error
+
+**To refresh the key:**
+```bash
+# Method 1: From 1Password (if op is signed in)
+op read "op://dev/gz4ahkc3fldjqtdnack6rjzijy/o7i32t3d5qf25qsfii23x4fnyi" > ~/.config/secret-cache/secrets.env.new
+mv ~/.config/secret-cache/secrets.env.new ~/.config/secret-cache/secrets.env
+
+# Method 2: From .zshrc (if recently updated there)
+grep "ZAI_API_KEY" ~/.zshrc | tail -1 > ~/.config/secret-cache/secrets.env
+```
+
+**Verify the refresh:**
+```bash
+source ~/.config/secret-cache/secrets.env
+~/.local/bin/generate-commit-msg.sh "test | 1 +"
+# Should output a commit message like: [AUTO] docs update
+```
+
 ## Compliance: External LLM Data Sharing
 
 **What is sent to external LLM:**
@@ -274,8 +301,10 @@ fi
 
 **LLM Provider:** z.ai (Anthropic-compatible endpoint)
 - Model: Claude 3.5 Haiku (via `claude-3-5-haiku-20241022`)
+- **Note:** On z.ai, `claude-3-5-haiku-20241022` maps to GLM-4.5 Flash
 - Endpoint: `https://api.z.ai/api/anthropic/v1/messages`
 - Purpose: Generate concise commit messages (max 72 chars)
+- **Critical:** `thinking: {type: "disabled"}` must be set for GLM compatibility
 
 **Data Retention:** The LLM provider does not store prompts/responses for Haiku model.
 
