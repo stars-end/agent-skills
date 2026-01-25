@@ -1,0 +1,7 @@
+{
+  "last_failure": "2026-01-25T20:15:40.779332138+01:00",
+  "failure_count": 2,
+  "backoff_until": "2026-01-25T20:16:40.779332688+01:00",
+  "needs_manual_sync": false,
+  "failure_reason": "git pull failed: exit status 1\nfatal: couldn't find remote ref feature-a1e-phase2-3\n"
+}
