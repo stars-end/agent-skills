@@ -24,8 +24,8 @@ chmod +x .claude/hooks/SessionStart/dx-bootstrap.sh
 
 **What it does**:
 1. Git sync with remote (optional, continues if fails)
-2. Runs dx-doctor check (Makefile target or direct script)
-3. Checks Agent Mail configuration status
+2. Runs `dx-check` (baseline health)
+3. Optionally runs `dx-doctor` when coordinator services are enabled
 4. Reports any issues (soft warnings, not blocking)
 
 **Testing**:

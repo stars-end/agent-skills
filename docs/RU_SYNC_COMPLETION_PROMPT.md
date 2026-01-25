@@ -311,3 +311,9 @@ Timing (per VM stagger):
 
 **Document:** `docs/RU_SYNC_COMPLETION_PROMPT.md`
 **Last Updated:** 2026-01-24
+# ARCHIVE / HISTORICAL
+#
+# This is a historical completion prompt for ru sync setup. Commands may need
+# adjustment based on current canonical targets. For current usage, prefer:
+# - docs/CANONICAL_TARGETS.md
+# - docs/REPO_SYNC_STRATEGY.md

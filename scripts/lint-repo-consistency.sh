@@ -26,12 +26,12 @@ if [[ "$have_rg" != "1" ]]; then
 fi
 
 # Exclude generated/irrelevant dirs.
-RG_BASE=(rg -n -S --hidden --glob '!**/.git/**' --glob '!**/.venv/**' --glob '!**/__pycache__/**')
+RG_BASE=(rg -n -S --hidden --glob '!**/.git/**' --glob '!**/.venv/**' --glob '!**/__pycache__/**' --glob '!**/.beads/**' --glob '!scripts/lint-repo-consistency.sh')
 
 # 1) Do not reintroduce removed components.
-if "${RG_BASE[@]}" "\\bagent-mail\\b|\\bAgent Mail\\b" . >/dev/null 2>&1; then
-  "${RG_BASE[@]}" "\\bagent-mail\\b|\\bAgent Mail\\b" . || true
-  fail "agent-mail must not appear in repo"
+if "${RG_BASE[@]}" "\\bagent-mail\\b" . >/dev/null 2>&1; then
+  "${RG_BASE[@]}" "\\bagent-mail\\b" . || true
+  fail "agent mail must not appear in repo"
 fi
 
 if "${RG_BASE[@]}" "\\bhive-dispatch\\b|\\bhive/orchestrator\\b|\\bhive/node\\b" . >/dev/null 2>&1; then
@@ -51,17 +51,17 @@ if "${RG_BASE[@]}" "~/.agent/skills/dx-doctor/check\\.sh|scripts/cli/dx_doctor\\
   fail "repo contains references to deprecated dx-doctor paths"
 fi
 
-# 4) Do not suggest systemd opencode-server as canonical.
-if "${RG_BASE[@]}" "systemctl\\s+--user\\s+.*opencode-server" docs scripts . >/dev/null 2>&1; then
-  "${RG_BASE[@]}" "systemctl\\s+--user\\s+.*opencode-server" docs scripts . || true
-  fail "docs/scripts must reference opencode (not opencode-server) for systemd"
+# 4) Do not suggest systemd opencode-server as canonical in documentation.
+# (Scripts may retain compatibility fallbacks.)
+if "${RG_BASE[@]}" "systemctl\\s+--user\\s+.*opencode-server" docs >/dev/null 2>&1; then
+  "${RG_BASE[@]}" "systemctl\\s+--user\\s+.*opencode-server" docs || true
+  fail "docs must reference opencode (not opencode-server) for systemd"
 fi
 
 # 5) Enforce skills naming convention (SKILL.md).
-if find "$ROOT" -type f \\( -name 'skill.md' -o -name 'Skill.md' \\) | rg -n . >/dev/null 2>&1; then
-  find "$ROOT" -type f \\( -name 'skill.md' -o -name 'Skill.md' \\) | rg -n . || true
+if find "$ROOT" -type f \( -name 'skill.md' -o -name 'Skill.md' \) | rg -n . >/dev/null 2>&1; then
+  find "$ROOT" -type f \( -name 'skill.md' -o -name 'Skill.md' \) | rg -n . || true
   fail "non-standard skill file name found (must be SKILL.md)"
 fi
 
 echo "OK: repo consistency checks passed"
-

@@ -294,4 +294,4 @@ If conflict arises, refactor to separate concerns.
 ---
 
 **Maintained by**: Stars-End agent coordination team
-**Questions**: Post to Agent Mail thread `dx-alerts` or open issue
+**Questions**: Post to the canonical Slack coordination channel (if enabled) or open a Beads issue

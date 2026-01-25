@@ -416,3 +416,10 @@ If you encounter issues, check:
 3. `git -C ~/agent-skills status` for repo state
 
 Do NOT modify the security model or add additional secrets to the cache without tech lead approval.
+# ARCHIVE / HISTORICAL
+#
+# This file is a historical one-shot build prompt. It may contain outdated paths
+# and scheduling details. For current usage, prefer:
+# - docs/START_HERE.md
+# - scripts/auto-checkpoint.sh
+# - scripts/auto-checkpoint-install.sh
