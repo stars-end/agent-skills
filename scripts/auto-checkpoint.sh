@@ -379,7 +379,42 @@ main() {
   return 0
 }
 
+# ============================================================
+# Single-Repo Mode (when invoked with REPO_PATH argument)
+# ============================================================
+
+single_repo_mode() {
+  local repo_path="$1"
+
+  log "=== Auto-checkpoint (single repo mode): $repo_path ==="
+
+  # Acquire lock
+  if ! acquire_lock; then
+    log "Cannot acquire lock, exiting"
+    exit 1
+  fi
+  trap release_lock EXIT
+
+  if checkpoint_repo "$repo_path"; then
+    # Update last-run timestamp
+    echo "$(date +%s)" > "$LOG_DIR/last-run"
+    return 0
+  else
+    return 1
+  fi
+}
+
+# ============================================================
+# Entry Point
+# ============================================================
+
 # Run if executed directly
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-  main "$@"
+  if [ $# -eq 1 ] && [ -d "$1" ]; then
+    # Single repo mode: auto-checkpoint.sh /path/to/repo
+    single_repo_mode "$1"
+  else
+    # Multi-repo mode: check all canonical repos
+    main "$@"
+  fi
 fi
