@@ -309,6 +309,71 @@ else
     WARNINGS=$((WARNINGS+1))
 fi
 
+# 7. Auto-checkpoint Status (Phase 1: warn-only during rollout)
+echo ""
+echo "--- Auto-checkpoint Status ---"
+CHECKPOINT_SCRIPT="$SCRIPT_DIR/auto-checkpoint.sh"
+CHECKPOINT_LOG_DIR="${AUTO_CHECKPOINT_LOG_DIR:-$HOME/.auto-checkpoint}"
+
+if [ -f "$CHECKPOINT_SCRIPT" ]; then
+    echo -e "${GREEN}✅ auto-checkpoint installed${RESET}"
+
+    # Check scheduler status
+    case "$(uname -s)" in
+        Linux*)
+            if systemctl --user is-active auto-checkpoint.timer >/dev/null 2>&1; then
+                echo -e "${GREEN}✅ auto-checkpoint timer active (systemd)${RESET}"
+            else
+                echo -e "${YELLOW}⚠️  auto-checkpoint timer not active${RESET}"
+                echo "   Fix: auto-checkpoint-install --status"
+                WARNINGS=$((WARNINGS+1))
+            fi
+            ;;
+        Darwin*)
+            if launchctl list 2>/dev/null | grep -q "auto-checkpoint"; then
+                echo -e "${GREEN}✅ auto-checkpoint timer active (launchd)${RESET}"
+            else
+                echo -e "${YELLOW}⚠️  auto-checkpoint timer not active${RESET}"
+                echo "   Fix: auto-checkpoint-install --status"
+                WARNINGS=$((WARNINGS+1))
+            fi
+            ;;
+        *)
+            echo -e "${YELLOW}⚠️  Unknown OS, cannot verify scheduler${RESET}"
+            WARNINGS=$((WARNINGS+1))
+            ;;
+    esac
+
+    # Check last run
+    if [ -f "$CHECKPOINT_LOG_DIR/last-run" ]; then
+        local last_run_ts
+        last_run_ts=$(cat "$CHECKPOINT_LOG_DIR/last-run")
+        local current_ts
+        current_ts=$(date +%s)
+        local minutes_since
+        minutes_since=$(( (current_ts - last_run_ts) / 60 ))
+
+        if [ $minutes_since -lt 30 ]; then
+            echo -e "${GREEN}✅ Last run: ${minutes_since}m ago${RESET}"
+        elif [ $minutes_since -lt 120 ]; then
+            echo -e "${YELLOW}⚠️  Last run: ${minutes_since}m ago${RESET}"
+            WARNINGS=$((WARNINGS+1))
+        else
+            echo -e "${RED}❌ Last run: ${minutes_since}m ago (may be stale)${RESET}"
+            echo "   Fix: auto-checkpoint-install --status"
+            ERRORS=$((ERRORS+1))
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Auto-checkpoint never ran${RESET}"
+        echo "   Fix: auto-checkpoint-install --run (test run)"
+        WARNINGS=$((WARNINGS+1))
+    fi
+else
+    echo -e "${YELLOW}⚠️  auto-checkpoint not installed${RESET}"
+    echo "   Run: auto-checkpoint-install (or dx-hydrate)"
+    WARNINGS=$((WARNINGS+1))
+fi
+
 echo ""
 if [ $ERRORS -eq 0 ]; then
     echo -e "${GREEN}✨ SYSTEM READY. All systems nominal.${RESET}"
