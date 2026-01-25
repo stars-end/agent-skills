@@ -272,14 +272,14 @@ chmod +x ~/.local/bin/generate-commit-msg.sh
 
 #### epyc6 (test first)
 ```bash
-ssh fengning@epyc6 'crontab -l 2>/dev/null; echo "
+ssh feng@epyc6 'crontab -l 2>/dev/null; echo "
 # === AUTO-CHECKPOINT (runs 5 min before ru sync) ===
 # Every 4 hours - agent-skills only
 10 */4 * * * ~/.local/bin/auto-checkpoint.sh ~/agent-skills >> ~/logs/auto-checkpoint.log 2>&1
 
 # Daily 12:10 UTC - all repos
 10 12 * * * for repo in ~/agent-skills ~/affordabot ~/prime-radiant-ai ~/llm-common; do [[ -d \"\$repo\" ]] && ~/.local/bin/auto-checkpoint.sh \"\$repo\"; done >> ~/logs/auto-checkpoint.log 2>&1
-"' | ssh fengning@epyc6 'crontab -'
+"' | ssh feng@epyc6 'crontab -'
 ```
 
 #### macmini (after 24h monitoring on epyc6)
@@ -302,7 +302,7 @@ ssh fengning@homedesktop-wsl 'crontab -l 2>/dev/null; echo "
 
 **Verify:**
 ```bash
-ssh fengning@epyc6 'crontab -l | grep auto-checkpoint'
+ssh feng@epyc6 'crontab -l | grep auto-checkpoint'
 ```
 
 ---
@@ -390,7 +390,7 @@ chmod +x test-auto-checkpoint.sh
 If issues arise:
 ```bash
 # Remove cron entries
-ssh fengning@epyc6 'crontab -l | grep -v auto-checkpoint | crontab -'
+ssh feng@epyc6 'crontab -l | grep -v auto-checkpoint | crontab -'
 ssh fengning@macmini 'crontab -l | grep -v auto-checkpoint | crontab -'
 ssh fengning@homedesktop-wsl 'crontab -l | grep -v auto-checkpoint | crontab -'
 ```
@@ -416,3 +416,10 @@ If you encounter issues, check:
 3. `git -C ~/agent-skills status` for repo state
 
 Do NOT modify the security model or add additional secrets to the cache without tech lead approval.
+# ARCHIVE / HISTORICAL
+#
+# This file is a historical one-shot build prompt. It may contain outdated paths
+# and scheduling details. For current usage, prefer:
+# - docs/START_HERE.md
+# - scripts/auto-checkpoint.sh
+# - scripts/auto-checkpoint-install.sh

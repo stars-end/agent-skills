@@ -198,11 +198,11 @@ for vm in $TARGET_VMS; do
     ssh $vm '~/agent-skills/scripts/dx-hydrate.sh'
     
     # Restart services
-    ssh $vm 'systemctl --user restart opencode-server'
+    ssh $vm 'systemctl --user restart opencode'
     ssh $vm 'systemctl --user restart slack-coordinator'
     
     # Verify
-    ssh $vm 'dx-check.sh'
+    ssh $vm 'dx-check'
 done
 
 echo "=== Deployment Complete ==="

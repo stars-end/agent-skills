@@ -4,7 +4,7 @@
 
 `DX_AGENT_ID` is a **warn-only** identity standard for agents working across multiple repos, VMs, and platforms.
 
-**Goal**: Consistent agent identification in git trailers, logs, and multi-agent coordination (Agent Mail, Beads).
+**Goal**: Consistent agent identification in git trailers, logs, and multi-agent coordination (Slack/dispatch/Beads).
 
 **Status**: P2, non-blocking. Agents should set it, but missing DX_AGENT_ID only triggers warnings, not failures.
 
@@ -68,7 +68,7 @@ Role: backend-engineer"
 
 **Multi-repo coordination**: When working across multiple repos (e.g., prime-radiant-ai, affordabot, llm-common), agents need a stable identity that works regardless of current working directory.
 
-**Agent Mail integration**: Agent Mail uses agent names for message routing. DX_AGENT_ID provides a consistent name across all repos/sessions.
+**Coordination integration**: Coordination layers (Slack/dx-dispatch) use agent names for routing and audit trails. DX_AGENT_ID provides a consistent name across all repos/sessions.
 
 **Beads tracking**: Git trailers use `Agent:` field to track which agent made commits. DX_AGENT_ID ensures consistency.
 
@@ -173,7 +173,7 @@ export DX_AGENT_ID="epyc6-antigravity"
 **Phase 2 (future)**:
 - Add DX_AGENT_ID check to `vm-bootstrap` install mode
 - Optionally validate format (hostname-platform)
-- Integrate with Agent Mail for automatic identity registration
+- Integrate with coordinator audit trails (optional)
 
 **Phase 3 (CI)**:
 - Require DX_AGENT_ID in GitHub Actions workflows

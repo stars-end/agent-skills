@@ -71,7 +71,7 @@ All VMs use the same tiered secret cache structure:
 
 | Script | Location | Purpose |
 |--------|----------|---------|
-| `auto-checkpoint.sh` | `~/.local/bin/auto-checkpoint.sh` | Main checkpoint script |
+| `auto-checkpoint` | `~/bin/auto-checkpoint` | Main checkpoint script |
 | `generate-commit-msg.sh` | `~/.local/bin/generate-commit-msg.sh` | GLM-4.5 commit message generation |
 
 **Endpoint:** `https://api.z.ai/api/coding/paas/v4/chat/completions`

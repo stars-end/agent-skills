@@ -259,24 +259,39 @@ checkpoint_repo() {
 
   cd "$repo_path" || return 1
 
-  # Get current branch
-  local current_branch
-  current_branch=$(git branch --show-current 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "detached")
+  # Track starting state so we can restore canonical clones back to trunk.
+  local starting_branch
+  starting_branch="$(git branch --show-current 2>/dev/null || true)"
 
-  # Check if on trunk
-  local needs_wip_branch=0
-  if is_trunk_branch "$current_branch"; then
-    log "  On trunk branch ($current_branch), creating wip/auto branch..."
-    needs_wip_branch=1
+  local is_detached=0
+  if [[ -z "$starting_branch" ]]; then
+    is_detached=1
   fi
 
-  # Check if detached HEAD
-  if [ "$current_branch" = "detached" ] || git rev-parse --HEAD >/dev/null 2>&1; then
+  local needs_wip_branch=0
+  local restore_branch=""
+
+  if [[ "$is_detached" -eq 1 ]]; then
     log "  Detached HEAD, creating wip/auto branch..."
     needs_wip_branch=1
+    # Prefer master/main if present.
+    if git show-ref --verify --quiet refs/heads/master; then
+      restore_branch="master"
+    elif git show-ref --verify --quiet refs/heads/main; then
+      restore_branch="main"
+    else
+      restore_branch="master"
+    fi
+  elif is_trunk_branch "$starting_branch"; then
+    log "  On trunk branch ($starting_branch), creating wip/auto branch..."
+    needs_wip_branch=1
+    restore_branch="$starting_branch"
   fi
 
   # Create wip branch if needed (format: wip/auto/<host>/<YYYY-MM-DD>)
+  local current_branch
+  current_branch="${starting_branch:-detached}"
+
   if [ $needs_wip_branch -eq 1 ]; then
     local hostname
     hostname=$(hostname -s 2>/dev/null || echo "unknown")
@@ -335,6 +350,16 @@ checkpoint_repo() {
     log "  Pushed to origin/$current_branch"
   else
     log "  Push failed (changes saved locally)"
+  fi
+
+  # If we created a wip branch from trunk/detached, restore the repo back to trunk
+  # so canonical clones stay on trunk for ru/dx automation.
+  if [[ $needs_wip_branch -eq 1 && -n "$restore_branch" ]]; then
+    if git checkout "$restore_branch" >/dev/null 2>&1; then
+      log "  Restored to trunk: $restore_branch"
+    else
+      log "  WARNING: could not restore to trunk ($restore_branch); repo left on $current_branch"
+    fi
   fi
 
   return 0

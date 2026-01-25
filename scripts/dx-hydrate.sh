@@ -36,6 +36,12 @@ ln -sfn "$AGENTS_ROOT" "$HOME/.agent/skills"
 echo -e "${GREEN} -> Ensuring ~/bin tools...${RESET}"
 "$AGENTS_ROOT/scripts/dx-ensure-bins.sh" >/dev/null 2>&1 || true
 
+# 3.0 Auto-checkpoint (CRITICAL durability plane)
+if [ "${DX_DISABLE_AUTO_CHECKPOINT:-0}" != "1" ] && command -v auto-checkpoint-install >/dev/null 2>&1; then
+  echo -e "${GREEN} -> Enabling auto-checkpoint scheduler (critical)...${RESET}"
+  auto-checkpoint-install >/dev/null 2>&1 || true
+fi
+
 # 3.0 Ensure ru is present (sync control plane)
 if ! command -v ru >/dev/null 2>&1; then
   echo -e "${GREEN} -> Installing ru (repo_updater)...${RESET}"

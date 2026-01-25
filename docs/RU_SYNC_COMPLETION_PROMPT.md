@@ -29,7 +29,7 @@ The auto-checkpoint.log has rotation but ru-sync.log does not.
 
 ```bash
 # === epyc6 ===
-ssh fengning@epyc6 'bash -s' << 'EOF'
+ssh feng@epyc6 'bash -s' << 'EOF'
 # Check if rotation exists
 if crontab -l 2>/dev/null | grep -q "ru-sync.*truncate"; then
   echo "✅ Log rotation already configured"
@@ -311,3 +311,9 @@ Timing (per VM stagger):
 
 **Document:** `docs/RU_SYNC_COMPLETION_PROMPT.md`
 **Last Updated:** 2026-01-24
+# ARCHIVE / HISTORICAL
+#
+# This is a historical completion prompt for ru sync setup. Commands may need
+# adjustment based on current canonical targets. For current usage, prefer:
+# - docs/CANONICAL_TARGETS.md
+# - docs/REPO_SYNC_STRATEGY.md

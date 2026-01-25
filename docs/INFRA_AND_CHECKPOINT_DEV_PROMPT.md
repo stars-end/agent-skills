@@ -685,3 +685,10 @@ journalctl --user -u <service-name> --since "1 day ago"
 **Document:** `docs/INFRA_AND_CHECKPOINT_DEV_PROMPT.md`
 **Version:** 1.0
 **Last Updated:** 2026-01-24
+# ARCHIVE / HISTORICAL
+#
+# This file is a historical one-shot build prompt. It may contain outdated paths
+# and scheduling details. For current usage, prefer:
+# - docs/START_HERE.md
+# - scripts/auto-checkpoint.sh
+# - scripts/auto-checkpoint-install.sh

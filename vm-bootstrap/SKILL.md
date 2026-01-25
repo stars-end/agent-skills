@@ -4,7 +4,7 @@ description: |
   Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment.
   Supports modes: check (warn-only), install (operator-confirmed), strict (CI-ready).
   Enforces Linux-only + mise as canonical; honors preference brew→npm (with apt fallback).
-  Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, bd, tmux, jq, rg.
+  Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, op, bd, dcg, ru, tmux, rg.
   Handles optional tools as warnings: tailscale, playwright, docker, bv.
   Never prints/seeds secrets; never stores tokens in repo/YAML; Railway vars only for app runtime env.
   Safe on dirty repos (refuses and points to dirty-repo-bootstrap skill, or snapshots WIP branch).
@@ -30,7 +30,7 @@ Verify and optionally install required tools for a standardized Linux developmen
 |------|-----|--------|--------|
 | `git` | repo sync, PRs | apt | `git --version` |
 | `curl` | installers, API calls | apt | `curl --version` |
-| `jq` | parse JSON (Railway/GH) | brew (apt fallback) | `jq --version` |
+| `jq` | parse JSON (nice-to-have) | brew (apt fallback) | `jq --version` (optional on epyc6) |
 | `rg` (ripgrep) | fast search | apt or brew | `rg --version` |
 | `tmux` | multi-agent sessions | apt or brew | `tmux -V` |
 | `mise` | toolchain versions | mise installer | `mise --version` |
@@ -40,7 +40,10 @@ Verify and optionally install required tools for a standardized Linux developmen
 | `pnpm` | monorepo installs | mise / corepack | `mise exec -- pnpm --version` |
 | `gh` | PRs + auth | brew | `gh --version && gh auth status` |
 | `railway` | env/shell/deploy | mise (`@railway/cli`) | `mise exec -- railway --version` + `railway status` + version >= 3.0.0 |
+| `op` | secrets + service auth | brew | `op --version` |
 | `bd` | Beads tasks | Beads installer | `bd --version` |
+| `dcg` | destructive command guard | installer | `dcg explain "rm -rf /"` |
+| `ru` | repo sync | installer | `ru --version` |
 
 ## Optional Tools (warn-only)
 
@@ -81,7 +84,7 @@ export DX_AGENT_ID="$(hostname -s)-claude-code"
 **Format**: `<magicdns-host>-<platform>`
 **Examples**: `epyc6-claude-code`, `macmini-codex-cli`
 
-**Why**: Provides stable identity for git trailers, Agent Mail coordination, and multi-repo workflows.
+**Why**: Provides stable identity for git trailers and multi-repo workflows.
 
 **Helper script**:
 ```bash

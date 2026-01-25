@@ -66,7 +66,7 @@ ZAI_API_KEY=xxx-your-glm-key-xxx
 - Listed in `.gitignore`
 - 30-day rotation policy
 
-### 2. Core Script: `~/.local/bin/auto-checkpoint.sh`
+### 2. Core Script: `~/bin/auto-checkpoint` (installed from agent-skills)
 
 **Pure bash, no Python dependencies.**
 
@@ -206,10 +206,10 @@ fi
 
 # Every 4 hours - agent-skills only
 # Stagger: homedesktop-wsl :00, macmini :05, epyc6 :10
-0 */4 * * * ~/.local/bin/auto-checkpoint.sh ~/agent-skills >> ~/logs/auto-checkpoint.log 2>&1
+0 */4 * * * auto-checkpoint ~/agent-skills >> ~/logs/auto-checkpoint.log 2>&1
 
 # Daily 12:00 UTC - all repos (5 min before ru sync --all)
-0 12 * * * for repo in ~/agent-skills ~/affordabot ~/prime-radiant-ai ~/llm-common; do ~/.local/bin/auto-checkpoint.sh "$repo"; done >> ~/logs/auto-checkpoint.log 2>&1
+0 12 * * * for repo in ~/agent-skills ~/affordabot ~/prime-radiant-ai ~/llm-common; do auto-checkpoint "$repo"; done >> ~/logs/auto-checkpoint.log 2>&1
 ```
 
 **Adjust minute offset per VM:**
@@ -363,7 +363,7 @@ Next checkpoint cycle: Will capture completed work
 echo "test" >> ~/agent-skills/README.md
 
 # Run checkpoint
-~/.local/bin/auto-checkpoint.sh ~/agent-skills
+auto-checkpoint ~/agent-skills
 
 # Verify
 git log -1 --oneline

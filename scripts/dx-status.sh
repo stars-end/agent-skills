@@ -46,7 +46,16 @@ check_binary() {
     else
          if [ "$required" -eq 1 ]; then
              echo -e "${RED}❌ Binary missing: $bin${RESET}"
-             echo "   Run: 'npm install -g $bin' or check installation guide."
+             case "$bin" in
+                 bd) echo "   Fix: install Beads CLI (bd) and ensure it is on PATH" ;;
+                 gh) echo "   Fix: install GitHub CLI (gh). Recommended: mise use -g gh@latest OR brew install gh" ;;
+                 railway) echo "   Fix: install Railway CLI. Recommended: mise use -g railway@latest" ;;
+                 op) echo "   Fix: install 1Password CLI (op). Recommended: brew install --cask 1password-cli OR brew install op" ;;
+                 ru) echo "   Fix: run: $HOME/agent-skills/scripts/install-ru.sh" ;;
+                 mise) echo "   Fix: run: $HOME/agent-skills/scripts/install-mise.sh" ;;
+                 dcg) echo "   Fix: install dcg (see: $HOME/agent-skills/dcg-safety/SKILL.md)" ;;
+                 *) echo "   Fix: install '$bin' and ensure it is on PATH" ;;
+             esac
              ERRORS=$((ERRORS+1))
          else
              warn_only "Binary missing: $bin"
@@ -254,6 +263,34 @@ if declare -p CANONICAL_OPTIONAL_TOOLS >/dev/null 2>&1; then
     for t in "${CANONICAL_OPTIONAL_TOOLS[@]}"; do
         check_binary "$t" 0
     done
+fi
+
+# 3.1 Auth sanity (warn-only; binaries are the hard requirement)
+echo ""
+echo "--- Auth Sanity (warn-only) ---"
+
+if command -v gh >/dev/null 2>&1; then
+    if gh auth status >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ gh auth: OK${RESET}"
+    else
+        warn_only "gh auth: not logged in (run: gh auth login)"
+    fi
+fi
+
+if command -v railway >/dev/null 2>&1; then
+    if railway status >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ railway auth: OK${RESET}"
+    else
+        warn_only "railway auth: not logged in (run: railway login) or set RAILWAY_TOKEN"
+    fi
+fi
+
+if command -v op >/dev/null 2>&1; then
+    if op whoami >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ op auth: OK${RESET}"
+    else
+        warn_only "op auth: not available (expected if using service tokens only); verify op account/sign-in if needed"
+    fi
 fi
 
 # 4. Invoke MCP Doctor

@@ -456,3 +456,10 @@ mv ~/.config/systemd/user/op-<hostname>-token.backup ~/.config/systemd/user/op-<
 **Generated:** 2026-01-24
 **Branch:** feature-auto-checkpoint-poc
 **Commits:** 12 commits across Phase 1 + Phase 2
+# ARCHIVE / HISTORICAL
+#
+# This summary reflects an earlier deployment approach and may mention legacy
+# paths (e.g., ~/.local/bin). For current usage, prefer:
+# - docs/START_HERE.md
+# - scripts/auto-checkpoint.sh
+# - scripts/auto-checkpoint-install.sh
