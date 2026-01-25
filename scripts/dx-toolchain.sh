@@ -135,6 +135,10 @@ ensure_local() {
   "$HOME/agent-skills/scripts/ensure-shell-path.sh" >/dev/null 2>&1 || true
   "$HOME/agent-skills/scripts/dx-ensure-bins.sh" >/dev/null 2>&1 || true
 
+  if ! have mise; then
+    "$HOME/agent-skills/scripts/install-mise.sh" >/dev/null 2>&1 || true
+  fi
+
   if ! have ru; then
     "$HOME/agent-skills/scripts/install-ru.sh" || true
   fi

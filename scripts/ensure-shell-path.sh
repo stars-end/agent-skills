@@ -10,6 +10,14 @@ ensure_zshenv_path() {
   local marker="# agent-skills: shell bootstrap (no secrets)"
 
   if [[ -f "$zshenv" ]] && grep -Fq "$marker" "$zshenv"; then
+    # Upgrade path line if an older bootstrap exists (without mise shims).
+    if ! grep -Fq "mise/shims" "$zshenv"; then
+      {
+        echo ""
+        echo "# agent-skills: shell bootstrap upgrade (no secrets)"
+        echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:$PATH"'
+      } >> "$zshenv"
+    fi
     return 0
   fi
 
@@ -17,7 +25,7 @@ ensure_zshenv_path() {
     echo ""
     echo "$marker"
     echo "# NOTE: ~/.zshenv runs for non-interactive shells; do not put tokens here."
-    echo 'export PATH="$HOME/.local/bin:$HOME/bin:$PATH"'
+    echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:$PATH"'
   } >> "$zshenv"
 }
 
@@ -28,6 +36,13 @@ ensure_bash_profile_path() {
   local marker="# agent-skills: shell bootstrap (no secrets)"
 
   if [[ -f "$profile" ]] && grep -Fq "$marker" "$profile"; then
+    if ! grep -Fq "mise/shims" "$profile"; then
+      {
+        echo ""
+        echo "# agent-skills: shell bootstrap upgrade (no secrets)"
+        echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:$PATH"'
+      } >> "$profile"
+    fi
     return 0
   fi
 
@@ -35,7 +50,7 @@ ensure_bash_profile_path() {
     echo ""
     echo "$marker"
     echo "# NOTE: Do not put tokens here."
-    echo 'export PATH="$HOME/.local/bin:$HOME/bin:$PATH"'
+    echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:$PATH"'
   } >> "$profile"
 }
 
