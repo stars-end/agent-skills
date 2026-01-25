@@ -41,7 +41,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 print_kv() { printf "%-12s %s\n" "$1" "$2"; }
 
 check_local() {
-  export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+  export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
 
   echo "=== dx-toolchain ($(hostname -s 2>/dev/null || hostname)) ==="
   print_kv "os" "$(uname -s 2>/dev/null || echo unknown)"
@@ -131,7 +131,7 @@ check_local() {
 }
 
 ensure_local() {
-  export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+  export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
   "$HOME/agent-skills/scripts/ensure-shell-path.sh" >/dev/null 2>&1 || true
   "$HOME/agent-skills/scripts/dx-ensure-bins.sh" >/dev/null 2>&1 || true
 
@@ -171,7 +171,7 @@ run_all() {
       continue
     fi
 
-    ssh_canonical_vm "$target" "export PATH=\\\"\\$HOME/.local/bin:\\$HOME/bin:\\$PATH\\\"; cd \\$HOME/agent-skills 2>/dev/null && git pull --ff-only origin master >/dev/null 2>&1 || true; ~/agent-skills/scripts/dx-toolchain.sh ${MODE} 2>/dev/null || ~/agent-skills/scripts/dx-toolchain.sh ${MODE} || true"
+    ssh_canonical_vm "$target" "export PATH=\\\"\\$HOME/.local/share/mise/shims:\\$HOME/.local/share/mise/bin:\\$HOME/.local/bin:\\$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:\\$PATH\\\"; cd \\$HOME/agent-skills 2>/dev/null && git pull --ff-only origin master >/dev/null 2>&1 || true; ~/agent-skills/scripts/dx-toolchain.sh ${MODE} 2>/dev/null || ~/agent-skills/scripts/dx-toolchain.sh ${MODE} || true"
   done
 }
 

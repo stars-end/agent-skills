@@ -10,12 +10,12 @@ ensure_zshenv_path() {
   local marker="# agent-skills: shell bootstrap (no secrets)"
 
   if [[ -f "$zshenv" ]] && grep -Fq "$marker" "$zshenv"; then
-    # Upgrade path line if an older bootstrap exists (without mise shims).
-    if ! grep -Fq "mise/shims" "$zshenv"; then
+    # Upgrade path line if an older bootstrap exists (missing common tool dirs).
+    if ! grep -Fq "/opt/homebrew/bin" "$zshenv" || ! grep -Fq "/home/linuxbrew/.linuxbrew/bin" "$zshenv"; then
       {
         echo ""
         echo "# agent-skills: shell bootstrap upgrade (no secrets)"
-        echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:$PATH"'
+        echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"'
       } >> "$zshenv"
     fi
     return 0
@@ -25,7 +25,7 @@ ensure_zshenv_path() {
     echo ""
     echo "$marker"
     echo "# NOTE: ~/.zshenv runs for non-interactive shells; do not put tokens here."
-    echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:$PATH"'
+    echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"'
   } >> "$zshenv"
 }
 
@@ -36,11 +36,11 @@ ensure_bash_profile_path() {
   local marker="# agent-skills: shell bootstrap (no secrets)"
 
   if [[ -f "$profile" ]] && grep -Fq "$marker" "$profile"; then
-    if ! grep -Fq "mise/shims" "$profile"; then
+    if ! grep -Fq "/opt/homebrew/bin" "$profile" || ! grep -Fq "/home/linuxbrew/.linuxbrew/bin" "$profile"; then
       {
         echo ""
         echo "# agent-skills: shell bootstrap upgrade (no secrets)"
-        echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:$PATH"'
+        echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"'
       } >> "$profile"
     fi
     return 0
@@ -50,7 +50,7 @@ ensure_bash_profile_path() {
     echo ""
     echo "$marker"
     echo "# NOTE: Do not put tokens here."
-    echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:$PATH"'
+    echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"'
   } >> "$profile"
 }
 
