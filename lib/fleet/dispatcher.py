@@ -212,6 +212,23 @@ class FleetDispatcher:
             if not backend_config.ssh:
                  raise RuntimeError(f"OpenCode backend {backend_config.name} has no SSH target")
 
+            # Best-effort: ensure the control plane (agent-skills) and ~/bin tools are fresh on the target VM.
+            # This is intentionally non-blocking: dispatch should still proceed if the VM is temporarily offline.
+            try:
+                pre_cmd = (
+                    'export PATH="$HOME/.local/bin:$HOME/bin:$PATH"; '
+                    'command -v ru >/dev/null 2>&1 && ru sync agent-skills --non-interactive --quiet || true; '
+                    '~/agent-skills/scripts/dx-ensure-bins.sh >/dev/null 2>&1 || true'
+                )
+                subprocess.run(
+                    ["ssh", backend_config.ssh, pre_cmd],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+            except Exception:
+                pass
+
             # Try canonical script first (preferred, repo-aware).
             try:
                 result = subprocess.run(

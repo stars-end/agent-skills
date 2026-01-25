@@ -15,6 +15,9 @@ AGENTS_ROOT="$HOME/agent-skills"
 BIN_DIR="$HOME/bin"
 mkdir -p "$BIN_DIR"
 
+# Ensure safe PATH bootstrap for non-interactive shells.
+"$AGENTS_ROOT/scripts/ensure-shell-path.sh" >/dev/null 2>&1 || true
+
 # 1. Symlink Configuration (NTM)
 # NOTE: Serena removed due to 99% CPU runaway issues (2026-01-03)
 echo -e "${GREEN} -> Linking configurations...${RESET}"
@@ -29,10 +32,15 @@ echo -e "${GREEN} -> Setting up skills mount (~/.agent/skills)...${RESET}"
 mkdir -p "$HOME/.agent"
 ln -sfn "$AGENTS_ROOT" "$HOME/.agent/skills"
 
-# 3. Install Smart Tools (run)
-echo -e "${GREEN} -> Installing Smart Tools...${RESET}"
-ln -sf "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"
-chmod +x "$AGENTS_ROOT/tools/run"
+# 3. Install canonical executables in ~/bin
+echo -e "${GREEN} -> Ensuring ~/bin tools...${RESET}"
+"$AGENTS_ROOT/scripts/dx-ensure-bins.sh" >/dev/null 2>&1 || true
+
+# 3.0 Ensure ru is present (sync control plane)
+if ! command -v ru >/dev/null 2>&1; then
+  echo -e "${GREEN} -> Installing ru (repo_updater)...${RESET}"
+  "$AGENTS_ROOT/scripts/install-ru.sh" >/dev/null 2>&1 || true
+fi
 
 # 3.1 Install Hive Tools
 echo -e "${GREEN} -> Installing Hive Mind Tools...${RESET}"
