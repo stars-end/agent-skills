@@ -11,8 +11,8 @@ debug_backends.py
 
 # Beads metadata
 .beads/last-touched
+.beads/sync-state.json
 
 # Reference checkouts
 mcp_agent_mail_reference/
-.beads/interactions.jsonl
 .beads/interactions.jsonl
