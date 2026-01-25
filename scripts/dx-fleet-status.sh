@@ -41,7 +41,7 @@ for entry in "${CANONICAL_VMS[@]}"; do
     } | sed -e 's/\x1b\[[0-9;]*m//g'
   else
     ssh_canonical_vm "$target" 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH";
-      command -v ru >/dev/null 2>&1 && ru sync agent-skills --non-interactive --quiet || (cd "$HOME/agent-skills" 2>/dev/null && git pull --ff-only origin master >/dev/null 2>&1 || true);
+      cd "$HOME/agent-skills" 2>/dev/null && git pull --ff-only origin master >/dev/null 2>&1 || true;
       echo "host: $(hostname -s 2>/dev/null || hostname)";
       echo "agent-skills: $(cd ~/agent-skills 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo missing)";
       echo "";

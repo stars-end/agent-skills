@@ -216,8 +216,8 @@ class FleetDispatcher:
             # This is intentionally non-blocking: dispatch should still proceed if the VM is temporarily offline.
             try:
                 pre_cmd = (
-                    'export PATH="$HOME/.local/bin:$HOME/bin:$PATH"; '
-                    'command -v ru >/dev/null 2>&1 && ru sync agent-skills --non-interactive --quiet || true; '
+                    'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"; '
+                    'cd "$HOME/agent-skills" 2>/dev/null && git pull --ff-only origin master >/dev/null 2>&1 || true; '
                     '~/agent-skills/scripts/dx-ensure-bins.sh >/dev/null 2>&1 || true'
                 )
                 subprocess.run(
