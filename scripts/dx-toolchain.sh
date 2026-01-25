@@ -33,6 +33,7 @@ done
 
 want_version_gh="2.86.0"
 want_version_railway="4.26.0"
+want_version_node="22.21.1"
 want_version_op_min="2.18.0"
 want_version_ru="1.2.1"
 
@@ -112,7 +113,8 @@ check_local() {
 
   # Node/npx (needed for Slack MCP npx flow)
   if have node; then
-    print_kv "node" "$(node --version 2>/dev/null || echo ok)"
+    got="$(node --version 2>/dev/null | sed 's/^v//' || echo ok)"
+    print_kv "node" "$got (want $want_version_node)"
   else
     print_kv "node" "missing (needed for npx slack-mcp-server)"
   fi
@@ -147,6 +149,7 @@ ensure_local() {
   if have mise; then
     mise use -g "railway@${want_version_railway}" >/dev/null 2>&1 || true
     mise use -g "gh@${want_version_gh}" >/dev/null 2>&1 || true
+    mise use -g "node@${want_version_node}" >/dev/null 2>&1 || true
     mise install >/dev/null 2>&1 || true
   fi
 }
