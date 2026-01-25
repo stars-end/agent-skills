@@ -346,11 +346,8 @@ if [ -f "$CHECKPOINT_SCRIPT" ]; then
 
     # Check last run
     if [ -f "$CHECKPOINT_LOG_DIR/last-run" ]; then
-        local last_run_ts
         last_run_ts=$(cat "$CHECKPOINT_LOG_DIR/last-run")
-        local current_ts
         current_ts=$(date +%s)
-        local minutes_since
         minutes_since=$(( (current_ts - last_run_ts) / 60 ))
 
         if [ $minutes_since -lt 30 ]; then
