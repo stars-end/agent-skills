@@ -22,6 +22,7 @@ from typing import Any
 from .backends.base import BackendBase, HealthStatus, SessionStatus
 from .backends.opencode import OpenCodeBackend
 from .backends.jules import JulesBackend
+from .backends.sandbox import SandboxBackend
 from .config import FleetConfig, BackendConfig
 from .state import FleetStateStore, DispatchRecord
 from .monitor import FleetMonitor, StuckStatus, MonitorResult
@@ -79,6 +80,8 @@ class FleetDispatcher:
                     name=backend_config.name,
                     three_gate_required=backend_config.three_gate_required,
                 )
+            elif backend_config.type == "sandbox":
+                backend = SandboxBackend(name=backend_config.name)
             else:
                 continue
             

@@ -31,6 +31,8 @@ import os
 import sys
 import json
 import argparse
+import shutil
+import subprocess
 from pathlib import Path
 from datetime import datetime
 
@@ -55,6 +57,30 @@ def log(msg: str, level: str = "INFO"):
     """Log with timestamp."""
     ts = datetime.now().strftime("%H:%M:%S")
     print(f"[{ts}] [{level}] {msg}")
+
+def run_auto_checkpoint(repo_path: Path) -> None:
+    """Best-effort: run auto-checkpoint for a repo path to avoid losing work.
+
+    This is intentionally non-blocking for dispatch: failures only emit warnings.
+    """
+    try:
+        if shutil.which("auto-checkpoint") is None:
+            return
+        if not repo_path.exists():
+            return
+        log(f"auto-checkpoint: {repo_path}")
+        result = subprocess.run(
+            ["auto-checkpoint", str(repo_path)],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode not in (0, 1):
+            log(f"auto-checkpoint exited {result.returncode} (continuing)", "WARN")
+    except subprocess.TimeoutExpired:
+        log("auto-checkpoint timed out (continuing)", "WARN")
+    except Exception as e:
+        log(f"auto-checkpoint error: {e}", "WARN")
 
 
 def run_sync_before_dispatch(repo: str = None) -> bool:
@@ -167,6 +193,12 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
     """Dispatch using FleetDispatcher."""
     vm_name = args.vm
     task = args.task
+
+    # Durability first: best-effort checkpoint to avoid losing work and to keep
+    # canonical clones fast-forwardable for ru sync.
+    run_auto_checkpoint(Path.home() / "agent-skills")
+    if hasattr(args, "repo") and args.repo:
+        run_auto_checkpoint(Path.home() / args.repo)
 
     # Sync before dispatch to ensure repos are fresh
     # Sync agent-skills first (highest churn)

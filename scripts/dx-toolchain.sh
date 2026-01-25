@@ -80,6 +80,13 @@ check_local() {
     print_kv "bd" "MISSING"
   fi
 
+  # dcg
+  if have dcg; then
+    print_kv "dcg" "ok"
+  else
+    print_kv "dcg" "MISSING"
+  fi
+
   # cass (optional)
   if have cass; then
     print_kv "cass" "ok"

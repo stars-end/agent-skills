@@ -3,6 +3,7 @@
 from .base import BackendBase, HealthStatus, SessionStatus
 from .opencode import OpenCodeBackend
 from .jules import JulesBackend
+from .sandbox import SandboxBackend
 
 __all__ = [
     "BackendBase",
@@ -10,4 +11,5 @@ __all__ = [
     "SessionStatus",
     "OpenCodeBackend",
     "JulesBackend",
+    "SandboxBackend",
 ]
