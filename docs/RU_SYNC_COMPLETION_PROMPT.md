@@ -29,7 +29,7 @@ The auto-checkpoint.log has rotation but ru-sync.log does not.
 
 ```bash
 # === epyc6 ===
-ssh fengning@epyc6 'bash -s' << 'EOF'
+ssh feng@epyc6 'bash -s' << 'EOF'
 # Check if rotation exists
 if crontab -l 2>/dev/null | grep -q "ru-sync.*truncate"; then
   echo "✅ Log rotation already configured"

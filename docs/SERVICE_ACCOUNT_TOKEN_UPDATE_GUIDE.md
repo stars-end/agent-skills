@@ -47,7 +47,7 @@ cat ~/.config/systemd/user/opencode-cleanup-token
 
 ```bash
 # SSH into epyc6 (or run locally if you're on epyc6)
-ssh fengning@epyc6
+ssh feng@epyc6
 
 # Create token file
 cat > ~/.config/systemd/user/auto-checkpoint-token << 'EOF'

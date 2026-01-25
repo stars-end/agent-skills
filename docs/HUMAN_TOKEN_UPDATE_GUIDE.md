@@ -72,7 +72,7 @@ hostname-based naming convention (`op-<hostname>-token`).
 cd ~/agent-skills/scripts
 ./distribute-unique-tokens.sh
 # The script will prompt for each token:
-# - Token for fengning@epyc6 (op-epyc6-token)
+# - Token for feng@epyc6 (op-epyc6-token)
 # - Token for fengning@homedesktop-wsl (op-homedesktop-wsl-token)
 # - Token for fengning@macmini (op-macmini-token)
 # Paste each token when prompted.

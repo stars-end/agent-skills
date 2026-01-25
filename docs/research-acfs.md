@@ -456,20 +456,6 @@ Configuration (`~/.claude/settings.json`):
 
 ---
 
-### Category 9: MCP Agent Mail
-
-**What it does**: Multi-agent messaging and file reservations via MCP
-
-**Our equivalent**: slack-coordinator.py (639 lines) with:
-- Multi-VM routing (@epyc6, @macmini)
-- Git worktree per Beads issue
-- Jules dispatch integration
-- Human approval workflow
-
-**Status**: User reported buggy ~30 days ago
-
-**Verdict**: ❌ **REJECT** - Slack is simpler and more reliable
-
 ---
 
 ## Priority Summary
@@ -506,7 +492,6 @@ Configuration (`~/.claude/settings.json`):
 |------|-----|
 | All shell tools | Already have via vm-bootstrap |
 | All language managers | Already have via mise |
-| Agent Mail | Buggy, Slack is better |
 | Vibe mode aliases | Violates Nakomi Protocol |
 | Supabase | BANNED per user rules |
 | Vault/Vercel/Wrangler | Use Railway |

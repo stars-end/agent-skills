@@ -122,7 +122,7 @@ if __name__ == "__main__":
 - [ ] Post test message: `[TASK] bd-verify-001: echo hello`
 - [ ] Verify response in thread
 - [ ] Check `journalctl --user -u slack-coordinator -f`
-- [ ] Check `systemctl --user status opencode-server`
+- [ ] Check `systemctl --user status opencode`
 
 ### Multi-VM
 
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 #!/usr/bin/env bash
 # emergency-stop.sh
 systemctl --user stop slack-coordinator
-systemctl --user stop opencode-server
+systemctl --user stop opencode
 pkill -f "opencode"
 echo "✅ All agent processes stopped"
 ```
@@ -163,7 +163,7 @@ echo "✅ All agent processes stopped"
 ```bash
 # Disable services
 systemctl --user disable slack-coordinator
-systemctl --user disable opencode-server
+systemctl --user disable opencode
 
 # Check logs
 journalctl --user -u slack-coordinator -n 100
@@ -190,5 +190,5 @@ journalctl --user -u slack-coordinator -n 100
 | Service | Log Command |
 |---------|-------------|
 | Coordinator | `journalctl --user -u slack-coordinator -f` |
-| OpenCode | `journalctl --user -u opencode-server -f` |
+| OpenCode | `journalctl --user -u opencode -f` |
 | Beads | `~/.beads/beads.log` |
