@@ -51,6 +51,33 @@ dx-dispatch epyc6 "Do X" --repo affordabot --beads bd-123
 
 Dispatch uses `lib/fleet` worktree setup (isolated branch/workdir) and is resilient to duplicates (idempotency).
 
+## Workspaces (worktrees) for agents
+
+Agents should not run `git worktree ...` directly. Use:
+
+```bash
+dx-worktree create <beads-id> <repo>
+```
+
+If a workspace is stuck:
+
+```bash
+dx-worktree cleanup <beads-id>
+dx-worktree prune <repo>
+```
+
+## ru sync integration (simple mental model)
+
+- `ru sync` keeps canonical clones (`~/<repo>`) fresh.
+- Workspaces live under `/tmp/agents/...` and are intentionally **not** synced by `ru`.
+
+## auto-checkpoint integration (recommended stance)
+
+If canonical clones stay clean, `ru sync` should not need auto-checkpoint.
+
+If a workspace is dirty and you must switch context:
+- Prefer `dirty-repo-bootstrap` snapshot (WIP branch + push) over any cron-based auto-commit/push.
+
 ## Two-day sprint scope (recommended)
 
 ### Day 1 (P0): correctness
@@ -61,4 +88,3 @@ Dispatch uses `lib/fleet` worktree setup (isolated branch/workdir) and is resili
 ### Day 2 (P1): consistency and visibility
 - Pin versions (at least `railway`, `gh`) across VMs (via `mise use -g ...`).
 - Add a single “fleet status” command and make it the default tech-lead ritual before dispatching.
-

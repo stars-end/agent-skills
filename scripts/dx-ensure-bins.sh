@@ -25,6 +25,7 @@ link() {
 link "$AGENTS_ROOT/scripts/dx-dispatch.py" "$BIN_DIR/dx-dispatch"
 link "$AGENTS_ROOT/scripts/fleet-dispatch.py" "$BIN_DIR/fleet-dispatch"
 link "$AGENTS_ROOT/scripts/worktree-setup.sh" "$BIN_DIR/worktree-setup.sh"
+link "$AGENTS_ROOT/scripts/dx-worktree.sh" "$BIN_DIR/dx-worktree"
 link "$AGENTS_ROOT/scripts/dx-status.sh" "$BIN_DIR/dx-status"
 link "$AGENTS_ROOT/scripts/dx-check.sh" "$BIN_DIR/dx-check"
 
