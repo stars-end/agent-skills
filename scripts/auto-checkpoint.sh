@@ -3,12 +3,13 @@
 # Bulletproof auto-checkpoint for agent sessions.
 #
 # Safety Contract:
-# 1. NEVER push to trunk (master/main). If on trunk: create wip/auto/<host>/<date> branch.
+# 1. NEVER push to trunk (master/main). If on trunk: create wip/auto/<host>/<YYYY-MM-DD> branch.
 # 2. NEVER operate inside worktree dirs (/tmp/agents/...). Only canonical clones in ~/.
-# 3. Secret scanning: added-lines-only (git diff --cached -U0) + high-confidence patterns.
-# 4. Works without LLM. LLM opt-in via AUTO_CHECKPOINT_ALLOW_LLM=1 (metadata only).
-# 5. Concurrency safe: lock file + bounded timeout.
+# 3. Concurrency safe: lock file with 5 min timeout + skip if .git/index.lock exists.
+# 4. Secret scanning: added-lines-only (git diff --cached -U0) + high-confidence patterns.
+# 5. Works without LLM. LLM opt-in via AUTO_CHECKPOINT_ALLOW_LLM=1 (metadata only).
 # 6. Push is best-effort; local commit MUST exist even if push fails (no work loss).
+# 7. Never operate without origin remote.
 
 set -euo pipefail
 
@@ -49,6 +50,20 @@ SECRET_PATTERNS=(
   "xoxp-[0-9]{10,}-[0-9]{10,}"
   # Private keys (high confidence only)
   "-----BEGIN [A-Z]+ PRIVATE KEY-----"
+)
+
+# Allowlist patterns to reduce false positives (these are NOT secrets)
+SECRET_ALLOWLIST=(
+  # Documentation examples
+  "sk-\.\.\."
+  "ghp_\*\*\*"
+  # Test/example values
+  '"sk-[a-zA-Z0-9]{20,}"'  # In documentation
+  '"AKIA[0-9A-Z]{16}"'      # In documentation
+  # Placeholder patterns
+  "YOUR_API_KEY"
+  "YOUR_SECRET_KEY"
+  "REPLACE_WITH"
 )
 
 # ============================================================
@@ -144,6 +159,16 @@ is_trunk_branch() {
   return 1
 }
 
+has_git_index_lock() {
+  local repo_path="$1"
+  [ -f "$repo_path/.git/index.lock" ]
+}
+
+has_origin_remote() {
+  local repo_path="$1"
+  git -C "$repo_path" remote get-url origin >/dev/null 2>&1
+}
+
 # ============================================================
 # Secret Scanning (Added-Lines-Only)
 # ============================================================
@@ -160,19 +185,21 @@ scan_for_secrets() {
     return 0
   fi
 
-  # Check each pattern
+  # Check allowlist first (skip lines that match allowlist patterns)
+  local filtered_lines="$added_lines"
+  for allow_pattern in "${SECRET_ALLOWLIST[@]}"; do
+    filtered_lines=$(grep -vE "$allow_pattern" <<< "$filtered_lines" || true)
+  done
+
+  # Check each pattern against filtered lines
   for pattern in "${SECRET_PATTERNS[@]}"; do
-    if grep -qE "$pattern" <<< "$added_lines" 2>/dev/null; then
+    if grep -qE "$pattern" <<< "$filtered_lines" 2>/dev/null; then
       found_secrets+=("$pattern")
     fi
   done
 
   if [ ${#found_secrets[@]} -gt 0 ]; then
-    error "Potential secrets detected in staged changes:"
-    for pattern in "${found_secrets[@]}"; do
-      echo "  - Pattern: $pattern" >&2
-    done
-    echo "" >&2
+    error "Potential secrets detected in staged changes."
     echo "Remediation:" >&2
     echo "  1. Run: git reset HEAD" >&2
     echo "  2. Review changes: git diff" >&2
@@ -206,8 +233,20 @@ checkpoint_repo() {
     return 0
   fi
 
+  # Skip if git index lock exists (another git operation in progress)
+  if has_git_index_lock "$repo_path"; then
+    log "  Skipping (git operation in progress)"
+    return 0
+  fi
+
   # Skip non-canonical repos (unless explicitly enabled)
   if ! is_canonical_repo "$repo_name" && [ "${AUTO_CHECKPOINT_ALL_REPOS:-0}" != "1" ]; then
+    return 0
+  fi
+
+  # Check for origin remote (requirement 7)
+  if ! has_origin_remote "$repo_path"; then
+    log "  Skipping (no origin remote)"
     return 0
   fi
 
@@ -237,12 +276,12 @@ checkpoint_repo() {
     needs_wip_branch=1
   fi
 
-  # Create wip branch if needed
+  # Create wip branch if needed (format: wip/auto/<host>/<YYYY-MM-DD>)
   if [ $needs_wip_branch -eq 1 ]; then
     local hostname
     hostname=$(hostname -s 2>/dev/null || echo "unknown")
     local datestamp
-    datestamp=$(date +%Y%m%d)
+    datestamp=$(date +%Y-%m-%d)
     local timestamp
     timestamp=$(date +%H%M%S)
     local wip_branch="wip/auto/${hostname}/${datestamp}-${timestamp}"
