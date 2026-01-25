@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# bd-context - Print current repo + Beads context (safe, no secrets).
+#
+# Usage:
+#   bd-context
+#
+# Output includes:
+# - repo root + origin URL (if any)
+# - current branch
+# - best-effort Beads issue ID inferred from branch name
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+REMOTE_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || echo "")"
+BRANCH="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo "")"
+
+if [[ -z "$BRANCH" ]]; then
+  BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+fi
+
+BEADS_ID=""
+if [[ -n "$BRANCH" ]]; then
+  BEADS_ID="$(echo "$BRANCH" | rg -o 'bd-[a-z0-9]+(\\.[0-9]+)?' -n 2>/dev/null | head -1 || true)"
+fi
+
+echo "repo_root: $REPO_ROOT"
+if [[ -n "$REMOTE_URL" ]]; then
+  echo "origin:    $REMOTE_URL"
+fi
+if [[ -n "$BRANCH" ]]; then
+  echo "branch:    $BRANCH"
+fi
+if [[ -n "$BEADS_ID" ]]; then
+  echo "beads_id:  $BEADS_ID"
+fi
+
+if command -v bd >/dev/null 2>&1; then
+  if [[ -n "$BEADS_ID" ]]; then
+    echo ""
+    echo "bd show $BEADS_ID (summary):"
+    bd show "$BEADS_ID" 2>/dev/null | head -20 || true
+  fi
+else
+  echo ""
+  echo "note: bd CLI not found"
+fi
+

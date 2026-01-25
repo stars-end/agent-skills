@@ -578,7 +578,7 @@ AI:
 
 **Last Updated:** 2025-11-13
 **Related Skills:** create-pull-request, fix-pr-feedback, sync-feature-branch
-**Helper Scripts:** scripts/bd-link-pr
+**Helper Scripts:** bd-link-pr
 **References:**
 - PR workflow: AGENTS.md
 - Beads integration: .claude/skills/beads-workflow/SKILL.md

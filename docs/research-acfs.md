@@ -114,7 +114,7 @@ The ACFS (Agentic Coding Flywheel Setup) repository is a comprehensive VPS boots
 
 #### tailscale
 - **What it does**: Mesh VPN for multi-machine access
-- **Our equivalent**: ✅ Already in vm-bootstrap, used by hive-dispatch
+- **Our equivalent**: ✅ Already in vm-bootstrap, used by dx-dispatch and coordinator services
 - **Verdict**: ❌ **SKIP** - Already have
 
 ---
@@ -185,8 +185,8 @@ The ACFS (Agentic Coding Flywheel Setup) repository is a comprehensive VPS boots
 - Session checkpoints
 
 **Our equivalent**: 
-- hive-dispatch for REMOTE VMs
-- slack-coordinator.py for multi-VM
+- dx-dispatch / lib/fleet for remote dispatch
+- slack-coordinator.py for multi-VM coordination (optional)
 - No LOCAL multi-agent orchestration
 
 **Human QoL**: ✅ **Excellent** - Visual dashboard for monitoring
@@ -522,4 +522,3 @@ Configuration (`~/.claude/settings.json`):
 | NTM | https://github.com/Dicklesworthstone/ntm |
 | CASS | https://github.com/Dicklesworthstone/coding_agent_session_search |
 | ACFS | https://github.com/Dicklesworthstone/agentic_coding_flywheel_setup |
-

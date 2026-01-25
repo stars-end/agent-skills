@@ -20,29 +20,24 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git pull origin master 2>&1 | grep -v "^Already up to date" || echo "  ↳ Already up to date"
 fi
 
-# 2. DX doctor check
-echo "🩺 Running dx-doctor..."
-if [[ -f Makefile ]] && grep -q "dx-doctor" Makefile 2>/dev/null; then
-    make dx-doctor 2>&1 || {
-        echo "⚠️  dx-doctor check found issues (see above)"
-        echo "   Continue with caution or fix issues before proceeding"
-    }
-elif [[ -f ~/.agent/skills/dx-doctor/check.sh ]]; then
-    ~/.agent/skills/dx-doctor/check.sh 2>&1 || {
-        echo "⚠️  dx-doctor check found issues (see above)"
-        echo "   Continue with caution or fix issues before proceeding"
-    }
+# 2. Baseline DX check (canonical)
+echo "🩺 Running dx-check..."
+if command -v dx-check >/dev/null 2>&1; then
+    dx-check 2>&1 || true
+elif [[ -f "$HOME/agent-skills/scripts/dx-check.sh" ]]; then
+    "$HOME/agent-skills/scripts/dx-check.sh" 2>&1 || true
 else
-    echo "⚠️  dx-doctor not found (install agent-skills)"
-    echo "   git clone https://github.com/stars-end/agent-skills ~/.agent/skills"
+    echo "⚠️  dx-check not found (install agent-skills)"
 fi
 
-# 3. Agent Mail check (if configured)
-if [[ -n "${AGENT_MAIL_URL:-}" ]] && [[ -n "${AGENT_MAIL_BEARER_TOKEN:-}" ]]; then
-    echo "✅ Agent Mail configured ($AGENT_MAIL_URL)"
-    echo "   Register identity and check inbox for assignments"
-else
-    echo "ℹ️  Agent Mail not configured (Beads + git only)"
+# 3. Coordinator stack checks (OPTIONAL)
+if [[ "${DX_BOOTSTRAP_COORDINATOR:-0}" == "1" ]]; then
+    echo "🩺 Running dx-doctor (optional coordinator checks)..."
+    if command -v dx-doctor >/dev/null 2>&1; then
+        dx-doctor 2>&1 || true
+    elif [[ -f "$HOME/agent-skills/scripts/dx-doctor.sh" ]]; then
+        "$HOME/agent-skills/scripts/dx-doctor.sh" 2>&1 || true
+    fi
 fi
 
 echo "✅ DX bootstrap complete"

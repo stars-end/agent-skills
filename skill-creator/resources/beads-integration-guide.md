@@ -447,14 +447,14 @@ bd ready
 
 **Problem:** Link Beads issues to PRs
 
-**Solution:** Use scripts/bd-link-pr helper
+**Solution:** Use bd-link-pr helper
 
 ```typescript
 // After creating PR
 PR_NUMBER = gh pr view --json number -q .number
 
 // Link to Beads (bidirectional)
-bash: scripts/bd-link-pr ${PR_NUMBER}
+bash: bd-link-pr ${PR_NUMBER}
 
 // OR update manually:
 mcp__plugin_beads_beads__update(
@@ -638,7 +638,7 @@ mcp__plugin_beads_beads__update(
 ### Check Beads Context
 
 ```bash
-scripts/bd-context
+bd-context
 # Shows: current issue, branch, ready count
 ```
 

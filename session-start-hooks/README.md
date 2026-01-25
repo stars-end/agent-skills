@@ -47,7 +47,7 @@ claude
 
 ```toml
 [session]
-on_start = "~/.agent/skills/dx-doctor/check.sh"
+on_start = "bash ~/.agent/skills/session-start-hooks/dx-bootstrap.sh"
 ```
 
 ### Antigravity
@@ -58,7 +58,8 @@ on_start = "~/.agent/skills/dx-doctor/check.sh"
 session:
   on_start:
     - git pull origin master
-    - make dx-doctor || ~/.agent/skills/dx-doctor/check.sh
+    - dx-check || true
+    - bash -lc '[[ "${DX_BOOTSTRAP_COORDINATOR:-0}" == "1" ]] && dx-doctor || true'
 ```
 
 ### Gemini
@@ -94,7 +95,8 @@ ls -la .claude/hooks/SessionStart/
 
 **Check**:
 ```bash
-ls -la ~/.agent/skills/dx-doctor/check.sh
+command -v dx-doctor || true
+ls -la ~/.agent/skills/scripts/dx-doctor.sh
 ```
 
 **Fix**: Install agent-skills:

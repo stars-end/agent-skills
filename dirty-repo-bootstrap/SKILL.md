@@ -63,9 +63,9 @@ git commit -m "wip: snapshot before [describe your next task]"
 # 5. Push WIP branch to origin
 git push -u origin HEAD
 
-# 6. Return to main/master branch
-git checkout main  # or master
-git pull origin main
+# 6. Return to trunk (master by default)
+git checkout master  # or main in some repos
+git pull origin master
 ```
 
 ## WIP Branch Naming Convention

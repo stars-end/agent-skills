@@ -20,10 +20,9 @@
     "mcp-doctor"
   ],
   "mcp": {
-    "required": [
-      "agent-mail"
-    ],
+    "required": [],
     "optional": [
+      "slack",
       "z.ai-search"
     ]
   }

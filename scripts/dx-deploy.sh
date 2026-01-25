@@ -14,8 +14,13 @@ echo -e "${BLUE}🚀 Multi-Agent Coordinator Deployment${RESET}"
 echo ""
 
 # Configuration
-TARGET_VMS="${TARGET_VMS:-epyc6 macmini}"
 AGENTS_REPO="agent-skills"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1090
+source "$SCRIPT_DIR/canonical-targets.sh" 2>/dev/null || true
+
+# Default targets (canonical host keys)
+TARGET_VMS="${TARGET_VMS:-epyc6 macmini}"
 
 # Parse arguments
 DRY_RUN=false
@@ -24,55 +29,75 @@ if [[ "$1" == "--dry-run" ]]; then
     echo -e "${YELLOW}DRY RUN MODE - No changes will be made${RESET}"
 fi
 
-for vm in $TARGET_VMS; do
+run_ssh() {
+    local target="$1"
+    shift
+    if command -v ssh_canonical_vm >/dev/null 2>&1; then
+        ssh_canonical_vm "$target" "$@"
+    else
+        ssh "$target" "$@"
+    fi
+}
+
+for vm_key in $TARGET_VMS; do
     echo ""
-    echo -e "${BLUE}=== Deploying to ${vm} ===${RESET}"
+    echo -e "${BLUE}=== Deploying to ${vm_key} ===${RESET}"
     
     if $DRY_RUN; then
-        echo "   [DRY RUN] Would deploy to ${vm}"
+        echo "   [DRY RUN] Would deploy to ${vm_key}"
         continue
     fi
     
+    # Resolve vm_key to canonical SSH target (user@host)
+    vm_target=""
+    if declare -p CANONICAL_VMS >/dev/null 2>&1; then
+        for entry in "${CANONICAL_VMS[@]}"; do
+            host="${entry%%:*}"
+            host_key="${host#*@}"
+            if [[ "$host_key" == "$vm_key" ]]; then
+                vm_target="$host"
+                break
+            fi
+        done
+    fi
+    vm_target="${vm_target:-$vm_key}"
+
     # Check connectivity
-    if ! ssh -o ConnectTimeout=5 "$vm" 'echo connected' >/dev/null 2>&1; then
-        echo -e "${RED}❌ Cannot connect to ${vm}${RESET}"
+    if ! run_ssh "$vm_target" 'echo connected' >/dev/null 2>&1; then
+        echo -e "${RED}❌ Cannot connect to ${vm_target}${RESET}"
         continue
     fi
     
     # Pull latest code
     echo "   Pulling latest code..."
-    ssh "$vm" "cd ~/${AGENTS_REPO} && git pull origin master" || {
+    run_ssh "$vm_target" "cd ~/${AGENTS_REPO} && git pull origin master" || {
         echo -e "${YELLOW}⚠️  Git pull failed, trying force checkout${RESET}"
-        ssh "$vm" "cd ~/${AGENTS_REPO} && git fetch origin && git checkout -f origin/master"
+        run_ssh "$vm_target" "cd ~/${AGENTS_REPO} && git fetch origin && git checkout -f origin/master"
     }
     
     # Run hydration
     echo "   Running hydration..."
-    ssh "$vm" "~/${AGENTS_REPO}/scripts/dx-hydrate.sh" 2>/dev/null || true
+    run_ssh "$vm_target" "~/${AGENTS_REPO}/scripts/dx-hydrate.sh" 2>/dev/null || true
     
     # Restart OpenCode server
     echo "   Restarting OpenCode server..."
-    ssh "$vm" 'systemctl --user restart opencode-server' 2>/dev/null || {
-        echo -e "${YELLOW}⚠️  OpenCode restart failed, may not be installed${RESET}"
-    }
+    run_ssh "$vm_target" 'systemctl --user restart opencode 2>/dev/null || systemctl --user restart opencode-server 2>/dev/null || true'
     
     # Restart coordinator
     echo "   Restarting coordinator..."
-    ssh "$vm" 'systemctl --user restart slack-coordinator' 2>/dev/null || {
-        echo -e "${YELLOW}⚠️  Coordinator restart failed, may not be installed${RESET}"
-    }
+    run_ssh "$vm_target" 'systemctl --user restart slack-coordinator 2>/dev/null || true'
     
     # Verify health
     echo "   Verifying health..."
     sleep 2
     
-    if ssh "$vm" 'systemctl --user is-active slack-coordinator' >/dev/null 2>&1; then
+    if run_ssh "$vm_target" 'systemctl --user is-active slack-coordinator' >/dev/null 2>&1; then
         echo -e "${GREEN}   ✅ Coordinator running${RESET}"
     else
         echo -e "${RED}   ❌ Coordinator not running${RESET}"
     fi
     
-    if ssh "$vm" 'systemctl --user is-active opencode-server' >/dev/null 2>&1; then
+    if run_ssh "$vm_target" 'systemctl --user is-active opencode 2>/dev/null || systemctl --user is-active opencode-server' >/dev/null 2>&1; then
         echo -e "${GREEN}   ✅ OpenCode running${RESET}"
     else
         echo -e "${RED}   ❌ OpenCode not running${RESET}"

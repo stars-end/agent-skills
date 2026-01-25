@@ -261,11 +261,11 @@ The skills plane is part of the standard DX bootstrap sequence:
 # 1. Git sync
 cd ~/llm-common && git pull origin master
 
-# 2. DX doctor check (includes mcp-doctor)
-~/.agent/skills/dx-doctor/check.sh
+# 2. Baseline DX check (safe in all workflows)
+dx-check || true
 
-# 3. Agent Mail (if configured)
-# Register identity and check inbox
+# 3. Optional coordinator checks (Slack/OpenCode/MCPs)
+DX_BOOTSTRAP_COORDINATOR=1 dx-doctor || true
 
 # 4. Beads sync (via primary repo)
 # Sync state from prime-radiant-ai or affordabot
@@ -285,7 +285,7 @@ See [DX_BOOTSTRAP_CONTRACT.md](./DX_BOOTSTRAP_CONTRACT.md) for full details.
 ```bash
 # Pull latest skills from GitHub
 cd ~/agent-skills
-git pull origin main
+git pull origin master
 
 # Verify mount point is still correct
 ~/.agent/skills/mcp-doctor/check.sh

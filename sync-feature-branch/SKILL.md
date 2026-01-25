@@ -23,7 +23,7 @@ Commit current work with Beads tracking + smart discovery handling + auto phase 
 
 ### 1. Set Beads Context
 ```bash
-scripts/bd-context
+bd-context
 ```
 
 ### 2. Get Current Issue

@@ -16,7 +16,8 @@ def cleanup_gemini(path):
         changed = False
         
         roots = ['mcp', 'mcpServers']
-        targets = ['skills', 'universal-skills', 'universal_skills', 'mcp-agent-mail', 'agent-mail', 'mcp_agent_mail']
+        # Clean only legacy skills MCP entries.
+        targets = ['skills', 'universal-skills', 'universal_skills']
         
         for root in roots:
             if root in data:
@@ -55,9 +56,6 @@ def cleanup_codex(path):
             '[mcp_servers.skills]', '[mcp_servers."skills"]',
             '[mcp_servers.universal-skills]', '[mcp_servers."universal-skills"]',
             '[mcp_servers.universal_skills]', '[mcp_servers."universal_skills"]',
-            '[mcp_servers.agent-mail]', '[mcp_servers."agent-mail"]',
-            '[mcp_servers.mcp-agent-mail]', '[mcp_servers."mcp-agent-mail"]',
-            '[mcp_servers.mcp_agent_mail]', '[mcp_servers."mcp_agent_mail"]'
         ]
 
         for line in lines:

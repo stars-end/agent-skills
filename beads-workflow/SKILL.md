@@ -96,7 +96,7 @@ bd dep bd-subtask bd-epic --type parent-child
 **Example execution:**
 ```bash
 # 1. Check context
-scripts/bd-context
+bd-context
 
 # 2. Create epic
 # Use bd create with JSON or flags
@@ -141,7 +141,7 @@ echo "✅ Created epic bd-xyz with phase tasks"
 **Example execution:**
 ```bash
 # 1. Check context
-scripts/bd-context
+bd-context
 
 # 2. Create feature
 bd create --title "OAUTH_LOGIN_BUTTON" --type feature --priority 2 --desc "Single OAuth login component..."
@@ -173,7 +173,7 @@ bd list --status open
 
 **Current context:**
 ```bash
-scripts/bd-context
+bd-context
 ```
 
 ### Track Work
@@ -202,7 +202,7 @@ bd create --title "Description" --type feature --priority 2
 
 **Link to PR:**
 ```bash
-scripts/bd-link-pr <pr-number>
+bd-link-pr <pr-number>
 ```
 
 ### Manage Dependencies
@@ -232,7 +232,7 @@ bd dep bd-discovered-bug bd-parent-feature --type discovered-from
 
 **Uses Beads:**
 - Ensures issue exists (creates if missing)
-- Links PR to issue via scripts/bd-link-pr
+- Links PR to issue via bd-link-pr
 - References issue in PR body
 
 **When invoked:** "create PR", "merge into master"
@@ -288,12 +288,12 @@ bd dep bd-discovered-bug bd-parent-feature --type discovered-from
 
 ### Helper Scripts
 
-**scripts/bd-context**
+**bd-context**
 - Shows current Beads context
 - Output: Issue, branch, feature key, ready count
 - Use when: Session start, status checks
 
-**scripts/bd-link-pr**
+**bd-link-pr**
 - Links PR to Beads issue
 - Auto-detects or creates issue
 - Prevents duplicate linking
@@ -318,7 +318,7 @@ bd dep bd-discovered-bug bd-parent-feature --type discovered-from
 
 1. Check context:
    ```bash
-   scripts/bd-context
+   bd-context
    ```
 
 2. Find ready work:
@@ -494,7 +494,7 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 
 **Last Updated:** 2025-01-11
 **Related Skills:** sync-feature-branch, create-pull-request
-**Helper Scripts:** scripts/bd-context, scripts/bd-link-pr
+**Helper Scripts:** bd-context, bd-link-pr
 **References:**
 - Beads MCP: https://github.com/steveyegge/beads/blob/main/docs/PLUGIN.md
 - Beads README: https://github.com/steveyegge/beads/blob/main/README.md

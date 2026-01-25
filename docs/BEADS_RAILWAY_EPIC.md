@@ -402,7 +402,6 @@ Epic is complete when:
 - **bd-railway-integration** (this epic)
 - **bd-v3-dx** - V3 DX philosophy implementation
 - **bd-skills-plane** - Skills plane architecture (bd-3871)
-- **bd-agent-mail** - Agent Mail coordination
 
 ---
 

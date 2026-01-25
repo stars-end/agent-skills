@@ -124,7 +124,7 @@ Note: `check.sh` is a wrapper for `verify.sh check`. `install.sh` provides inter
 DX entrypoints should call `vm-bootstrap check` as first step:
 
 ```bash
-# In scripts/bd-context or make dx-doctor
+# In bd-context or dx-doctor
 ~/agent-skills/vm-bootstrap/verify.sh check
 ```
 

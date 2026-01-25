@@ -103,7 +103,9 @@ Role: {engineer-type}
 ```bash
 cd ~/llm-common
 git pull origin master
-~/.agent/skills/dx-doctor/check.sh
+dx-check || true
+# Optional (only if using coordinator services):
+# DX_BOOTSTRAP_COORDINATOR=1 dx-doctor || true
 # No Beads sync (uses primary repo's Beads)
 ```
 

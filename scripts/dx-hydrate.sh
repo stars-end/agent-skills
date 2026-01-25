@@ -42,57 +42,44 @@ if ! command -v ru >/dev/null 2>&1; then
   "$AGENTS_ROOT/scripts/install-ru.sh" >/dev/null 2>&1 || true
 fi
 
-# 3.1 Install Hive Tools
-echo -e "${GREEN} -> Installing Hive Mind Tools...${RESET}"
-ln -sf "$AGENTS_ROOT/hive/orchestrator/hive-status.py" "$BIN_DIR/hive-status"
-ln -sf "$AGENTS_ROOT/hive/orchestrator/monitor.py" "$BIN_DIR/hive-monitor"
-ln -sf "$AGENTS_ROOT/hive/node/cleanup.sh" "$BIN_DIR/hive-cleanup"
-ln -sf "$AGENTS_ROOT/hive/node/hive-queen.py" "$BIN_DIR/hive-queen"
-chmod +x "$AGENTS_ROOT/hive/orchestrator/hive-status.py"
-chmod +x "$AGENTS_ROOT/hive/orchestrator/monitor.py"
-chmod +x "$AGENTS_ROOT/hive/node/cleanup.sh"
-chmod +x "$AGENTS_ROOT/hive/node/hive-queen.py"
+# 3.1 Slack MCP (OPTIONAL)
+echo -e "${GREEN} -> Slack MCP is optional (not configured by default)...${RESET}"
 
-# 3.2 Install Slack MCP
-echo -e "${GREEN} -> Setting up Slack MCP integration...${RESET}"
-
-# 3.3 Install OpenCode Server (Systemd)
-echo -e "${GREEN} -> Installing OpenCode systemd service...${RESET}"
+# 3.2 Install OpenCode (Systemd) — OPTIONAL coordinator stack
+echo -e "${GREEN} -> Installing OpenCode systemd service (optional)...${RESET}"
 mkdir -p "$HOME/.config/systemd/user"
-if [ -f "$AGENTS_ROOT/systemd/opencode-server.service" ]; then
-    cp "$AGENTS_ROOT/systemd/opencode-server.service" "$HOME/.config/systemd/user/"
-    
-    # Adjust WorkingDirectory for the current user
-    sed -i "s|WorkingDirectory=/home/feng|WorkingDirectory=$HOME|g" "$HOME/.config/systemd/user/opencode-server.service"
-    
-    # Reload and enable (but don't start - let user do that)
+if [ -f "$AGENTS_ROOT/systemd/opencode.service" ]; then
+    cp "$AGENTS_ROOT/systemd/opencode.service" "$HOME/.config/systemd/user/"
+
+    # Ensure scoped env file exists (safe to copy template; op run resolves op:// at runtime).
+    mkdir -p "$HOME/.config/opencode"
+    if [ ! -f "$HOME/.config/opencode/.env" ] && [ -f "$AGENTS_ROOT/scripts/env/opencode.env.template" ]; then
+        cp "$AGENTS_ROOT/scripts/env/opencode.env.template" "$HOME/.config/opencode/.env"
+        chmod 600 "$HOME/.config/opencode/.env" 2>/dev/null || true
+    fi
+
     systemctl --user daemon-reload 2>/dev/null || true
-    systemctl --user enable opencode-server 2>/dev/null || true
-    echo "   OpenCode service installed. Start with: systemctl --user start opencode-server"
+    systemctl --user enable opencode 2>/dev/null || true
+    echo "   OpenCode service installed. Start with: systemctl --user start opencode"
 else
     echo "   OpenCode service file not found, skipping..."
 fi
 
-# 3.4 Install Slack Coordinator (Systemd)
-echo -e "${GREEN} -> Installing Slack Coordinator service...${RESET}"
+# 3.3 Install Slack Coordinator (Systemd) — OPTIONAL coordinator stack
+echo -e "${GREEN} -> Installing Slack Coordinator service (optional)...${RESET}"
 if [ -f "$AGENTS_ROOT/systemd/slack-coordinator.service" ]; then
     cp "$AGENTS_ROOT/systemd/slack-coordinator.service" "$HOME/.config/systemd/user/"
-    
-    # Adjust paths for current user
-    sed -i "s|/home/feng|$HOME|g" "$HOME/.config/systemd/user/slack-coordinator.service"
-    
+
+    # Ensure scoped env file exists (safe to copy template; op run resolves op:// at runtime).
+    mkdir -p "$HOME/.config/slack-coordinator"
+    if [ ! -f "$HOME/.config/slack-coordinator/.env" ] && [ -f "$AGENTS_ROOT/scripts/env/slack-coordinator.env.template" ]; then
+        cp "$AGENTS_ROOT/scripts/env/slack-coordinator.env.template" "$HOME/.config/slack-coordinator/.env"
+        chmod 600 "$HOME/.config/slack-coordinator/.env" 2>/dev/null || true
+    fi
+
     systemctl --user daemon-reload 2>/dev/null || true
     systemctl --user enable slack-coordinator 2>/dev/null || true
     echo "   Coordinator service installed. Start with: systemctl --user start slack-coordinator"
-    
-    # Create env file if not exists
-    if [ ! -f "$HOME/.config/slack-coordinator.env" ]; then
-        cat > "$HOME/.config/slack-coordinator.env" <<EOF
-OPENCODE_URL=http://localhost:4105
-AGENT_NAME=$(hostname -s)
-EOF
-        echo "   Created coordinator env file: ~/.config/slack-coordinator.env"
-    fi
 else
     echo "   Coordinator service file not found, skipping..."
 fi
@@ -125,19 +112,13 @@ cat > "$HOME/.cass/settings.json" <<EOF
 }
 EOF
 
-# 5. Install Hooks (The Physics)
-echo -e "${GREEN} -> Installing Git Hooks & Safety Guard...${RESET}"
-
-# Install Claude Hook globally
-"$AGENTS_ROOT/git-safety-guard/install.sh" --global
-
-# Install Native Hooks per repo
-for repo in "$HOME/prime-radiant-ai" "$HOME/affordabot" "$HOME/llm-common" "$AGENTS_ROOT"; do
-    if [ -d "$repo/.git" ]; then
-        echo "   Installing hooks in $repo..."
-        (cd "$repo" && "$AGENTS_ROOT/git-safety-guard/install.sh")
-    fi
-done
+# 5. Safety Guard (Canonical): DCG
+echo -e "${GREEN} -> Safety Guard: DCG (canonical)...${RESET}"
+if command -v dcg >/dev/null 2>&1; then
+    echo "   ✅ dcg installed"
+else
+    echo "   ⚠️  dcg not found (install per dcg-safety/SKILL.md)"
+fi
 
 # Enforce GEMINI.md -> AGENTS.md symlink (Relative)
 for repo in "$HOME/prime-radiant-ai" "$HOME/affordabot" "$HOME/llm-common" "$AGENTS_ROOT"; do

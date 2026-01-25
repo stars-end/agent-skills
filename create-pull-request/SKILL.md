@@ -85,7 +85,7 @@ FEATURE_KEY=$(echo "$CURRENT_BRANCH" | sed 's/^feature-//')
 ### 2. Get Beads Context
 Use `bd` CLI:
 ```bash
-scripts/bd-context
+bd-context
 
 # Get issue details
 issue=$(bd show <FEATURE_KEY> --json)
@@ -403,7 +403,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 PR_NUMBER=$(gh pr view --json number -q .number)
 
 # Use helper script if available
-scripts/bd-link-pr $PR_NUMBER
+bd-link-pr $PR_NUMBER
 
 # Or update via CLI
 bd update <FEATURE_KEY> status=in_progress --external-ref "PR#${PR_NUMBER}"

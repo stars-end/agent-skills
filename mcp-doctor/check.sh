@@ -52,14 +52,6 @@ echo "REQUIRED MCP servers:"
 echo ""
 echo "OPTIONAL MCP servers:"
 
-# 2) agent-mail (OPTIONAL)
-if f="$(have_in_files \"mcp-agent-mail\")" || f="$(have_in_files \"agent-mail\")"; then
-  echo "✅ agent-mail (config seen in: $f)"
-else
-  echo "⚠️  agent-mail (no config found) — optional"
-  missing_optional=$((missing_optional+1))
-fi
-
 # 3) serena (DEPRECATED - V4.2.1)
 if f="$(have_in_files \"serena\")"; then
   echo "⚠️  serena (config seen in: $f) — DEPRECATED, consider removing"
@@ -68,7 +60,15 @@ else
   echo "✅ serena (not configured — correctly removed)"
 fi
 
-# 4) z.ai search MCP (OPTIONAL)
+# 4) slack MCP (OPTIONAL)
+if f="$(have_in_files '\"slack\"')" || f="$(have_in_files \"slack-mcp\")" || f="$(have_in_files \"slack-mcp-server\")"; then
+  echo "✅ slack (config seen in: $f)"
+else
+  echo "⚠️  slack (no config found) — optional"
+  missing_optional=$((missing_optional+1))
+fi
+
+# 5) z.ai search MCP (OPTIONAL)
 if f="$(have_in_files \"z.ai\")" || f="$(have_in_files \"api.z.ai\")" || f="$(have_in_files \"search-mcp\")"; then
   echo "✅ z.ai search (config seen in: $f)"
 else

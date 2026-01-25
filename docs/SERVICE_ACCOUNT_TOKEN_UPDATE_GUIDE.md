@@ -196,7 +196,7 @@ done
 # Verify token authentication
 ssh fengning@homedesktop-wsl "export OP_SERVICE_ACCOUNT_TOKEN=\$(cat ~/.config/systemd/user/opencode-cleanup-token) && op whoami"
 ssh fengning@macmini "export OP_SERVICE_ACCOUNT_TOKEN=\$(cat ~/.config/systemd/user/auto-checkpoint-token) && op whoami"
-ssh epyc6 "export OP_SERVICE_ACCOUNT_TOKEN=\$(cat ~/.config/systemd/user/auto-checkpoint-token) && op whoami"
+ssh feng@epyc6 "export OP_SERVICE_ACCOUNT_TOKEN=\$(cat ~/.config/systemd/user/auto-checkpoint-token) && op whoami"
 ```
 
 ## Step 6: Clean Up Old Token

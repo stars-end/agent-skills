@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# bd-link-pr - Link a GitHub PR to a Beads issue (safe, no secrets).
+#
+# Usage:
+#   bd-link-pr <beads-id> <pr-number|pr-url>
+#
+# Example:
+#   bd-link-pr bd-123 456
+#   bd-link-pr bd-123 https://github.com/org/repo/pull/456
+
+set -euo pipefail
+
+ISSUE_ID="${1:-}"
+PR_INPUT="${2:-}"
+
+die() { echo "bd-link-pr: $*" >&2; exit 2; }
+
+[[ -n "$ISSUE_ID" && -n "$PR_INPUT" ]] || die "usage: bd-link-pr <beads-id> <pr-number|pr-url>"
+command -v bd >/dev/null 2>&1 || die "bd CLI not found"
+
+PR_NUM=""
+PR_URL=""
+
+if [[ "$PR_INPUT" =~ ^[0-9]+$ ]]; then
+  PR_NUM="$PR_INPUT"
+elif [[ "$PR_INPUT" =~ /pull/([0-9]+) ]]; then
+  PR_NUM="${BASH_REMATCH[1]}"
+  PR_URL="$PR_INPUT"
+else
+  die "could not parse PR number from: $PR_INPUT"
+fi
+
+if [[ -z "$PR_URL" ]] && command -v gh >/dev/null 2>&1; then
+  PR_URL="$(gh pr view "$PR_NUM" --json url -q .url 2>/dev/null || echo "")"
+fi
+PR_URL="${PR_URL:-}"
+
+bd update "$ISSUE_ID" --external-ref "gh-$PR_NUM" >/dev/null
+if [[ -n "$PR_URL" ]]; then
+  bd comments add "$ISSUE_ID" "PR: $PR_URL" >/dev/null || true
+else
+  bd comments add "$ISSUE_ID" "PR: gh-$PR_NUM" >/dev/null || true
+fi
+
+echo "✅ linked $ISSUE_ID -> gh-$PR_NUM"
+if [[ -n "$PR_URL" ]]; then
+  echo "$PR_URL"
+fi
+

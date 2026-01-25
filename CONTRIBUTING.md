@@ -12,9 +12,8 @@
 
 **Session start sequence** (mandatory):
 1. `git pull origin master`
-2. `~/.agent/skills/dx-doctor/check.sh`
-3. Register Agent Mail identity (if configured)
-4. Check inbox for assignments
+2. `dx-check`
+3. Optional (only if using coordinator services): `DX_BOOTSTRAP_COORDINATOR=1 dx-doctor`
 
 **See**: `DX_BOOTSTRAP_CONTRACT.md` for full details
 

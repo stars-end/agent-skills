@@ -115,7 +115,7 @@ What priority? (Based on Beads convention)
 
 ```typescript
 // Get current context
-currentContext = bash: scripts/bd-context
+currentContext = bash: bd-context
 
 // Parse for current epic/feature
 if (currentContext contains epic or feature in_progress) {

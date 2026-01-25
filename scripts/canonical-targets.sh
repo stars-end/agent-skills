@@ -115,19 +115,19 @@ esac
 # Required vs optional tools (by host role)
 case "$CANONICAL_HOST_KEY" in
   homedesktop-wsl)
-    export CANONICAL_REQUIRED_TOOLS=( "mise" )
+    export CANONICAL_REQUIRED_TOOLS=( "dcg" "mise" )
     export CANONICAL_OPTIONAL_TOOLS=( "bd" "jules" "cass" "ru" "railway" "gh" "op" )
     ;;
   macmini)
-    export CANONICAL_REQUIRED_TOOLS=( "bd" "mise" )
+    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "mise" )
     export CANONICAL_OPTIONAL_TOOLS=( "jules" "cass" "ru" "railway" "gh" "op" )
     ;;
   epyc6)
-    export CANONICAL_REQUIRED_TOOLS=( "bd" "jules" "mise" )
+    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "jules" "mise" )
     export CANONICAL_OPTIONAL_TOOLS=( "cass" "ru" "railway" "gh" "op" )
     ;;
   *)
-    export CANONICAL_REQUIRED_TOOLS=( "bd" "jules" "mise" )
+    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "jules" "mise" )
     export CANONICAL_OPTIONAL_TOOLS=( "cass" "ru" "railway" "gh" "op" )
     ;;
 esac
@@ -226,6 +226,9 @@ ssh_canonical_vm() {
 deploy_to_all_vms() {
   local src="$1"
   local dest="$2"
+  local base
+  base="$(basename "$src")"
+  local tmp="/tmp/agentskills-deploy-$base-$$"
 
   echo "Deploying $src to all canonical VMs..."
 
@@ -235,9 +238,14 @@ deploy_to_all_vms() {
     scp "$src" "$target:$dest" 2>/dev/null && echo "    ✅" || echo "    ❌ Failed"
   done
 
-  # epyc6 via jump host
+  # epyc6 via jump host (use homedesktop-wsl as the transfer point)
   echo "  → feng@epyc6 (via jump)"
-  ssh fengning@homedesktop-wsl "scp $dest feng@epyc6:$dest" 2>/dev/null && echo "    ✅" || echo "    ❌ Failed"
+  if scp "$src" "fengning@homedesktop-wsl:$tmp" 2>/dev/null; then
+    ssh fengning@homedesktop-wsl "scp '$tmp' 'feng@epyc6:$dest' && rm -f '$tmp'" 2>/dev/null \
+      && echo "    ✅" || echo "    ❌ Failed"
+  else
+    echo "    ❌ Failed (could not copy to jump host)"
+  fi
 }
 
 # Export functions for use in subshells
