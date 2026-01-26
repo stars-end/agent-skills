@@ -5,6 +5,7 @@
 # Usage:
 #   auto-checkpoint-install            # installs + enables scheduler
 #   auto-checkpoint-install --status   # reports scheduler + last run
+#   auto-checkpoint-install --status --check  # exits non-zero if scheduler inactive/missing
 #   auto-checkpoint-install --run      # runs auto-checkpoint immediately
 #   auto-checkpoint-install --uninstall # disables + removes scheduler
 
@@ -249,10 +250,16 @@ run_now() {
 # ============================================================
 
 status() {
+  local status_code=0
+
   echo "--- Auto-checkpoint Status ---"
   echo "Binary: $AUTO_CHECKPOINT_BIN"
   echo "Log dir: $LOG_DIR"
   echo "Main log: $MAIN_LOG_FILE"
+
+  if [ ! -x "$AUTO_CHECKPOINT_BIN" ]; then
+    status_code=3
+  fi
 
   if [ -f "$LOG_DIR/last-run" ]; then
     last_run_ts=$(cat "$LOG_DIR/last-run")
@@ -266,12 +273,15 @@ status() {
   case "$OS" in
     linux)
       # Check systemd first
-      if systemctl --user is-active auto-checkpoint.timer >/dev/null 2>&1; then
+      if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active auto-checkpoint.timer >/dev/null 2>&1; then
         echo "Scheduler: systemd (active)"
       elif command -v crontab >/dev/null 2>&1 && crontab -l 2>/dev/null | grep -q "auto-checkpoint"; then
         echo "Scheduler: crontab (active)"
       else
         echo "Scheduler: not installed"
+        if [ $status_code -eq 0 ]; then
+          status_code=2
+        fi
       fi
       ;;
     macos)
@@ -279,9 +289,18 @@ status() {
         echo "Scheduler: launchd (active)"
       else
         echo "Scheduler: not installed"
+        if [ $status_code -eq 0 ]; then
+          status_code=2
+        fi
       fi
       ;;
+    *)
+      echo "Scheduler: unknown (unsupported OS)"
+      status_code=4
+      ;;
   esac
+
+  AUTO_CHECKPOINT_STATUS_CODE="$status_code"
 }
 
 # ============================================================
@@ -291,6 +310,7 @@ status() {
 UNINSTALL=0
 RUN_NOW=0
 SHOW_STATUS=0
+CHECK_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -306,8 +326,12 @@ while [[ $# -gt 0 ]]; do
       SHOW_STATUS=1
       shift
       ;;
+    --check)
+      CHECK_ONLY=1
+      shift
+      ;;
     *)
-      echo "Usage: $0 [--uninstall] [--run] [--status]" >&2
+      echo "Usage: $0 [--uninstall] [--run] [--status [--check]]" >&2
       exit 1
       ;;
   esac
@@ -319,6 +343,9 @@ mkdir -p "$MAIN_LOG_DIR"
 
 if [ $SHOW_STATUS -eq 1 ]; then
   status
+  if [ $CHECK_ONLY -eq 1 ]; then
+    exit "${AUTO_CHECKPOINT_STATUS_CODE:-2}"
+  fi
   exit 0
 fi
 
