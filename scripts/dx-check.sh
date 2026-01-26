@@ -13,7 +13,46 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${BLUE}🩺 Running DX Health Check...${RESET}"
 
-if "${SCRIPT_DIR}/dx-status.sh"; then
+resolve_auto_checkpoint_installer() {
+    if command -v auto-checkpoint-install >/dev/null 2>&1; then
+        command -v auto-checkpoint-install
+        return 0
+    fi
+    if [ -f "${SCRIPT_DIR}/auto-checkpoint-install.sh" ]; then
+        echo "${SCRIPT_DIR}/auto-checkpoint-install.sh"
+        return 0
+    fi
+    echo ""
+    return 1
+}
+
+check_auto_checkpoint_scheduler() {
+    local installer="$1"
+    if [ -z "$installer" ]; then
+        return 1
+    fi
+    "$installer" --status --check >/dev/null 2>&1
+}
+
+needs_fix=0
+if ! "${SCRIPT_DIR}/dx-status.sh"; then
+    needs_fix=1
+fi
+
+# Auto-checkpoint scheduling is REQUIRED for durability. This is enforced in dx-check (not dx-status),
+# so dx-status remains usable for partial environments.
+AUTO_CHECKPOINT_INSTALLER="$(resolve_auto_checkpoint_installer || true)"
+if [ -z "$AUTO_CHECKPOINT_INSTALLER" ]; then
+    echo -e "${RED}❌ auto-checkpoint-install not found (required)${RESET}"
+    echo "   Fix: run: ${SCRIPT_DIR}/dx-ensure-bins.sh"
+    needs_fix=1
+elif ! check_auto_checkpoint_scheduler "$AUTO_CHECKPOINT_INSTALLER"; then
+    echo -e "${RED}❌ auto-checkpoint scheduler not active (required)${RESET}"
+    "$AUTO_CHECKPOINT_INSTALLER" --status || true
+    needs_fix=1
+fi
+
+if [ "$needs_fix" -eq 0 ]; then
     echo -e "${GREEN}✨ Environment is healthy.${RESET}"
 else
     echo -e "${RED}⚠️  Environment unhealthy.${RESET}"
@@ -28,8 +67,23 @@ else
 
     if [[ $run_fix =~ ^[Yy] ]] || [[ -z $run_fix ]]; then
         "${SCRIPT_DIR}/dx-hydrate.sh"
+
+        # Ensure auto-checkpoint scheduler is installed/enabled even if dx-hydrate best-effort failed.
+        AUTO_CHECKPOINT_INSTALLER="$(resolve_auto_checkpoint_installer || true)"
+        if [ -n "$AUTO_CHECKPOINT_INSTALLER" ]; then
+            "$AUTO_CHECKPOINT_INSTALLER" >/dev/null 2>&1 || true
+        fi
+
         echo -e "${BLUE}🔄 Re-checking status...${RESET}"
-        "${SCRIPT_DIR}/dx-status.sh"
+        if ! "${SCRIPT_DIR}/dx-status.sh"; then
+            exit 1
+        fi
+        AUTO_CHECKPOINT_INSTALLER="$(resolve_auto_checkpoint_installer || true)"
+        if [ -z "$AUTO_CHECKPOINT_INSTALLER" ] || ! check_auto_checkpoint_scheduler "$AUTO_CHECKPOINT_INSTALLER"; then
+            echo -e "${RED}❌ auto-checkpoint scheduler still not active${RESET}"
+            [ -n "$AUTO_CHECKPOINT_INSTALLER" ] && "$AUTO_CHECKPOINT_INSTALLER" --status || true
+            exit 1
+        fi
     else
         echo "Exiting without fix."
         exit 1
