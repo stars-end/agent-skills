@@ -257,112 +257,109 @@ checkpoint_repo() {
 
   log "  Changes detected, committing..."
 
-  cd "$repo_path" || return 1
+  # IMPORTANT: Never leave canonical clones on a wip branch. If checkpointing fails mid-run (secret scan,
+  # commit failure, etc.) we must still restore the repo back to trunk when we created a wip branch.
+  # A subshell + EXIT trap makes this robust without impacting the caller's working directory.
+  (
+    cd "$repo_path" || exit 1
 
-  # Track starting state so we can restore canonical clones back to trunk.
-  local starting_branch
-  starting_branch="$(git branch --show-current 2>/dev/null || true)"
-
-  local is_detached=0
-  if [[ -z "$starting_branch" ]]; then
-    is_detached=1
-  fi
-
-  local needs_wip_branch=0
-  local restore_branch=""
-
-  if [[ "$is_detached" -eq 1 ]]; then
-    log "  Detached HEAD, creating wip/auto branch..."
-    needs_wip_branch=1
-    # Prefer master/main if present.
-    if git show-ref --verify --quiet refs/heads/master; then
-      restore_branch="master"
-    elif git show-ref --verify --quiet refs/heads/main; then
-      restore_branch="main"
-    else
-      restore_branch="master"
+    starting_branch="$(git branch --show-current 2>/dev/null || true)"
+    is_detached=0
+    if [[ -z "${starting_branch:-}" ]]; then
+      is_detached=1
     fi
-  elif is_trunk_branch "$starting_branch"; then
-    log "  On trunk branch ($starting_branch), creating wip/auto branch..."
-    needs_wip_branch=1
-    restore_branch="$starting_branch"
-  fi
 
-  # Create wip branch if needed (format: wip/auto/<host>/<YYYY-MM-DD>)
-  local current_branch
-  current_branch="${starting_branch:-detached}"
+    needs_wip_branch=0
+    restore_branch=""
 
-  if [ $needs_wip_branch -eq 1 ]; then
-    local hostname
-    hostname=$(hostname -s 2>/dev/null || echo "unknown")
-    local datestamp
-    datestamp=$(date +%Y-%m-%d)
-    local timestamp
-    timestamp=$(date +%H%M%S)
-    local wip_branch="wip/auto/${hostname}/${datestamp}-${timestamp}"
+    if [[ "$is_detached" -eq 1 ]]; then
+      log "  Detached HEAD, creating wip/auto branch..."
+      needs_wip_branch=1
+      # Prefer master/main if present.
+      if git show-ref --verify --quiet refs/heads/master; then
+        restore_branch="master"
+      elif git show-ref --verify --quiet refs/heads/main; then
+        restore_branch="main"
+      else
+        restore_branch="master"
+      fi
+    elif is_trunk_branch "$starting_branch"; then
+      log "  On trunk branch ($starting_branch), creating wip/auto branch..."
+      needs_wip_branch=1
+      restore_branch="$starting_branch"
+    fi
 
-    git checkout -b "$wip_branch" 2>/dev/null || {
-      error "  Cannot create wip branch (git operation failed)"
-      return 1
+    current_branch="${starting_branch:-detached}"
+    did_switch_to_wip=0
+
+    restore_to_trunk() {
+      if [[ "${did_switch_to_wip:-0}" -eq 1 && -n "${restore_branch:-}" ]]; then
+        if git checkout "$restore_branch" >/dev/null 2>&1; then
+          log "  Restored to trunk: $restore_branch"
+        else
+          log "  WARNING: could not restore to trunk ($restore_branch); repo left on $current_branch"
+        fi
+      fi
     }
-    current_branch="$wip_branch"
-    log "  Created branch: $current_branch"
-  fi
 
-  # Stage all changes
-  git add -A 2>/dev/null || {
-    error "  Cannot stage changes"
-    return 1
-  }
+    if [ "$needs_wip_branch" -eq 1 ]; then
+      hostname=$(hostname -s 2>/dev/null || echo "unknown")
+      datestamp=$(date +%Y-%m-%d)
+      timestamp=$(date +%H%M%S)
+      wip_branch="wip/auto/${hostname}/${datestamp}-${timestamp}"
 
-  # Run secret scan on staged changes
-  if ! scan_for_secrets "$repo_path"; then
-    error "  Secret scan failed, aborting checkpoint"
-    # Reset staging to avoid accidental commit
-    git reset HEAD 2>/dev/null || true
-    return 1
-  fi
-
-  # Generate commit message
-  local commit_msg
-  if [ "${AUTO_CHECKPOINT_ALLOW_LLM:-0}" = "1" ] && command -v cc-glm >/dev/null 2>&1; then
-    # LLM mode: send only diff stat (metadata), never code
-    local diff_stat
-    diff_stat=$(git diff --cached --stat 2>/dev/null || echo "unknown")
-    commit_msg=$(cc-glm -p "Generate a 1-line commit message (max 50 chars) for these changes: $diff_stat" --output-format text 2>/dev/null || echo "auto-checkpoint")
-    # Sanitize: ensure commit msg doesn't contain secrets
-    commit_msg=$(echo "$commit_msg" | head -1 | cut -c1-72)
-  else
-    # Non-LLL mode: simple deterministic message
-    commit_msg="auto-checkpoint: $(date '+%Y-%m-%d %H:%M:%S')"
-  fi
-
-  # Commit (local - this is the critical step for work preservation)
-  git commit -m "$commit_msg" 2>/dev/null || {
-    error "  Commit failed"
-    return 1
-  }
-
-  log "  Committed: $commit_msg"
-
-  # Push is best-effort (don't fail if push fails)
-  if git push -u origin "$current_branch" >/dev/null 2>&1; then
-    log "  Pushed to origin/$current_branch"
-  else
-    log "  Push failed (changes saved locally)"
-  fi
-
-  # If we created a wip branch from trunk/detached, restore the repo back to trunk
-  # so canonical clones stay on trunk for ru/dx automation.
-  if [[ $needs_wip_branch -eq 1 && -n "$restore_branch" ]]; then
-    if git checkout "$restore_branch" >/dev/null 2>&1; then
-      log "  Restored to trunk: $restore_branch"
-    else
-      log "  WARNING: could not restore to trunk ($restore_branch); repo left on $current_branch"
+      git checkout -b "$wip_branch" 2>/dev/null || {
+        error "  Cannot create wip branch (git operation failed)"
+        exit 1
+      }
+      current_branch="$wip_branch"
+      did_switch_to_wip=1
+      log "  Created branch: $current_branch"
     fi
-  fi
 
-  return 0
+    trap restore_to_trunk EXIT
+
+    # Stage all changes
+    git add -A 2>/dev/null || {
+      error "  Cannot stage changes"
+      exit 1
+    }
+
+    # Run secret scan on staged changes
+    if ! scan_for_secrets "$repo_path"; then
+      error "  Secret scan failed, aborting checkpoint"
+      # Reset staging to avoid accidental commit
+      git reset HEAD 2>/dev/null || true
+      exit 1
+    fi
+
+    # Generate commit message
+    if [ "${AUTO_CHECKPOINT_ALLOW_LLM:-0}" = "1" ] && command -v cc-glm >/dev/null 2>&1; then
+      # LLM mode: send only diff stat (metadata), never code
+      diff_stat=$(git diff --cached --stat 2>/dev/null || echo "unknown")
+      commit_msg=$(cc-glm -p "Generate a 1-line commit message (max 50 chars) for these changes: $diff_stat" --output-format text 2>/dev/null || echo "auto-checkpoint")
+      # Sanitize: ensure commit msg doesn't contain secrets
+      commit_msg=$(echo "$commit_msg" | head -1 | cut -c1-72)
+    else
+      # Non-LLL mode: simple deterministic message
+      commit_msg="auto-checkpoint: $(date '+%Y-%m-%d %H:%M:%S')"
+    fi
+
+    # Commit (local - this is the critical step for work preservation)
+    git commit -m "$commit_msg" 2>/dev/null || {
+      error "  Commit failed"
+      exit 1
+    }
+
+    log "  Committed: $commit_msg"
+
+    # Push is best-effort (don't fail if push fails)
+    if git push -u origin "$current_branch" >/dev/null 2>&1; then
+      log "  Pushed to origin/$current_branch"
+    else
+      log "  Push failed (changes saved locally)"
+    fi
+  )
 }
 
 # ============================================================
