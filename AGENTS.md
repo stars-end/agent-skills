@@ -323,6 +323,36 @@ cc-glm --resume <session-id>
 | `dx-fleet-status` | Check all VMs at once |
 
 
+---
+
+## Product Repo Integration
+
+The agent-skills repo provides global workflow skills, while each product repo has repo-specific context skills.
+
+### Skill Architecture
+
+| Location | Purpose | Managed By |
+|----------|---------|------------|
+| `~/agent-skills/` | Global workflows and automation | Centrally |
+| `.claude/skills/context-*/` | Repo-specific domain knowledge | Per repo |
+
+### Product Repos
+
+| Repo | Context Location | Skills | Auto-Update |
+|------|-----------------|--------|-------------|
+| [prime-radiant-ai](https://github.com/stars-end/prime-radiant-ai) | `.claude/skills/context-*/` | 16 | ✅ |
+| [affordabot](https://github.com/stars-end/affordabot) | `.claude/skills/context-*/` | 12 | ✅ |
+| [llm-common](https://github.com/stars-end/llm-common) | `.claude/skills/context-*/` | 3 | ✅ |
+
+### Key Principle
+
+**Global skills in `~/agent-skills`** are for workflows that apply to all repos (issue tracking, PR creation, git operations).
+
+**Context skills in `.claude/skills/context-*`** are for repo-specific domain knowledge (API contracts, database schema, infrastructure patterns).
+
+Never duplicate global skills in product repos. They are auto-discovered from `~/agent-skills`.
+
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
