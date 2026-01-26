@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-dx-dispatch - Dispatch tasks to remote OpenCode agents
+dx-dispatch - Canonical dispatch tool for cross-VM and cloud work
 
 Part of the agent-skills dx-* workflow.
 Now uses lib/fleet for unified dispatch logic.
@@ -9,12 +9,14 @@ Usage:
     dx-dispatch <vm> <task> [options]
     dx-dispatch --list              # List available VMs
     dx-dispatch --status <vm>       # Check VM status
+    dx-dispatch --jules --issue <id> # Dispatch Beads issue to Jules Cloud
 
 Examples:
     dx-dispatch epyc6 "Run make test in ~/affordabot"
     dx-dispatch macmini "Fix linting errors" --slack
     dx-dispatch epyc6 "Continue work" --session ses_abc123
     dx-dispatch --all "Run make verify-local"
+    dx-dispatch --jules --issue bd-123  # Dispatch to Jules Cloud
 
 Options:
     --session <id>    Resume existing session
@@ -25,6 +27,8 @@ Options:
     --wait            Wait for completion
     --timeout <sec>   Timeout for --wait (default: 300)
     --smoke-pr        Create an empty PR for smoke testing (requires --repo + --beads)
+    --jules           Dispatch to Jules Cloud (requires --issue)
+    --issue <id>      Beads issue ID for Jules dispatch
 """
 
 import os
