@@ -57,9 +57,74 @@ Act only when: task is blocking, founder is looping, hidden complexity exists, o
 
 ---
 
+## Quick Start (5 Commands)
+
+Every agent session starts here:
+
+| Step | Command | Purpose |
+|------|---------|---------|
+| 1 | `dx-check` | Verify environment |
+| 2 | `bd list` | See current issues |
+| 3 | `bd create "title" --type task` | Create tracking issue |
+| 4 | `/skill core/sync-feature-branch` | Save work |
+| 5 | `/skill core/create-pull-request` | Create PR |
+
+### Example: Fix a Bug
+
+```bash
+# 1. Check environment
+dx-check
+
+# 2. Create tracking issue
+bd create "Fix auth timeout bug" --type bug --priority 2
+
+# 3. Start work (creates branch)
+/skill core/beads-workflow
+# Select: start-feature bd-xxx
+
+# 4. Make your changes...
+
+# 5. Save work
+/skill core/sync-feature-branch
+# Enter: sync-feature "fixed auth timeout"
+
+# 6. Create PR when done
+/skill core/create-pull-request
+```
+
+---
+
 ## Skills (agentskills.io Format)
 
 Skills are stored in `~/agent-skills/*/SKILL.md` using the [agentskills.io](https://agentskills.io) open standard.
+
+## Skill Categories
+
+Skills are organized into categories for easy discovery:
+
+| Category | Purpose | When to Use |
+|----------|---------|-------------|
+| `core/` | Daily workflow | Every session - creating issues, syncing work, PRs |
+| `safety/` | Safety guards | Auto-loaded - prevents destructive commands |
+| `health/` | Diagnostics | When something isn't working right |
+| `infra/` | VM/environment | Setting up new VMs or debugging environment |
+| `dispatch/` | Cross-VM work | When task needs another VM (GPU, macOS) |
+| `railway/` | Railway deployment | Deploying to Railway |
+| `search/` | Context/history | Finding past solutions or building context |
+| `extended/` | Advanced workflows | Optional - parallelization, planning, etc. |
+
+### Finding Skills by Need
+
+| Need | Skill | Category |
+|------|-------|----------|
+| Create/track issues | `/skill core/beads-workflow` | core/ |
+| Save work | `/skill core/sync-feature-branch` | core/ |
+| Create PR | `/skill core/create-pull-request` | core/ |
+| Dispatch to another VM | `/skill dispatch/multi-agent-dispatch` | dispatch/ |
+| Deploy to Railway | `/skill railway/deploy` | railway/ |
+| Search past sessions | `/skill search/cass-search` | search/ |
+| Debug environment | `/skill health/bd-doctor` | health/ |
+| Set up new VM | `/skill infra/vm-bootstrap` | infra/ |
 
 **Agent Skill Discovery:**
 
@@ -127,20 +192,79 @@ cass stats
 **Installed on**: homedesktop-wsl, macmini (epyc6 blocked by GLIBC)
 
 
+## When You Need More
+
+### Cross-VM Dispatch
+
+Use when task needs specific VM capabilities:
+
+```bash
+# SSH dispatch to canonical VMs
+dx-dispatch epyc6 "Run GPU tests in ~/affordabot"
+dx-dispatch macmini "Build iOS app"
+dx-dispatch homedesktop-wsl "Run integration tests"
+
+# Check VM status
+dx-dispatch --list
+
+# Jules Cloud dispatch (async)
+dx-dispatch --jules --issue bd-123
+```
+
+### Environment Issues
+
+```bash
+# Quick health check
+dx-check
+
+# Full diagnostics
+/skill health/bd-doctor
+/skill health/mcp-doctor
+/skill health/toolchain-health
+```
+
+### Fleet Operations
+
+```bash
+# Finalize PR for a session
+dx-dispatch --finalize-pr ses_abc123 --beads bd-123
+
+# Abort a running session
+dx-dispatch --abort ses_abc123
+```
+
+---
 
 ## Multi-Agent Dispatch
 
-**When to use**: Tasks needing specific VMs (GPU work → epyc6, macOS → macmini), parallel execution, or status notifications.
+`dx-dispatch` is the canonical tool for cross-VM and cloud dispatch.
+
+### SSH Dispatch (default)
 
 ```bash
 dx-dispatch epyc6 "Run make test in ~/affordabot"
 dx-dispatch macmini "Build iOS app"
-dx-dispatch --list   # Check VM status
+dx-dispatch --list  # Check VM status
 ```
+
+### Jules Cloud Dispatch
+
+```bash
+dx-dispatch --jules --issue bd-123
+dx-dispatch --jules --issue bd-123 --dry-run  # Preview prompt
+```
+
+### Canonical VMs
+
+| VM | User | Capabilities |
+|----|------|--------------|
+| homedesktop-wsl | fengning | Primary dev, DCG, CASS |
+| macmini | fengning | macOS builds, iOS |
+| epyc6 | feng | GPU work, ML training |
 
 **Add Slack notifications** to long tasks:
 ```
-After completing, use slack_conversations_add_message 
+After completing, use slack_conversations_add_message
 to post summary to channel C09MQGMFKDE.
 ```
 
@@ -178,6 +302,25 @@ cc-glm --resume <session-id>
 - **Rules**:
   - Scripts must be idempotent.
   - `dx-hydrate.sh` is the single source of truth for setup.
+
+## dx-* Commands Reference
+
+### Core Commands (use frequently)
+
+| Command | Purpose |
+|---------|---------|
+| `dx-check` | Verify environment (git, Beads, skills) |
+| `dx-dispatch` | Cross-VM and cloud dispatch |
+| `dx-status` | Show repo and environment status |
+
+### Optional Commands (use when needed)
+
+| Command | Purpose |
+|---------|---------|
+| `dx-doctor` | Deep environment diagnostics |
+| `dx-toolchain` | Verify toolchain consistency |
+| `dx-worktree` | Manage git worktrees |
+| `dx-fleet-status` | Check all VMs at once |
 
 
 ## Landing the Plane (Session Completion)
