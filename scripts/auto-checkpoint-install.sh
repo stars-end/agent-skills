@@ -5,6 +5,7 @@
 # Usage:
 #   auto-checkpoint-install            # installs + enables scheduler
 #   auto-checkpoint-install --status   # reports scheduler + last run
+#   auto-checkpoint-install --status --check  # exits non-zero if scheduler inactive/missing
 #   auto-checkpoint-install --run      # runs auto-checkpoint immediately
 #   auto-checkpoint-install --uninstall # disables + removes scheduler
 
@@ -249,10 +250,21 @@ run_now() {
 # ============================================================
 
 status() {
+  local scheduler="unknown"
+  local scheduler_active="0"
+  local status_code="0"
+
   echo "--- Auto-checkpoint Status ---"
   echo "Binary: $AUTO_CHECKPOINT_BIN"
   echo "Log dir: $LOG_DIR"
   echo "Main log: $MAIN_LOG_FILE"
+
+  if [ ! -x "$AUTO_CHECKPOINT_BIN" ]; then
+    echo "Binary status: missing or not executable"
+    status_code="3"
+  else
+    echo "Binary status: OK"
+  fi
 
   if [ -f "$LOG_DIR/last-run" ]; then
     last_run_ts=$(cat "$LOG_DIR/last-run")
@@ -267,21 +279,49 @@ status() {
     linux)
       # Check systemd first
       if systemctl --user is-active auto-checkpoint.timer >/dev/null 2>&1; then
-        echo "Scheduler: systemd (active)"
+        scheduler="systemd"
+        scheduler_active="1"
       elif command -v crontab >/dev/null 2>&1 && crontab -l 2>/dev/null | grep -q "auto-checkpoint"; then
-        echo "Scheduler: crontab (active)"
+        scheduler="crontab"
+        scheduler_active="1"
       else
-        echo "Scheduler: not installed"
+        scheduler="none"
+        scheduler_active="0"
       fi
       ;;
     macos)
       if launchctl list 2>/dev/null | grep -q "auto-checkpoint"; then
-        echo "Scheduler: launchd (active)"
+        scheduler="launchd"
+        scheduler_active="1"
       else
-        echo "Scheduler: not installed"
+        scheduler="none"
+        scheduler_active="0"
       fi
       ;;
+    *)
+      scheduler="unknown"
+      scheduler_active="0"
+      ;;
   esac
+
+  if [ "$scheduler_active" = "1" ]; then
+    echo "Scheduler: $scheduler (active)"
+    if [ "$status_code" = "0" ]; then
+      status_code="0"
+    fi
+  else
+    if [ "$scheduler" = "unknown" ]; then
+      echo "Scheduler: unknown (unsupported OS)"
+      status_code="4"
+    else
+      echo "Scheduler: not installed"
+      if [ "$status_code" = "0" ]; then
+        status_code="2"
+      fi
+    fi
+  fi
+
+  AUTO_CHECKPOINT_STATUS_CODE="$status_code"
 }
 
 # ============================================================
@@ -291,6 +331,7 @@ status() {
 UNINSTALL=0
 RUN_NOW=0
 SHOW_STATUS=0
+CHECK_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -306,6 +347,10 @@ while [[ $# -gt 0 ]]; do
       SHOW_STATUS=1
       shift
       ;;
+    --check)
+      CHECK_ONLY=1
+      shift
+      ;;
     *)
       echo "Usage: $0 [--uninstall] [--run] [--status]" >&2
       exit 1
@@ -319,6 +364,9 @@ mkdir -p "$MAIN_LOG_DIR"
 
 if [ $SHOW_STATUS -eq 1 ]; then
   status
+  if [ $CHECK_ONLY -eq 1 ]; then
+    exit "${AUTO_CHECKPOINT_STATUS_CODE:-2}"
+  fi
   exit 0
 fi
 
