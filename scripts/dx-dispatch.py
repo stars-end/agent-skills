@@ -31,6 +31,7 @@ import os
 import sys
 import json
 import argparse
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -345,17 +346,178 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
 def check_status(args, dispatcher: FleetDispatcher):
     """Check status of a VM or session."""
     vm_name = args.status
-    
+
     backend = dispatcher.get_backend(vm_name)
     if not backend:
         log(f"Unknown VM: {vm_name}", "ERROR")
         sys.exit(1)
-    
+
     health = backend.check_health()
     if health == HealthStatus.HEALTHY:
         print(f"🟢 {vm_name} is healthy")
     else:
         print(f"🔴 {vm_name} is {health.value}")
+
+
+def get_beads_issue(issue_id: str) -> dict:
+    """Fetch issue details from Beads as JSON."""
+    try:
+        result = subprocess.run(
+            ["bd", "show", issue_id, "--json"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return json.loads(result.stdout)
+    except subprocess.CalledProcessError as e:
+        log(f"Error fetching issue {issue_id}: {e.stderr}", "ERROR")
+        sys.exit(1)
+    except json.JSONDecodeError:
+        log(f"Error parsing JSON for issue {issue_id}", "ERROR")
+        sys.exit(1)
+
+
+def identify_context_skills(issue: dict) -> list[str]:
+    """Match context skills based on keywords.
+
+    Simplified version of matching logic.
+    """
+    text = (issue.get("title", "") + " " + issue.get("description", "")).lower()
+    skills = []
+
+    mapping = {
+        "context-database-schema": ["database", "schema", "migration", "sql", "table", "supabase"],
+        "context-api-contracts": ["api", "endpoint", "rest", "route", "controller"],
+        "context-ui-design": ["ui", "frontend", "css", "component", "react", "tailwind"],
+        "context-infrastructure": ["ci", "railway", "deploy", "docker", "github actions"],
+        "context-analytics": ["analytics", "tracking", "metrics"],
+        "context-security-resolver": ["security", "resolver", "cusip", "isin", "symbol"],
+    }
+
+    for skill, keywords in mapping.items():
+        if any(k in text for k in keywords):
+            skills.append(skill)
+
+    return skills if skills else ["area-context-create"]  # Fallback
+
+
+def generate_jules_prompt(issue: dict, skills: list[str]) -> str:
+    """Construct the rich prompt for Jules."""
+    issue_id = issue.get("id")
+    title = issue.get("title")
+    desc = issue.get("description")
+
+    skills_str = "\\n".join([f"- {s}" for s in skills])
+
+    return f"""
+TASK: {title} ({issue_id})
+
+CONTEXT:
+- Repository: Current
+- Branch: feature-{issue_id}-jules
+
+🚨 INSTRUCTIONS:
+
+1. INVOKE SKILLS:
+   Identify and invoke relevant context skills to understand the codebase.
+   Recommended based on keywords:
+{skills_str}
+
+2. EXPLORE:
+   - Use `find_by_name` or `grep_search` to find relevant files.
+   - Read the SKILL.md of invoked context skills for map of the area.
+   - Don't guess. Verify existing code first.
+
+3. PLAN & EXECUTE:
+   - Checkout branch: `git checkout -b feature-{issue_id}-jules`
+   - Implement changes.
+   - Verify with tests if possible.
+   - Commit with `Feature-Key: {issue_id}` trailer.
+   - Push and create PR using `gh pr create`.
+
+ISSUE DETAILS:
+{desc}
+"""
+
+
+def dispatch_jules(issue_id: str, dry_run: bool = False) -> int:
+    """Dispatch a Beads issue to Jules Cloud.
+
+    Args:
+        issue_id: Beads issue ID (e.g. bd-123)
+        dry_run: Print command without executing
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    log(f"Processing {issue_id}...")
+    issue = get_beads_issue(issue_id)
+    skills = identify_context_skills(issue)
+    prompt = generate_jules_prompt(issue, skills)
+
+    cmd = [
+        "jules", "remote", "new",
+        "--repo", ".",
+        "--session", prompt
+    ]
+
+    if dry_run:
+        log(f"--- Dry Run {issue_id} ---")
+        print(" ".join(shlex.quote(arg) for arg in cmd))
+        log("--- End Prompt ---")
+        print(prompt[:500] + "..." if len(prompt) > 500 else prompt)
+        return 0
+
+    log(f"🚀 Dispatching {issue_id} to Jules...")
+    try:
+        subprocess.run(cmd, check=True)
+        log(f"✅ Dispatched {issue_id}")
+        return 0
+    except subprocess.CalledProcessError:
+        log(f"❌ Failed to dispatch {issue_id}", "ERROR")
+        return 1
+    except FileNotFoundError:
+        log("jules CLI not found in PATH", "ERROR")
+        return 1
+
+
+def cmd_finalize_pr(args, dispatcher: FleetDispatcher) -> int:
+    """Finalize PR for an OpenCode session."""
+    pr_url = dispatcher.finalize_pr(
+        session_id=args.finalize_pr,
+        beads_id=args.beads,
+        smoke_mode=getattr(args, "smoke", False),
+    )
+    if pr_url:
+        log(f"✅ PR finalized: {pr_url}")
+        print(pr_url)
+        return 0
+    else:
+        log("Failed to finalize PR", "ERROR")
+        status = dispatcher.get_status(args.finalize_pr)
+        log(f"Session status: {status}", "DEBUG")
+        return 2
+
+
+def cmd_abort(args, dispatcher: FleetDispatcher) -> int:
+    """Abort a running session (best-effort)."""
+    record = dispatcher.state_store.find_by_session_id(args.abort)
+    if not record:
+        log("Session not found in fleet-state.json", "ERROR")
+        return 2
+
+    backend = dispatcher.get_backend(record.backend_name)
+    if not backend:
+        log(f"Backend not found: {record.backend_name}", "ERROR")
+        return 2
+
+    ok = backend.abort_session(args.abort)
+    if ok:
+        log(f"✅ Session {args.abort} aborted")
+        return 0
+    else:
+        log(f"Failed to abort session {args.abort}", "ERROR")
+        return 2
 
 
 def main():
@@ -364,7 +526,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
-    
+
     parser.add_argument("vm", nargs="?", help="Target VM (e.g. epyc6, macmini)")
     parser.add_argument("task", nargs="?", help="Task description")
     parser.add_argument("--list", action="store_true", help="List available VMs")
@@ -380,33 +542,56 @@ def main():
     parser.add_argument("--all", action="store_true", help="Dispatch to all VMs")
     parser.add_argument("--shell", action="store_true", help="Use shell mode (legacy)")
     parser.add_argument("--attach", action="store_true", help="Use attach mode (legacy)")
-    
+    parser.add_argument("--jules", action="store_true", help="Dispatch to Jules Cloud (requires --issue)")
+    parser.add_argument("--issue", "-i", help="Beads issue ID to dispatch (required for --jules)")
+    parser.add_argument("--dry-run", action="store_true", help="Print command without executing (Jules mode)")
+    parser.add_argument("--finalize-pr", metavar="SESSION", help="Finalize PR for an OpenCode session (requires --beads)")
+    parser.add_argument("--abort", metavar="SESSION", help="Abort a running session")
+
     args = parser.parse_args()
-    
+
+    # Handle --jules mode (dispatches Beads issues to Jules Cloud)
+    if args.jules:
+        if not args.issue:
+            log("Error: --issue required with --jules", "ERROR")
+            sys.exit(1)
+        sys.exit(dispatch_jules(args.issue, args.dry_run))
+
     # Load config
     config = load_legacy_config()
-    
+
     # Initialize FleetDispatcher
     if not FLEET_AVAILABLE:
         log("lib/fleet not available. Please ensure it's installed.", "ERROR")
         sys.exit(1)
-    
+
     dispatcher = FleetDispatcher()
-    
+
     # Handle commands
     if args.list:
         list_vms(dispatcher)
         return
-    
+
     if args.status:
         check_status(args, dispatcher)
         return
-    
+
+    # Handle --finalize-pr command
+    if args.finalize_pr:
+        if not args.beads:
+            log("Error: --beads required with --finalize-pr", "ERROR")
+            sys.exit(1)
+        sys.exit(cmd_finalize_pr(args, dispatcher))
+
+    # Handle --abort command
+    if args.abort:
+        sys.exit(cmd_abort(args, dispatcher))
+
     # Validate args
     if not args.session and (not args.vm or not args.task):
         parser.print_help()
         sys.exit(1)
-    
+
     # Dispatch
     dispatch_with_fleet(args, config, dispatcher)
 

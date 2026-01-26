@@ -23,7 +23,8 @@ link() {
 
 # Core control-plane CLIs
 link "$AGENTS_ROOT/scripts/dx-dispatch.py" "$BIN_DIR/dx-dispatch"
-link "$AGENTS_ROOT/scripts/fleet-dispatch.py" "$BIN_DIR/fleet-dispatch"
+# fleet-dispatch.py consolidated into dx-dispatch.py (see archive/dispatch-legacy/)
+# link "$AGENTS_ROOT/scripts/fleet-dispatch.py" "$BIN_DIR/fleet-dispatch"
 link "$AGENTS_ROOT/scripts/worktree-setup.sh" "$BIN_DIR/worktree-setup.sh"
 link "$AGENTS_ROOT/scripts/dx-worktree.sh" "$BIN_DIR/dx-worktree"
 link "$AGENTS_ROOT/scripts/dx-status.sh" "$BIN_DIR/dx-status"
