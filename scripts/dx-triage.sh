@@ -35,7 +35,7 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 # shellcheck disable=SC1090
 source "$SCRIPT_DIR/canonical-targets.sh" 2>/dev/null || true
 
-CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
+CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-main}"
 
 MODE="${1:-status}"
 case "$MODE" in
@@ -309,21 +309,28 @@ if [[ "$MODE" == "fix" ]]; then
         echo -e "${YELLOW}$manual_needed repo(s) still need manual attention.${RESET}"
     fi
 
-    # Clear triage flags after successful fix
-    echo -e "${BLUE}Clearing triage flags...${RESET}"
+    # Clear triage flags after successful fix and update ACK timestamp
+    echo -e "${BLUE}Clearing triage flags and updating ACK...${RESET}"
     for repo in "${ALL_REPOS[@]}"; do
         [[ "${REPO_EXISTS[$repo]:-0}" -eq 0 ]] && continue
         repo_path="$HOME/$repo"
         triage_file="$repo_path/.git/DX_TRIAGE_REQUIRED"
+        ack_file="$repo_path/.git/DX_TRIAGE_ACK"
+
         if [[ -f "$triage_file" ]]; then
             rm -f "$triage_file"
             echo -e "  ${GREEN}✓${RESET} $repo: flag cleared"
         fi
+
+        # Update ACK timestamp so forced review is satisfied
+        echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$ack_file"
     done
 
 elif [[ "$MODE" == "ack" ]]; then
-    echo -e "${BLUE}Acknowledging triage flags...${RESET}"
-    echo -e "${YELLOW}This will clear all .git/DX_TRIAGE_REQUIRED flags.${RESET}"
+    echo -e "${BLUE}Acknowledging triage status and recording review...${RESET}"
+    echo -e "${YELLOW}This will:${RESET}"
+    echo "  1. Clear all .git/DX_TRIAGE_REQUIRED flags"
+    echo "  2. Update .git/DX_TRIAGE_ACK timestamp (for forced review)"
     echo ""
 
     # Non-interactive: require explicit confirmation via env var
@@ -341,38 +348,39 @@ elif [[ "$MODE" == "ack" ]]; then
     fi
 
     cleared_count=0
+    ack_count=0
     for repo in "${ALL_REPOS[@]}"; do
         [[ "${REPO_EXISTS[$repo]:-0}" -eq 0 ]] && continue
         repo_path="$HOME/$repo"
         triage_file="$repo_path/.git/DX_TRIAGE_REQUIRED"
+        ack_file="$repo_path/.git/DX_TRIAGE_ACK"
 
+        # Clear DX_TRIAGE_REQUIRED if exists
         if [[ -f "$triage_file" ]]; then
             # Show what we're acknowledging
             echo ""
             echo -e "${CYAN}$repo:${RESET}"
             cat "$triage_file" | head -8
 
-            # Record acknowledgment in the flag file before clearing
-            echo ""
-            echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> "$triage_file"
-
-            # Move to archive
-            archive_dir="$repo_path/.git/dx-triage-archived"
-            mkdir -p "$archive_dir"
-            mv "$triage_file" "$archive_dir/flag-$(date +%Y%m%d-%H%M%S).txt"
-
-            echo -e "  ${GREEN}✓${RESET} Flag acknowledged and archived"
+            rm -f "$triage_file"
+            echo -e "  ${GREEN}✓${RESET} Cleared DX_TRIAGE_REQUIRED"
             cleared_count=$((cleared_count + 1))
         fi
+
+        # Update ACK timestamp (forced review gating)
+        echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$ack_file"
+        echo -e "  ${GREEN}✓${RESET} Updated DX_TRIAGE_ACK timestamp"
+        ack_count=$((ack_count + 1))
     done
 
     echo ""
     if [[ $cleared_count -eq 0 ]]; then
-        echo -e "${GREEN}No triage flags found.${RESET}"
+        echo -e "${GREEN}No critical flags found.${RESET}"
     else
-        echo -e "${GREEN}$cleared_count flag(s) acknowledged and cleared.${RESET}"
-        echo -e "${YELLOW}You can now push. Use --no-verify if pre-push hook still blocks.${RESET}"
+        echo -e "${GREEN}$cleared_count critical flag(s) cleared.${RESET}"
     fi
+    echo -e "${GREEN}Acknowledgment recorded for $ack_count repo(s).${RESET}"
+    echo -e "${YELLOW}Pre-push hook will now pass (ACK timestamp >= STATUS timestamp).${RESET}"
 
 elif [[ "$MODE" == "force" ]]; then
     echo -e "${RED}⚠️  FORCE MODE - This will stash WIP and reset ALL repos to $CANONICAL_TRUNK_BRANCH${RESET}"
