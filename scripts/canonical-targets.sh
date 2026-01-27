@@ -19,7 +19,7 @@
 # These are the primary VMs used for development and deployment.
 # Format: "user@hostname:OS:Description"
 
-export CANONICAL_TRUNK_BRANCH="master"
+export CANONICAL_TRUNK_BRANCH="main"
 
 export CANONICAL_VMS=(
   "feng@epyc6:linux:Primary Linux dev host (this machine)"
