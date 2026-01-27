@@ -18,29 +18,26 @@ RESET='\033[0m'
 
 # Get repo name from current directory
 REPO_NAME="$(basename "$(git rev-parse --show-toplevel)")"
-TRIAGE_FILE=".git/DX_TRIAGE_REQUIRED"
 
 # ============================================================================
-# SECTION 1: Railway deployment check
+# SECTION 1: Railway environment check
 # ============================================================================
-# Check if this repo has Railway deployments and if there are active deployments
+# Blocks push if RAILWAY_ENVIRONMENT is set (Railway project detected)
+# This prevents pushing during active Railway deployments
 
 check_railway_status() {
-    # Skip if railway command not available
-    command -v railway >/dev/null 2>&1 || return 0
-
-    # Skip if not in a Railway project
-    railway status >/dev/null 2>&1 || return 0
-
-    # Check for active deployments
-    if railway status 2>/dev/null | grep -q "building\|deploying"; then
-        echo -e "${YELLOW}⚠️  Railway has active deployments for this repo${RESET}"
+    # Check if we're in a Railway environment
+    # RAILWAY_ENVIRONMENT is set when railway link/configure has been run
+    if [[ -n "${RAILWAY_ENVIRONMENT:-}" ]]; then
+        echo -e "${YELLOW}⚠️  Railway environment detected${RESET}"
         echo ""
-        echo "Active deployments detected. Pushing during active deployments may cause:"
+        echo "RAILWAY_ENVIRONMENT is set to: ${RAILWAY_ENVIRONMENT}"
+        echo ""
+        echo "Pushing while in a Railway project may cause:"
         echo "  - Deployment conflicts"
         echo "  - Inconsistent application state"
         echo ""
-        echo "Check status: railway status"
+        echo "To check active deployments: railway status"
         echo "To bypass: git push --no-verify"
         echo ""
         return 1
