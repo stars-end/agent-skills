@@ -13,7 +13,14 @@ echo -e "${BLUE}🩺 Checking Agent Health...${RESET}"
 ERRORS=0
 WARNINGS=0
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks to get actual script directory (works on macOS and Linux)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 CANONICAL_TARGETS_SH="$SCRIPT_DIR/canonical-targets.sh"
 
 # Optional: source canonical targets (VMs/IDEs/repos + trunk branch)

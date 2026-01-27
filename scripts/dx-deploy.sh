@@ -15,7 +15,14 @@ echo ""
 
 # Configuration
 AGENTS_REPO="agent-skills"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks to get actual script directory (works on macOS and Linux)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 # shellcheck disable=SC1090
 source "$SCRIPT_DIR/canonical-targets.sh" 2>/dev/null || true
 
