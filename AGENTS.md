@@ -310,6 +310,7 @@ cc-glm --resume <session-id>
 | Command | Purpose |
 |---------|---------|
 | `dx-check` | Verify environment (git, Beads, skills) |
+| `dx-triage` | Diagnose repo state + safe recovery (see below) |
 | `dx-dispatch` | Cross-VM and cloud dispatch |
 | `dx-status` | Show repo and environment status |
 
@@ -321,6 +322,32 @@ cc-glm --resume <session-id>
 | `dx-toolchain` | Verify toolchain consistency |
 | `dx-worktree` | Manage git worktrees |
 | `dx-fleet-status` | Check all VMs at once |
+
+### dx-triage: Repo State Diagnosis
+
+When repos are in mixed states (different branches, uncommitted work, staleness), use `dx-triage`:
+
+```bash
+# Show current state of all repos
+dx-triage
+
+# Apply safe fixes only (pull stale, reset merged branches)
+dx-triage --fix
+
+# Force reset ALL to trunk (DANGEROUS - stashes WIP first)
+dx-triage --force
+```
+
+**States detected:**
+| State | Meaning | Action |
+|-------|---------|--------|
+| OK | On trunk, clean, up-to-date | None needed |
+| STALE | On trunk, behind origin | Safe to pull |
+| DIRTY | Uncommitted changes | Review first |
+| FEATURE-MERGED | On merged feature branch | Safe to reset |
+| FEATURE-ACTIVE | On unmerged feature branch | Finish or discard |
+
+**Key principle:** `dx-triage --fix` only does SAFE operations. It never touches DIRTY or FEATURE-ACTIVE repos.
 
 
 ---
