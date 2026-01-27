@@ -2,14 +2,16 @@
 # dx-triage-cron
 # Periodic repo state checker that creates triage flag files
 #
-# Runs via cron (every 4 hours) to check if repos need attention.
-# Creates .git/DX_TRIAGE_REQUIRED when drift is detected.
+# Runs via cron (HOURLY) to check if repos need attention.
+# Creates:
+#   - .git/DX_TRIAGE_STATUS (always, hourly update)
+#   - .git/DX_TRIAGE_REQUIRED (when critical issues detected)
 #
 # This is the CRON component of the dx-triage enforcement system.
-# It runs BEFORE agents try to push, so they see warnings at push time.
+# The pre-push hook enforces ACK must be newer than STATUS.
 #
 # Usage (via cron):
-#   15 */4 * * * /home/feng/.local/bin/dx-triage-cron >/dev/null 2>&1
+#   0 * * * * /home/feng/.local/bin/dx-triage-cron >/dev/null 2>&1
 #
 # Manual testing:
 #   dx-triage-cron --dry-run  # Show what would be flagged
@@ -29,7 +31,7 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 # shellcheck disable=SC1090
 source "$SCRIPT_DIR/canonical-targets.sh" 2>/dev/null || true
 
-CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
+CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-main}"
 
 # Parse args
 DRY_RUN=""
@@ -112,10 +114,29 @@ for repo in "${ALL_REPOS[@]}"; do
     hours_since_commit=$(( (current_secs - last_commit_secs) / 3600 ))
 
     # Get last file modification time (for uncommitted changes)
+    # Cross-platform stat: macOS (BSD) uses -f %m, Linux (GNU) uses -c %Y
     last_file_change=0
     if [[ "$dirty_count" -gt 0 ]]; then
-        # Find the most recently changed tracked file
-        last_file_change=$(git diff --name-only 2>/dev/null | head -1 | xargs stat -c %Y 2>/dev/null || echo "0")
+        # Get both modified and untracked files
+        changed_files=$(git diff --name-only 2>/dev/null)
+        untracked_files=$(git ls-files --others --exclude-standard 2>/dev/null)
+        all_files="$changed_files
+$untracked_files"
+
+        # Find the most recently changed file
+        # Note: Using a simple loop since file lists may have newlines
+        if [[ -n "$all_files" ]]; then
+            for f in $(echo "$all_files" | tr '\n' ' '); do
+                [[ -z "$f" ]] && continue
+                [[ ! -f "$f" ]] && continue
+                # Try GNU stat first (Linux), then BSD stat (macOS)
+                f_time=0
+                f_time=$(stat -c %Y "$f" 2>/dev/null) || f_time=$(stat -f %m "$f" 2>/dev/null) || f_time=0
+                if [[ -n "$f_time" ]] && [[ "$f_time" -gt "$last_file_change" ]]; then
+                    last_file_change="$f_time"
+                fi
+            done
+        fi
         hours_since_change=$(( (current_secs - last_file_change) / 3600 ))
     fi
 
@@ -131,7 +152,7 @@ for repo in "${ALL_REPOS[@]}"; do
 
     # Check if feature branch is merged
     merged=0
-    if [[ "$branch" != "$CANONICAL_TRUNK_BRANCH" && "$branch" != "main" ]]; then
+    if [[ "$branch" != "$CANONICAL_TRUNK_BRANCH" ]]; then
         if git merge-base --is-ancestor HEAD "origin/$CANONICAL_TRUNK_BRANCH" 2>/dev/null; then
             merged=1
         fi
@@ -144,7 +165,7 @@ for repo in "${ALL_REPOS[@]}"; do
     if [[ "$merged" -eq 1 ]]; then
         FLAG_REASON="Feature branch '$branch' appears merged in origin/$CANONICAL_TRUNK_BRANCH"
         RECOMMENDATION="Safe to reset: git checkout $CANONICAL_TRUNK_BRANCH && git pull"
-    elif [[ "$branch" != "$CANONICAL_TRUNK_BRANCH" && "$branch" != "main" && "$hours_since_commit" -gt 24 ]]; then
+    elif [[ "$branch" != "$CANONICAL_TRUNK_BRANCH" && "$hours_since_commit" -gt 24 ]]; then
         FLAG_REASON="On feature branch '$branch' with no commits for ${hours_since_commit}h"
         RECOMMENDATION="Finish work or reset if abandoned"
     elif [[ "$behind" -gt 100 ]]; then
@@ -156,13 +177,31 @@ for repo in "${ALL_REPOS[@]}"; do
     fi
 
     triage_file=".git/DX_TRIAGE_REQUIRED"
+    status_file=".git/DX_TRIAGE_STATUS"
 
-    # Write or remove flag file
+    # Get last commit author (for both files)
+    last_author=$(git log -1 --format='%an <%ae>' 2>/dev/null || echo "unknown")
+
+    # ALWAYS write DX_TRIAGE_STATUS (hourly update for forced review)
+    cat > "$status_file" <<EOF
+STATUS_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+BRANCH: $branch
+STATE: $([[ "$merged" -eq 1 ]] && echo "MERGED" || [[ "$branch" == "$CANONICAL_TRUNK_BRANCH" ]] && echo "TRUNK" || echo "FEATURE")
+DIRTY: $dirty_count uncommitted files
+BEHIND: $behind commits behind origin/$CANONICAL_TRUNK_BRANCH
+
+Last commit: ${hours_since_commit}h ago by $last_author
+$([[ "$hours_since_change" -gt 0 ]] && echo "Last change: ${hours_since_change}h ago" || echo "")
+
+Current issues:
+$([[ -n "$FLAG_REASON" ]] && echo "  - $FLAG_REASON" || echo "  None")
+EOF
+
+    log "STATUS: $repo - $branch, $dirty_count dirty, $behind behind"
+
+    # Write or remove critical flag file (only for issues requiring action)
     if [[ -n "$FLAG_REASON" ]]; then
-        # Get last commit author
-        last_author=$(git log -1 --format='%an <%ae>' 2>/dev/null || echo "unknown")
-
-        # Create flag file
+        # Create DX_TRIAGE_REQUIRED file
         cat > "$triage_file" <<EOF
 FLAGGED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 BRANCH: $branch

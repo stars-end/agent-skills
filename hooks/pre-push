@@ -51,22 +51,64 @@ check_railway_status() {
 # ============================================================================
 
 check_triage_status() {
-    if [[ ! -f "$TRIAGE_FILE" ]]; then
+    local STATUS_FILE=".git/DX_TRIAGE_STATUS"
+    local REQUIRED_FILE=".git/DX_TRIAGE_REQUIRED"
+    local ACK_FILE=".git/DX_TRIAGE_ACK"
+
+    local status_mtime=0
+    local ack_mtime=0
+    local block_reason=""
+    local blocking_file=""
+
+    # Check DX_TRIAGE_REQUIRED (critical - always blocks)
+    if [[ -f "$REQUIRED_FILE" ]]; then
+        block_reason="CRITICAL: Manual review required"
+        blocking_file="$REQUIRED_FILE"
+    fi
+
+    # Check DX_TRIAGE_STATUS vs ACK timestamp (forced review)
+    if [[ -f "$STATUS_FILE" ]]; then
+        status_mtime=$(stat -f %m "$STATUS_FILE" 2>/dev/null || stat -c %Y "$STATUS_FILE" 2>/dev/null || echo "0")
+    fi
+
+    if [[ -f "$ACK_FILE" ]]; then
+        ack_mtime=$(stat -f %m "$ACK_FILE" 2>/dev/null || stat -c %Y "$ACK_FILE" 2>/dev/null || echo "0")
+    fi
+
+    # If status is newer than ACK, review is required
+    if [[ "$status_mtime" -gt "$ack_mtime" ]]; then
+        if [[ -z "$block_reason" ]]; then
+            block_reason="Status updated since last acknowledgment"
+            blocking_file="$STATUS_FILE"
+        fi
+    fi
+
+    # If no block needed, return success
+    if [[ -z "$block_reason" ]]; then
         return 0
     fi
 
-    # Read and display the triage status
+    # Display block message
     echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════╗${RESET}"
-    echo -e "${CYAN}║  ⚠️  PUSH BLOCKED - Repo requires triage review                       ║${RESET}"
+    echo -e "${CYAN}║  ⚠️  PUSH BLOCKED - $block_reason${RESET}"
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════╝${RESET}"
     echo ""
-    cat "$TRIAGE_FILE"
+
+    # Show the blocking file content
+    cat "$blocking_file"
     echo ""
+
+    # Show ACK timestamp if exists
+    if [[ -f "$ACK_FILE" ]]; then
+        echo -e "${YELLOW}Last ACK:${RESET} $(date -r "$ACK_FILE" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || stat -c %y "$ACK_FILE" 2>/dev/null | cut -d'.' -f1)"
+        echo ""
+    fi
+
     echo -e "${YELLOW}Before pushing, you must:${RESET}"
     echo ""
     echo -e "  ${GREEN}dx-triage${RESET}              # See full status of all repos"
-    echo -e "  ${GREEN}dx-triage --fix${RESET}         # Apply safe fixes and clear flag"
-    echo -e "  ${GREEN}dx-triage --ack${RESET}         # Acknowledge and clear flag (I know what I'm doing)"
+    echo -e "  ${GREEN}dx-triage --fix${RESET}         # Apply safe fixes"
+    echo -e "  ${GREEN}dx-triage --ack${RESET}         # Acknowledge status and record review"
     echo ""
     echo -e "Or to bypass: ${CYAN}git push --no-verify${RESET}"
     echo ""
