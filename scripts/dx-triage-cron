@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+# dx-triage-cron
+# Periodic repo state checker that creates triage flag files
+#
+# Runs via cron (every 4 hours) to check if repos need attention.
+# Creates .git/DX_TRIAGE_REQUIRED when drift is detected.
+#
+# This is the CRON component of the dx-triage enforcement system.
+# It runs BEFORE agents try to push, so they see warnings at push time.
+#
+# Usage (via cron):
+#   15 */4 * * * /home/feng/.local/bin/dx-triage-cron >/dev/null 2>&1
+#
+# Manual testing:
+#   dx-triage-cron --dry-run  # Show what would be flagged
+#   dx-triage-cron --verbose   # Show detailed output
+
+set -euo pipefail
+
+# Resolve symlinks to get actual script directory
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+# shellcheck disable=SC1090
+source "$SCRIPT_DIR/canonical-targets.sh" 2>/dev/null || true
+
+CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
+
+# Parse args
+DRY_RUN=""
+VERBOSE=""
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN="echo" ;;
+        --verbose|-v) VERBOSE="1" ;;
+        --help|-h)
+            echo "dx-triage-cron - Periodic repo state checker"
+            echo ""
+            echo "Usage:"
+            echo "  dx-triage-cron [--dry-run] [--verbose]"
+            echo ""
+            echo "This script checks canonical repos for drift conditions:"
+            echo "  - Feature branches with no commits for >24h"
+            echo "  - Behind origin/master by >100 commits"
+            echo "  - Feature branches already merged in remote"
+            echo "  - Uncommitted changes not touched in >48h"
+            echo ""
+            echo "If drift detected, creates .git/DX_TRIAGE_REQUIRED with details."
+            echo ""
+            exit 0
+            ;;
+    esac
+done
+
+log() {
+    if [[ -n "$VERBOSE" ]]; then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2
+    fi
+}
+
+# Collect all repos to check
+ALL_REPOS=()
+if declare -p CANONICAL_REQUIRED_REPOS >/dev/null 2>&1; then
+    ALL_REPOS+=("${CANONICAL_REQUIRED_REPOS[@]}")
+fi
+if declare -p CANONICAL_OPTIONAL_REPOS >/dev/null 2>&1; then
+    ALL_REPOS+=("${CANONICAL_OPTIONAL_REPOS[@]}")
+fi
+
+if [[ ${#ALL_REPOS[@]} -eq 0 ]]; then
+    log "No canonical repos defined, exiting"
+    exit 0
+fi
+
+# Process each repo
+FLAGGED_COUNT=0
+
+for repo in "${ALL_REPOS[@]}"; do
+    repo_path="$HOME/$repo"
+
+    # Skip if repo doesn't exist
+    if [[ ! -d "$repo_path/.git" ]]; then
+        log "Skipping $repo (not found)"
+        continue
+    fi
+
+    cd "$repo_path"
+
+    # Skip worktrees (only process main repo)
+    if [[ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]]; then
+        log "Skipping $repo (worktree)"
+        continue
+    fi
+
+    log "Checking $repo..."
+
+    # Fetch to get accurate state
+    git fetch origin --quiet 2>/dev/null || true
+
+    # Get current state
+    branch="$(git branch --show-current 2>/dev/null || echo "unknown")"
+    dirty_count=$(git status --porcelain=v1 2>/dev/null | wc -l | tr -d ' ')
+
+    # Get last commit time (in hours ago)
+    last_commit_secs=$(git log -1 --format='%ct' 2>/dev/null || echo "0")
+    current_secs=$(date +%s)
+    hours_since_commit=$(( (current_secs - last_commit_secs) / 3600 ))
+
+    # Get last file modification time (for uncommitted changes)
+    last_file_change=0
+    if [[ "$dirty_count" -gt 0 ]]; then
+        # Find the most recently changed tracked file
+        last_file_change=$(git diff --name-only 2>/dev/null | head -1 | xargs stat -c %Y 2>/dev/null || echo "0")
+        hours_since_change=$(( (current_secs - last_file_change) / 3600 ))
+    fi
+
+    # Check behind/ahead
+    behind=0
+    if git rev-parse --verify "origin/$branch" >/dev/null 2>&1; then
+        behind=$(git rev-list --count "HEAD..origin/$branch" 2>/dev/null || echo 0)
+    elif [[ "$branch" != "$CANONICAL_TRUNK_BRANCH" ]]; then
+        if git rev-parse --verify "origin/$CANONICAL_TRUNK_BRANCH" >/dev/null 2>&1; then
+            behind=$(git rev-list --count "HEAD..origin/$CANONICAL_TRUNK_BRANCH" 2>/dev/null || echo 0)
+        fi
+    fi
+
+    # Check if feature branch is merged
+    merged=0
+    if [[ "$branch" != "$CANONICAL_TRUNK_BRANCH" && "$branch" != "main" ]]; then
+        if git merge-base --is-ancestor HEAD "origin/$CANONICAL_TRUNK_BRANCH" 2>/dev/null; then
+            merged=1
+        fi
+    fi
+
+    # Determine if flagging is needed
+    FLAG_REASON=""
+    RECOMMENDATION=""
+
+    if [[ "$merged" -eq 1 ]]; then
+        FLAG_REASON="Feature branch '$branch' appears merged in origin/$CANONICAL_TRUNK_BRANCH"
+        RECOMMENDATION="Safe to reset: git checkout $CANONICAL_TRUNK_BRANCH && git pull"
+    elif [[ "$branch" != "$CANONICAL_TRUNK_BRANCH" && "$branch" != "main" && "$hours_since_commit" -gt 24 ]]; then
+        FLAG_REASON="On feature branch '$branch' with no commits for ${hours_since_commit}h"
+        RECOMMENDATION="Finish work or reset if abandoned"
+    elif [[ "$behind" -gt 100 ]]; then
+        FLAG_REASON="Behind origin/$CANONICAL_TRUNK_BRANCH by $behind commits"
+        RECOMMENDATION="Safe to pull: git pull"
+    elif [[ "$dirty_count" -gt 0 && "$hours_since_change" -gt 48 ]]; then
+        FLAG_REASON="Uncommitted changes not touched in ${hours_since_change}h"
+        RECOMMENDATION="Commit or stash changes"
+    fi
+
+    triage_file=".git/DX_TRIAGE_REQUIRED"
+
+    # Write or remove flag file
+    if [[ -n "$FLAG_REASON" ]]; then
+        # Get last commit author
+        last_author=$(git log -1 --format='%an <%ae>' 2>/dev/null || echo "unknown")
+
+        # Create flag file
+        cat > "$triage_file" <<EOF
+FLAGGED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+BRANCH: $branch
+REASON: $FLAG_REASON
+BEHIND: $behind commits behind origin/$CANONICAL_TRUNK_BRANCH
+
+Last commit: ${hours_since_commit}h ago by $last_author
+
+Recommended action:
+  dx-triage              # See full status of all repos
+  dx-triage --fix        # Apply safe fixes and clear flag
+  dx-triage --ack        # Acknowledge and clear flag (I know what I'm doing)
+
+To investigate manually:
+  git status
+  git log --oneline -5
+  git branch -r --contains HEAD
+EOF
+
+        log "FLAGGED: $repo - $FLAG_REASON"
+        FLAGGED_COUNT=$((FLAGGED_COUNT + 1))
+    else
+        # Remove flag file if state is now clean
+        if [[ -f "$triage_file" ]]; then
+            $DRY_RUN rm -f "$triage_file"
+            log "CLEARED: $repo - state is now healthy"
+        fi
+    fi
+done
+
+log "dx-triage-cron complete: $FLAGGED_COUNT repo(s) flagged"
+
+exit 0

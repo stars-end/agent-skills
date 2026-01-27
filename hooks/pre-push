@@ -1,0 +1,105 @@
+#!/bin/bash
+# dx-triage pre-push hook
+# Part of the dx-triage enforcement system
+#
+# This hook runs before git push and checks:
+# 1. Railway deployment status (if applicable)
+# 2. dx-triage status flag (repo needs attention)
+#
+# Pass --no-verify to git push to bypass this hook.
+
+set -euo pipefail
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+RESET='\033[0m'
+
+# Get repo name from current directory
+REPO_NAME="$(basename "$(git rev-parse --show-toplevel)")"
+TRIAGE_FILE=".git/DX_TRIAGE_REQUIRED"
+
+# ============================================================================
+# SECTION 1: Railway deployment check
+# ============================================================================
+# Check if this repo has Railway deployments and if there are active deployments
+
+check_railway_status() {
+    # Skip if railway command not available
+    command -v railway >/dev/null 2>&1 || return 0
+
+    # Skip if not in a Railway project
+    railway status >/dev/null 2>&1 || return 0
+
+    # Check for active deployments
+    if railway status 2>/dev/null | grep -q "building\|deploying"; then
+        echo -e "${YELLOW}⚠️  Railway has active deployments for this repo${RESET}"
+        echo ""
+        echo "Active deployments detected. Pushing during active deployments may cause:"
+        echo "  - Deployment conflicts"
+        echo "  - Inconsistent application state"
+        echo ""
+        echo "Check status: railway status"
+        echo "To bypass: git push --no-verify"
+        echo ""
+        return 1
+    fi
+
+    return 0
+}
+
+# ============================================================================
+# SECTION 2: dx-triage status check
+# ============================================================================
+
+check_triage_status() {
+    if [[ ! -f "$TRIAGE_FILE" ]]; then
+        return 0
+    fi
+
+    # Read and display the triage status
+    echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${CYAN}║  ⚠️  PUSH BLOCKED - Repo requires triage review                       ║${RESET}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    cat "$TRIAGE_FILE"
+    echo ""
+    echo -e "${YELLOW}Before pushing, you must:${RESET}"
+    echo ""
+    echo -e "  ${GREEN}dx-triage${RESET}              # See full status of all repos"
+    echo -e "  ${GREEN}dx-triage --fix${RESET}         # Apply safe fixes and clear flag"
+    echo -e "  ${GREEN}dx-triage --ack${RESET}         # Acknowledge and clear flag (I know what I'm doing)"
+    echo ""
+    echo -e "Or to bypass: ${CYAN}git push --no-verify${RESET}"
+    echo ""
+
+    return 1
+}
+
+# ============================================================================
+# SECTION 3: ci-lite check (preserved from original hook)
+# ============================================================================
+
+check_ci_lite() {
+    if [ -f Makefile ] && grep -q "ci-lite:" Makefile; then
+        echo -e "${CYAN}🧪 Running make ci-lite...${RESET}"
+        if ! make ci-lite; then
+            echo -e "${RED}❌ PUSH BLOCKED: CI-Lite failed.${RESET}"
+            echo -e "${YELLOW}🚨 Fix errors before pushing or use --no-verify (not recommended).${RESET}"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
+
+# Run checks in order
+check_railway_status || exit 1
+check_triage_status || exit 1
+check_ci_lite || exit 1
+
+exit 0
