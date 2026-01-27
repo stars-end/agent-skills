@@ -11,6 +11,7 @@
 # Usage:
 #   dx-triage              # Show current state
 #   dx-triage --fix        # Apply safe fixes only
+#   dx-triage --ack        # Acknowledge flag and clear (I know what I'm doing)
 #   dx-triage --force      # Reset all to trunk (DANGEROUS - stashes WIP)
 
 set -euo pipefail
@@ -39,6 +40,7 @@ CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
 MODE="${1:-status}"
 case "$MODE" in
     --fix) MODE="fix" ;;
+    --ack) MODE="ack" ;;
     --force) MODE="force" ;;
     --help|-h) MODE="help" ;;
     *) MODE="status" ;;
@@ -51,6 +53,7 @@ dx-triage - Repo state diagnosis and safe recovery
 Usage:
   dx-triage              Show current state of all repos
   dx-triage --fix        Apply safe fixes (pull stale, reset merged branches)
+  dx-triage --ack        Acknowledge triage flags and clear (I know what I'm doing)
   dx-triage --force      Reset ALL repos to trunk (DANGEROUS - stashes WIP first)
   dx-triage --help       Show this help
 
@@ -66,6 +69,12 @@ Safe fixes (--fix):
   - Pulls stale repos
   - Resets FEATURE-MERGED branches to trunk
   - NEVER touches DIRTY or FEATURE-ACTIVE repos
+  - Clears triage flags after fixing
+
+Ack mode (--ack):
+  - Clears .git/DX_TRIAGE_REQUIRED flags
+  - Records acknowledgment timestamp
+  - Use when you've reviewed the state and want to proceed anyway
 
 Force mode (--force):
   - Stashes any uncommitted work
@@ -298,6 +307,71 @@ if [[ "$MODE" == "fix" ]]; then
     echo -e "${GREEN}Safe fixes applied.${RESET}"
     if [[ $manual_needed -gt 0 ]]; then
         echo -e "${YELLOW}$manual_needed repo(s) still need manual attention.${RESET}"
+    fi
+
+    # Clear triage flags after successful fix
+    echo -e "${BLUE}Clearing triage flags...${RESET}"
+    for repo in "${ALL_REPOS[@]}"; do
+        [[ "${REPO_EXISTS[$repo]:-0}" -eq 0 ]] && continue
+        repo_path="$HOME/$repo"
+        triage_file="$repo_path/.git/DX_TRIAGE_REQUIRED"
+        if [[ -f "$triage_file" ]]; then
+            rm -f "$triage_file"
+            echo -e "  ${GREEN}✓${RESET} $repo: flag cleared"
+        fi
+    done
+
+elif [[ "$MODE" == "ack" ]]; then
+    echo -e "${BLUE}Acknowledging triage flags...${RESET}"
+    echo -e "${YELLOW}This will clear all .git/DX_TRIAGE_REQUIRED flags.${RESET}"
+    echo ""
+
+    # Non-interactive: require explicit confirmation via env var
+    if [[ "${DX_TRIAGE_ACK_CONFIRM:-}" != "yes" ]]; then
+        if [[ -t 0 ]]; then
+            read -p "Type 'yes' to confirm: " confirm
+            if [[ "$confirm" != "yes" ]]; then
+                echo "Aborted."
+                exit 1
+            fi
+        else
+            echo "Non-interactive mode. Set DX_TRIAGE_ACK_CONFIRM=yes to proceed."
+            exit 1
+        fi
+    fi
+
+    cleared_count=0
+    for repo in "${ALL_REPOS[@]}"; do
+        [[ "${REPO_EXISTS[$repo]:-0}" -eq 0 ]] && continue
+        repo_path="$HOME/$repo"
+        triage_file="$repo_path/.git/DX_TRIAGE_REQUIRED"
+
+        if [[ -f "$triage_file" ]]; then
+            # Show what we're acknowledging
+            echo ""
+            echo -e "${CYAN}$repo:${RESET}"
+            cat "$triage_file" | head -8
+
+            # Record acknowledgment in the flag file before clearing
+            echo ""
+            echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> "$triage_file"
+
+            # Move to archive
+            archive_dir="$repo_path/.git/dx-triage-archived"
+            mkdir -p "$archive_dir"
+            mv "$triage_file" "$archive_dir/flag-$(date +%Y%m%d-%H%M%S).txt"
+
+            echo -e "  ${GREEN}✓${RESET} Flag acknowledged and archived"
+            cleared_count=$((cleared_count + 1))
+        fi
+    done
+
+    echo ""
+    if [[ $cleared_count -eq 0 ]]; then
+        echo -e "${GREEN}No triage flags found.${RESET}"
+    else
+        echo -e "${GREEN}$cleared_count flag(s) acknowledged and cleared.${RESET}"
+        echo -e "${YELLOW}You can now push. Use --no-verify if pre-push hook still blocks.${RESET}"
     fi
 
 elif [[ "$MODE" == "force" ]]; then
