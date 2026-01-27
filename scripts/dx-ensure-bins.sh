@@ -34,6 +34,7 @@ link "$AGENTS_ROOT/scripts/dx-doctor.sh" "$BIN_DIR/dx-doctor"
 # Fleet visibility + toolchain consistency
 link "$AGENTS_ROOT/scripts/dx-fleet-status.sh" "$BIN_DIR/dx-fleet-status"
 link "$AGENTS_ROOT/scripts/dx-toolchain.sh" "$BIN_DIR/dx-toolchain"
+link "$AGENTS_ROOT/scripts/dx-triage.sh" "$BIN_DIR/dx-triage"
 
 # Beads helpers (used across repos)
 link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
