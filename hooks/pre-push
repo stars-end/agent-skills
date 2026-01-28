@@ -76,8 +76,8 @@ check_triage_status() {
     # Check DX_TRIAGE_STATUS fingerprint vs ACK (forced review)
     # Compare fingerprint content, not file mtime, so timestamps can stay fresh
     if [[ -f "$STATUS_FILE" ]]; then
-        current_fingerprint=$(grep "^X_FINGERPRINT:" "$STATUS_FILE" 2>/dev/null | cut -d':' -f2-)
-        ack_fingerprint=$(grep "^X_FINGERPRINT:" "$ACK_FILE" 2>/dev/null | cut -d':' -f2-)
+        current_fingerprint=$(grep "^X_FINGERPRINT:" "$STATUS_FILE" 2>/dev/null | cut -d':' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        ack_fingerprint=$(grep "^X_FINGERPRINT:" "$ACK_FILE" 2>/dev/null | cut -d':' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
         # If fingerprints differ (or no ACK exists), review is required
         if [[ "$current_fingerprint" != "$ack_fingerprint" ]]; then

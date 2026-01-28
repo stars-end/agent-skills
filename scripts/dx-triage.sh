@@ -325,7 +325,8 @@ if [[ "$MODE" == "fix" ]]; then
 
         # Update ACK file with fingerprint (forced review gating)
         if [[ -f "$status_file" ]]; then
-            current_fingerprint=$(grep "^X_FINGERPRINT:" "$status_file" 2>/dev/null | cut -d':' -f2-)
+            # Extract fingerprint and trim leading/trailing whitespace
+            current_fingerprint=$(grep "^X_FINGERPRINT:" "$status_file" 2>/dev/null | cut -d':' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$ack_file"
             echo "X_FINGERPRINT: $current_fingerprint" >> "$ack_file"
         else
