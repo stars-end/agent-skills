@@ -152,20 +152,15 @@ for repo in "${ALL_REPOS[@]}"; do
 
     # Determine if flagging is needed
     FLAG_REASON=""
-    RECOMMENDATION=""
 
     if [[ "$merged" -eq 1 ]]; then
         FLAG_REASON="Feature branch '$branch' appears merged in origin/$CANONICAL_TRUNK_BRANCH"
-        RECOMMENDATION="Safe to reset: git checkout $CANONICAL_TRUNK_BRANCH && git pull"
     elif [[ "$branch" != "$CANONICAL_TRUNK_BRANCH" && "$hours_since_commit" -gt 24 ]]; then
         FLAG_REASON="On feature branch '$branch' with no commits for ${hours_since_commit}h"
-        RECOMMENDATION="Finish work or reset if abandoned"
     elif [[ "$behind" -gt 100 ]]; then
         FLAG_REASON="Behind origin/$CANONICAL_TRUNK_BRANCH by $behind commits"
-        RECOMMENDATION="Safe to pull: git pull"
     elif [[ "$dirty_count" -gt 0 && "$hours_since_change" -gt 48 ]]; then
         FLAG_REASON="Uncommitted changes not touched in ${hours_since_change}h"
-        RECOMMENDATION="Commit or stash changes"
     fi
 
     triage_file=".git/DX_TRIAGE_REQUIRED"

@@ -107,9 +107,11 @@ check_triage_status() {
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════╝${RESET}"
     echo ""
 
-    # Show the blocking file content
-    cat "$blocking_file"
-    echo ""
+    # Show the blocking file content (if file exists)
+    if [[ -f "$blocking_file" ]]; then
+        cat "$blocking_file"
+        echo ""
+    fi
 
     # Show ACK timestamp if exists
     if [[ -f "$ACK_FILE" ]]; then
