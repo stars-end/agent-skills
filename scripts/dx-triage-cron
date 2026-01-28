@@ -173,9 +173,20 @@ for repo in "${ALL_REPOS[@]}"; do
     # Get last commit author (for both files)
     last_author=$(git log -1 --format='%an <%ae>' 2>/dev/null || echo "unknown")
 
-    # Generate new STATUS content
-    new_status_content=$(cat <<EOF
+    # Generate state fingerprint (without timestamp) for comparison
+    state_fingerprint="BRANCH:$branch|STATE:$([[ "$merged" -eq 1 ]] && echo "MERGED" || [[ "$branch" == "$CANONICAL_TRUNK_BRANCH" ]] && echo "TRUNK" || echo "FEATURE")|DIRTY:$dirty_count|BEHIND:$behind|ISSUES:$([[ -n "$FLAG_REASON" ]] && echo "1" || echo "0")"
+
+    # Check if state actually changed (compare fingerprint with stored one)
+    stored_fingerprint=""
+    if [[ -f "$status_file" ]]; then
+        stored_fingerprint=$(grep "^X_FINGERPRINT:" "$status_file" 2>/dev/null | cut -d':' -f2-)
+    fi
+
+    # Only write STATUS if state changed
+    if [[ "$state_fingerprint" != "$stored_fingerprint" ]]; then
+        cat > "$status_file" <<EOF
 STATUS_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+X_FINGERPRINT: $state_fingerprint
 BRANCH: $branch
 STATE: $([[ "$merged" -eq 1 ]] && echo "MERGED" || [[ "$branch" == "$CANONICAL_TRUNK_BRANCH" ]] && echo "TRUNK" || echo "FEATURE")
 DIRTY: $dirty_count uncommitted files
@@ -187,11 +198,6 @@ $([[ "$hours_since_change" -gt 0 ]] && echo "Last change: ${hours_since_change}h
 Current issues:
 $([[ -n "$FLAG_REASON" ]] && echo "  - $FLAG_REASON" || echo "  None")
 EOF
-)
-
-    # Only write STATUS if content changed (avoid unnecessary ACK re-requests)
-    if [[ ! -f "$status_file" ]] || [[ "$new_status_content" != "$(cat "$status_file" 2>/dev/null)" ]]; then
-        echo "$new_status_content" > "$status_file"
         log "STATUS: $repo - $branch, $dirty_count dirty, $behind behind (updated)"
     else
         log "STATUS: $repo - $branch, $dirty_count dirty, $behind behind (unchanged)"
