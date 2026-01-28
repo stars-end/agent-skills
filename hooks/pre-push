@@ -3,7 +3,7 @@
 # Part of the dx-triage enforcement system
 #
 # This hook runs before git push and checks:
-# 1. Railway deployment status (if applicable)
+# 1. Railway environment requirement (prime-radiant-ai, affordabot only)
 # 2. dx-triage status flag (repo needs attention)
 #
 # Pass --no-verify to git push to bypass this hook.
@@ -71,6 +71,14 @@ check_triage_status() {
     if [[ -f "$REQUIRED_FILE" ]]; then
         block_reason="CRITICAL: Manual review required"
         blocking_file="$REQUIRED_FILE"
+    fi
+
+    # Check DX_TRIAGE_STATUS exists (required for forced review)
+    if [[ ! -f "$STATUS_FILE" ]]; then
+        if [[ -z "$block_reason" ]]; then
+            block_reason="No status file found - run dx-triage-cron or dx-triage first"
+            blocking_file="<missing>"
+        fi
     fi
 
     # Check DX_TRIAGE_STATUS fingerprint vs ACK (forced review)
