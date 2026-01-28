@@ -157,8 +157,8 @@ for repo in "${ALL_REPOS[@]}"; do
 
     # Check if feature branch has been merged to trunk
     merged=0
-    if [[ "$branch" != "$CANONICAL_TRUNK_BRANCH" && "$branch" != "main" ]]; then
-        # Check if branch is fully merged into origin/master
+    if [[ "$branch" != "$CANONICAL_TRUNK_BRANCH" ]]; then
+        # Check if branch is fully merged into origin/$CANONICAL_TRUNK_BRANCH
         if git merge-base --is-ancestor HEAD "origin/$CANONICAL_TRUNK_BRANCH" 2>/dev/null; then
             merged=1
         fi
@@ -309,28 +309,35 @@ if [[ "$MODE" == "fix" ]]; then
         echo -e "${YELLOW}$manual_needed repo(s) still need manual attention.${RESET}"
     fi
 
-    # Clear triage flags after successful fix and update ACK timestamp
+    # Clear triage flags after successful fix and update ACK with fingerprint
     echo -e "${BLUE}Clearing triage flags and updating ACK...${RESET}"
     for repo in "${ALL_REPOS[@]}"; do
         [[ "${REPO_EXISTS[$repo]:-0}" -eq 0 ]] && continue
         repo_path="$HOME/$repo"
         triage_file="$repo_path/.git/DX_TRIAGE_REQUIRED"
         ack_file="$repo_path/.git/DX_TRIAGE_ACK"
+        status_file="$repo_path/.git/DX_TRIAGE_STATUS"
 
         if [[ -f "$triage_file" ]]; then
             rm -f "$triage_file"
             echo -e "  ${GREEN}✓${RESET} $repo: flag cleared"
         fi
 
-        # Update ACK timestamp so forced review is satisfied
-        echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$ack_file"
+        # Update ACK file with fingerprint (forced review gating)
+        if [[ -f "$status_file" ]]; then
+            current_fingerprint=$(grep "^X_FINGERPRINT:" "$status_file" 2>/dev/null | cut -d':' -f2-)
+            echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$ack_file"
+            echo "X_FINGERPRINT: $current_fingerprint" >> "$ack_file"
+        else
+            echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$ack_file"
+        fi
     done
 
 elif [[ "$MODE" == "ack" ]]; then
     echo -e "${BLUE}Acknowledging triage status and recording review...${RESET}"
     echo -e "${YELLOW}This will:${RESET}"
     echo "  1. Clear all .git/DX_TRIAGE_REQUIRED flags"
-    echo "  2. Update .git/DX_TRIAGE_ACK timestamp (for forced review)"
+    echo "  2. Update .git/DX_TRIAGE_ACK with current fingerprint"
     echo ""
 
     # Non-interactive: require explicit confirmation via env var
@@ -367,9 +374,16 @@ elif [[ "$MODE" == "ack" ]]; then
             cleared_count=$((cleared_count + 1))
         fi
 
-        # Update ACK timestamp (forced review gating)
-        echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$ack_file"
-        echo -e "  ${GREEN}✓${RESET} Updated DX_TRIAGE_ACK timestamp"
+        # Update ACK file with fingerprint (forced review gating)
+        status_file="$repo_path/.git/DX_TRIAGE_STATUS"
+        if [[ -f "$status_file" ]]; then
+            current_fingerprint=$(grep "^X_FINGERPRINT:" "$status_file" 2>/dev/null | cut -d':' -f2-)
+            echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$ack_file"
+            echo "X_FINGERPRINT: $current_fingerprint" >> "$ack_file"
+        else
+            echo "ACKED_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$ack_file"
+        fi
+        echo -e "  ${GREEN}✓${RESET} Updated DX_TRIAGE_ACK"
         ack_count=$((ack_count + 1))
     done
 
@@ -380,7 +394,7 @@ elif [[ "$MODE" == "ack" ]]; then
         echo -e "${GREEN}$cleared_count critical flag(s) cleared.${RESET}"
     fi
     echo -e "${GREEN}Acknowledgment recorded for $ack_count repo(s).${RESET}"
-    echo -e "${YELLOW}Pre-push hook will now pass (ACK timestamp >= STATUS timestamp).${RESET}"
+    echo -e "${YELLOW}Pre-push hook will now pass (fingerprint matches).${RESET}"
 
 elif [[ "$MODE" == "force" ]]; then
     echo -e "${RED}⚠️  FORCE MODE - This will stash WIP and reset ALL repos to $CANONICAL_TRUNK_BRANCH${RESET}"

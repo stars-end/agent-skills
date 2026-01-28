@@ -173,18 +173,22 @@ for repo in "${ALL_REPOS[@]}"; do
     # Get last commit author (for both files)
     last_author=$(git log -1 --format='%an <%ae>' 2>/dev/null || echo "unknown")
 
-    # Generate state fingerprint (without timestamp) for comparison
+    # Generate state fingerprint (without timestamp) for ACK gating
     state_fingerprint="BRANCH:$branch|STATE:$([[ "$merged" -eq 1 ]] && echo "MERGED" || [[ "$branch" == "$CANONICAL_TRUNK_BRANCH" ]] && echo "TRUNK" || echo "FEATURE")|DIRTY:$dirty_count|BEHIND:$behind|ISSUES:$([[ -n "$FLAG_REASON" ]] && echo "1" || echo "0")"
 
     # Check if state actually changed (compare fingerprint with stored one)
     stored_fingerprint=""
+    fingerprint_changed="false"
     if [[ -f "$status_file" ]]; then
         stored_fingerprint=$(grep "^X_FINGERPRINT:" "$status_file" 2>/dev/null | cut -d':' -f2-)
     fi
 
-    # Only write STATUS if state changed
     if [[ "$state_fingerprint" != "$stored_fingerprint" ]]; then
-        cat > "$status_file" <<EOF
+        fingerprint_changed="true"
+    fi
+
+    # ALWAYS write STATUS (for fresh timestamps), but log when fingerprint changed
+    cat > "$status_file" <<EOF
 STATUS_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 X_FINGERPRINT: $state_fingerprint
 BRANCH: $branch
@@ -198,9 +202,11 @@ $([[ "$hours_since_change" -gt 0 ]] && echo "Last change: ${hours_since_change}h
 Current issues:
 $([[ -n "$FLAG_REASON" ]] && echo "  - $FLAG_REASON" || echo "  None")
 EOF
-        log "STATUS: $repo - $branch, $dirty_count dirty, $behind behind (updated)"
+
+    if [[ "$fingerprint_changed" == "true" ]]; then
+        log "STATUS: $repo - $branch, $dirty_count dirty, $behind behind (fingerprint changed)"
     else
-        log "STATUS: $repo - $branch, $dirty_count dirty, $behind behind (unchanged)"
+        log "STATUS: $repo - $branch, $dirty_count dirty, $behind behind (timestamp updated)"
     fi
 
     # Write or remove critical flag file (only for issues requiring action)
