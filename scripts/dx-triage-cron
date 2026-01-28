@@ -48,7 +48,7 @@ for arg in "$@"; do
             echo ""
             echo "This script checks canonical repos for drift conditions:"
             echo "  - Feature branches with no commits for >24h"
-            echo "  - Behind origin/master by >100 commits"
+            echo "  - Behind origin/\$CANONICAL_TRUNK_BRANCH by >100 commits"
             echo "  - Feature branches already merged in remote"
             echo "  - Uncommitted changes not touched in >48h"
             echo ""
@@ -117,26 +117,17 @@ for repo in "${ALL_REPOS[@]}"; do
     # Cross-platform stat: macOS (BSD) uses -f %m, Linux (GNU) uses -c %Y
     last_file_change=0
     if [[ "$dirty_count" -gt 0 ]]; then
-        # Get both modified and untracked files
-        changed_files=$(git diff --name-only 2>/dev/null)
-        untracked_files=$(git ls-files --others --exclude-standard 2>/dev/null)
-        all_files="$changed_files
-$untracked_files"
-
-        # Find the most recently changed file
-        # Note: Using a simple loop since file lists may have newlines
-        if [[ -n "$all_files" ]]; then
-            for f in $(echo "$all_files" | tr '\n' ' '); do
-                [[ -z "$f" ]] && continue
-                [[ ! -f "$f" ]] && continue
-                # Try GNU stat first (Linux), then BSD stat (macOS)
-                f_time=0
-                f_time=$(stat -c %Y "$f" 2>/dev/null) || f_time=$(stat -f %m "$f" 2>/dev/null) || f_time=0
-                if [[ -n "$f_time" ]] && [[ "$f_time" -gt "$last_file_change" ]]; then
-                    last_file_change="$f_time"
-                fi
-            done
-        fi
+        # Get both modified and untracked files, handling filenames with spaces
+        while IFS= read -r f; do
+            [[ -z "$f" ]] && continue
+            [[ ! -f "$f" ]] && continue
+            # Try GNU stat first (Linux), then BSD stat (macOS)
+            f_time=0
+            f_time=$(stat -c %Y "$f" 2>/dev/null) || f_time=$(stat -f %m "$f" 2>/dev/null) || f_time=0
+            if [[ -n "$f_time" ]] && [[ "$f_time" -gt "$last_file_change" ]]; then
+                last_file_change="$f_time"
+            fi
+        done < <(git diff --name-only 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)
         hours_since_change=$(( (current_secs - last_file_change) / 3600 ))
     fi
 
@@ -182,8 +173,8 @@ $untracked_files"
     # Get last commit author (for both files)
     last_author=$(git log -1 --format='%an <%ae>' 2>/dev/null || echo "unknown")
 
-    # ALWAYS write DX_TRIAGE_STATUS (hourly update for forced review)
-    cat > "$status_file" <<EOF
+    # Generate new STATUS content
+    new_status_content=$(cat <<EOF
 STATUS_AT: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 BRANCH: $branch
 STATE: $([[ "$merged" -eq 1 ]] && echo "MERGED" || [[ "$branch" == "$CANONICAL_TRUNK_BRANCH" ]] && echo "TRUNK" || echo "FEATURE")
@@ -196,8 +187,15 @@ $([[ "$hours_since_change" -gt 0 ]] && echo "Last change: ${hours_since_change}h
 Current issues:
 $([[ -n "$FLAG_REASON" ]] && echo "  - $FLAG_REASON" || echo "  None")
 EOF
+)
 
-    log "STATUS: $repo - $branch, $dirty_count dirty, $behind behind"
+    # Only write STATUS if content changed (avoid unnecessary ACK re-requests)
+    if [[ ! -f "$status_file" ]] || [[ "$new_status_content" != "$(cat "$status_file" 2>/dev/null)" ]]; then
+        echo "$new_status_content" > "$status_file"
+        log "STATUS: $repo - $branch, $dirty_count dirty, $behind behind (updated)"
+    else
+        log "STATUS: $repo - $branch, $dirty_count dirty, $behind behind (unchanged)"
+    fi
 
     # Write or remove critical flag file (only for issues requiring action)
     if [[ -n "$FLAG_REASON" ]]; then
