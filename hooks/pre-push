@@ -22,22 +22,22 @@ REPO_NAME="$(basename "$(git rev-parse --show-toplevel)")"
 # ============================================================================
 # SECTION 1: Railway environment check
 # ============================================================================
-# Blocks push if RAILWAY_ENVIRONMENT is set (Railway project detected)
-# This prevents pushing during active Railway deployments
+# Blocks push if RAILWAY_ENVIRONMENT is NOT set (not in Railway project)
+# Requirement: RAILWAY_ENVIRONMENT must be non-empty to proceed
 
 check_railway_status() {
     # Check if we're in a Railway environment
     # RAILWAY_ENVIRONMENT is set when railway link/configure has been run
-    if [[ -n "${RAILWAY_ENVIRONMENT:-}" ]]; then
-        echo -e "${YELLOW}⚠️  Railway environment detected${RESET}"
+    if [[ -z "${RAILWAY_ENVIRONMENT:-}" ]]; then
+        echo -e "${YELLOW}⚠️  Railway environment not detected${RESET}"
         echo ""
-        echo "RAILWAY_ENVIRONMENT is set to: ${RAILWAY_ENVIRONMENT}"
+        echo "RAILWAY_ENVIRONMENT is not set."
+        echo "This repo requires Railway to be configured before pushing."
         echo ""
-        echo "Pushing while in a Railway project may cause:"
-        echo "  - Deployment conflicts"
-        echo "  - Inconsistent application state"
+        echo "To set up Railway:"
+        echo "  railway login"
+        echo "  railway link"
         echo ""
-        echo "To check active deployments: railway status"
         echo "To bypass: git push --no-verify"
         echo ""
         return 1
