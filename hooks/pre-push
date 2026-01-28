@@ -23,25 +23,34 @@ REPO_NAME="$(basename "$(git rev-parse --show-toplevel)")"
 # SECTION 1: Railway environment check
 # ============================================================================
 # Blocks push if RAILWAY_ENVIRONMENT is NOT set (not in Railway project)
+# Only applies to prime-radiant-ai and affordabot repos
 # Requirement: RAILWAY_ENVIRONMENT must be non-empty to proceed
 
 check_railway_status() {
-    # Check if we're in a Railway environment
-    # RAILWAY_ENVIRONMENT is set when railway link/configure has been run
-    if [[ -z "${RAILWAY_ENVIRONMENT:-}" ]]; then
-        echo -e "${YELLOW}⚠️  Railway environment not detected${RESET}"
-        echo ""
-        echo "RAILWAY_ENVIRONMENT is not set."
-        echo "This repo requires Railway to be configured before pushing."
-        echo ""
-        echo "To set up Railway:"
-        echo "  railway login"
-        echo "  railway link"
-        echo ""
-        echo "To bypass: git push --no-verify"
-        echo ""
-        return 1
-    fi
+    # Only enforce Railway for specific repos
+    case "$REPO_NAME" in
+        prime-radiant-ai|affordabot)
+            # Check if we're in a Railway environment
+            # RAILWAY_ENVIRONMENT is set when railway link/configure has been run
+            if [[ -z "${RAILWAY_ENVIRONMENT:-}" ]]; then
+                echo -e "${YELLOW}⚠️  Railway environment not detected${RESET}"
+                echo ""
+                echo "RAILWAY_ENVIRONMENT is not set."
+                echo "This repo ($REPO_NAME) requires Railway to be configured before pushing."
+                echo ""
+                echo "To set up Railway:"
+                echo "  railway login"
+                echo "  railway link"
+                echo ""
+                echo "To bypass: git push --no-verify"
+                echo ""
+                return 1
+            fi
+            ;;
+        *)
+            # Other repos don't require Railway
+            ;;
+    esac
 
     return 0
 }
@@ -55,8 +64,6 @@ check_triage_status() {
     local REQUIRED_FILE=".git/DX_TRIAGE_REQUIRED"
     local ACK_FILE=".git/DX_TRIAGE_ACK"
 
-    local status_mtime=0
-    local ack_mtime=0
     local block_reason=""
     local blocking_file=""
 
@@ -66,20 +73,18 @@ check_triage_status() {
         blocking_file="$REQUIRED_FILE"
     fi
 
-    # Check DX_TRIAGE_STATUS vs ACK timestamp (forced review)
+    # Check DX_TRIAGE_STATUS fingerprint vs ACK (forced review)
+    # Compare fingerprint content, not file mtime, so timestamps can stay fresh
     if [[ -f "$STATUS_FILE" ]]; then
-        status_mtime=$(stat -c %Y "$STATUS_FILE" 2>/dev/null || stat -f %m "$STATUS_FILE" 2>/dev/null || echo "0")
-    fi
+        current_fingerprint=$(grep "^X_FINGERPRINT:" "$STATUS_FILE" 2>/dev/null | cut -d':' -f2-)
+        ack_fingerprint=$(grep "^X_FINGERPRINT:" "$ACK_FILE" 2>/dev/null | cut -d':' -f2-)
 
-    if [[ -f "$ACK_FILE" ]]; then
-        ack_mtime=$(stat -c %Y "$ACK_FILE" 2>/dev/null || stat -f %m "$ACK_FILE" 2>/dev/null || echo "0")
-    fi
-
-    # If status is newer than ACK, review is required
-    if [[ "$status_mtime" -gt "$ack_mtime" ]]; then
-        if [[ -z "$block_reason" ]]; then
-            block_reason="Status updated since last acknowledgment"
-            blocking_file="$STATUS_FILE"
+        # If fingerprints differ (or no ACK exists), review is required
+        if [[ "$current_fingerprint" != "$ack_fingerprint" ]]; then
+            if [[ -z "$block_reason" ]]; then
+                block_reason="Status changed since last acknowledgment"
+                blocking_file="$STATUS_FILE"
+            fi
         fi
     fi
 
