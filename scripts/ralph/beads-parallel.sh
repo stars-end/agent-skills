@@ -1,7 +1,16 @@
 #!/bin/bash
 # Ralph Parallel Execution via Beads Dependencies
-# Usage: ./beads-parallel.sh <task-id-1> <task-id-2> ... [--max-parallel N]
+# Usage: ./beads-parallel.sh <task-id-1> <task-id-2> ... [--max-parallel N] [--resume <checkpoint-file>]
 # Bash 3.2 compatible (macOS default)
+#
+# Examples:
+#   ./beads-parallel.sh agent-abc agent-def agent-ghi
+#   ./beads-parallel.sh agent-* --max-parallel 4
+#   ./beads-parallel.sh agent-* --max-parallel 2 --resume .ralph-checkpoint-epic-123.txt
+#
+# Environment Variables:
+#   KEEP_WORKTREES=1    Keep worktrees after completion (for debugging)
+#   MAX_PARALLEL=N      Override default parallel worker count (default: 3)
 
 set -e
 
@@ -40,10 +49,15 @@ mkdir -p "$LOG_DIR"
 
 # Parse arguments
 TASK_IDS=""
+RESUME_MODE=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --max-parallel)
       MAX_PARALLEL="$2"
+      shift 2
+      ;;
+    --resume)
+      RESUME_MODE="$2"
       shift 2
       ;;
     agent-*)
@@ -66,9 +80,28 @@ if [ -z "$TASK_IDS" ]; then
 fi
 
 log "=== Ralph Parallel Execution ==="
+if [ -n "$RESUME_MODE" ]; then
+  log "Resume mode: loading checkpoint from $RESUME_MODE"
+fi
 log "Tasks: $TASK_IDS"
 log "Max parallel workers: $MAX_PARALLEL"
 log ""
+
+# =============================================================================
+# RESUME MODE: Load checkpoint if specified (agent-duf)
+# =============================================================================
+COMPLETED_TASKS=""
+if [ -n "$RESUME_MODE" ]; then
+  CHECKPOINT_FILE="$WORKSPACE/$RESUME_MODE"
+  if [ -f "$CHECKPOINT_FILE" ]; then
+    log "Loading checkpoint from $CHECKPOINT_FILE..."
+    COMPLETED_TASKS=$(cat "$CHECKPOINT_FILE" | tr '\n' ' ' | sed 's/ $//')
+    log "Previously completed: $COMPLETED_TASKS"
+  else
+    log_warning "Checkpoint file not found: $CHECKPOINT_FILE"
+    log_warning "Starting fresh execution"
+  fi
+fi
 
 # =============================================================================
 # STEP 1: Build dependency graph (stored as temp files for bash 3.2 compatibility)
@@ -100,7 +133,15 @@ for task_id in $TASK_IDS; do
   # Extract dependencies and save to file
   deps=$(echo "$task_json" | jq -r '.dependencies[]?.id' | tr '\n' ' ' | sed 's/ $//')
   echo "$deps" > "$GRAPH_DIR/${task_id}-deps"
-  echo "pending" > "$GRAPH_DIR/${task_id}-status"
+
+  # RESUME MODE: Mark previously completed tasks
+  if [[ " $COMPLETED_TASKS " =~ " $task_id " ]]; then
+    echo "complete" > "$GRAPH_DIR/${task_id}-status"
+    log "  [$task_id] Skipping (completed in previous run)"
+  else
+    echo "pending" > "$GRAPH_DIR/${task_id}-status"
+  fi
+
   echo "0" > "$GRAPH_DIR/${task_id}-incoming"
 done
 
@@ -423,6 +464,21 @@ for ((layer=0; layer<TOTAL_LAYERS; layer++)); do
         fi
       done
     done
+  fi
+
+  # RESUME MODE: Save checkpoint after each layer completes (agent-duf)
+  if [ -n "$RESUME_MODE" ]; then
+    CHECKPOINT_FILE="$WORKSPACE/$RESUME_MODE"
+    # Collect all completed tasks so far
+    COMPLETED_IN_CHECKPOINT=""
+    for task_id in $TASK_IDS; do
+      status=$(cat "$GRAPH_DIR/${task_id}-status" 2>/dev/null)
+      if [ "$status" = "complete" ]; then
+        COMPLETED_IN_CHECKPOINT="$COMPLETED_IN_CHECKPOINT$task_id\n"
+      fi
+    done
+    echo -e "$COMPLETED_IN_CHECKPOINT" > "$CHECKPOINT_FILE"
+    log "Checkpoint saved: $(echo -e "$COMPLETED_IN_CHECKPOINT" | wc -l | tr -d ' ') tasks completed"
   fi
 
   log ""
