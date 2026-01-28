@@ -56,7 +56,7 @@ log ""
 
 # Get epic details
 log "Fetching epic details..."
-EPIC_JSON=$(bd show "$EPIC_ID" --json 2>/dev/null)
+EPIC_JSON=$(bd show "$EPIC_ID" --json --db "$BEADS_DIR" 2>/dev/null)
 if [ -z "$EPIC_JSON" ]; then
   error "Epic $EPIC_ID not found"
   exit 1
@@ -153,7 +153,7 @@ for TASK_ID in $SUBTASK_IDS; do
   log "$(printf '=%.0s' {1..60})"
 
   # Get task details
-  TASK_JSON=$(bd show "$TASK_ID" --json 2>/dev/null)
+  TASK_JSON=$(bd show "$TASK_ID" --json --db "$BEADS_DIR" 2>/dev/null)
   TASK_TITLE=$(echo "$TASK_JSON" | jq -r '.[0].title')
   TASK_DESC=$(echo "$TASK_JSON" | jq -r '.[0].description // "No description"')
 
@@ -242,7 +242,7 @@ Output signal (one line only):
 
       # Mark Beads task as complete
       log "Closing Beads task: $TASK_ID"
-      bd close "$TASK_ID" --reason="Completed via Ralph Beads Integration: $rev_output" 2>/dev/null || true
+      bd close "$TASK_ID" --reason="Completed via Ralph Beads Integration: $rev_output" --db "$BEADS_DIR" 2>/dev/null || true
 
       # Create final commit with Beads ID
       git commit --amend -m "$TASK_ID: Complete [$TASK_ID]
@@ -289,7 +289,7 @@ if [ $COMPLETED -eq $TOTAL_TASKS ]; then
 
   # Mark epic as complete
   log "Closing epic: $EPIC_ID"
-  bd close "$EPIC_ID" --reason="All subtasks completed via Ralph Beads Integration" 2>/dev/null || true
+  bd close "$EPIC_ID" --reason="All subtasks completed via Ralph Beads Integration" --db "$BEADS_DIR" 2>/dev/null || true
 else
   log "⚠️  SOME TASKS FAILED - EPIC INCOMPLETE"
 fi
