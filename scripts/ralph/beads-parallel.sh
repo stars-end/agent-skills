@@ -206,6 +206,40 @@ log ""
 
 COMPLETED=0
 FAILED=0
+START_TIME=$(date +%s)
+
+# =============================================================================
+# Helper: Progress reporting (agent-4e4)
+# =============================================================================
+show_progress() {
+  local current=$1
+  local total=$2
+  local layer=$3
+
+  # Count completed/pending
+  local completed_count=0
+  local running_count=0
+  local pending_count=$total
+
+  for task_id in $TASK_IDS; do
+    local status=$(cat "$GRAPH_DIR/${task_id}-status" 2>/dev/null)
+    case "$status" in
+      complete) ((completed_count++)); ((pending_count--));;
+      running) ((running_count++));;
+      *) ;;
+    esac
+  done
+
+  local elapsed=$(( $(date +%s) - START_TIME))
+  local elapsed_min=$((elapsed / 60))
+
+  log "[$((layer + 1))/$TOTAL_LAYERS] $completed_count/$total complete, $running_count running, $pending_count pending (${elapsed_min}m elapsed)"
+}
+
+# =============================================================================
+# Helper: Retry logic with max attempts (agent-amm)
+# =============================================================================
+MAX_ATTEMPTS=3
 
 run_single_task() {
   local task_id="$1"
@@ -347,8 +381,49 @@ for ((layer=0; layer<TOTAL_LAYERS; layer++)); do
       wait $pid 2>/dev/null || true
     done
 
+    # INTEGRATION: Progress reporting after each batch
+    show_progress "$((batch_end - 1))" "$layer_size" "$layer"
+
     batch_start=$((batch_end + 1))
   done
+
+  log ""
+
+  # INTEGRATION: Retry logic for failed tasks in this layer
+  # Collect failed task IDs
+  FAILED_TASKS=""
+  for task_id in $layer_tasks; do
+    status=$(cat "$GRAPH_DIR/${task_id}-status" 2>/dev/null)
+    if [ "$status" = "failed" ]; then
+      FAILED_TASKS="$FAILED_TASKS $task_id"
+    fi
+  done
+
+  if [ -n "$FAILED_TASKS" ]; then
+    log "Retrying ${#FAILED_TASKS[@]} failed task(s) from this layer..."
+    for task_id in $FAILED_TASKS; do
+      local attempt=1
+      while [ $attempt -le $MAX_ATTEMPTS ]; do
+        log "  [$task_id] Retry attempt $attempt/$MAX_ATTEMPTS"
+
+        # Re-run the task (reuse same worker_num if possible)
+        # Find available worker number
+        local retry_worker_num=$worker_num
+
+        run_single_task "$task_id" "$layer" "$retry_worker_num"
+        ((worker_num++))
+
+        # Check if succeeded
+        status=$(cat "$GRAPH_DIR/${task_id}-status" 2>/dev/null)
+        if [ "$status" = "complete" ]; then
+          log_success "  [$task_id] Retry succeeded!"
+          break
+        else
+          ((attempt++))
+        fi
+      done
+    done
+  fi
 
   log ""
 done
