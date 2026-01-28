@@ -116,6 +116,7 @@ for repo in "${ALL_REPOS[@]}"; do
     # Get last file modification time (for uncommitted changes)
     # Cross-platform stat: macOS (BSD) uses -f %m, Linux (GNU) uses -c %Y
     last_file_change=0
+    hours_since_change=0
     if [[ "$dirty_count" -gt 0 ]]; then
         # Get both modified and untracked files, handling filenames with spaces
         while IFS= read -r f; do
