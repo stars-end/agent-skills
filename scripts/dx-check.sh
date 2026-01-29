@@ -84,6 +84,11 @@ elif ! check_auto_checkpoint_scheduler "$AUTO_CHECKPOINT_INSTALLER"; then
     needs_fix=1
 fi
 
+# WIP Branch Check - warn about unmerged auto-checkpoint branches
+if [ -f "${SCRIPT_DIR}/dx-wip-check.sh" ]; then
+    "${SCRIPT_DIR}/dx-wip-check.sh"
+fi
+
 if [ "$needs_fix" -eq 0 ]; then
     echo -e "${GREEN}✨ Environment is healthy.${RESET}"
 else
