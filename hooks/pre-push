@@ -33,18 +33,17 @@ check_railway_status() {
             # Check if we're in a Railway environment
             # RAILWAY_ENVIRONMENT is set when railway link/configure has been run
             if [[ -z "${RAILWAY_ENVIRONMENT:-}" ]]; then
-                echo -e "${YELLOW}⚠️  Railway environment not detected${RESET}"
+                echo -e "${YELLOW}⚠️  Railway environment not detected (Warning)${RESET}"
                 echo ""
                 echo "RAILWAY_ENVIRONMENT is not set."
-                echo "This repo ($REPO_NAME) requires Railway to be configured before pushing."
+                echo "This repo ($REPO_NAME) normally requires Railway to be configured."
                 echo ""
-                echo "To set up Railway:"
+                echo "To set up Railway (recommended):"
                 echo "  railway login"
                 echo "  railway link"
                 echo ""
-                echo "To bypass: git push --no-verify"
-                echo ""
-                return 1
+                # Warn only (was return 1)
+                return 0
             fi
             ;;
         *)
