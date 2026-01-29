@@ -398,6 +398,14 @@ main() {
   # Update last-run timestamp
   echo "$(date +%s)" > "$LOG_DIR/last-run"
 
+  # Cleanup old WIP branches (prevent accumulation)
+  for repo in "${CANONICAL_REPOS[@]}"; do
+    local repo_path="$HOME/$repo"
+    if [ -d "$repo_path" ]; then
+      cleanup_wip_branches "$repo_path"
+    fi
+  done
+
   return 0
 }
 
@@ -424,6 +432,76 @@ single_repo_mode() {
   else
     return 1
   fi
+}
+
+# ============================================================
+# WIP Branch Cleanup (prevent accumulation)
+# ============================================================
+
+cleanup_wip_branches() {
+  local repo_path="$1"
+  local repo_name
+  repo_name=$(basename "$repo_path")
+
+  log "Checking for old WIP branches to cleanup..."
+
+  (
+    cd "$repo_path" || exit 1
+
+    local hostname
+    hostname=$(hostname -s 2>/dev/null || echo "unknown")
+
+    # Find WIP branches for this host, older than 7 days
+    local cutoff_date
+    if date -v-7d +%Y%m%d >/dev/null 2>&1; then
+      # BSD date (macOS)
+      cutoff_date=$(date -v-7d +%Y%m%d)
+    else
+      # GNU date (Linux)
+      cutoff_date=$(date -d "7 days ago" +%Y%m%d)
+    fi
+
+    local deleted=0
+    local warned=0
+
+    for branch in $(git branch -r 2>/dev/null | grep "origin/wip/auto/${hostname}/" | sed 's|origin/||' | sed 's| ||g'); do
+      # Extract date from branch name (format: wip/auto/HOST/YYYY-MM-DD-HHMMSS)
+      local branch_date
+      branch_date=$(echo "$branch" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | sed 's/-//g' || echo "99999999")
+
+      # Skip branches newer than cutoff
+      [[ "$branch_date" -ge "$cutoff_date" ]] && continue
+
+      # Check if branch has commits not in current trunk
+      local trunk_branch
+      if git show-ref --verify --quiet refs/heads/master 2>/dev/null; then
+        trunk_branch="master"
+      elif git show-ref --verify --quiet refs/heads/main 2>/dev/null; then
+        trunk_branch="main"
+      else
+        continue
+      fi
+
+      if git log "$trunk_branch".."origin/$branch" --oneline 2>/dev/null | grep -q .; then
+        # Branch has unmerged commits - warn but don't delete
+        log "  WARNING: $branch has unmerged commits (not deleting)"
+        warned=$((warned + 1))
+      else
+        # Branch is fully merged - safe to delete
+        if git push origin --delete "$branch" >/dev/null 2>&1; then
+          log "  Deleted old WIP branch: $branch"
+          deleted=$((deleted + 1))
+        fi
+      fi
+    done
+
+    if [[ $deleted -gt 0 ]]; then
+      log "  Cleaned up $deleted old WIP branches"
+    fi
+    if [[ $warned -gt 0 ]]; then
+      log "  $warned WIP branches have unmerged commits (run 'dx-wip-check' for details)"
+    fi
+  )
 }
 
 # ============================================================
