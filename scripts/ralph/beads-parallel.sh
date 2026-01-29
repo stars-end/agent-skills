@@ -443,13 +443,13 @@ for ((layer=0; layer<TOTAL_LAYERS; layer++)); do
   if [ -n "$FAILED_TASKS" ]; then
     log "Retrying ${#FAILED_TASKS[@]} failed task(s) from this layer..."
     for task_id in $FAILED_TASKS; do
-      local attempt=1
+      attempt=1
       while [ $attempt -le $MAX_ATTEMPTS ]; do
         log "  [$task_id] Retry attempt $attempt/$MAX_ATTEMPTS"
 
         # Re-run the task (reuse same worker_num if possible)
         # Find available worker number
-        local retry_worker_num=$worker_num
+        retry_worker_num=$worker_num
 
         run_single_task "$task_id" "$layer" "$retry_worker_num"
         ((worker_num++))
