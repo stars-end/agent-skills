@@ -20,6 +20,31 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 echo -e "${BLUE}🩺 Running DX Health Check...${RESET}"
 
+# Freshness Check for AGENTS.md
+if [ -f "AGENTS.local.md" ]; then
+    get_hash() {
+        if command -v md5sum >/dev/null 2>&1; then
+            md5sum "$1" | cut -d' ' -f1
+        else
+            md5 -q "$1"
+        fi
+    }
+
+    GLOBAL_SRC=~/agent-skills/AGENTS.md
+    if [ -f "$GLOBAL_SRC" ]; then
+        GLOBAL_HASH=$(get_hash "$GLOBAL_SRC")
+        LOCAL_HASH=$(get_hash "AGENTS.local.md")
+        
+        COMPILED_HASH=$(head -n 5 AGENTS.md 2>/dev/null | grep -o 'global-hash:[a-f0-9]*' | cut -d: -f2 || echo "none")
+        COMPILED_LOCAL_HASH=$(head -n 5 AGENTS.md 2>/dev/null | grep -o 'local-hash:[a-f0-9]*' | cut -d: -f2 || echo "none")
+
+        if [ "$GLOBAL_HASH" != "$COMPILED_HASH" ] || [ "$LOCAL_HASH" != "$COMPILED_LOCAL_HASH" ]; then
+            echo -e "${BLUE}⚠️  AGENTS.md stale - recompiling...${RESET}"
+            "${SCRIPT_DIR}/compile_agent_context.sh" .
+        fi
+    fi
+fi
+
 resolve_auto_checkpoint_installer() {
     if command -v auto-checkpoint-install >/dev/null 2>&1; then
         command -v auto-checkpoint-install
