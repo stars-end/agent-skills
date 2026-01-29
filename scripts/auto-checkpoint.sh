@@ -3,13 +3,14 @@
 # Bulletproof auto-checkpoint for agent sessions.
 #
 # Safety Contract:
-# 1. NEVER push to trunk (master/main). If on trunk: create wip/auto/<host>/<YYYY-MM-DD> branch.
-# 2. NEVER operate inside worktree dirs (/tmp/agents/...). Only canonical clones in ~/.
-# 3. Concurrency safe: lock file with 5 min timeout + skip if .git/index.lock exists.
-# 4. Secret scanning: added-lines-only (git diff --cached -U0) + high-confidence patterns.
-# 5. Works without LLM. LLM opt-in via AUTO_CHECKPOINT_ALLOW_LLM=1 (metadata only).
-# 6. Push is best-effort; local commit MUST exist even if push fails (no work loss).
-# 7. Never operate without origin remote.
+# 1. NEVER push to trunk (master/main). If on trunk: switch to auto-checkpoint/<hostname> branch.
+# 2. On feature branches: commit and push directly (no branch switching).
+# 3. NEVER operate inside worktree dirs (/tmp/agents/...). Only canonical clones in ~/.
+# 4. Concurrency safe: lock file with 5 min timeout + skip if .git/index.lock exists.
+# 5. Secret scanning: added-lines-only (git diff --cached -U0) + high-confidence patterns.
+# 6. Works without LLM. LLM opt-in via AUTO_CHECKPOINT_ALLOW_LLM=1 (metadata only).
+# 7. Push is best-effort; local commit MUST exist even if push fails (no work loss).
+# 8. Never operate without origin remote.
 
 set -euo pipefail
 
@@ -257,9 +258,10 @@ checkpoint_repo() {
 
   log "  Changes detected, committing..."
 
-  # IMPORTANT: Never leave canonical clones on a wip branch. If checkpointing fails mid-run (secret scan,
-  # commit failure, etc.) we must still restore the repo back to trunk when we created a wip branch.
-  # A subshell + EXIT trap makes this robust without impacting the caller's working directory.
+  # Simplified checkpoint behavior: Single auto-checkpoint branch per hostname
+  # - On trunk/detached: switch to auto-checkpoint/<hostname> (reuse if exists)
+  # - On feature branch: commit directly to feature branch
+  # - On auto-checkpoint/*: commit to existing branch
   (
     cd "$repo_path" || exit 1
 
@@ -269,55 +271,50 @@ checkpoint_repo() {
       is_detached=1
     fi
 
-    needs_wip_branch=0
-    restore_branch=""
+    needs_auto_branch=0
+    current_branch="$starting_branch"
 
-    if [[ "$is_detached" -eq 1 ]]; then
-      log "  Detached HEAD, creating wip/auto branch..."
-      needs_wip_branch=1
-      # Prefer master/main if present.
-      if git show-ref --verify --quiet refs/heads/master; then
-        restore_branch="master"
-      elif git show-ref --verify --quiet refs/heads/main; then
-        restore_branch="main"
-      else
-        restore_branch="master"
-      fi
+    # Check if already on auto-checkpoint branch (reuse it)
+    if [[ "$starting_branch" =~ ^auto-checkpoint/ ]]; then
+      log "  On auto-checkpoint branch, reusing: $starting_branch"
+      current_branch="$starting_branch"
+    elif [[ "$is_detached" -eq 1 ]]; then
+      log "  Detached HEAD, switching to auto-checkpoint branch..."
+      needs_auto_branch=1
     elif is_trunk_branch "$starting_branch"; then
-      log "  On trunk branch ($starting_branch), creating wip/auto branch..."
-      needs_wip_branch=1
-      restore_branch="$starting_branch"
+      log "  On trunk branch ($starting_branch), switching to auto-checkpoint branch..."
+      needs_auto_branch=1
     fi
 
-    current_branch="${starting_branch:-detached}"
-    did_switch_to_wip=0
-
-    restore_to_trunk() {
-      if [[ "${did_switch_to_wip:-0}" -eq 1 && -n "${restore_branch:-}" ]]; then
-        if git checkout "$restore_branch" >/dev/null 2>&1; then
-          log "  Restored to trunk: $restore_branch"
-        else
-          log "  WARNING: could not restore to trunk ($restore_branch); repo left on $current_branch"
-        fi
-      fi
-    }
-
-    if [ "$needs_wip_branch" -eq 1 ]; then
+    # Create or switch to auto-checkpoint branch
+    if [ "$needs_auto_branch" -eq 1 ]; then
       hostname=$(hostname -s 2>/dev/null || echo "unknown")
-      datestamp=$(date +%Y-%m-%d)
-      timestamp=$(date +%H%M%S)
-      wip_branch="wip/auto/${hostname}/${datestamp}-${timestamp}"
+      auto_branch="auto-checkpoint/${hostname}"
 
-      git checkout -b "$wip_branch" 2>/dev/null || {
-        error "  Cannot create wip branch (git operation failed)"
-        exit 1
-      }
-      current_branch="$wip_branch"
-      did_switch_to_wip=1
-      log "  Created branch: $current_branch"
+      # Check if branch already exists (local or remote)
+      if git show-ref --verify --quiet refs/heads/"$auto_branch" 2>/dev/null; then
+        git checkout "$auto_branch" 2>/dev/null || {
+          error "  Cannot checkout auto-checkpoint branch"
+          exit 1
+        }
+        log "  Switched to: $auto_branch"
+      elif git fetch origin "$auto_branch" 2>/dev/null; then
+        # Branch exists on remote, check it out
+        git checkout "$auto_branch" 2>/dev/null || {
+          error "  Cannot checkout auto-checkpoint branch from remote"
+          exit 1
+        }
+        log "  Checked out: $auto_branch (from origin)"
+      else
+        # Create new branch from current trunk
+        git checkout -b "$auto_branch" 2>/dev/null || {
+          error "  Cannot create auto-checkpoint branch"
+          exit 1
+        }
+        log "  Created: $auto_branch"
+      fi
+      current_branch="$auto_branch"
     fi
-
-    trap restore_to_trunk EXIT
 
     # Stage all changes
     git add -A 2>/dev/null || {
@@ -398,14 +395,6 @@ main() {
   # Update last-run timestamp
   echo "$(date +%s)" > "$LOG_DIR/last-run"
 
-  # Cleanup old WIP branches (prevent accumulation)
-  for repo in "${CANONICAL_REPOS[@]}"; do
-    local repo_path="$HOME/$repo"
-    if [ -d "$repo_path" ]; then
-      cleanup_wip_branches "$repo_path"
-    fi
-  done
-
   return 0
 }
 
@@ -432,76 +421,6 @@ single_repo_mode() {
   else
     return 1
   fi
-}
-
-# ============================================================
-# WIP Branch Cleanup (prevent accumulation)
-# ============================================================
-
-cleanup_wip_branches() {
-  local repo_path="$1"
-  local repo_name
-  repo_name=$(basename "$repo_path")
-
-  log "Checking for old WIP branches to cleanup..."
-
-  (
-    cd "$repo_path" || exit 1
-
-    local hostname
-    hostname=$(hostname -s 2>/dev/null || echo "unknown")
-
-    # Find WIP branches for this host, older than 7 days
-    local cutoff_date
-    if date -v-7d +%Y%m%d >/dev/null 2>&1; then
-      # BSD date (macOS)
-      cutoff_date=$(date -v-7d +%Y%m%d)
-    else
-      # GNU date (Linux)
-      cutoff_date=$(date -d "7 days ago" +%Y%m%d)
-    fi
-
-    local deleted=0
-    local warned=0
-
-    for branch in $(git branch -r 2>/dev/null | grep "origin/wip/auto/${hostname}/" | sed 's|origin/||' | sed 's| ||g'); do
-      # Extract date from branch name (format: wip/auto/HOST/YYYY-MM-DD-HHMMSS)
-      local branch_date
-      branch_date=$(echo "$branch" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | sed 's/-//g' || echo "99999999")
-
-      # Skip branches newer than cutoff
-      [[ "$branch_date" -ge "$cutoff_date" ]] && continue
-
-      # Check if branch has commits not in current trunk
-      local trunk_branch
-      if git show-ref --verify --quiet refs/heads/master 2>/dev/null; then
-        trunk_branch="master"
-      elif git show-ref --verify --quiet refs/heads/main 2>/dev/null; then
-        trunk_branch="main"
-      else
-        continue
-      fi
-
-      if git log "$trunk_branch".."origin/$branch" --oneline 2>/dev/null | grep -q .; then
-        # Branch has unmerged commits - warn but don't delete
-        log "  WARNING: $branch has unmerged commits (not deleting)"
-        warned=$((warned + 1))
-      else
-        # Branch is fully merged - safe to delete
-        if git push origin --delete "$branch" >/dev/null 2>&1; then
-          log "  Deleted old WIP branch: $branch"
-          deleted=$((deleted + 1))
-        fi
-      fi
-    done
-
-    if [[ $deleted -gt 0 ]]; then
-      log "  Cleaned up $deleted old WIP branches"
-    fi
-    if [[ $warned -gt 0 ]]; then
-      log "  $warned WIP branches have unmerged commits (run 'dx-wip-check' for details)"
-    fi
-  )
 }
 
 # ============================================================
