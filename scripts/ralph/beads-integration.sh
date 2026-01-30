@@ -123,12 +123,12 @@ run_agent() {
 
   echo "$response" > "$output_file.json"
 
-  # Extract text using JSON parsing (robust)
-  local text=$(echo "$response" | jq -r '.parts[] | select(.type == "text") | .text' 2>/dev/null | head -1)
+  # Extract text using JSON parsing - get first text part with full content (no head -1, text may contain newlines)
+  local text=$(echo "$response" | jq -r '.parts[] | select(.type == "text") | .text' 2>/dev/null)
 
-  # Fallback to regex if JSON parsing fails
+  # Fallback to regex if JSON parsing fails (no head -1 here either)
   if [ -z "$text" ]; then
-    text=$(echo "$response" | grep -o '"type":"text"[^}]*"text":"[^"]*"' | sed 's/.*"text":"\([^"]*\)".*/\1/' | head -1)
+    text=$(echo "$response" | grep -o '"type":"text"[^}]*"text":"[^"]*"' | sed 's/.*"text":"\([^"]*\)".*/\1/')
   fi
 
   if [ -z "$text" ]; then
@@ -137,6 +137,11 @@ run_agent() {
 
   # Remove markdown code blocks if present (LLMs often wrap responses in ```text```)
   text=$(echo "$text" | sed 's/^```\s*//; s/\s*```\s*$//')
+
+  # Check if text is empty after markdown stripping (agent returned only ``` markers)
+  if [ -z "$text" ]; then
+    text="ERROR: Empty agent response after markdown stripping"
+  fi
 
   # Write output file (more robust)
   {
