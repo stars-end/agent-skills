@@ -22,6 +22,10 @@ IMPL_MODEL="glm-4.7"
 REV_PROVIDER="zai-coding-plan"
 REV_MODEL="glm-4.7"
 
+# Timeout settings (seconds)
+AGENT_TIMEOUT=180         # Per-agent call timeout (3 minutes)
+MAX_ATTEMPTS=3            # Max revision attempts per task
+
 WORKSPACE="/Users/fengning/agent-skills"
 WORK_DIR="$WORKSPACE/.ralph-work-$$"
 mkdir -p "$WORK_DIR/logs"
@@ -111,7 +115,7 @@ run_agent() {
   local session_id=$(create_session)
   local escaped_prompt=$(echo "$prompt" | jq -Rs .)
 
-  local response=$(timeout 180 curl -s -X POST "$BASE/session/$session_id/message" \
+  local response=$(timeout "$AGENT_TIMEOUT" curl -s -X POST "$BASE/session/$session_id/message" \
     -H "Content-Type: application/json" \
     -d "{\"agent\":\"$agent\",\"model\":{\"providerID\":\"$provider\",\"modelID\":\"$model\"},\"parts\":[{\"type\":\"text\",\"text\":$escaped_prompt}]}")
 
@@ -119,11 +123,12 @@ run_agent() {
 
   echo "$response" > "$output_file.json"
 
-  # Extract text (handle control characters)
-  local text=$(echo "$response" | grep -o '"type":"text"[^}]*"text":"[^"]*"' | sed 's/.*"text":"\([^"]*\)".*/\1/' | head -1)
+  # Extract text using JSON parsing (robust)
+  local text=$(echo "$response" | jq -r '.parts[] | select(.type == "text") | .text' 2>/dev/null | head -1)
 
+  # Fallback to regex if JSON parsing fails
   if [ -z "$text" ]; then
-    text=$(echo "$response" | jq -r '.parts[] | select(.type == "text") | .text' 2>/dev/null | head -1)
+    text=$(echo "$response" | grep -o '"type":"text"[^}]*"text":"[^"]*"' | sed 's/.*"text":"\([^"]*\)".*/\1/' | head -1)
   fi
 
   if [ -z "$text" ]; then
@@ -136,9 +141,12 @@ run_agent() {
 
 parse_signal() {
   local output="$1"
-  if echo "$output" | grep -q "✅ APPROVED"; then
+
+  # Check for APPROVED signal (multiple patterns for robustness)
+  if echo "$output" | grep -qE "(✅ APPROVED|APPROVED|✅)"; then
     echo "APPROVED"
-  elif echo "$output" | grep -q "🔴 REVISION_REQUIRED"; then
+  # Check for REVISION_REQUIRED signal (multiple patterns)
+  elif echo "$output" | grep -qE "(🔴 REVISION_REQUIRED|REVISION_REQUIRED|🔴)"; then
     echo "REVISION_REQUIRED"
   else
     echo "UNKNOWN"
@@ -181,8 +189,8 @@ EOF
   attempt=1
   approved=false
 
-  while [ $attempt -le 3 ] && [ "$approved" = false ]; do
-    log "Attempt $attempt/3"
+  while [ $attempt -le "$MAX_ATTEMPTS" ] && [ "$approved" = false ]; do
+    log "Attempt $attempt/$MAX_ATTEMPTS"
 
     # Get current commit
     BEFORE_COMMIT=$(cd "$WORK_DIR" && git rev-parse HEAD)
@@ -261,9 +269,9 @@ $rev_output" -q
       ((REVISIONS++))
       ((attempt++))
 
-      if [ $attempt -gt 3 ]; then
+      if [ $attempt -gt "$MAX_ATTEMPTS" ]; then
         ((FAILED++))
-        log "❌ Task $TASK_ID FAILED after 3 attempts"
+        log "❌ Task $TASK_ID FAILED after $MAX_ATTEMPTS attempts"
         approved=true
       fi
     else
