@@ -113,9 +113,9 @@ GRAPH_DIR="/tmp/ralph-graph-$$"
 mkdir -p "$GRAPH_DIR"
 
 # PERFORMANCE FIX: Batch fetch all task data at once
-# Use bd list --json once to get all tasks, then filter locally
+# Use --no-daemon to avoid daemon sync overhead for parallel ops
 log "Fetching task data from Beads..."
-ALL_TASKS_JSON=$(BEADS_DIR="$BEADS_DIR" /opt/homebrew/bin/bd list --json 2>/dev/null)
+ALL_TASKS_JSON=$(BEADS_DIR="$BEADS_DIR" /opt/homebrew/bin/bd --no-daemon list --json 2>/dev/null)
 
 # Create lookup table from all tasks
 echo "$ALL_TASKS_JSON" > "$GRAPH_DIR/all-tasks.json"
