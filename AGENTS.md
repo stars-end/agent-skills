@@ -8,7 +8,12 @@
 ## Global Skills
 | Activation Keywords | Skill | Purpose |
 |---------------------|-------|---------|
+| "add database", "add postgres", "add redis", "connect database" | railway/database | This skill should be used when the user wants to add a datab... |
+| "add domain", "railway domain", "custom domain", "service URL" | railway/domain | This skill should be used when the user wants to add a domai... |
+| "beads guard", "beads conflict", "jsonl conflict", "beads sync issue" | safety/beads-guard | Safe Beads workflow helper (warning-only). Use before bd syn... |
 | "check mcp", "mcp status", "mcp health", "verify mcp" | health/mcp-doctor | Warn-only health check for canonical MCP configuration and r... |
+| "check skills", "skills health", "validate skills", "missing skills" | health/skills-doctor | Validate that the current VM has the right `agent-skills` in... |
+| "check ssh", "ssh health", "ssh keys", "vm connection" | health/ssh-key-doctor | Fast, deterministic SSH health check for canonical VMs (no h... |
 | "commit work", "save work", "git commit", "sync branch" | core/sync-feature-branch | Commit current work to feature branch with Beads metadata tr... |
 | "create PR", "open PR", "merge into master", "ready for review" | core/create-pull-request | Create GitHub pull request with atomic Beads issue closure. ... |
 | "create issue", "track work", "start feature", "finish feature" | core/beads-workflow | Beads issue tracking and workflow management with automatic ... |
@@ -16,8 +21,26 @@
 | "finish feature", "close epic", "archive work", "cleanup branch" | core/finish-feature | Complete epic with cleanup and archiving, or verify feature ... |
 | "fix PR", "address feedback", "fix CI", "resolve comments" | core/fix-pr-feedback | Address PR feedback with iterative refinement. MUST BE USED ... |
 | "fix beads", "check beads", "beads sync failing", "beads doctor" | health/bd-doctor | Check and fix common Beads workflow issues across all repos. |
+| "fix lockfile", "lockfile out of sync", "poetry.lock error", "pnpm lockfile" | health/lockfile-doctor | Check and fix lockfile drift across Poetry (Python) and pnpm... |
+| "full lifecycle", "manage feature", "feature suite", "development workflow" | core/feature-lifecycle | A suite of skills to manage the full development lifecycle f... |
 | "git reset --hard", "force push", "delete branch", "rm -rf" | safety/dcg-safety | Destructive Command Guard (DCG) safety hook for all AI codin... |
+| "goodbye", "bye", "done for now", "logging off" | core/session-end | End Claude Code session with Beads sync and summary. MUST BE... |
+| "install safety guard", "setup git guard", "protect from destructive commands", "add safety hooks" | safety/git-safety-guard | Installs a Git safety guard hook for Claude Code to prevent ... |
+| "list projects", "switch project", "railway projects", "project settings" | railway/projects | This skill should be used when the user wants to list all pr... |
+| "manage deployment", "view logs", "deployment history", "stop deployment" | railway/deployment | This skill should be used when the user wants to manage Rail... |
+| "merge PR", "merge it", "merge this", "ready to merge" | core/merge-pr | Prepare PR for merge and guide human to merge via GitHub web... |
+| "python version", "mise check", "poetry env", "toolchain check" | health/toolchain-health | Validate Python toolchain alignment between mise, Poetry, an... |
+| "railway check", "railway deploy failed", "debug railway", "railway error" | health/railway-doctor | Pre-flight checks for Railway deployments to catch failures ... |
+| "railway config", "environment variables", "env vars", "set variable" | railway/environment | This skill should be used when the user asks "what's the con... |
+| "railway docs", "railway features", "how railway works", "docs.railway" | railway/railway-docs | This skill should be used when the user asks about Railway f... |
+| "railway metrics", "resource usage", "CPU usage", "memory usage" | railway/metrics | This skill should be used when the user asks about resource ... |
+| "railway status", "is it running", "what's deployed", "deployment status" | railway/status | This skill should be used when the user asks "railway status... |
+| "railway template", "add service template", "find template", "ghost template" | railway/templates | This skill should be used when the user wants to add a servi... |
+| "railway up", "deploy to railway", "ship to railway", "push code" | railway/deploy | This skill should be used when the user wants to push code t... |
+| "service status", "rename service", "service health", "docker service" | railway/service | This skill should be used when the user asks about service s... |
+| "setup railway", "initialize railway", "create project", "create service" | railway/new | This skill should be used when the user says "setup", "deplo... |
 | "start work", "implement feature", "fix bug", "create task" | core/issue-first | Enforce Issue-First pattern by creating Beads tracking issue... |
+| "verify pipeline", "check my work", "run tests", "validate changes" | health/verify-pipeline | Run project verification checks using standard Makefile targ... |
 
 
 ---

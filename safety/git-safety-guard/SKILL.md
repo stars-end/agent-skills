@@ -1,5 +1,11 @@
 ---
 name: git-safety-guard
+activation:
+  - "install safety guard"
+  - "setup git guard"
+  - "protect from destructive commands"
+  - "add safety hooks"
+  - "install git hooks"
 description: |
   Installs a Git safety guard hook for Claude Code to prevent destructive Git and filesystem commands.
   Blocks accidental data loss from commands like 'git checkout --', 'git reset --hard', 'git clean -f', 'git push --force', and 'rm -rf'.

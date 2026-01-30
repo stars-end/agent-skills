@@ -140,7 +140,7 @@ install_homebrew() {
 
     if command -v brew >/dev/null 2>&1; then
         success "Homebrew already installed: $(brew --version | head -1)"
-        eval "$(($(brew --prefix)/bin/brew shellenv 2>/dev/null))" || true
+        eval "$("$(brew --prefix)/bin/brew" shellenv 2>/dev/null)" || true
     else
         if confirm "Install Homebrew (Linuxbrew)?"; then
             info "Running Homebrew installer..."

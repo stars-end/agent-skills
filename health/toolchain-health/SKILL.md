@@ -1,5 +1,11 @@
 ---
 name: toolchain-health
+activation:
+  - "python version"
+  - "mise check"
+  - "poetry env"
+  - "toolchain check"
+  - "python mismatch"
 description: |
   Validate Python toolchain alignment between mise, Poetry, and pyproject.
   Use when changing Python versions, editing pyproject.toml, or seeing Poetry/mise

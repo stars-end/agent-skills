@@ -1,5 +1,12 @@
 ---
 name: merge-pr
+activation:
+  - "merge PR"
+  - "merge it"
+  - "merge this"
+  - "ready to merge"
+  - "merge to master"
+  - "ship it"
 description: |
   Prepare PR for merge and guide human to merge via GitHub web UI. MUST BE USED when user wants to merge a PR.
   Verifies CI passing, verifies Beads issue already closed (from PR creation), and provides merge instructions.

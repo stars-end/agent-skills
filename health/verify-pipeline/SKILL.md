@@ -1,5 +1,11 @@
 ---
 name: verify-pipeline
+activation:
+  - "verify pipeline"
+  - "check my work"
+  - "run tests"
+  - "validate changes"
+  - "make verify"
 description: |
   Run project verification checks using standard Makefile targets.
   Use when user says "verify pipeline", "check my work", "run tests", or "validate changes".

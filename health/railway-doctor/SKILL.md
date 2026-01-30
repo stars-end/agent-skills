@@ -1,5 +1,11 @@
 ---
 name: railway-doctor
+activation:
+  - "railway check"
+  - "railway deploy failed"
+  - "debug railway"
+  - "railway error"
+  - "pre-flight check"
 description: |
   Pre-flight checks for Railway deployments to catch failures BEFORE deploying.
   Use when about to deploy to Railway, Railway deployment fails, debugging Railway errors,

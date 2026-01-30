@@ -1,5 +1,11 @@
 ---
 name: beads-guard
+activation:
+  - "beads guard"
+  - "beads conflict"
+  - "jsonl conflict"
+  - "beads sync issue"
+  - "prevent beads conflict"
 description: |
   Safe Beads workflow helper (warning-only). Use before bd sync/close/create to
   avoid JSONL conflicts. Ensures you are on a feature branch, up to date with

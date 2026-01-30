@@ -1,6 +1,12 @@
 ---
 name: skills-doctor
-description: Validate that the current VM has the right `agent-skills` installed for the repo you’re working in.
+activation:
+  - "check skills"
+  - "skills health"
+  - "validate skills"
+  - "missing skills"
+  - "skills out of date"
+description: Validate that the current VM has the right `agent-skills` installed for the repo you're working in.
 ---
 
 # skills-doctor

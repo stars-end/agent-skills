@@ -1,5 +1,11 @@
 ---
 name: ssh-key-doctor
+activation:
+  - "check ssh"
+  - "ssh health"
+  - "ssh keys"
+  - "vm connection"
+  - "ssh doctor"
 description: |
   Fast, deterministic SSH health check for canonical VMs (no hangs, no secrets).
   Warn-only by default; strict mode is opt-in.

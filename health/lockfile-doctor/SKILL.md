@@ -1,5 +1,11 @@
 ---
 name: lockfile-doctor
+activation:
+  - "fix lockfile"
+  - "lockfile out of sync"
+  - "poetry.lock error"
+  - "pnpm lockfile"
+  - "update lockfile"
 description: Check and fix lockfile drift across Poetry (Python) and pnpm (Node.js) projects.
 ---
 

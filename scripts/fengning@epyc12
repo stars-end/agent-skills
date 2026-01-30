@@ -1,0 +1,11 @@
+# agent-skills: shell bootstrap (no secrets)
+# NOTE: ~/.zshenv runs for non-interactive shells; do not put tokens here.
+
+export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+. "$HOME/.cargo/env"
+
+# agent-skills: shell bootstrap upgrade (no secrets)
+export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:$PATH"
+
+# agent-skills: shell bootstrap upgrade (no secrets)
+export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"

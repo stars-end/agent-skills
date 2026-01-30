@@ -1,5 +1,11 @@
 ---
 name: projects
+activation:
+  - "list projects"
+  - "switch project"
+  - "railway projects"
+  - "project settings"
+  - "rename project"
 description: This skill should be used when the user wants to list all projects, switch projects, rename a project, enable/disable PR deploys, make a project public/private, or modify project settings.
 allowed-tools: Bash(railway:*)
 ---

@@ -1,5 +1,11 @@
 ---
 name: metrics
+activation:
+  - "railway metrics"
+  - "resource usage"
+  - "CPU usage"
+  - "memory usage"
+  - "service performance"
 description: This skill should be used when the user asks about resource usage, CPU, memory, network, disk, or service performance. Covers questions like "how much memory is my service using" or "is my service slow".
 allowed-tools: Bash(railway:*)
 ---

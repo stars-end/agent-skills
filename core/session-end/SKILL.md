@@ -1,5 +1,12 @@
 ---
 name: session-end
+activation:
+  - "goodbye"
+  - "bye"
+  - "done for now"
+  - "logging off"
+  - "end session"
+  - "wrap up"
 description: |
   End Claude Code session with Beads sync and summary. MUST BE USED when user says they're done, ending session, or logging off.
   Guarantees Beads export to git, shows session stats, and suggests next ready work. Handles cleanup and context saving.

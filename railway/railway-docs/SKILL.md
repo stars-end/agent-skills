@@ -1,5 +1,11 @@
 ---
 name: railway-docs
+activation:
+  - "railway docs"
+  - "railway features"
+  - "how railway works"
+  - "docs.railway"
+  - "railway documentation"
 description: This skill should be used when the user asks about Railway features, how Railway works, or shares a docs.railway.com URL. Fetches up-to-date Railway docs to answer accurately.
 ---
 

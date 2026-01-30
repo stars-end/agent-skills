@@ -1,5 +1,11 @@
 ---
 name: feature-lifecycle
+activation:
+  - "full lifecycle"
+  - "manage feature"
+  - "feature suite"
+  - "development workflow"
+  - "complete workflow"
 description: |
   A suite of skills to manage the full development lifecycle from start to finish.
   - `start-feature`: Initializes a new feature branch, docs, and story.

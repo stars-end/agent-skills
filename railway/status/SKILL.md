@@ -1,5 +1,11 @@
 ---
 name: status
+activation:
+  - "railway status"
+  - "is it running"
+  - "what's deployed"
+  - "deployment status"
+  - "service uptime"
 description: This skill should be used when the user asks "railway status", "is it running", "what's deployed", "deployment status", or about uptime. NOT for variables ("what variables", "env vars", "add variable") or configuration queries - use environment skill for those.
 allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*)
 ---

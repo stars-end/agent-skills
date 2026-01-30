@@ -1,5 +1,11 @@
 ---
 name: deployment
+activation:
+  - "manage deployment"
+  - "view logs"
+  - "deployment history"
+  - "stop deployment"
+  - "redeploy service"
 description: This skill should be used when the user wants to manage Railway deployments, view logs, or debug issues. Covers deployment lifecycle (remove, stop, redeploy, restart), deployment visibility (list, status, history), and troubleshooting (logs, errors, failures, crashes, why deploy failed). NOT for deleting services - use environment skill with isDeleted for that.
 allowed-tools: Bash(railway:*)
 ---
