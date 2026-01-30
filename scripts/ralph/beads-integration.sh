@@ -210,8 +210,8 @@ EOF
 
     # Run implementer
     log "🟢 IMPLEMENTER ($IMPL_MODEL)"
-    impl_output=$(run_agent "$IMPLEMENTER_AGENT" "$IMPL_PROVIDER" "$IMPL_MODEL" "
-Working directory: $WORK_DIR
+    # Store prompt in variable first (avoid multi-line string in command substitution)
+    impl_prompt="Working directory: $WORK_DIR
 
 Read the task from RALPH_TASK.md and implement it.
 
@@ -223,8 +223,8 @@ Working directory: $WORK_DIR
 
 NOTE: OpenCode may add an extra trailing newline. This is acceptable.
 
-Output: IMPLEMENTATION_COMPLETE when done.
-" "$LOG_DIR/impl-$TASK_ID-attempt-$attempt.log")
+Output: IMPLEMENTATION_COMPLETE when done."
+    impl_output=$(run_agent "$IMPLEMENTER_AGENT" "$IMPL_PROVIDER" "$IMPL_MODEL" "$impl_prompt" "$LOG_DIR/impl-$TASK_ID-attempt-$attempt.log")
 
     echo "$impl_output" >> "$LOG_DIR/test.log"
 
@@ -237,8 +237,8 @@ Output: IMPLEMENTATION_COMPLETE when done.
 
     # Run reviewer
     log "🔴 REVIEWER ($REV_MODEL)"
-    rev_output=$(run_agent "$REVIEWER_AGENT" "$REV_PROVIDER" "$REV_MODEL"
-"Working directory: $WORK_DIR
+    # Store prompt in variable first (avoid multi-line string in command substitution)
+    rev_prompt="Working directory: $WORK_DIR
 
 Review the implementation for task: $TASK_TITLE
 Task ID: $TASK_ID
@@ -254,8 +254,8 @@ Focus on: correct file created, correct content, functional implementation.
 
 Output signal (one line only):
 ✅ APPROVED: [concise reason]
-🔴 REVISION_REQUIRED: [specific issue]
-" "$LOG_DIR/rev-$TASK_ID-attempt-$attempt.log")
+🔴 REVISION_REQUIRED: [specific issue]"
+    rev_output=$(run_agent "$REVIEWER_AGENT" "$REV_PROVIDER" "$REV_MODEL" "$rev_prompt" "$LOG_DIR/rev-$TASK_ID-attempt-$attempt.log")
 
     echo "$rev_output" >> "$LOG_DIR/test.log"
 
