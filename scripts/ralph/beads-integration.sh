@@ -135,8 +135,9 @@ run_agent() {
     text="ERROR: No response"
   fi
 
-  echo "$text" > "$output_file"
-  echo "$text"
+  # Use printf for safer output with special characters
+  printf '%s\n' "$text" > "$output_file"
+  printf '%s\n' "$text"
 }
 
 parse_signal() {
