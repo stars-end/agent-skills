@@ -214,14 +214,15 @@ Output: IMPLEMENTATION_COMPLETE when done.
 
     # Run reviewer
     log "🔴 REVIEWER ($REV_MODEL)"
-    rev_output=$(run_agent "$REVIEWER_AGENT" "$REV_PROVIDER" "$REV_MODEL" "
-Working directory: $WORK_DIR
+    rev_output=$(run_agent "$REVIEWER_AGENT" "$REV_PROVIDER" "$REV_MODEL"
+"Working directory: $WORK_DIR
 
 Review the implementation for task: $TASK_TITLE
 Task ID: $TASK_ID
 
-Check git diff for this cycle:
-cd $WORK_DIR && git diff $BEFORE_COMMIT $AFTER_COMMIT
+Check the implementation by examining files in: $WORK_DIR
+List files: ls $WORK_DIR
+Read task: cat $WORK_DIR/RALPH_TASK.md
 
 Verify the implementation satisfies the requirements.
 
