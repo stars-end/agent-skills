@@ -200,6 +200,8 @@ Task ID: $TASK_ID
 IMPORTANT: Use absolute paths for all file operations.
 Working directory: $WORK_DIR
 
+NOTE: OpenCode may add an extra trailing newline. This is acceptable.
+
 Output: IMPLEMENTATION_COMPLETE when done.
 " "$LOG_DIR/impl-$TASK_ID-attempt-$attempt.log")
 
@@ -225,6 +227,9 @@ List files: ls $WORK_DIR
 Read task: cat $WORK_DIR/RALPH_TASK.md
 
 Verify the implementation satisfies the requirements.
+
+IMPORTANT: Be lenient about extra trailing newlines (OpenCode known issue).
+Focus on: correct file created, correct content, functional implementation.
 
 Output signal (one line only):
 ✅ APPROVED: [concise reason]
