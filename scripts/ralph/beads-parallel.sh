@@ -112,17 +112,16 @@ log "Building dependency graph..."
 GRAPH_DIR="/tmp/ralph-graph-$$"
 mkdir -p "$GRAPH_DIR"
 
-# PERFORMANCE FIX: Batch fetch all task data at once
-# Use bd list --json once to get all tasks, then filter locally
+# FIX: Use bd show for each task to get full dependencies array
+# bd list --json only returns dependency_count (integer), not IDs
+# bd show --json returns full dependencies array with IDs
+# Note: bd show returns JSON array [{issue}], so use .[0] wrapper
 log "Fetching task data from Beads..."
-ALL_TASKS_JSON=$(BEADS_DIR="$BEADS_DIR" /opt/homebrew/bin/bd list --json 2>/dev/null)
-
-# Create lookup table from all tasks
-echo "$ALL_TASKS_JSON" > "$GRAPH_DIR/all-tasks.json"
 
 for task_id in $TASK_IDS; do
-  # Extract task from all tasks JSON
-  task_json=$(echo "$ALL_TASKS_JSON" | jq -r ".[] | select(.id == \"$task_id\")")
+  # Get full task data including dependencies
+  # Use --allow-stale to bypass stale check when database has sync issues
+  task_json=$(BEADS_DIR="$BEADS_DIR" /opt/homebrew/bin/bd --no-daemon --allow-stale show "$task_id" --json 2>/dev/null)
 
   if [ -z "$task_json" ]; then
     log_error "Task $task_id not found"
@@ -130,8 +129,9 @@ for task_id in $TASK_IDS; do
     exit 1
   fi
 
-  # Extract dependencies and save to file
-  deps=$(echo "$task_json" | jq -r '.dependencies[]?.id' | tr '\n' ' ' | sed 's/ $//')
+  # Extract dependencies from array and save to file
+  # bd show returns [{...}], so use .[0].dependencies[].id
+  deps=$(echo "$task_json" | jq -r '.[0].dependencies[]?.id' | tr '\n' ' ' | sed 's/ $//')
   echo "$deps" > "$GRAPH_DIR/${task_id}-deps"
 
   # RESUME MODE: Mark previously completed tasks

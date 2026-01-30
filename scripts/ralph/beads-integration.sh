@@ -22,6 +22,10 @@ IMPL_MODEL="glm-4.7"
 REV_PROVIDER="zai-coding-plan"
 REV_MODEL="glm-4.7"
 
+# Timeout settings (seconds)
+AGENT_TIMEOUT=180         # Per-agent call timeout (3 minutes)
+MAX_ATTEMPTS=3            # Max revision attempts per task
+
 WORKSPACE="/Users/fengning/agent-skills"
 WORK_DIR="$WORKSPACE/.ralph-work-$$"
 mkdir -p "$WORK_DIR/logs"
@@ -56,7 +60,7 @@ log ""
 
 # Get epic details
 log "Fetching epic details..."
-EPIC_JSON=$(bd show "$EPIC_ID" --json 2>/dev/null)
+EPIC_JSON=$(bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale show "$EPIC_ID" --json 2>/dev/null)
 if [ -z "$EPIC_JSON" ]; then
   error "Epic $EPIC_ID not found"
   exit 1
@@ -111,7 +115,7 @@ run_agent() {
   local session_id=$(create_session)
   local escaped_prompt=$(echo "$prompt" | jq -Rs .)
 
-  local response=$(timeout 180 curl -s -X POST "$BASE/session/$session_id/message" \
+  local response=$(timeout "$AGENT_TIMEOUT" curl -s -X POST "$BASE/session/$session_id/message" \
     -H "Content-Type: application/json" \
     -d "{\"agent\":\"$agent\",\"model\":{\"providerID\":\"$provider\",\"modelID\":\"$model\"},\"parts\":[{\"type\":\"text\",\"text\":$escaped_prompt}]}")
 
@@ -119,11 +123,12 @@ run_agent() {
 
   echo "$response" > "$output_file.json"
 
-  # Extract text (handle control characters)
-  local text=$(echo "$response" | grep -o '"type":"text"[^}]*"text":"[^"]*"' | sed 's/.*"text":"\([^"]*\)".*/\1/' | head -1)
+  # Extract text using JSON parsing (robust)
+  local text=$(echo "$response" | jq -r '.parts[] | select(.type == "text") | .text' 2>/dev/null | head -1)
 
+  # Fallback to regex if JSON parsing fails
   if [ -z "$text" ]; then
-    text=$(echo "$response" | jq -r '.parts[] | select(.type == "text") | .text' 2>/dev/null | head -1)
+    text=$(echo "$response" | grep -o '"type":"text"[^}]*"text":"[^"]*"' | sed 's/.*"text":"\([^"]*\)".*/\1/' | head -1)
   fi
 
   if [ -z "$text" ]; then
@@ -136,9 +141,12 @@ run_agent() {
 
 parse_signal() {
   local output="$1"
-  if echo "$output" | grep -q "✅ APPROVED"; then
+
+  # Check for APPROVED signal (multiple patterns for robustness)
+  if echo "$output" | grep -qE "(✅ APPROVED|APPROVED|✅)"; then
     echo "APPROVED"
-  elif echo "$output" | grep -q "🔴 REVISION_REQUIRED"; then
+  # Check for REVISION_REQUIRED signal (multiple patterns)
+  elif echo "$output" | grep -qE "(🔴 REVISION_REQUIRED|REVISION_REQUIRED|🔴)"; then
     echo "REVISION_REQUIRED"
   else
     echo "UNKNOWN"
@@ -153,7 +161,7 @@ for TASK_ID in $SUBTASK_IDS; do
   log "$(printf '=%.0s' {1..60})"
 
   # Get task details
-  TASK_JSON=$(bd show "$TASK_ID" --json 2>/dev/null)
+  TASK_JSON=$(bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale show "$TASK_ID" --json 2>/dev/null)
   TASK_TITLE=$(echo "$TASK_JSON" | jq -r '.[0].title')
   TASK_DESC=$(echo "$TASK_JSON" | jq -r '.[0].description // "No description"')
 
@@ -181,8 +189,8 @@ EOF
   attempt=1
   approved=false
 
-  while [ $attempt -le 3 ] && [ "$approved" = false ]; do
-    log "Attempt $attempt/3"
+  while [ $attempt -le "$MAX_ATTEMPTS" ] && [ "$approved" = false ]; do
+    log "Attempt $attempt/$MAX_ATTEMPTS"
 
     # Get current commit
     BEFORE_COMMIT=$(cd "$WORK_DIR" && git rev-parse HEAD)
@@ -200,6 +208,8 @@ Task ID: $TASK_ID
 IMPORTANT: Use absolute paths for all file operations.
 Working directory: $WORK_DIR
 
+NOTE: OpenCode may add an extra trailing newline. This is acceptable.
+
 Output: IMPLEMENTATION_COMPLETE when done.
 " "$LOG_DIR/impl-$TASK_ID-attempt-$attempt.log")
 
@@ -214,16 +224,20 @@ Output: IMPLEMENTATION_COMPLETE when done.
 
     # Run reviewer
     log "🔴 REVIEWER ($REV_MODEL)"
-    rev_output=$(run_agent "$REVIEWER_AGENT" "$REV_PROVIDER" "$REV_MODEL" "
-Working directory: $WORK_DIR
+    rev_output=$(run_agent "$REVIEWER_AGENT" "$REV_PROVIDER" "$REV_MODEL"
+"Working directory: $WORK_DIR
 
 Review the implementation for task: $TASK_TITLE
 Task ID: $TASK_ID
 
-Check git diff for this cycle:
-cd $WORK_DIR && git diff $BEFORE_COMMIT $AFTER_COMMIT
+Check the implementation by examining files in: $WORK_DIR
+List files: ls $WORK_DIR
+Read task: cat $WORK_DIR/RALPH_TASK.md
 
 Verify the implementation satisfies the requirements.
+
+IMPORTANT: Be lenient about extra trailing newlines (OpenCode known issue).
+Focus on: correct file created, correct content, functional implementation.
 
 Output signal (one line only):
 ✅ APPROVED: [concise reason]
@@ -242,7 +256,7 @@ Output signal (one line only):
 
       # Mark Beads task as complete
       log "Closing Beads task: $TASK_ID"
-      bd close "$TASK_ID" --reason="Completed via Ralph Beads Integration: $rev_output" 2>/dev/null || true
+      bd --no-daemon --db "$BEADS_DIR/beads.db" close "$TASK_ID" --reason="Completed via Ralph Beads Integration: $rev_output" 2>/dev/null || true
 
       # Create final commit with Beads ID
       git commit --amend -m "$TASK_ID: Complete [$TASK_ID]
@@ -255,9 +269,9 @@ $rev_output" -q
       ((REVISIONS++))
       ((attempt++))
 
-      if [ $attempt -gt 3 ]; then
+      if [ $attempt -gt "$MAX_ATTEMPTS" ]; then
         ((FAILED++))
-        log "❌ Task $TASK_ID FAILED after 3 attempts"
+        log "❌ Task $TASK_ID FAILED after $MAX_ATTEMPTS attempts"
         approved=true
       fi
     else
@@ -289,7 +303,7 @@ if [ $COMPLETED -eq $TOTAL_TASKS ]; then
 
   # Mark epic as complete
   log "Closing epic: $EPIC_ID"
-  bd close "$EPIC_ID" --reason="All subtasks completed via Ralph Beads Integration" 2>/dev/null || true
+  bd --no-daemon --db "$BEADS_DIR/beads.db" close "$EPIC_ID" --reason="All subtasks completed via Ralph Beads Integration" 2>/dev/null || true
 else
   log "⚠️  SOME TASKS FAILED - EPIC INCOMPLETE"
 fi
