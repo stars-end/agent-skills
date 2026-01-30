@@ -135,8 +135,15 @@ run_agent() {
     text="ERROR: No response"
   fi
 
-  # Use printf for safer output with special characters
-  printf '%s\n' "$text" > "$output_file"
+  # Remove markdown code blocks if present (LLMs often wrap responses in ```text```)
+  text=$(echo "$text" | sed 's/^```\s*//; s/\s*```\s*$//')
+
+  # Write output file (more robust)
+  {
+    printf '%s\n' "$text" > "$output_file" 2>/dev/null || echo "Failed to write to: [$output_file]"
+  } 2>&1
+
+  # Return the text
   printf '%s\n' "$text"
 }
 
