@@ -1,10 +1,25 @@
 # DX Bootstrap Contract
 
+> **⚠️ DEPRECATED (2026-01-30)**
+>
+> This document has been **deprecated** in favor of **AGENTS.md**, which is now the canonical reference.
+>
+> **Migration Guide:**
+> - Session Start Bootstrap → See "Session Start Bootstrap" in AGENTS.md
+> - Beads Feature-Key Trailers → See "Beads Integration" in AGENTS.md
+> - Platform-Specific Hooks → See "Platform-Specific Session Start Hooks" in AGENTS.md
+> - DX_AGENT_ID specification → See DX_AGENT_ID.md
+> - Required CLI tools → See infra/vm-bootstrap/SKILL.md
+>
+> **Please use AGENTS.md as your primary reference going forward.**
+
+---
+
 **Version**: 1.0
-**Status**: Canonical Reference
+**Status**: DEPRECATED - See AGENTS.md
 **Applies to**: All repos (prime-radiant-ai, affordabot, llm-common, agent-skills)
 
-This document defines the **mandatory bootstrap sequence** for AI agents working across the Stars-End multi-repo ecosystem.
+This document defined the **mandatory bootstrap sequence** for AI agents working across the Stars-End multi-repo ecosystem. **Content has been migrated to AGENTS.md.**
 
 ---
 

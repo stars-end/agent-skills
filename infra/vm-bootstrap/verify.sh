@@ -6,7 +6,9 @@
 #   install - Prompt before each install
 #   strict  - Exit non-zero on first missing required tool
 
-set -euo pipefail
+# Note: Using set -u -o pipefail instead of set -e to avoid premature exit
+# Functions handle their own error returns appropriately
+set -uo pipefail
 
 # ============================================================================
 # Configuration
@@ -107,18 +109,34 @@ verify_mise_tool() {
     local name="$1"
     local tool="$2"
     local version_flag="${3:---version}"
-    
-    if check_cmd mise && mise exec -- "$tool" "$version_flag" >/dev/null 2>&1; then
-        local version
-        version=$(mise exec -- "$tool" "$version_flag" 2>&1 | head -1)
-        success "$name (mise): $version"
-        return 0
-    elif check_cmd "$tool"; then
-        local version
+
+    # Disable set -e locally for this function since we handle errors
+    local old_opts="$-"
+    set +e
+
+    local version=""
+    local found=0
+
+    # Try mise first
+    if check_cmd mise; then
+        if mise exec -- "$tool" "$version_flag" >/dev/null 2>&1; then
+            version=$(mise exec -- "$tool" "$version_flag" 2>&1 | head -1)
+            success "$name (mise): $version"
+            found=1
+        fi
+    fi
+
+    # Fallback to system command
+    if [[ $found -eq 0 ]] && check_cmd "$tool"; then
         version=$("$tool" "$version_flag" 2>&1 | head -1)
         success "$name (system): $version"
-        return 0
-    else
+        found=1
+    fi
+
+    # Restore options
+    [[ "$old_opts" == *e* ]] && set -e
+
+    if [[ $found -eq 0 ]]; then
         ((REQUIRED_MISSING++))
         error "$name: NOT FOUND"
         if [[ "$MODE" == "strict" ]]; then
@@ -127,6 +145,8 @@ verify_mise_tool() {
         fi
         return 1
     fi
+
+    return 0
 }
 
 verify_gh_auth() {

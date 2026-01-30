@@ -94,6 +94,79 @@ bd create "Fix auth timeout bug" --type bug --priority 2
 
 ---
 
+## Session Start Bootstrap (Mandatory Sequence)
+
+**Every agent session MUST execute these steps in order:**
+
+### 1. Git Sync
+```bash
+cd ~/your-repo
+git pull origin master
+```
+
+**Purpose**: Ensure working directory matches latest team state
+**Failure mode**: If pull fails, resolve conflicts before proceeding
+
+### 2. DX Check
+```bash
+# Canonical baseline check (all repos)
+dx-check
+
+# Optional: Full diagnostics
+dx-doctor
+```
+
+**Purpose**: Preflight check for:
+- Canonical clones on trunk + clean (where required)
+- Toolchain presence (mise, gh, railway, op, etc.)
+- Optional MCP configuration — warn-only
+
+**Failure mode**:
+- ❌ Missing REQUIRED items → fix before proceeding
+- ⚠️ Missing OPTIONAL items → note but continue
+
+---
+
+## Beads Integration
+
+### Beads State Sync
+
+**Before starting work**:
+```bash
+bd sync --dry-run  # Check for remote changes
+bd sync            # Pull latest JSONL from remote
+```
+
+**Failure mode**: Merge conflicts in `.beads/*.jsonl`
+- Use `beads-guard` skill for conflict prevention
+- Resolve manually if conflicts occur
+
+### Feature-Key Trailers
+
+**All commits MUST include**:
+```
+Feature-Key: {beads-id}
+Agent: {routing-name or DX_AGENT_ID}
+Role: {engineer-type}
+```
+
+**Examples**:
+- `Feature-Key: bd-3871.5`
+- `Agent: epyc6-codex-cli` (recommended: use `$DX_AGENT_ID`)
+- `Role: backend-engineer`
+
+### Beads CLI Reference
+
+| Command | Purpose |
+|---------|---------|
+| `bd list` | Show all issues |
+| `bd create "title" --type task` | Create new issue |
+| `bd start bd-xxx` | Start working on issue |
+| `bd sync` | Pull latest JSONL from remote |
+| `bd export -o .beads/issues.jsonl` | Export to JSONL |
+
+---
+
 ## Skills (agentskills.io Format)
 
 Skills are stored in `~/agent-skills/*/SKILL.md` using the [agentskills.io](https://agentskills.io) open standard.
@@ -379,6 +452,53 @@ The agent-skills repo provides global workflow skills, while each product repo h
 
 Never duplicate global skills in product repos. They are auto-discovered from `~/agent-skills`.
 
+---
+
+## Platform-Specific Session Start Hooks
+
+For automated bootstrap at session start, configure these hooks in your IDE:
+
+### Claude Code
+
+**SessionStart hook** (`.claude/hooks/SessionStart/dx-bootstrap.sh`):
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 1. Git sync
+git pull origin master || echo "⚠️  git pull failed (resolve conflicts)"
+
+# 2. DX check
+dx-check || true
+
+# 3. Optional coordinator stack checks
+dx-doctor || true
+
+echo "✅ DX bootstrap complete"
+```
+
+### Codex CLI
+
+**Config** (`~/.codex/config.toml`):
+```toml
+[session]
+on_start = "bash ~/.agent/skills/session-start-hooks/dx-bootstrap.sh"
+```
+
+### Antigravity
+
+**Config** (`~/.antigravity/config.yaml`):
+```yaml
+session:
+  on_start:
+    - git pull origin master
+    - dx-check || true
+    - dx-doctor || true
+```
+
+**See also**: `docs/IDE_SPECS.md` for full IDE configuration details.
+
+---
 
 ## Landing the Plane (Session Completion)
 
