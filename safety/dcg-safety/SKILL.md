@@ -1,5 +1,12 @@
 ---
 name: dcg-safety
+activation:
+  - "git reset --hard"
+  - "force push"
+  - "delete branch"
+  - "rm -rf"
+  - "drop table"
+  - "dangerous command"
 description: |
   Destructive Command Guard (DCG) safety hook for all AI coding agents.
   Rust-based PreToolUse hook that blocks dangerous git and filesystem commands.

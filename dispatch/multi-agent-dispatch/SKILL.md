@@ -1,5 +1,12 @@
 ---
 name: multi-agent-dispatch
+activation:
+  - "dispatch task"
+  - "run on vm"
+  - "switch vm"
+  - "jules dispatch"
+  - "remote task"
+  - "cross-vm"
 description: Cross-VM task dispatch using dx-dispatch (canonical). Supports SSH dispatch to canonical VMs (homedesktop-wsl, macmini, epyc6), Jules Cloud dispatch for async work, and fleet orchestration.
 ---
 

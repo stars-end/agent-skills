@@ -30,15 +30,25 @@ if [ -f "AGENTS.local.md" ]; then
         fi
     }
 
-    GLOBAL_SRC=~/agent-skills/AGENTS.md
+    GLOBAL_SRC=~/agent-skills/AGENTS.global.md
     if [ -f "$GLOBAL_SRC" ]; then
         GLOBAL_HASH=$(get_hash "$GLOBAL_SRC")
         LOCAL_HASH=$(get_hash "AGENTS.local.md")
         
+        CONTEXT_HASH="none"
+        if [ -d ".claude/skills" ]; then
+            if command -v md5sum >/dev/null 2>&1; then
+                CONTEXT_HASH=$(find ".claude/skills" -name "SKILL.md" -exec cat {} \; 2>/dev/null | md5sum | cut -d' ' -f1)
+            else
+                CONTEXT_HASH=$(find ".claude/skills" -name "SKILL.md" -exec cat {} \; 2>/dev/null | md5 -q)
+            fi
+        fi
+        
         COMPILED_HASH=$(head -n 5 AGENTS.md 2>/dev/null | grep -o 'global-hash:[a-f0-9]*' | cut -d: -f2 || echo "none")
         COMPILED_LOCAL_HASH=$(head -n 5 AGENTS.md 2>/dev/null | grep -o 'local-hash:[a-f0-9]*' | cut -d: -f2 || echo "none")
+        COMPILED_CONTEXT_HASH=$(head -n 5 AGENTS.md 2>/dev/null | grep -o 'context-hash:[a-f0-9]*' | cut -d: -f2 || echo "none")
 
-        if [ "$GLOBAL_HASH" != "$COMPILED_HASH" ] || [ "$LOCAL_HASH" != "$COMPILED_LOCAL_HASH" ]; then
+        if [ "$GLOBAL_HASH" != "$COMPILED_HASH" ] || [ "$LOCAL_HASH" != "$COMPILED_LOCAL_HASH" ] || [ "$CONTEXT_HASH" != "$COMPILED_CONTEXT_HASH" ]; then
             echo -e "${BLUE}⚠️  AGENTS.md stale - recompiling...${RESET}"
             "${SCRIPT_DIR}/compile_agent_context.sh" .
         fi

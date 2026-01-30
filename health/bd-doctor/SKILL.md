@@ -1,5 +1,11 @@
 ---
 name: bd-doctor
+activation:
+  - "fix beads"
+  - "check beads"
+  - "beads sync failing"
+  - "beads doctor"
+  - "jsonl sync error"
 description: Check and fix common Beads workflow issues across all repos.
 ---
 

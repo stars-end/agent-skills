@@ -1,5 +1,12 @@
 ---
 name: finish-feature
+activation:
+  - "finish feature"
+  - "close epic"
+  - "archive work"
+  - "cleanup branch"
+  - "delete branch"
+  - "finish work"
 description: |
   Complete epic with cleanup and archiving, or verify feature already closed. MUST BE USED when finishing epics/features.
   For epics: Verifies children closed, archives docs, closes epic.

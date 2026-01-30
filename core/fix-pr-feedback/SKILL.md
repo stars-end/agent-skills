@@ -1,5 +1,12 @@
 ---
 name: fix-pr-feedback
+activation:
+  - "fix PR"
+  - "address feedback"
+  - "fix CI"
+  - "resolve comments"
+  - "handle feedback"
+  - "update PR"
 description: |
   Address PR feedback with iterative refinement. MUST BE USED when fixing PR issues.
   Supports auto-detection (CI failures, code review) and manual triage (user reports bugs). Creates Beads issues for all problems, fixes systematically.

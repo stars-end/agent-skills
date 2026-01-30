@@ -1,5 +1,12 @@
 ---
 name: sync-feature-branch
+activation:
+  - "commit work"
+  - "save work"
+  - "git commit"
+  - "sync branch"
+  - "save progress"
+  - "checkpoint"
 description: |
   Commit current work to feature branch with Beads metadata tracking and git integration. MUST BE USED for all commit operations.
   Handles Feature-Key trailers, Beads status updates, and optional quick linting before commit.

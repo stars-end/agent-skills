@@ -1,5 +1,12 @@
 ---
 name: create-pull-request
+activation:
+  - "create PR"
+  - "open PR"
+  - "merge into master"
+  - "ready for review"
+  - "pull request"
+  - "submit PR"
 description: |
   Create GitHub pull request with atomic Beads issue closure. MUST BE USED for opening PRs.
   Asks if work is complete - if YES, closes Beads issue BEFORE creating PR (JSONL merges atomically with code).

@@ -1,5 +1,12 @@
 ---
 name: beads-workflow
+activation:
+  - "create issue"
+  - "track work"
+  - "start feature"
+  - "finish feature"
+  - "close issue"
+  - "find work"
 description: |
   Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations.
   Handles full epic→branch→work lifecycle, dependencies, and ready task queries.

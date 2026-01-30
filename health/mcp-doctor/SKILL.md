@@ -1,5 +1,11 @@
 ---
 name: mcp-doctor
+activation:
+  - "check mcp"
+  - "mcp status"
+  - "mcp health"
+  - "verify mcp"
+  - "debug mcp"
 description: |
   Warn-only health check for canonical MCP configuration and related DX tooling.
   Strict mode is opt-in via MCP_DOCTOR_STRICT=1.

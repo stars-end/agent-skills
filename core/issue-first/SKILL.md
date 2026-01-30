@@ -1,5 +1,12 @@
 ---
 name: issue-first
+activation:
+  - "start work"
+  - "implement feature"
+  - "fix bug"
+  - "create task"
+  - "new issue"
+  - "begin work"
 description: |
   Enforce Issue-First pattern by creating Beads tracking issue BEFORE implementation. MUST BE USED for all implementation work.
   Classifies work type (epic/feature/task/bug/chore), determines priority (0-4), finds parent in hierarchy, creates issue, then passes control to implementation.
