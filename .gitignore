@@ -17,3 +17,8 @@ debug_backends.py
 mcp_agent_mail_reference/
 .beads/interactions.jsonl
 node_modules/
+
+# Ralph work directories
+.ralph-test-*/
+.ralph-validate-*
+.ralph-work-*/
