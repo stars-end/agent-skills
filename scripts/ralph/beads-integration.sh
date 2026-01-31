@@ -26,6 +26,9 @@ REV_MODEL="glm-4.7"
 AGENT_TIMEOUT=180         # Per-agent call timeout (3 minutes)
 MAX_ATTEMPTS=3            # Max revision attempts per task
 
+# Environment Variables
+KEEP_WORKDIR="${KEEP_WORKDIR:-0}"  # Keep work directory after completion (for debugging)
+
 WORKSPACE="/Users/fengning/agent-skills"
 WORK_DIR="$WORKSPACE/.ralph-work-$$"
 mkdir -p "$WORK_DIR/logs"
@@ -163,6 +166,34 @@ parse_signal() {
     echo "REVISION_REQUIRED"
   else
     echo "UNKNOWN"
+  fi
+}
+
+# Cleanup function to remove work directory after session completion
+cleanup_workdir() {
+  if [ -d "$WORK_DIR" ]; then
+    if [ "$KEEP_WORKDIR" = "1" ]; then
+      log "Work directory preserved at: $WORK_DIR (KEEP_WORKDIR=1)"
+      return 0
+    fi
+
+    log "Cleaning up work directory: $WORK_DIR"
+
+    # Remove the work directory
+    if rm -rf "$WORK_DIR" 2>/dev/null; then
+      log "✓ Work directory cleaned up successfully"
+    else
+      error "Failed to clean up work directory: $WORK_DIR"
+      return 1
+    fi
+
+    # Prune git worktree metadata from canonical repos
+    log "Pruning git worktree metadata..."
+    for repo in "$WORKSPACE"; do
+      if [ -d "$repo/.git" ]; then
+        git -C "$repo" worktree prune 2>/dev/null || true
+      fi
+    done
   fi
 }
 
@@ -326,7 +357,10 @@ REMAINING=$(curl -s "$BASE/session" | jq 'length' 2>/dev/null || echo "0")
 log "Remaining OpenCode sessions: $REMAINING"
 
 log ""
-log "Work directory preserved at: $WORK_DIR"
+
+# Cleanup work directory after session completion
+cleanup_workdir
+
 log "Logs available at: $LOG_DIR"
 
 if [ $FAILED -eq 0 ] && [ $COMPLETED -eq $TOTAL_TASKS ]; then

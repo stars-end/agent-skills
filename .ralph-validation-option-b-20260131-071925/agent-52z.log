@@ -1,0 +1,20 @@
+[07:19:25] === Ralph Beads Integration ===
+[07:19:25] Epic ID: agent-52z
+[07:19:25] Work directory: /Users/fengning/agent-skills/.ralph-work-82052
+[07:19:25] 
+[07:19:25] Fetching epic details...
+[07:19:26] Epic: Document edge cases and patterns
+[07:19:26] Description: Analyze results and document findings.
+
+## Document
+1. What types of tasks work well
+2. What causes failures
+3. Common error patterns
+4. Recommended task criteria for Ralph
+
+## Success Criteria
+- Document created in docs/ralph/
+- Task suitability checklist defined
+[07:19:26] 
+[07:19:26] Fetching subtasks...
+[07:19:26] ERROR: No subtasks found for epic agent-52z

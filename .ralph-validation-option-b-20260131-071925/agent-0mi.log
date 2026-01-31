@@ -1,0 +1,19 @@
+[07:19:27] === Ralph Beads Integration ===
+[07:19:27] Epic ID: agent-0mi
+[07:19:27] Work directory: /Users/fengning/agent-skills/.ralph-work-82483
+[07:19:27] 
+[07:19:27] Fetching epic details...
+[07:19:28] Epic: Add mise trust support to Ralph worktrees
+[07:19:28] Description: Add mise trust call after worktree creation in Ralph scripts.
+
+## Implementation
+- In run_single_task(), after worktree creation:
+  `mise trust --yes $worktree/.mise.toml 2>/dev/null || true`
+
+## Why
+- Ensures tool versions are correct in worktree
+- Consistent with dx-dispatch behavior
+- Prevents tool version mismatches
+[07:19:28] 
+[07:19:28] Fetching subtasks...
+[07:19:28] ERROR: No subtasks found for epic agent-0mi

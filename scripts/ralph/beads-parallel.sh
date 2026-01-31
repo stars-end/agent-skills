@@ -327,7 +327,7 @@ run_single_task() {
 
   # INTEGRATION: Add mise trust support
   log "  [$task_id] Worker $worker_num: Setting up mise trust..."
-  mise trust --yes "$worktree/.mise.toml" 2>/dev/null || true
+  mise trust --yes $worktree/.mise.toml 2>/dev/null || true
 
   # Run the beads integration script for this single task
   log "  [$task_id] Worker $worker_num: Starting Ralph loop..."

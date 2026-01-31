@@ -1,0 +1,22 @@
+[07:19:28] === Ralph Beads Integration ===
+[07:19:28] Epic ID: agent-5pk
+[07:19:28] Work directory: /Users/fengning/agent-skills/.ralph-work-82592
+[07:19:28] 
+[07:19:28] Fetching epic details...
+[07:19:28] Epic: Create troubleshooting guide
+[07:19:28] Description: Create docs/ralph/troubleshooting.md.
+
+## Content
+- Common errors and solutions
+- Debug mode (verbose logging)
+- How to recover from failures
+- How to resume interrupted runs
+- Orphaned OpenCode session cleanup
+- Beads database issues
+
+## Success Criteria
+- Can solve common issues without help
+- Debug tips for each error type
+[07:19:28] 
+[07:19:28] Fetching subtasks...
+[07:19:28] ERROR: No subtasks found for epic agent-5pk
