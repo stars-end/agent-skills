@@ -3,8 +3,6 @@
 # Validates environment before starting Ralph autonomous loop
 # Exit codes: 0 (pass with warnings), 1 (errors), 2 (fatal)
 
-set -e
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'

@@ -123,20 +123,33 @@ run_agent() {
 
   echo "$response" > "$output_file.json"
 
-  # Extract text using JSON parsing (robust)
-  local text=$(echo "$response" | jq -r '.parts[] | select(.type == "text") | .text' 2>/dev/null | head -1)
+  # Extract text using JSON parsing - get first text part with full content (no head -1, text may contain newlines)
+  local text=$(echo "$response" | jq -r '.parts[] | select(.type == "text") | .text' 2>/dev/null)
 
-  # Fallback to regex if JSON parsing fails
+  # Fallback to regex if JSON parsing fails (no head -1 here either)
   if [ -z "$text" ]; then
-    text=$(echo "$response" | grep -o '"type":"text"[^}]*"text":"[^"]*"' | sed 's/.*"text":"\([^"]*\)".*/\1/' | head -1)
+    text=$(echo "$response" | grep -o '"type":"text"[^}]*"text":"[^"]*"' | sed 's/.*"text":"\([^"]*\)".*/\1/')
   fi
 
   if [ -z "$text" ]; then
     text="ERROR: No response"
   fi
 
-  echo "$text" > "$output_file"
-  echo "$text"
+  # Remove markdown code blocks if present (LLMs often wrap responses in ```text```)
+  text=$(echo "$text" | sed 's/^```\s*//; s/\s*```\s*$//')
+
+  # Check if text is empty after markdown stripping (agent returned only ``` markers)
+  if [ -z "$text" ]; then
+    text="ERROR: Empty agent response after markdown stripping"
+  fi
+
+  # Write output file (more robust)
+  {
+    printf '%s\n' "$text" > "$output_file" 2>/dev/null || echo "Failed to write to: [$output_file]"
+  } 2>&1
+
+  # Return the text
+  printf '%s\n' "$text"
 }
 
 parse_signal() {
@@ -197,8 +210,8 @@ EOF
 
     # Run implementer
     log "🟢 IMPLEMENTER ($IMPL_MODEL)"
-    impl_output=$(run_agent "$IMPLEMENTER_AGENT" "$IMPL_PROVIDER" "$IMPL_MODEL" "
-Working directory: $WORK_DIR
+    # Store prompt in variable first (avoid multi-line string in command substitution)
+    impl_prompt="Working directory: $WORK_DIR
 
 Read the task from RALPH_TASK.md and implement it.
 
@@ -210,8 +223,8 @@ Working directory: $WORK_DIR
 
 NOTE: OpenCode may add an extra trailing newline. This is acceptable.
 
-Output: IMPLEMENTATION_COMPLETE when done.
-" "$LOG_DIR/impl-$TASK_ID-attempt-$attempt.log")
+Output: IMPLEMENTATION_COMPLETE when done."
+    impl_output=$(run_agent "$IMPLEMENTER_AGENT" "$IMPL_PROVIDER" "$IMPL_MODEL" "$impl_prompt" "$LOG_DIR/impl-$TASK_ID-attempt-$attempt.log")
 
     echo "$impl_output" >> "$LOG_DIR/test.log"
 
@@ -224,8 +237,8 @@ Output: IMPLEMENTATION_COMPLETE when done.
 
     # Run reviewer
     log "🔴 REVIEWER ($REV_MODEL)"
-    rev_output=$(run_agent "$REVIEWER_AGENT" "$REV_PROVIDER" "$REV_MODEL"
-"Working directory: $WORK_DIR
+    # Store prompt in variable first (avoid multi-line string in command substitution)
+    rev_prompt="Working directory: $WORK_DIR
 
 Review the implementation for task: $TASK_TITLE
 Task ID: $TASK_ID
@@ -241,8 +254,8 @@ Focus on: correct file created, correct content, functional implementation.
 
 Output signal (one line only):
 ✅ APPROVED: [concise reason]
-🔴 REVISION_REQUIRED: [specific issue]
-" "$LOG_DIR/rev-$TASK_ID-attempt-$attempt.log")
+🔴 REVISION_REQUIRED: [specific issue]"
+    rev_output=$(run_agent "$REVIEWER_AGENT" "$REV_PROVIDER" "$REV_MODEL" "$rev_prompt" "$LOG_DIR/rev-$TASK_ID-attempt-$attempt.log")
 
     echo "$rev_output" >> "$LOG_DIR/test.log"
 
