@@ -19,6 +19,21 @@ RESET='\033[0m'
 # Get repo name from current directory
 REPO_NAME="$(basename "$(git rev-parse --show-toplevel)")"
 
+# Get current branch
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+
+# ============================================================================
+# SECTION 0: Auto-checkpoint bypass
+# ============================================================================
+# Auto-checkpoint branches must bypass ALL safety checks to work.
+# These are automated recovery branches, not human feature branches.
+# If we block them, work never gets saved (defeats the purpose).
+
+if [[ "$CURRENT_BRANCH" == wip/auto/* ]] || [[ "$CURRENT_BRANCH" == auto-checkpoint/* ]]; then
+    # Allow auto-checkpoint pushes without any checks
+    exit 0
+fi
+
 # ============================================================================
 # SECTION 1: Railway environment check
 # ============================================================================

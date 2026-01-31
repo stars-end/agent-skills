@@ -166,7 +166,7 @@ if command -v bd >/dev/null 2>&1; then
 else
     warn "Beads CLI (bd) not found"
     info "Install Beads per: https://github.com/beadshq/beads"
-    info "Typically: npm install -g @beadshq/beads-cli"
+    info "Typically: npm install -g @beads/bd"
 fi
 
 echo ""
@@ -205,6 +205,6 @@ info "2. Clone repos: ~/prime-radiant-ai, ~/affordabot, ~/agent-skills"
 info "3. Run 'mise install' in each repo"
 info "4. Run 'gh auth login' to authenticate"
 info "5. Run 'railway login' (in mise-enabled repo) to authenticate"
-info "6. Run '~/agent-skills/vm-bootstrap/verify.sh check' to verify"
+info "6. Run '~/agent-skills/infra/vm-bootstrap/verify.sh check' to verify"
 
 echo ""
