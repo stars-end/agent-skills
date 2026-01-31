@@ -206,6 +206,46 @@ for repo in "${ALL_REPOS[@]}"; do
     fi
 done
 
+# 2.7 BEADS_DIR Check (CRITICAL - External Database Requirement)
+echo ""
+echo "--- External Beads Database (BEADS_DIR) ---"
+check_beads_dir() {
+    local expected_path="$HOME/bd/.beads"
+
+    if [ -z "${BEADS_DIR:-}" ]; then
+        echo -e "${RED}❌ BEADS_DIR not set${RESET}"
+        echo "   All agents MUST use the external beads database."
+        echo "   Fix: cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh && source ~/.bashrc"
+        ERRORS=$((ERRORS+1))
+        return
+    fi
+
+    # Normalize paths for comparison
+    local beads_dir_real=$(resolve_path "$BEADS_DIR")
+    local expected_real=$(resolve_path "$expected_path")
+
+    if [ "$beads_dir_real" != "$expected_real" ]; then
+        echo -e "${YELLOW}⚠️  BEADS_DIR points to non-standard location${RESET}"
+        echo "   Current: $BEADS_DIR"
+        echo "   Expected: $expected_path"
+        echo "   If this is intentional, ensure all VMs use the same path."
+        WARNINGS=$((WARNINGS+1))
+    else
+        echo -e "${GREEN}✅ BEADS_DIR = $BEADS_DIR${RESET}"
+    fi
+
+    # Verify database exists
+    if [ ! -f "$BEADS_DIR/beads.db" ]; then
+        echo -e "${RED}❌ Beads database not found at $BEADS_DIR${RESET}"
+        echo "   Fix: cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh"
+        ERRORS=$((ERRORS+1))
+    else
+        echo -e "${GREEN}✅ Database exists at $BEADS_DIR${RESET}"
+    fi
+}
+
+check_beads_dir
+
 # 2. Check Hooks (V3 Logic)
 echo "--- Git Hooks ---"
 PRIME_HOOK="$HOME/prime-radiant-ai/.git/hooks/pre-commit"

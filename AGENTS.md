@@ -119,11 +119,26 @@ dx-doctor
 **Purpose**: Preflight check for:
 - Canonical clones on trunk + clean (where required)
 - Toolchain presence (mise, gh, railway, op, etc.)
+- **BEADS_DIR environment variable set correctly**
 - Optional MCP configuration — warn-only
 
 **Failure mode**:
 - ❌ Missing REQUIRED items → fix before proceeding
 - ⚠️ Missing OPTIONAL items → note but continue
+
+### 2.5. Verify BEADS_DIR (CRITICAL)
+```bash
+# MUST be set for all agent sessions
+echo $BEADS_DIR
+# Expected output: /home/$USER/bd/.beads
+
+# If not set, run migration:
+cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh && source ~/.bashrc
+```
+
+**Purpose**: Ensure all agents use the centralized external beads database
+**Failure mode**: If BEADS_DIR is not set or points to local `.beads/`, the agent MUST migrate before proceeding
+**See**: External Beads Database section below for details
 
 ---
 
@@ -164,6 +179,160 @@ Role: {engineer-type}
 | `bd start bd-xxx` | Start working on issue |
 | `bd sync` | Pull latest JSONL from remote |
 | `bd export -o .beads/issues.jsonl` | Export to JSONL |
+
+---
+
+## External Beads Database (CRITICAL - ALL AGENTS)
+
+### Requirement
+
+**ALL agents MUST use the centralized external beads database via `BEADS_DIR` environment variable.**
+
+This eliminates rebase conflicts caused by `.beads/` files in code repositories and ensures all agents work from a single source of truth.
+
+### Verification
+
+**Every agent session MUST verify:**
+
+```bash
+# Check BEADS_DIR is set correctly
+echo $BEADS_DIR
+# Expected: /home/$USER/bd/.beads
+
+# If not set or wrong, run migration immediately
+cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh && source ~/.bashrc
+```
+
+### Why External DB?
+
+| Problem | Solution |
+|---------|----------|
+| `.beads/` files cause git rebase conflicts | External DB separate from code repos |
+| Each repo has isolated issues | Single shared database across all repos |
+| Multi-VM sync is complex | One `~/bd` repo synced via git |
+| Agent contexts fragment | All agents see same issues |
+
+### Architecture
+
+```
+~/bd/.beads/                    (Central database - ALL agents use this)
+├── beads.db                    (SQLite database)
+├── issues.jsonl                (Export format)
+├── config.yaml                 (Beads config)
+└── .git/                       (For multi-VM sync)
+```
+
+**Environment Variable:**
+```bash
+export BEADS_DIR="$HOME/bd/.beads"
+# Set automatically by migration script
+# Persisted in ~/.bashrc and ~/.zshrc
+```
+
+### VM Configuration
+
+| VM | BEADS_DIR | Status |
+|----|-----------|--------|
+| homedesktop-wsl | `~/bd/.beads` | Must be configured |
+| macmini | `~/bd/.beads` | Must be configured |
+| epyc6 | `~/bd/.beads` | Must be configured |
+
+### Migration
+
+**First-time setup (one-time per VM):**
+
+```bash
+cd ~/agent-skills
+./scripts/migrate-to-external-beads.sh
+source ~/.bashrc  # or source ~/.zshrc
+```
+
+**What migration does:**
+1. Backs up existing `.beads/` directories
+2. Creates `~/bd/.beads/` central database
+3. Exports and migrates existing issues
+4. Updates shell profiles with `BEADS_DIR`
+5. Verifies success
+
+### Agent Behavior
+
+**BEADS_DIR is automatically respected by:**
+
+- ✅ Claude Code (via `cc-glm` alias)
+- ✅ Antigravity (via session config)
+- ✅ Codex CLI (via session config)
+- ✅ Gemini CLI (via session config)
+- ✅ OpenCode (via systemd environment)
+
+**All `bd` commands automatically use `BEADS_DIR`:**
+```bash
+# These commands use ~/bd/.beads regardless of current directory
+cd ~/prime-radiant-ai
+bd list                    # Reads from ~/bd/.beads
+bd create "New task"        # Writes to ~/bd/.beads
+```
+
+### Code Repos Stay Clean
+
+**With BEADS_DIR set, code repos have NO `.beads/` changes:**
+```bash
+cd ~/prime-radiant-ai
+git status                  # No .beads/ changes shown
+git rebase master           # No .beads/ conflicts possible
+```
+
+### Cross-VM Sync (Optional)
+
+For multi-VM synchronization:
+
+```bash
+# On one VM, create GitHub repo (one-time)
+cd ~/bd
+gh repo create stars-end/bd --private
+git remote add origin git@github.com:stars-end/bd.git
+git push -u origin master
+
+# On other VMs, clone the database
+cd ~
+git clone git@github.com:stars-end/bd.git bd
+# BEADS_DIR already points to ~/bd/.beads
+```
+
+### Troubleshooting
+
+**BEADS_DIR not set:**
+```bash
+# Run migration
+cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh
+source ~/.bashrc
+```
+
+**bd can't find database:**
+```bash
+# Verify BEADS_DIR
+echo $BEADS_DIR
+ls -la $BEADS_DIR/beads.db
+
+# If missing, re-run migration
+cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh
+```
+
+**Need to access old local issues (rollback):**
+```bash
+# Temporarily unset BEADS_DIR
+unset BEADS_DIR
+cd ~/prime-radiant-ai
+bd list  # Uses local .beads/
+
+# Re-enable BEADS_DIR
+export BEADS_DIR="$HOME/bd/.beads"
+```
+
+### Documentation
+
+- **Migration script:** `scripts/migrate-to-external-beads.sh`
+- **DevOps review:** `docs/BEADS_EXTERNAL_DB_DEVOPS_REVIEW.md`
+- **Beads docs:** `~/beads/docs/WORKTREES.md` (BEADS_DIR documented)
 
 ---
 
