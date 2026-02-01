@@ -281,7 +281,7 @@ update_shell_profiles() {
     local bead_line="export BEADS_DIR=\"$CENTRAL_DB_PATH\""
     local marker="# External Beads Database (managed by migrate-to-external-beads.sh)"
 
-    for rc_file in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    for rc_file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.zshenv"; do
         if [ ! -f "$rc_file" ]; then
             continue
         fi
