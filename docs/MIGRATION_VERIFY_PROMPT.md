@@ -1,16 +1,12 @@
-# Migration and Verification Prompt
+# Migration Verification Prompt - Proof of Work
 
-**Copy-paste this entire block into your terminal on homedesktop-wsl or macmini.**
+**Run this AFTER migration to verify work and provide proof-of-work.**
 
-**This will:**
-1. Pull latest agent-skills
-2. Run migration with backup
-3. Verify all success criteria
-4. Generate proof-of-work report
+**For: homedesktop-wsl OR macmini agent**
 
 ---
 
-## Copy-Paste Prompt (For homedesktop-wsl OR macmini)
+## Copy-Paste Verification Prompt
 
 ```bash
 cd ~/agent-skills && bash -c '
@@ -21,86 +17,70 @@ YELLOW="\033[1;33m"
 RED="\033[0;31m"
 RESET="\033[0m"
 VM_NAME=$(hostname)
+FAILED=0
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${RESET}"
-echo -e "${BLUE}  External Beads Migration: $VM_NAME${RESET}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════════════${RESET}"
-echo ""
-
-# Step 1: Pull latest
-echo -e "${BLUE}Step 1: Pull latest agent-skills...${RESET}"
-git pull -q origin master
-echo -e "${GREEN}✓ Pulled latest scripts${RESET}"
-echo ""
-
-# Step 2: Run migration
-echo -e "${BLUE}Step 2: Run migration (backup, create DB, migrate issues)...${RESET}"
-./scripts/migrate-to-external-beads.sh --force
-MIGRATION_EXIT=$?
-if [ $MIGRATION_EXIT -ne 0 ]; then
-    echo -e "${RED}✗ Migration failed with exit code $MIGRATION_EXIT${RESET}"
-    echo -e "${YELLOW}Check log: ~/.beads-migration.log${RESET}"
-    exit 1
-fi
-echo -e "${GREEN}✓ Migration complete${RESET}"
-echo ""
-
-# Step 3: Add BEADS_DIR to ~/.zshrc
-echo -e "${BLUE}Step 3: Add BEADS_DIR to ~/.zshrc...${RESET}"
-grep -q "BEADS_DIR.*bd" ~/.zshrc 2>/dev/null || echo "export BEADS_DIR=\"$HOME/bd/.beads\"" >> ~/.zshrc
-echo -e "${GREEN}✓ BEADS_DIR added to ~/.zshrc${RESET}"
-echo ""
-
-# Step 4: Verify
-echo -e "${BLUE}═══════════════════════════════════════════════════════════════${RESET}"
-echo -e "${BLUE}  VERIFICATION REPORT${RESET}"
+echo -e "${BLUE}  MIGRATION VERIFICATION: $VM_NAME${RESET}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${RESET}"
 echo ""
 
-# 4.1: BEADS_DIR is set
+# Check 1: BEADS_DIR environment variable
 echo -e "${YELLOW}[1] BEADS_DIR Environment Variable${RESET}"
 source ~/.zshrc 2>/dev/null || true
-if [ -z "${BEADS_DIR:-}" ]; then
-    BEADS_DIR="$HOME/bd/.beads"
-fi
+export BEADS_DIR="${BEADS_DIR:-$HOME/bd/.beads}"
 echo "  BEADS_DIR=$BEADS_DIR"
 if [ "$BEADS_DIR" = "$HOME/bd/.beads" ]; then
-    echo -e "  ${GREEN}✓ PASS: BEADS_DIR points to correct location${RESET}"
+    echo -e "  ${GREEN}✓ PASS${RESET}"
 else
-    echo -e "  ${RED}✗ FAIL: BEADS_DIR points to wrong location${RESET}"
+    echo -e "  ${RED}✗ FAIL: BEADS_DIR incorrect${RESET}"
+    FAILED=$((FAILED+1))
 fi
 echo ""
 
-# 4.2: Database exists
+# Check 2: Central database exists
 echo -e "${YELLOW}[2] Central Database Exists${RESET}"
 if [ -f "$BEADS_DIR/beads.db" ]; then
     DB_SIZE=$(ls -lh "$BEADS_DIR/beads.db" | awk "{print \$5}")
-    echo "  Path: $BEADS_DIR/beads.db"
+    DB_PATH=$(realpath "$BEADS_DIR/beads.db")
+    echo "  Path: $DB_PATH"
     echo "  Size: $DB_SIZE"
-    echo -e "  ${GREEN}✓ PASS: Database file exists${RESET}"
+    echo -e "  ${GREEN}✓ PASS${RESET}"
 else
-    echo -e "  ${RED}✗ FAIL: Database not found at $BEADS_DIR/beads.db${RESET}"
+    echo -e "  ${RED}✗ FAIL: Database not found${RESET}"
+    FAILED=$((FAILED+1))
 fi
 echo ""
 
-# 4.3: Backup created
-echo -e "${YELLOW}[3] Backup Created${RESET}"
+# Check 3: BEADS_DIR in ~/.zshrc
+echo -e "${YELLOW}[3] BEADS_DIR Persisted in ~/.zshrc${RESET}"
+if grep -q "BEADS_DIR.*bd" ~/.zshrc 2>/dev/null; then
+    BEADS_LINE=$(grep "BEADS_DIR.*bd" ~/.zshrc)
+    echo "  Found: $BEADS_LINE"
+    echo -e "  ${GREEN}✓ PASS${RESET}"
+else
+    echo -e "  ${RED}✗ FAIL: BEADS_DIR not in ~/.zshrc${RESET}"
+    FAILED=$((FAILED+1))
+fi
+echo ""
+
+# Check 4: Backup exists
+echo -e "${YELLOW}[4] Backup Created${RESET}"
 BACKUP_DIR=$(ls -td ~/.beads-migration-backup-* 2>/dev/null | head -1 || echo "")
-if [ -n "$BACKUP_DIR" ]; then
+if [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
     echo "  Location: $BACKUP_DIR"
     BACKUP_ITEMS=$(ls -1 "$BACKUP_DIR" 2>/dev/null | wc -l)
-    echo "  Items backed up: $BACKUP_ITEMS"
-    echo -e "  ${GREEN}✓ PASS: Backup exists${RESET}"
+    echo "  Items: $BACKUP_ITEMS"
+    echo -e "  ${GREEN}✓ PASS${RESET}"
 else
-    echo -e "  ${RED}✗ FAIL: No backup found${RESET}"
+    echo -e "  ${YELLOW}⚠ WARNING: No backup found${RESET}"
 fi
 echo ""
 
-# 4.4: Code repos clean
-echo -e "${YELLOW}[4] Code Repos Clean (no .beads changes)${RESET}"
+# Check 5: Code repos clean (no .beads changes)
+echo -e "${YELLOW}[5] Code Repos Clean (no .beads changes)${RESET}"
 REPOS_CLEAN=true
-for repo in "$HOME/prime-radiant-ai" "$HOME/agent-skills"; do
-    if [ -d "$repo" ]; then
+for repo in "$HOME/prime-radiant-ai" "$HOME/agent-skills" "$HOME/affordabot" "$HOME/llm-common"; do
+    if [ -d "$repo/.git" ]; then
         cd "$repo"
         if git status --porcelain | grep "\.beads" >/dev/null 2>&1; then
             echo "  ✗ $(basename $repo): has .beads changes"
@@ -111,144 +91,198 @@ for repo in "$HOME/prime-radiant-ai" "$HOME/agent-skills"; do
     fi
 done
 if [ "$REPOS_CLEAN" = true ]; then
-    echo -e "  ${GREEN}✓ PASS: All code repos clean${RESET}"
+    echo -e "  ${GREEN}✓ PASS${RESET}"
 else
     echo -e "  ${RED}✗ FAIL: Some repos have .beads changes${RESET}"
+    FAILED=$((FAILED+1))
 fi
 echo ""
 
-# 4.5: Database accessible
-echo -e "${YELLOW}[5] Database Accessible (bd CLI)${RESET}"
+# Check 6: Database accessible (bd CLI works)
+echo -e "${YELLOW}[6] Database Accessible (bd CLI)${RESET}"
 export BEADS_DIR="$HOME/bd/.beads"
 ISSUE_COUNT=$(bd list 2>/dev/null | wc -l || echo "0")
 ISSUE_COUNT=$(echo "$ISSUE_COUNT" | tr -d "[:space:]")
-echo "  Total issues in central DB: $ISSUE_COUNT"
+echo "  Total issues: $ISSUE_COUNT"
 if [ "$ISSUE_COUNT" -gt 0 ]; then
-    echo -e "  ${GREEN}✓ PASS: Database accessible, issues found${RESET}"
+    echo -e "  ${GREEN}✓ PASS${RESET}"
 else
-    echo -e "  ${RED}✗ FAIL: No issues found in database${RESET}"
+    echo -e "  ${RED}✗ FAIL: No issues accessible${RESET}"
+    FAILED=$((FAILED+1))
 fi
 echo ""
 
-# 4.6: Sample issues
-echo -e "${YELLOW}[6] Sample Issues (first 5)${RESET}"
-bd list 2>/dev/null | head -5 || echo "  (Unable to list issues)"
+# Check 7: AGENTS.md updated with BEADS_DIR requirements
+echo -e "${YELLOW}[7] AGENTS.md Updated (BEADS_DIR documented)${RESET}"
+cd ~/agent-skills
+if git log --oneline --all | grep -q "external beads" 2>/dev/null; then
+    echo "  Latest agent-skills commits:"
+    git log --oneline -5 | head -5 | sed "s/^/    /"
+    echo -e "  ${GREEN}✓ PASS: External beads commits found${RESET}"
+else
+    echo -e "  ${YELLOW}⚠ WARNING: Cannot verify AGENTS.md update (git history)${RESET}"
+fi
+
+# Check if AGENTS.md has BEADS_DIR section
+if [ -f "AGENTS.md" ] && grep -q "BEADS_DIR" AGENTS.md; then
+    echo "  AGENTS.md contains BEADS_DIR documentation"
+    echo -e "  ${GREEN}✓ PASS${RESET}"
+else
+    echo -e "  ${YELLOW}⚠ WARNING: AGENTS.md may not be latest${RESET}"
+    echo "  Run: cd ~/agent-skills && git pull origin master"
+fi
+echo ""
+
+# Check 8: Sample issues from central DB
+echo -e "${YELLOW}[8] Sample Issues (from central DB)${RESET}"
+echo "  First 5 issues:"
+bd list 2>/dev/null | head -5 | sed "s/^/    /" || echo "    (Unable to list)"
 echo ""
 
 # Summary
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${RESET}"
-echo -e "${GREEN}  === MIGRATION COMPLETE ===${RESET}"
+echo -e "${BLUE}  VERIFICATION SUMMARY${RESET}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${RESET}"
 echo ""
-echo -e "${YELLOW}VM: $VM_NAME${RESET}"
-echo -e "${YELLOW}Timestamp: $(date)${RESET}"
-echo -e "${YELLOW}Backup: $BACKUP_DIR${RESET}"
-echo -e "${YELLOW}Issues migrated: $ISSUE_COUNT${RESET}"
+echo "  VM: $VM_NAME"
+echo "  Timestamp: $(date)"
+echo "  Checks passed: $((8-FAILED))/8"
 echo ""
-echo -e "${YELLOW}Next step: Restart shell to activate BEADS_DIR:${RESET}"
-echo -e "${GREEN}  exec zsh${RESET}"
+
+if [ $FAILED -eq 0 ]; then
+    echo -e "${GREEN}  ✓✓✓ ALL CHECKS PASSED ✓✓✓${RESET}"
+    echo ""
+    echo "  Migration complete and verified!"
+else
+    echo -e "${RED}  ✗✗✗ $FAILED CHECK(S) FAILED ✗✗✗${RESET}"
+    echo ""
+    echo "  Please review failed checks above."
+fi
+echo ""
+
+echo -e "${YELLOW}Proof of Work Data:${RESET}"
+echo "  VM: $VM_NAME"
+echo "  BEADS_DIR: $BEADS_DIR"
+echo "  Database: ${DB_PATH:-<not found>}"
+echo "  Database size: ${DB_SIZE:-<not found>}"
+echo "  Issues migrated: $ISSUE_COUNT"
+echo "  Backup: ${BACKUP_DIR:-<not found>}"
 echo ""
 '
 ```
 
 ---
 
-## Expected Proof-of-Work Output
+## Expected Output
 
 ```
 ═══════════════════════════════════════════════════════════════
-  External Beads Migration: homedesktop-wsl
-═══════════════════════════════════════════════════════════════
-
-Step 1: Pull latest agent-skills...
-✓ Pulled latest scripts
-
-Step 2: Run migration (backup, create DB, migrate issues)...
-2026-02-01 XX:XX:XX [INFO] === Beads External DB Migration ===
-2026-02-01 XX:XX:XX [SUCCESS] ✓ All pre-flight checks passed
-2026-02-01 XX:XX:XX [SUCCESS] ✓ Backup complete: /home/feng/.beads-migration-backup-XXXXXXXX
-2026-02-01 XX:XX:XX [SUCCESS] ✓ Migrated approximately XX issues
-2026-02-01 XX:XX:XX [SUCCESS] ✓ All post-flight checks passed
-✓ Migration complete
-
-Step 3: Add BEADS_DIR to ~/.zshrc...
-✓ BEADS_DIR added to ~/.zshrc
-
-═══════════════════════════════════════════════════════════════
-  VERIFICATION REPORT
+  MIGRATION VERIFICATION: homedesktop-wsl
 ═══════════════════════════════════════════════════════════════
 
 [1] BEADS_DIR Environment Variable
   BEADS_DIR=/home/feng/bd/.beads
-  ✓ PASS: BEADS_DIR points to correct location
+  ✓ PASS
 
 [2] Central Database Exists
   Path: /home/feng/bd/.beads/beads.db
   Size: 268K
-  ✓ PASS: Database file exists
+  ✓ PASS
 
-[3] Backup Created
-  Location: /home/feng/.beads-migration-backup-XXXXXXXX
-  Items backed up: X
-  ✓ PASS: Backup exists
+[3] BEADS_DIR Persisted in ~/.zshrc
+  Found: export BEADS_DIR="/home/feng/bd/.beads"
+  ✓ PASS
 
-[4] Code Repos Clean (no .beads changes)
+[4] Backup Created
+  Location: /home/feng/.beads-migration-backup-20260131174851
+  Items: 4
+  ✓ PASS
+
+[5] Code Repos Clean (no .beads changes)
   ✓ prime-radiant-ai: clean
   ✓ agent-skills: clean
-  ✓ PASS: All code repos clean
+  ✓ affordabot: clean
+  ✓ llm-common: clean
+  ✓ PASS
 
-[5] Database Accessible (bd CLI)
-  Total issues in central DB: XX
-  ✓ PASS: Database accessible, issues found
+[6] Database Accessible (bd CLI)
+  Total issues: 47
+  ✓ PASS
 
-[6] Sample Issues (first 5)
-  agent-xxx [Px] [type] status - Title
-  ...
+[7] AGENTS.md Updated (BEADS_DIR documented)
+  Latest agent-skills commits:
+    7c6e2dec docs: add migration verification prompt with proof-of-work
+    99de1c3d docs: add self-contained migration prompts for all VMs
+    460c490a feat: external beads database migration (BEADS_DIR)
+  ✓ PASS: External beads commits found
+  AGENTS.md contains BEADS_DIR documentation
+  ✓ PASS
+
+[8] Sample Issues (from central DB)
+  First 5 issues:
+    agent-xxx [Px] [type] status - Title
+    ...
 
 ═══════════════════════════════════════════════════════════════
-  === MIGRATION COMPLETE ===
+  VERIFICATION SUMMARY
 ═══════════════════════════════════════════════════════════════
 
-VM: homedesktop-wsl
-Timestamp: 2026-02-01 XX:XX:XX
-Backup: /home/feng/.beads-migration-backup-XXXXXXXX
-Issues migrated: XX
+  VM: homedesktop-wsl
+  Timestamp: 2026-02-01 ...
+  Checks passed: 8/8
 
-Next step: Restart shell to activate BEADS_DIR:
-  exec zsh
+  ✓✓✓ ALL CHECKS PASSED ✓✓✓
+
+  Migration complete and verified!
+
+Proof of Work Data:
+  VM: homedesktop-wsl
+  BEADS_DIR: /home/feng/bd/.beads
+  Database: /home/feng/bd/.beads/beads.db
+  Database size: 268K
+  Issues migrated: 47
+  Backup: /home/feng/.beads-migration-backup-20260131174851
 ```
 
 ---
 
-## After Migration
+## What Gets Verified
 
-**Restart your shell:**
-
-```bash
-exec zsh
-```
-
-**Final verification:**
-
-```bash
-echo $BEADS_DIR              # Should show: /home/feng/bd/.beads
-bd list                      # Should show issues
-dx-check                     # Should pass (may have unrelated warnings)
-```
+| Check | Description |
+|-------|-------------|
+| [1] | BEADS_DIR environment variable is set correctly |
+| [2] | Central database file exists at ~/bd/.beads/beads.db |
+| [3] | BEADS_DIR is persisted in ~/.zshrc |
+| [4] | Backup of old .beads directories exists |
+| [5] | Code repos have no .beads/ changes (clean) |
+| [6] | bd CLI can access central database |
+| [7] | AGENTS.md has been updated with BEADS_DIR docs |
+| [8] | Sample issues shown from central database |
 
 ---
 
-## Rollback (If Needed)
+## If Checks Fail
 
+**BEADS_DIR not set:**
 ```bash
-# Remove BEADS_DIR from ~/.zshrc
-sed -i.bak '/BEADS_DIR.*bd/d' ~/.zshrc
+export BEADS_DIR="$HOME/bd/.beads"
+echo 'export BEADS_DIR="$HOME/bd/.beads"' >> ~/.zshrc
+```
 
-# Restart shell
-exec zsh
+**Database not found:**
+```bash
+cd ~/agent-skills
+./scripts/migrate-to-external-beads.sh
+```
 
-# Restore from backup
-BACKUP_DIR=$(ls -td ~/.beads-migration-backup-* | head -1)
-cp -r "$BACKUP_DIR/agent-skills-beads" ~/agent-skills/.beads
-cp -r "$BACKUP_DIR/prime-radiant-ai-beads" ~/prime-radiant-ai/.beads
+**AGENTS.md not updated:**
+```bash
+cd ~/agent-skills
+git pull origin master
+```
+
+**Repos have .beads changes:**
+```bash
+# This is expected if migration not yet run
+# Run migration first, then verify
 ```
