@@ -26,6 +26,13 @@ REV_MODEL="glm-4.7"
 AGENT_TIMEOUT=180         # Per-agent call timeout (3 minutes)
 MAX_ATTEMPTS=3            # Max revision attempts per task
 
+# Ralph-Ready Configuration
+# Tasks must meet quality criteria to be processed by Ralph
+# Prevents wasted runs on under-specified tasks (based on validation data)
+RALPH_READY_LABEL="ralph-ready"
+RALPH_READY_MIN_CHARS=50  # Minimum chars for design or acceptance criteria
+SKIP_READY_CHECK="${SKIP_READY_CHECK:-0}"  # Set to 1 to bypass check
+
 # Environment Variables
 KEEP_WORKDIR="${KEEP_WORKDIR:-0}"  # Keep work directory after completion (for debugging)
 
@@ -106,6 +113,39 @@ create_session() {
 
 delete_session() {
   curl -s -X DELETE "$BASE/session/$1" >/dev/null 2>&1 || true
+}
+
+# Check if a task meets Ralph-Ready criteria
+# Based on validation data: Ralph needs well-specified tasks to succeed
+# Returns 0 (success) if task is ready, 1 (not ready) otherwise
+is_ralph_ready() {
+  local task_id="$1"
+  local task_json="$2"
+
+  # Skip check if bypassed
+  if [ "$SKIP_READY_CHECK" -eq 1 ]; then
+    return 0
+  fi
+
+  # Check for manual ralph-ready label (manual override)
+  local labels=$(echo "$task_json" | jq -r '.labels // [] | join(" ")')
+  if echo "$labels" | grep -q "$RALPH_READY_LABEL"; then
+    return 0
+  fi
+
+  # Auto-qualify check: must have substantive design OR acceptance criteria
+  local design=$(echo "$task_json" | jq -r '.design // ""')
+  local acceptance=$(echo "$task_json" | jq -r '.acceptance_criteria // ""')
+
+  local design_len=${#design}
+  local acceptance_len=${#acceptance}
+
+  # Task is ready if it has design >50 chars OR acceptance criteria >50 chars
+  if [ $design_len -gt $RALPH_READY_MIN_CHARS ] || [ $acceptance_len -gt $RALPH_READY_MIN_CHARS ]; then
+    return 0
+  fi
+
+  return 1
 }
 
 run_agent() {
@@ -208,6 +248,21 @@ for TASK_ID in $SUBTASK_IDS; do
   TASK_JSON=$(bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale show "$TASK_ID" --json 2>/dev/null)
   TASK_TITLE=$(echo "$TASK_JSON" | jq -r '.[0].title')
   TASK_DESC=$(echo "$TASK_JSON" | jq -r '.[0].description // "No description"')
+
+  # Check Ralph-Ready criteria before processing
+  if ! is_ralph_ready "$TASK_ID" "$(echo "$TASK_JSON" | jq -c '.[0]')"; then
+    log "⚠️  SKIP: Task does not meet Ralph-Ready criteria"
+    log "    Design: $(echo "$TASK_JSON" | jq -r '.[0].design // "none"' | cut -c1-60)..."
+    log "    Acceptance: $(echo "$TASK_JSON" | jq -r '.[0].acceptance_criteria // "none"' | cut -c1-60)..."
+    log "    Labels: $(echo "$TASK_JSON" | jq -r '.[0].labels // []' | tr '\n' ' ')"
+    log ""
+    log "    To enable this task for Ralph:"
+    log "    1. Add design/acceptance criteria (>50 chars)"
+    log "    2. Or add label: $RALPH_READY_LABEL"
+    log "    3. Or set SKIP_READY_CHECK=1 to bypass"
+    ((TOTAL_TASKS--))  # Adjust count since we're skipping
+    continue
+  fi
 
   log "Title: $TASK_TITLE"
   log "Description: $TASK_DESC"

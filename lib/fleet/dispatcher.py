@@ -263,7 +263,7 @@ class FleetDispatcher:
             f"cd {repo_path} && git worktree add {worktree_path} -b {beads_id}",
             f"mise trust --yes {worktree_path}/.mise.toml 2>/dev/null || true",
         ]
-        
+
         for cmd in commands:
             subprocess.run(
                 ["ssh", backend_config.ssh, cmd],
@@ -271,9 +271,84 @@ class FleetDispatcher:
                 text=True,
                 timeout=60
             )
-        
+
         return worktree_path
-    
+
+    def is_ralph_ready(
+        self,
+        beads_id: str,
+        repo: str = "agent-skills"
+    ) -> tuple[bool, str]:
+        """
+        Check if a task meets Ralph-Ready criteria.
+
+        Ralph requires well-specified tasks to succeed (based on validation data).
+        Tasks must have:
+        - 'ralph-ready' label (manual override), OR
+        - design field >50 chars, OR
+        - acceptance_criteria field >50 chars
+
+        Args:
+            beads_id: Beads issue ID (e.g., "bd-xxx")
+            repo: Repository name (default: "agent-skills")
+
+        Returns:
+            (is_ready: bool, reason: str)
+        """
+        import json
+        import os
+        from pathlib import Path
+
+        # Check environment variable for bypass
+        if os.getenv("SKIP_READY_CHECK") == "1":
+            return True, "SKIP_READY_CHECK=1 bypass"
+
+        # Try to get task details from Beads
+        try:
+            result = subprocess.run(
+                ["bd", "show", beads_id, "--json"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=Path.home() / repo
+            )
+
+            if result.returncode != 0:
+                return False, f"Task {beads_id} not found"
+
+            task_data = json.loads(result.stdout)
+            if not task_data or len(task_data) == 0:
+                return False, f"Task {beads_id} not found"
+
+            task = task_data[0]
+
+            # Check for manual ralph-ready label
+            labels = task.get("labels", [])
+            if "ralph-ready" in labels:
+                return True, "Manual override via ralph-ready label"
+
+            # Check auto-qualify criteria
+            design = task.get("design", "")
+            acceptance = task.get("acceptance_criteria", "")
+
+            design_len = len(design)
+            acceptance_len = len(acceptance)
+
+            # Task is ready if design >50 chars OR acceptance >50 chars
+            if design_len > 50:
+                return True, f"Design field present ({design_len} chars)"
+            if acceptance_len > 50:
+                return True, f"Acceptance criteria present ({acceptance_len} chars)"
+
+            return False, f"Task under-specified (design: {design_len} chars, acceptance: {acceptance_len} chars)"
+
+        except FileNotFoundError:
+            return False, "Beads CLI not found"
+        except subprocess.TimeoutExpired:
+            return False, "Beads query timeout"
+        except json.JSONDecodeError:
+            return False, "Failed to parse Beads response"
+
     def dispatch(
         self,
         beads_id: str,
@@ -309,9 +384,21 @@ class FleetDispatcher:
                 error="No healthy backends available",
                 failure_code="SERVER_UNREACHABLE"
             )
-        
+
         backend, backend_config = selection
-        
+
+        # 1.5. Check Ralph-Ready criteria (if using Ralph or auto-selected OpenCode)
+        # Only check if explicitly using Ralph or when auto-selecting
+        # This provides a safety gate for Ralph dispatch
+        if preferred_backend == "ralph" or (preferred_backend is None and backend_config.type == "opencode"):
+            is_ready, ready_reason = self.is_ralph_ready(beads_id, repo)
+            if not is_ready:
+                return DispatchResult(
+                    success=False,
+                    error=f"Task does not meet Ralph-Ready criteria: {ready_reason}",
+                    failure_code="RALPH_NOT_READY"
+                )
+
         # 2. Check idempotency
         existing = self.state_store.find_active_dispatch(
             beads_id=beads_id,
