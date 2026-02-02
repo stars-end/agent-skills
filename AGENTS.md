@@ -57,6 +57,59 @@ Act only when: task is blocking, founder is looping, hidden complexity exists, o
 
 ---
 
+## ⚠️ CANONICAL REPOSITORY RULES (CRITICAL)
+
+**The following directories are canonical repositories that auto-reset daily:**
+- `~/agent-skills`
+- `~/prime-radiant-ai`
+- `~/affordabot`
+- `~/llm-common`
+
+### Rules:
+1. ❌ **NEVER commit directly to canonical repos**
+2. ✅ **ALWAYS use worktrees for development work**
+3. 🔄 **Canonical repos reset to origin/master at 3am daily**
+
+### Workflow:
+```bash
+# Start new work - ALWAYS use worktrees
+dx-worktree create bd-xxxx prime-radiant-ai
+cd /tmp/agents/bd-xxxx/prime-radiant-ai
+
+# Work normally in worktree
+git add .
+git commit -m "feat: your changes"
+git push origin bd-xxxx
+
+# Create PR from worktree branch
+gh pr create --base master --head bd-xxxx
+```
+
+### If you accidentally commit to a canonical repo:
+The pre-commit hook will block you with this message:
+```
+🚨 COMMIT BLOCKED: Canonical Repository
+This directory resets to origin/master daily at 3am.
+Use worktrees for development work.
+```
+
+### Recovery (if work was lost):
+```bash
+cd ~/repo
+git reflog | head -20  # Find your commit
+git show <commit-hash>  # Verify it's your work
+
+# Recover to worktree
+dx-worktree create bd-recovery repo
+cd /tmp/agents/bd-recovery/repo
+git cherry-pick <commit-hash>
+git push origin bd-recovery
+```
+
+**Why this matters:** Canonical repos are read-only mirrors that sync with origin/master. Any local commits will be deleted within 24 hours. All development must happen in worktrees.
+
+---
+
 ## Quick Start (5 Commands)
 
 Every agent session starts here:
