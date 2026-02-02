@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: b6d064d5f5a91e610359e4aa8b4ee4191db57945 -->
-<!-- Last updated: 2026-02-02 12:47:35 -->
+<!-- Source SHA: 3730bf3bd2dfbfaae0ea3a61109dd06c864abec7 -->
+<!-- Last updated: 2026-02-02 13:26:02 -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Operating Contract (Layer A — Curated)
@@ -113,6 +113,7 @@ source ~/.zshrc
 | Each repo isolated | Single shared database |
 | Multi-VM sync complex | One `~/bd` repo via git |
 | Agent context fragments | All agents see same issues |
+```
 
 ## Session Start Bootstrap
 
@@ -236,7 +237,7 @@ When ending a work session, MUST complete ALL steps:
 
 ---
 
-**Discovery**: Skills auto-load from \`~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md\`  
+**Discovery**: Skills auto-load from `~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md`  
 **Details**: Each skill's SKILL.md contains full documentation  
 **Specification**: https://agentskills.io/specification  
 **Source**: Generated from agent-skills commit shown in header

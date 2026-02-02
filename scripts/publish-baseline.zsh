@@ -133,7 +133,7 @@ cat >> "$OUTFILE" <<'EOF'
 
 ---
 
-**Discovery**: Skills auto-load from \`~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md\`  
+**Discovery**: Skills auto-load from `~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md`  
 **Details**: Each skill's SKILL.md contains full documentation  
 **Specification**: https://agentskills.io/specification  
 **Source**: Generated from agent-skills commit shown in header

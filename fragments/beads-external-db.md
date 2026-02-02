@@ -40,3 +40,4 @@ source ~/.zshrc
 | Each repo isolated | Single shared database |
 | Multi-VM sync complex | One `~/bd` repo via git |
 | Agent context fragments | All agents see same issues |
+```
