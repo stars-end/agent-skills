@@ -251,7 +251,8 @@ migrate_existing_issues() {
 
             # Export issues if database exists and has issues
             if [ -f ".beads/beads.db" ]; then
-                local issue_count=$(bd list --json 2>/dev/null | grep -c "\"id\":" || echo "0")
+                local issue_count=$(bd list --json 2>/dev/null | grep -c "\"id\":" 2>/dev/null || echo "0")
+                issue_count=$(echo "$issue_count" | tr -d '[:space:]')
                 if [ "$issue_count" -gt 0 ]; then
                     local export_file="$BACKUP_DIR/${repo_name}-issues.jsonl"
                     log_info "  Exporting $issue_count issues..."
