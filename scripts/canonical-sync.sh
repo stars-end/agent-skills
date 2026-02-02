@@ -1,6 +1,15 @@
-#!/bin/bash
-# canonical-sync.sh - Daily reset of canonical repos to origin/master
-
+#!/bin/zsh
+# Canonical Repository Sync - Safety Net
+#
+# Purpose: Ensure canonical repos stay aligned with origin/master
+# Frequency: Daily (3am)
+# Enforcement: This is a SAFETY NET, not primary enforcement
+# Primary enforcement: Git pre-commit hook blocks commits to canonical repos
+#
+# This script performs a non-destructive sync:
+# - Fetches latest from origin
+# - Resets to origin/master
+# - Does NOT touch uncommitted changes in worktrees
 set -euo pipefail
 
 REPOS=(agent-skills prime-radiant-ai affordabot llm-common)

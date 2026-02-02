@@ -145,6 +145,34 @@ diagnose_local() {
         echo -e "${RED}❌ Beads CLI missing${RESET}"
         ((ISSUES_FOUND++))
     fi
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Baseline Sync Status"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    for repo in ~/prime-radiant-ai ~/affordabot ~/llm-common; do
+        if [[ ! -d "$repo" ]]; then
+            continue
+        fi
+        
+        # Run in subshell to avoid changing directory of the script
+        (
+            cd "$repo"
+            repo_name=$(basename "$repo")
+            
+            if [[ -f "fragments/universal-baseline.md" ]]; then
+                baseline_sha=$(grep "^<!-- Source SHA:" fragments/universal-baseline.md | sed 's/.*: \(.*\) -->/\1/' | cut -c1-8)
+                if [[ -n "$baseline_sha" ]]; then
+                    echo -e "✅ ${GREEN}${repo_name}${RESET}: baseline synced (agent-skills@$baseline_sha)"
+                else
+                    echo -e "⚠️  ${YELLOW}${repo_name}${RESET}: baseline exists but no SHA found"
+                fi
+            else
+                echo -e "❌ ${RED}${repo_name}${RESET}: baseline not synced yet"
+            fi
+        )
+    done
 }
 
 # =============================================================================

@@ -103,6 +103,25 @@ if [ -f "${SCRIPT_DIR}/dx-wip-check.sh" ]; then
     "${SCRIPT_DIR}/dx-wip-check.sh"
 fi
 
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "BEADS_DIR Configuration"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [[ -z "$BEADS_DIR" ]]; then
+    echo "❌ BEADS_DIR not set"
+    echo "   Run: cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh"
+    needs_fix=1
+elif [[ ! -d "$BEADS_DIR" ]]; then
+    echo "❌ BEADS_DIR points to non-existent directory: $BEADS_DIR"
+    needs_fix=1
+elif [[ ! -f "$BEADS_DIR/beads.db" ]]; then
+    echo "⚠️  BEADS_DIR set but database doesn't exist: $BEADS_DIR"
+    echo "   Run: cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh"
+else
+    echo "✅ BEADS_DIR configured: $BEADS_DIR"
+fi
+
 if [ "$needs_fix" -eq 0 ]; then
     echo -e "${GREEN}✨ Environment is healthy.${RESET}"
 else
