@@ -255,12 +255,12 @@ migrate_existing_issues() {
                 if [ "$issue_count" -gt 0 ]; then
                     local export_file="$BACKUP_DIR/${repo_name}-issues.jsonl"
                     log_info "  Exporting $issue_count issues..."
-                    bd export -o "$export_file" -q 2>/dev/null || true
+                    bd export -o "$export_file" 2>/dev/null || true
 
                     # Import to central database
                     log_info "  Importing to central DB..."
                     export BEADS_DIR="$CENTRAL_DB_PATH"
-                    bd import "$export_file" -q 2>/dev/null || log_warning "  Import had issues (may be duplicates)"
+                    bd import -i "$export_file" 2>/dev/null || log_warning "  Import had issues (may be duplicates)"
                     total_migrated=$((total_migrated + issue_count))
                 fi
             fi
