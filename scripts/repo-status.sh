@@ -11,7 +11,19 @@ ISSUES=0
 # Check for sync alert
 if [[ -f ~/logs/SYNC_ALERT ]]; then
     echo -e "${RED}🚨 SYNC FAILED - check ~/logs/canonical-sync.log${RESET}"
-    ((ISSUES++))
+    ISSUES=$((ISSUES + 1))
+fi
+
+# Check for healing events (agents bypassed hooks)
+if [[ -f ~/logs/canonical-sync.log ]]; then
+    HEALING_EVENTS=$(grep -c "Healing" ~/logs/canonical-sync.log 2>/dev/null || echo 0)
+    if [[ $HEALING_EVENTS -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️  $HEALING_EVENTS healing events detected (agents bypassed pre-commit hooks)${RESET}"
+        echo "   Last 3 events:"
+        grep "Healing" ~/logs/canonical-sync.log | tail -3 | sed 's/^/   /'
+        echo "   Full log: tail ~/logs/canonical-sync.log"
+        ISSUES=$((ISSUES + 1))
+    fi
 fi
 
 for repo in agent-skills prime-radiant-ai affordabot llm-common; do
@@ -22,21 +34,21 @@ for repo in agent-skills prime-radiant-ai affordabot llm-common; do
     # Check if on master
     if [[ "$BRANCH" != "master" ]]; then
         echo -e "${YELLOW}⚠️  $repo on $BRANCH (expected master)${RESET}"
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
     fi
     
     # Check if behind
     BEHIND=$(git rev-list --count HEAD..origin/master 2>/dev/null || echo 0)
     if [[ $BEHIND -gt 5 ]]; then
         echo -e "${YELLOW}⚠️  $repo $BEHIND commits behind${RESET}"
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
     fi
     
     # Check for dirty files
     DIRTY=$(git status --porcelain | wc -l)
     if [[ $DIRTY -gt 0 ]]; then
         echo -e "${YELLOW}⚠️  $repo has $DIRTY dirty files${RESET}"
-        ((ISSUES++))
+        ISSUES=$((ISSUES + 1))
     fi
 done
 

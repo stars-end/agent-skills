@@ -25,6 +25,14 @@ for repo in "${REPOS[@]}"; do
         continue
     fi
     
+    # Check if repo needs healing (not on master or has uncommitted changes)
+    CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+    DIRTY=$(git status --porcelain 2>/dev/null || echo "")
+    
+    if [[ "$CURRENT_BRANCH" != "master" ]] || [[ -n "$DIRTY" ]]; then
+        echo "$LOG_PREFIX Healing ~/$repo (was on $CURRENT_BRANCH, dirty: $([[ -n "$DIRTY" ]] && echo "yes" || echo "no"))"
+    fi
+    
     # Fetch from origin
     if ! git fetch origin --prune --quiet 2>/dev/null; then
         echo "$LOG_PREFIX $repo: Failed to fetch (network issue?)"
