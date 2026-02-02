@@ -20,6 +20,20 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 echo -e "${BLUE}🩺 Running DX Health Check...${RESET}"
 
+# V5 Preflight: Enforce BEADS_DIR
+if [[ -z "${BEADS_DIR:-}" ]]; then
+    echo -e "${RED}❌ FATAL: BEADS_DIR not set in environment.${RESET}"
+    echo "   V5 REQUIREMENT: All Beads state must live in a centralized directory."
+    echo "   Action: Add 'export BEADS_DIR=/home/fengning/bd/.beads' to your .zshrc"
+    exit 1
+fi
+
+if [[ -d ".beads" ]]; then
+    echo -e "${YELLOW}⚠️  Encountered local .beads/ directory (DEPRECATED)${RESET}"
+    echo "   V5 requires this to be removed. Deleting..."
+    rm -rf .beads
+fi
+
 # Freshness Check for AGENTS.md
 if [ -f "AGENTS.local.md" ]; then
     get_hash() {
