@@ -58,6 +58,12 @@ for repo in "${REPOS[@]}"; do
     # Clean up old WIP branches
     git branch | grep -E 'wip/auto|auto-checkpoint/' | xargs -r git branch -D 2>/dev/null || true
     
+    # Enforce V5 External Beads (Phase 4)
+    if [[ -d ".beads" ]]; then
+        echo "$LOG_PREFIX $repo: Removing legacy .beads/ directory"
+        rm -rf .beads
+    fi
+    
     echo "$LOG_PREFIX $repo: ✅ Synced to origin/master"
     SYNCED=$((SYNCED + 1))
 done

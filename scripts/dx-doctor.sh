@@ -119,10 +119,27 @@ diagnose_local() {
     echo ""
     check_mcp_servers
 
-    # 5. Beads
+    # 5. Beads (V5 Enhanced)
     echo ""
-    echo -e "${BLUE}=== Beads ===${RESET}"
-    if command -v bd || command -v /home/feng/.local/bin/bd >/dev/null 2>&1; then
+    echo -e "${BLUE}=== Beads (V5) ===${RESET}"
+    if [[ -z "${BEADS_DIR:-}" ]]; then
+        echo -e "${RED}❌ BEADS_DIR not set${RESET}"
+        ((ISSUES_FOUND++))
+    else
+        echo -e "${GREEN}✅ BEADS_DIR set: $BEADS_DIR${RESET}"
+        if [[ ! -d "$BEADS_DIR" ]]; then
+            echo -e "${RED}❌ BEADS_DIR directory missing: $BEADS_DIR${RESET}"
+            ((ISSUES_FOUND++))
+        fi
+    fi
+
+    if [[ -d ".beads" ]]; then
+        echo -e "${RED}❌ Local .beads/ directory exists (V5 violation)${RESET}"
+        echo -e "${YELLOW}   Repair: rm -rf .beads${RESET}"
+        ((ISSUES_FOUND++))
+    fi
+
+    if command -v bd >/dev/null 2>&1; then
         echo -e "${GREEN}✅ Beads CLI available${RESET}"
     else
         echo -e "${RED}❌ Beads CLI missing${RESET}"
