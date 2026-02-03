@@ -25,7 +25,7 @@ install_for_repo() {
   for h in post-checkout post-merge pre-push; do
     if [ -L "$hooks_dir/$h" ]; then
       target="$(readlink "$hooks_dir/$h" 2>/dev/null || true)"
-      if echo "$target" | grep -q "git-safety-guard"; then
+      if echo "$target" | grep -q "git-safety-guard" || echo "$target" | grep -q "\.claude/hooks"; then
         rm -f "$hooks_dir/$h" 2>/dev/null || true
       fi
     fi
