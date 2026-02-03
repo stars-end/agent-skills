@@ -431,14 +431,19 @@ if [ -f "$CHECKPOINT_SCRIPT" ]; then
         current_ts=$(date +%s)
         minutes_since=$(( (current_ts - last_run_ts) / 60 ))
 
-        if [ $minutes_since -lt 30 ]; then
+        # auto-checkpoint-install schedules every 4 hours. Allow reasonable slack before erroring:
+        # - < 4h: healthy
+        # - < 6h: warning (missed/late run)
+        # - >= 6h: error (stale)
+        if [ $minutes_since -lt 240 ]; then
             echo -e "${GREEN}✅ Last run: ${minutes_since}m ago${RESET}"
-        elif [ $minutes_since -lt 120 ]; then
-            echo -e "${YELLOW}⚠️  Last run: ${minutes_since}m ago${RESET}"
+        elif [ $minutes_since -lt 360 ]; then
+            echo -e "${YELLOW}⚠️  Last run: ${minutes_since}m ago (may be delayed)${RESET}"
+            echo "   Fix: auto-checkpoint-install --status"
             WARNINGS=$((WARNINGS+1))
         else
-            echo -e "${RED}❌ Last run: ${minutes_since}m ago (may be stale)${RESET}"
-            echo "   Fix: auto-checkpoint-install --status"
+            echo -e "${RED}❌ Last run: ${minutes_since}m ago (stale; expected <= ~6h)${RESET}"
+            echo "   Fix: auto-checkpoint-install --status (then auto-checkpoint-install --run to test)"
             ERRORS=$((ERRORS+1))
         fi
     else
