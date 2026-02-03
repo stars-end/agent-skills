@@ -756,7 +756,7 @@ bd update agent-skills-scu --status closed --reason "All subtasks complete"
 | `merge-pr` | `core/merge-pr` |
 | `dcg-safety` | `safety/dcg-safety` |
 | `beads-guard` | `safety/beads-guard` |
-| `git-safety-guard` | `safety/git-safety-guard` |
+| `git-safety-guard` | *(removed; use `safety/dcg-safety`)* |
 | `bd-doctor` | `health/bd-doctor` |
 | `mcp-doctor` | `health/mcp-doctor` |
 | `railway-doctor` | `health/railway-doctor` |
