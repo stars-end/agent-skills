@@ -275,7 +275,7 @@ mkdir -p core safety health infra dispatch search extended
 | Category | Purpose | Skills to Move |
 |----------|---------|----------------|
 | `core/` | Daily workflow - every agent needs | beads-workflow, sync-feature-branch, create-pull-request, finish-feature, issue-first, session-end, feature-lifecycle, fix-pr-feedback, merge-pr |
-| `safety/` | Auto-loaded safety guards | dcg-safety, beads-guard, git-safety-guard |
+| `safety/` | Auto-loaded safety guards | dcg-safety, beads-guard |
 | `health/` | Environment diagnostics | bd-doctor, mcp-doctor, railway-doctor, skills-doctor, ssh-key-doctor, lockfile-doctor, toolchain-health, verify-pipeline |
 | `infra/` | VM setup and maintenance | vm-bootstrap, canonical-targets, github-runner-setup, devops-dx, dx-alerts |
 | `dispatch/` | Cross-VM coordination | multi-agent-dispatch |
@@ -756,7 +756,7 @@ bd update agent-skills-scu --status closed --reason "All subtasks complete"
 | `merge-pr` | `core/merge-pr` |
 | `dcg-safety` | `safety/dcg-safety` |
 | `beads-guard` | `safety/beads-guard` |
-| `git-safety-guard` | `safety/git-safety-guard` |
+| `git-safety-guard` | *(removed; use `safety/dcg-safety`)* |
 | `bd-doctor` | `health/bd-doctor` |
 | `mcp-doctor` | `health/mcp-doctor` |
 | `railway-doctor` | `health/railway-doctor` |

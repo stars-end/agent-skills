@@ -263,9 +263,6 @@ if [ -e "$PRIME_HOOK" ]; then
     # Method A: V3 Symlink
     if [ -L "$PRIME_HOOK" ]; then
         TARGET=$(resolve_path "$PRIME_HOOK")
-        if [[ "$TARGET" == *"permission-sentinel"* ]]; then
-            IS_VALID=1
-        fi
     fi
     
     # Method B: Legacy/Content Check
