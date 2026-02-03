@@ -24,7 +24,8 @@ echo -e "${BLUE}🩺 Running DX Health Check...${RESET}"
 if [[ -z "${BEADS_DIR:-}" ]]; then
     echo -e "${RED}❌ FATAL: BEADS_DIR not set in environment.${RESET}"
     echo "   V5 REQUIREMENT: All Beads state must live in a centralized directory."
-    echo "   Action: Add 'export BEADS_DIR=/home/fengning/bd/.beads' to your .zshrc"
+    echo "   Action: export BEADS_DIR=\"$HOME/bd/.beads\""
+    echo "   Tip: persist this in your shell startup (e.g. ~/.zshenv or ~/.bash_profile)."
     exit 1
 fi
 
@@ -60,12 +61,12 @@ if [ -f "AGENTS.local.md" ]; then
 fi
 
 resolve_auto_checkpoint_installer() {
-    if command -v auto-checkpoint-install >/dev/null 2>&1; then
-        command -v auto-checkpoint-install
-        return 0
-    fi
     if [ -f "${SCRIPT_DIR}/auto-checkpoint-install.sh" ]; then
         echo "${SCRIPT_DIR}/auto-checkpoint-install.sh"
+        return 0
+    fi
+    if command -v auto-checkpoint-install >/dev/null 2>&1; then
+        command -v auto-checkpoint-install
         return 0
     fi
     echo ""

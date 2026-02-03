@@ -275,7 +275,7 @@ status() {
       # Check systemd first
       if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active auto-checkpoint.timer >/dev/null 2>&1; then
         echo "Scheduler: systemd (active)"
-      elif command -v crontab >/dev/null 2>&1 && crontab -l 2>/dev/null | grep -q "auto-checkpoint"; then
+      elif command -v crontab >/dev/null 2>&1 && grep -q "auto-checkpoint" < <(crontab -l 2>/dev/null); then
         echo "Scheduler: crontab (active)"
       else
         echo "Scheduler: not installed"
@@ -285,7 +285,8 @@ status() {
       fi
       ;;
     macos)
-      if launchctl list 2>/dev/null | grep -q "auto-checkpoint"; then
+      # Avoid pipefail + SIGPIPE false negatives from `... | grep -q ...`
+      if grep -q "auto-checkpoint" < <(launchctl list 2>/dev/null); then
         echo "Scheduler: launchd (active)"
       else
         echo "Scheduler: not installed"
@@ -360,7 +361,7 @@ if [ $UNINSTALL -eq 1 ]; then
       # Try systemd first, then crontab
       if systemctl --user is-active auto-checkpoint.timer >/dev/null 2>&1 2>/dev/null; then
         uninstall_systemd
-      elif command -v crontab >/dev/null 2>&1 && crontab -l 2>/dev/null | grep -q "auto-checkpoint"; then
+      elif command -v crontab >/dev/null 2>&1 && grep -q "auto-checkpoint" < <(crontab -l 2>/dev/null); then
         uninstall_crontab
       else
         echo "Nothing to uninstall (no auto-checkpoint scheduler found)"
