@@ -7,6 +7,7 @@ set -e
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
 RESET='\033[0m'
 
 # Resolve symlinks to get actual script directory (works on macOS and Linux)
@@ -92,6 +93,24 @@ check_auto_checkpoint_scheduler() {
 needs_fix=0
 if ! "${SCRIPT_DIR}/dx-status.sh"; then
     needs_fix=1
+fi
+
+# External Beads repo must be git-synced (durability across VMs)
+if [[ "${BEADS_DIR}" == "${DEFAULT_BEADS_DIR}" ]]; then
+    if [[ ! -d "$HOME/bd/.git" ]]; then
+        echo -e "${RED}❌ FATAL: BEADS_DIR points at $DEFAULT_BEADS_DIR but ~/bd is not a git repo.${RESET}"
+        echo "   Action:"
+        echo "     1) Create repo dir: mkdir -p ~/bd"
+        echo "     2) Initialize (one-time): cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh"
+        echo "     3) Configure remote sync: git -C ~/bd remote add origin git@github.com:stars-end/bd.git"
+        needs_fix=1
+    elif ! git -C "$HOME/bd" remote get-url origin >/dev/null 2>&1; then
+        echo -e "${RED}❌ FATAL: ~/bd has no 'origin' remote. Beads state will not sync across VMs.${RESET}"
+        echo "   Fix:"
+        echo "     git -C ~/bd remote add origin git@github.com:stars-end/bd.git"
+        echo "     git -C ~/bd push -u origin master"
+        needs_fix=1
+    fi
 fi
 
 # Auto-checkpoint scheduling is REQUIRED for durability. This is enforced in dx-check (not dx-status),
