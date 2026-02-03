@@ -684,7 +684,7 @@ cat > ~/prime-radiant-ai/fragments/repo-specific.md <<'EOF'
 
 **First-time setup:**
 ```bash
-./scripts/cli/dx_doctor.sh
+dx-doctor
 ```
 
 **Session start:**

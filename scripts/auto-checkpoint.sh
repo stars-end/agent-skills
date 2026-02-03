@@ -265,6 +265,7 @@ checkpoint_repo() {
   (
     cd "$repo_path" || exit 1
 
+    hostname=$(hostname -s 2>/dev/null || echo "unknown")
     starting_branch="$(git branch --show-current 2>/dev/null || true)"
     is_detached=0
     if [[ -z "${starting_branch:-}" ]]; then
@@ -274,21 +275,35 @@ checkpoint_repo() {
     needs_auto_branch=0
     current_branch="$starting_branch"
 
-    # Check if already on auto-checkpoint branch (reuse it)
+    trunk_default=""
+    for tb in "${TRUNK_BRANCHES[@]}"; do
+      if git show-ref --verify --quiet "refs/heads/$tb" >/dev/null 2>&1; then
+        trunk_default="$tb"
+        break
+      fi
+    done
+    [ -z "$trunk_default" ] && trunk_default="${TRUNK_BRANCHES[0]}"
+
+    # Canonical-policy behavior:
+    # - If already on auto-checkpoint/*, reuse it.
+    # - Otherwise (trunk, detached, or any feature branch), always checkpoint onto auto-checkpoint/<host>
+    #   so canonical clones can be restored to trunk after saving work.
     if [[ "$starting_branch" =~ ^auto-checkpoint/ ]]; then
       log "  On auto-checkpoint branch, reusing: $starting_branch"
       current_branch="$starting_branch"
-    elif [[ "$is_detached" -eq 1 ]]; then
-      log "  Detached HEAD, switching to auto-checkpoint branch..."
+    else
       needs_auto_branch=1
-    elif is_trunk_branch "$starting_branch"; then
-      log "  On trunk branch ($starting_branch), switching to auto-checkpoint branch..."
-      needs_auto_branch=1
+      if [[ "$is_detached" -eq 1 ]]; then
+        log "  Detached HEAD, switching to auto-checkpoint branch..."
+      elif is_trunk_branch "$starting_branch"; then
+        log "  On trunk branch ($starting_branch), switching to auto-checkpoint branch..."
+      else
+        log "  On non-trunk branch ($starting_branch), switching to auto-checkpoint branch..."
+      fi
     fi
 
     # Create or switch to auto-checkpoint branch
     if [ "$needs_auto_branch" -eq 1 ]; then
-      hostname=$(hostname -s 2>/dev/null || echo "unknown")
       auto_branch="auto-checkpoint/${hostname}"
 
       # Check if branch already exists (local or remote)
@@ -298,20 +313,23 @@ checkpoint_repo() {
           exit 1
         }
         log "  Switched to: $auto_branch"
-      elif git fetch origin "$auto_branch" 2>/dev/null; then
-        # Branch exists on remote, check it out
-        git checkout "$auto_branch" 2>/dev/null || {
-          error "  Cannot checkout auto-checkpoint branch from remote"
-          exit 1
-        }
-        log "  Checked out: $auto_branch (from origin)"
       else
-        # Create new branch from current trunk
-        git checkout -b "$auto_branch" 2>/dev/null || {
-          error "  Cannot create auto-checkpoint branch"
-          exit 1
-        }
-        log "  Created: $auto_branch"
+        # Best-effort: if branch exists on origin, base local branch on it.
+        if git fetch origin "$auto_branch" >/dev/null 2>&1; then
+          if git checkout -B "$auto_branch" "origin/$auto_branch" >/dev/null 2>&1; then
+            log "  Checked out: $auto_branch (from origin)"
+          else
+            error "  Cannot checkout auto-checkpoint branch from origin"
+            exit 1
+          fi
+        else
+          # Create new branch from current HEAD
+          git checkout -b "$auto_branch" >/dev/null 2>&1 || {
+            error "  Cannot create auto-checkpoint branch"
+            exit 1
+          }
+          log "  Created: $auto_branch"
+        fi
       fi
       current_branch="$auto_branch"
     fi
@@ -350,9 +368,39 @@ checkpoint_repo() {
 
     log "  Committed: $commit_msg"
 
+
+    # After checkpointing canonical clones, always restore trunk branch to keep canonical repos clean.
+    # This prevents long-lived drift onto auto-checkpoint/* branches (which breaks ru/dx automation).
+    if is_canonical_repo "$repo_name"; then
+      if git checkout "$trunk_default" >/dev/null 2>&1; then
+        log "  Restored trunk: $trunk_default"
+      else
+        log "  WARN: could not restore trunk branch ($trunk_default)"
+      fi
+    fi
+
     # Push is best-effort (don't fail if push fails)
     if git push -u origin "$current_branch" >/dev/null 2>&1; then
       log "  Pushed to origin/$current_branch"
+
+      # Best-effort: create/update a single rolling draft PR for this host+repo.
+      # Enable by default; can be disabled with AUTO_CHECKPOINT_CREATE_PR=0.
+      if [ "${AUTO_CHECKPOINT_CREATE_PR:-1}" = "1" ] && command -v gh >/dev/null 2>&1; then
+        # Only do this for auto-checkpoint branches.
+        if [[ "$current_branch" =~ ^auto-checkpoint/ ]]; then
+          pr_title="auto-checkpoint(${hostname}): ${repo_name}"
+          pr_body="Automated checkpoint for ${repo_name} on host '${hostname}'.
+
+This PR is a rolling draft updated by auto-checkpoint when canonical clones accidentally become dirty.
+
+Safe to close without merging if not needed."
+          # If an open PR already exists for this head, do nothing.
+          existing=$(gh pr list --state open --head "$current_branch" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -z "${existing:-}" ]; then
+            gh pr create --draft --base "$trunk_default" --head "$current_branch" --title "$pr_title" --body "$pr_body" >/dev/null 2>&1 || true
+          fi
+        fi
+      fi
     else
       log "  Push failed (changes saved locally)"
     fi
