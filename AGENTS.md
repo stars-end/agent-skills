@@ -86,10 +86,6 @@ git push origin bd-xxxx
 gh pr create --base master --head bd-xxxx
 ```
 
-### POC Runs (avoid merge conflicts)
-
-If creating POC artifacts under `docs/poc_runs/`, use a **unique filename per run** (e.g. `docs/poc_runs/<branch-name>.md`, replacing `/` with `_`). See `docs/poc_runs/README.md`.
-
 ### If you accidentally commit to a canonical repo:
 The pre-commit hook will block you with this message:
 ```
