@@ -120,6 +120,13 @@ check_canonical_repo() {
     fi
 
     echo -e "${GREEN}✅ $repo_path clean on $CANONICAL_TRUNK_BRANCH${RESET}"
+
+    # Stashes don't block ru sync, but they are a major cognitive-load / “lost work” source.
+    local stash_count
+    stash_count="$(git -C "$repo_path" stash list 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${stash_count:-0}" != "0" ]; then
+        warn_only "$repo_path has $stash_count git stash entries (not durable across VMs; prefer PRs)"
+    fi
 }
 
 is_in_list() {
