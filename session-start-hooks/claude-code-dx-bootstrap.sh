@@ -30,6 +30,11 @@ else
     echo "⚠️  dx-check not found (install agent-skills)"
 fi
 
+# 2.5 Stranded work reminder (auto-checkpoint/WIP visibility)
+if [[ -f "$HOME/agent-skills/scripts/auto-checkpoint-notify.sh" ]]; then
+    "$HOME/agent-skills/scripts/auto-checkpoint-notify.sh" 2>&1 || true
+fi
+
 # 3. Coordinator stack checks (OPTIONAL)
 if [[ "${DX_BOOTSTRAP_COORDINATOR:-0}" == "1" ]]; then
     echo "🩺 Running dx-doctor (optional coordinator checks)..."

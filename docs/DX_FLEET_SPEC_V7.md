@@ -72,7 +72,22 @@ For product repos (`prime-radiant-ai`, `affordabot`, `llm-common`):
 - `.beads/` is **gitignored** and not tracked.
 - Any workflow that relied on `.beads/**` must be disabled or migrated to `BEADS_DIR`.
 
-### I6 — QA story paths are canonical (no “lost STORIES”)
+### I6 — PR-or-it-didn’t-happen (no stranded work)
+Work is only considered **durable** when it is:
+- Committed on a branch
+- Pushed to `origin`
+- Visible as a PR (draft is fine)
+
+This invariant exists because the fleet’s biggest real-world failure mode is **stranded work**:
+- worktrees with local-only commits
+- auto-checkpoint branches that were never reviewed/merged
+- piles of local stashes that nobody remembers
+
+Important:
+- `auto-checkpoint` is a **safety net**, not a delivery mechanism.
+- `auto-checkpoint` does **not** operate inside `/tmp/agents/**` worktrees by design, so it cannot rescue unpushed worktree work.
+
+### I7 — QA story paths are canonical (no “lost STORIES”)
 The uismoke runner currently loads stories **non-recursively**.
 
 Canonical story layout in app repos:
@@ -87,15 +102,29 @@ Contract:
 - Any “analysis-only” story sets must include a README that says they are not runnable.
 
 ## Why the “lost STORIES” saga happened (Root Cause)
-What happened operationally:
-- Rewritten production stories were placed under `docs/TESTING/stories_hybrid/` (a subdirectory).
-- The uismoke loader is **non-recursive**, so those stories were effectively “invisible” to standard runs.
-- Because multiple agents were working across VMs/branches, the directory mismatch created the impression that work was lost even though it existed.
+There were **two overlapping failure modes**, and the painful one was first:
 
-V7 fixes this by:
-- Defining the **only runnable locations** (`docs/TESTING/STORIES/poc` + `docs/TESTING/STORIES/production`).
-- Requiring that any “non-runnable” sets are explicitly labeled as such (README).
-- Standardizing Makefile targets to point to the canonical directories (see next section).
+### Root cause #1 (primary): work was not on `master`
+Operationally, agents produced real work, but it did not reliably land on `master` because it was stranded in:
+- worktrees under `/tmp/agents/**` (local-only commits or unpushed work)
+- auto-checkpoint branches (`auto-checkpoint/<host>`) that weren’t merged/reviewed
+- local stashes created by tooling or humans (hard to discover, easy to forget)
+
+When a founder then checks `master`, it looks like “the work is gone”, even though it’s just **not merged** (or not pushed).
+
+V7 fixes this by making “PR-or-it-didn’t-happen” explicit and discoverable:
+- `dx-check` runs a WIP scan (auto-checkpoint + wip branches).
+- SessionStart bootstrap prints stranded-work guidance.
+- `auto-checkpoint` (when it can push) maintains a rolling **draft PR** per host+repo for visibility.
+
+### Root cause #2 (secondary): story path confusion
+Separately, rewritten production stories were placed under `docs/TESTING/stories_hybrid/`, and because the uismoke loader is **non-recursive**, standard targets didn’t see them.
+
+V7 fixes this by defining the only runnable locations:
+- `docs/TESTING/STORIES/poc`
+- `docs/TESTING/STORIES/production`
+
+Anything else is “analysis-only” and must say so (README).
 
 ## Happy Path (End-to-End)
 ### 0) Preflight
@@ -194,4 +223,3 @@ Reference contract:
 - `~/affordabot` — product app
 - `~/llm-common` — shared libs (uismoke harness + contracts)
 - `~/bd` — Beads planning repo (durable shared DB)
-
