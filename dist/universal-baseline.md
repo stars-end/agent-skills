@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 3730bf3bd2dfbfaae0ea3a61109dd06c864abec7 -->
-<!-- Last updated: 2026-02-02 13:26:02 -->
+<!-- Source SHA: df07514ad1e3404b36ee4a11a7dd3b35cbae083c -->
+<!-- Last updated: 2026-02-03 15:36:19 -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Operating Contract (Layer A — Curated)
@@ -113,6 +113,15 @@ source ~/.zshrc
 | Each repo isolated | Single shared database |
 | Multi-VM sync complex | One `~/bd` repo via git |
 | Agent context fragments | All agents see same issues |
+
+### Cross-VM Sync (Required for durability)
+
+- `~/bd` should be a git repo with remote `stars-end/bd`.
+- If `bd doctor` reports a **Repo Fingerprint mismatch**, run:
+  ```bash
+  cd ~/bd
+  printf 'y\n' | bd migrate --update-repo-id
+  ```
 ```
 
 ## Session Start Bootstrap
