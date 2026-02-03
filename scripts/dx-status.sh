@@ -265,11 +265,11 @@ if [ -e "$PRIME_HOOK" ]; then
         TARGET=$(resolve_path "$PRIME_HOOK")
     fi
     
-    # Method B: Legacy/Content Check
+    # Method B: Content Check
     if [ $IS_VALID -eq 0 ] && [ -f "$PRIME_HOOK" ]; then
-        if grep -q "validate_beads" "$PRIME_HOOK" 2>/dev/null; then
+        if grep -q "CANONICAL COMMIT BLOCKED" "$PRIME_HOOK" 2>/dev/null; then
             IS_VALID=1
-        elif grep -q "permission-sentinel" "$PRIME_HOOK" 2>/dev/null; then
+        elif grep -q "validate_beads" "$PRIME_HOOK" 2>/dev/null; then
             IS_VALID=1
         fi
     fi
@@ -280,7 +280,7 @@ if [ -e "$PRIME_HOOK" ]; then
         if [ $PRIME_REQUIRED -eq 1 ]; then
             echo -e "${RED}❌ Hook invalid in prime-radiant-ai${RESET}"
             echo "   Target: $(resolve_path $PRIME_HOOK)"
-            echo "   Fix: cd ~/prime-radiant-ai && make setup-git-hooks"
+            echo "   Fix: cd ~/agent-skills && scripts/install-canonical-precommit.sh"
             ERRORS=$((ERRORS+1))
         else
             warn_only "Hook invalid in prime-radiant-ai (optional on this host)"
@@ -289,7 +289,7 @@ if [ -e "$PRIME_HOOK" ]; then
 else
     if [ $PRIME_REQUIRED -eq 1 ]; then
         echo -e "${RED}❌ Hook missing in prime-radiant-ai${RESET}"
-        echo "   Fix: cd ~/prime-radiant-ai && make setup-git-hooks"
+        echo "   Fix: cd ~/agent-skills && scripts/install-canonical-precommit.sh"
         ERRORS=$((ERRORS+1))
     else
         warn_only "Hook missing in prime-radiant-ai (optional on this host)"
