@@ -383,28 +383,39 @@ checkpoint_repo() {
     if git push -u origin "$current_branch" >/dev/null 2>&1; then
       log "  Pushed to origin/$current_branch"
 
-      # Best-effort: create/update a single rolling draft PR for this host+repo.
-      # Enable by default; can be disabled with AUTO_CHECKPOINT_CREATE_PR=0.
-      if [ "${AUTO_CHECKPOINT_CREATE_PR:-1}" = "1" ] && command -v gh >/dev/null 2>&1; then
-        # Only do this for auto-checkpoint branches.
-        if [[ "$current_branch" =~ ^auto-checkpoint/ ]]; then
-          pr_title="auto-checkpoint(${hostname}): ${repo_name}"
-          pr_body="Automated checkpoint for ${repo_name} on host '${hostname}'.
+	      # Best-effort: create/update a single rolling draft PR for this host+repo.
+	      # Enable by default; can be disabled with AUTO_CHECKPOINT_CREATE_PR=0.
+	      if [ "${AUTO_CHECKPOINT_CREATE_PR:-1}" = "1" ] && command -v gh >/dev/null 2>&1; then
+	        # Only do this for auto-checkpoint branches.
+	        if [[ "$current_branch" =~ ^auto-checkpoint/ ]]; then
+	          pr_title="auto-checkpoint(${hostname}): ${repo_name}"
+	          pr_body="Automated checkpoint for ${repo_name} on host '${hostname}'.
 
-This PR is a rolling draft updated by auto-checkpoint when canonical clones accidentally become dirty.
+	This PR is a rolling draft updated by auto-checkpoint when canonical clones accidentally become dirty.
 
-Safe to close without merging if not needed."
-          # If an open PR already exists for this head, do nothing.
-          existing=$(gh pr list --state open --head "$current_branch" --json number --jq '.[0].number' 2>/dev/null || true)
-          if [ -z "${existing:-}" ]; then
-            gh pr create --draft --base "$trunk_default" --head "$current_branch" --title "$pr_title" --body "$pr_body" >/dev/null 2>&1 || true
-          fi
-        fi
-      fi
-    else
-      log "  Push failed (changes saved locally)"
-    fi
-  )
+	Safe to close without merging if not needed."
+	          # If an open PR already exists for this head, do nothing.
+	          existing=""
+	          if existing="$(gh pr list --state open --head "$current_branch" --json number --jq '.[0].number // \"\"' 2>/dev/null)"; then
+	            if [ -n "${existing:-}" ]; then
+	              log "  Rolling PR already open (#$existing)"
+	            else
+	              pr_out=""
+	              if pr_out="$(gh pr create --draft --base "$trunk_default" --head "$current_branch" --title "$pr_title" --body "$pr_body" 2>&1)"; then
+	                log "  Created rolling draft PR for $current_branch"
+	              else
+	                log "  WARN: failed to create rolling PR for $current_branch: $pr_out"
+	              fi
+	            fi
+	          else
+	            log "  WARN: gh pr list failed; skipping rolling PR creation"
+	          fi
+	        fi
+	      fi
+	    else
+	      log "  Push failed (changes saved locally)"
+	    fi
+	  )
 }
 
 # ============================================================
