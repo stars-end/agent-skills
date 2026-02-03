@@ -21,6 +21,16 @@ install_for_repo() {
   # If a previous system installed symlinked hooks, remove them first so we do not write through the symlink target.
   rm -f "$hooks_dir/pre-commit" 2>/dev/null || true
 
+  # Remove legacy git-safety-guard symlinked hooks if present (best-effort).
+  for h in post-checkout post-merge pre-push; do
+    if [ -L "$hooks_dir/$h" ]; then
+      target="$(readlink "$hooks_dir/$h" 2>/dev/null || true)"
+      if echo "$target" | grep -q "git-safety-guard"; then
+        rm -f "$hooks_dir/$h" 2>/dev/null || true
+      fi
+    fi
+  done
+
   cat > "$hooks_dir/pre-commit" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
