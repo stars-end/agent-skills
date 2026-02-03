@@ -8,7 +8,13 @@ CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common)
 
 install_for_repo() {
   local repo_root="$1"
-  local hooks_dir="$repo_root/.git/hooks"
+  local git_common_dir
+  git_common_dir="$(git -C "$repo_root" rev-parse --git-common-dir 2>/dev/null || echo "$repo_root/.git")"
+  # rev-parse may return a relative path; normalize to absolute
+  if [[ "$git_common_dir" != /* ]]; then
+    git_common_dir="$repo_root/$git_common_dir"
+  fi
+  local hooks_dir="$git_common_dir/hooks"
 
   mkdir -p "$hooks_dir"
 
