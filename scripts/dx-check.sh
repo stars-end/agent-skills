@@ -20,13 +20,21 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 echo -e "${BLUE}🩺 Running DX Health Check...${RESET}"
 
-# V5 Preflight: Enforce BEADS_DIR
+# V5/V6 Preflight: Prefer centralized Beads state, but don't hard-fail if it's discoverable.
+DEFAULT_BEADS_DIR="$HOME/bd/.beads"
 if [[ -z "${BEADS_DIR:-}" ]]; then
-    echo -e "${RED}❌ FATAL: BEADS_DIR not set in environment.${RESET}"
-    echo "   V5 REQUIREMENT: All Beads state must live in a centralized directory."
-    echo "   Action: export BEADS_DIR=\"$HOME/bd/.beads\""
-    echo "   Tip: persist this in your shell startup (e.g. ~/.zshenv or ~/.bash_profile)."
-    exit 1
+    if [[ -d "$DEFAULT_BEADS_DIR" ]]; then
+        echo -e "${YELLOW}⚠️  BEADS_DIR not set; defaulting to ${DEFAULT_BEADS_DIR} for this run.${RESET}"
+        echo "   Tip: persist with: export BEADS_DIR=\"$DEFAULT_BEADS_DIR\" (e.g. ~/.zshenv or ~/.bash_profile)"
+        export BEADS_DIR="$DEFAULT_BEADS_DIR"
+    else
+        echo -e "${RED}❌ FATAL: BEADS_DIR not set and default DB not found.${RESET}"
+        echo "   Expected Beads DB at: $DEFAULT_BEADS_DIR"
+        echo "   Action:"
+        echo "     1) Create it by running: cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh"
+        echo "     2) Persist: export BEADS_DIR=\"$DEFAULT_BEADS_DIR\""
+        exit 1
+    fi
 fi
 
 if [[ -d ".beads" ]]; then
