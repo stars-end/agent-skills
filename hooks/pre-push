@@ -74,9 +74,13 @@ check_railway_status() {
 # ============================================================================
 
 check_triage_status() {
-    local STATUS_FILE=".git/DX_TRIAGE_STATUS"
-    local REQUIRED_FILE=".git/DX_TRIAGE_REQUIRED"
-    local ACK_FILE=".git/DX_TRIAGE_ACK"
+    # Worktree-safe: use the *common* git dir so the same status/ack gates apply across worktrees.
+    local COMMON_DIR
+    COMMON_DIR="$(git rev-parse --git-common-dir)"
+
+    local STATUS_FILE="$COMMON_DIR/DX_TRIAGE_STATUS"
+    local REQUIRED_FILE="$COMMON_DIR/DX_TRIAGE_REQUIRED"
+    local ACK_FILE="$COMMON_DIR/DX_TRIAGE_ACK"
 
     local block_reason=""
     local blocking_file=""

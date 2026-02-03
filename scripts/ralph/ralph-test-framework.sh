@@ -5,7 +5,12 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BEADS_DIR="/Users/fengning/agent-skills/.beads"
+WORKSPACE="${WORKSPACE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+if [ -z "${BEADS_DIR:-}" ]; then
+    echo "❌ BEADS_DIR not set. V5 requires external beads DB."
+    echo "   Fix: export BEADS_DIR=\"$HOME/bd/.beads\""
+    exit 1
+fi
 
 # Colors
 GREEN='\033[0;32m'
@@ -38,7 +43,7 @@ create_test_epic() {
     log "Creating test epic: $epic_id"
 
     # Create epic
-    bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale create \
+    bd --no-daemon --allow-stale create \
         --id "$epic_id" \
         --title "$epic_title" \
         --type epic \
@@ -51,7 +56,7 @@ create_test_epic() {
         local filename="test-file-$i.txt"
         local content="This is test file $i created by Ralph"
 
-        bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale create \
+        bd --no-daemon --allow-stale create \
             --id "$task_id" \
             --title "Create test file $i" \
             --type task \
@@ -60,7 +65,7 @@ create_test_epic() {
             --acceptance "File exists with correct content" >/dev/null
 
         # Link task to epic
-        bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale dep add "$task_id" "$epic_id" >/dev/null 2>&1 || true
+        bd --no-daemon --allow-stale dep add "$task_id" "$epic_id" >/dev/null 2>&1 || true
     done
 
     log_pass "Test epic created with 5 tasks"
@@ -124,7 +129,7 @@ run_test_cycle() {
     log "Work directory: $work_dir"
 
     # Run Ralph integration
-    if "$SCRIPT_DIR/beads-integration.sh" "$epic_id"; then
+    if (cd "$WORKSPACE" && "$SCRIPT_DIR/beads-integration.sh" "$epic_id"); then
         log_pass "Cycle $cycle_num completed successfully"
         return 0
     else
@@ -154,7 +159,7 @@ main() {
         if [ $cycle -gt 1 ]; then
             log "Re-creating test epic for cycle $cycle..."
             # Close previous epic
-            bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale close "$epic_id" >/dev/null 2>&1 || true
+            bd --no-daemon --allow-stale close "$epic_id" >/dev/null 2>&1 || true
             # Create new epic
             epic_id=$(create_test_epic)
         fi

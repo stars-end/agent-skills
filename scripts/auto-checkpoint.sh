@@ -160,6 +160,19 @@ is_trunk_branch() {
   return 1
 }
 
+detect_trunk_branch() {
+  # Prefer an existing local trunk branch (master/main), fallback to first configured.
+  local tb
+  for tb in "${TRUNK_BRANCHES[@]}"; do
+    if git show-ref --verify --quiet "refs/heads/$tb" 2>/dev/null; then
+      echo "$tb"
+      return 0
+    fi
+  done
+  echo "${TRUNK_BRANCHES[0]}"
+  return 0
+}
+
 has_git_index_lock() {
   local repo_path="$1"
   [ -f "$repo_path/.git/index.lock" ]
@@ -265,7 +278,9 @@ checkpoint_repo() {
   (
     cd "$repo_path" || exit 1
 
+    hostname=$(hostname -s 2>/dev/null || echo "unknown")
     starting_branch="$(git branch --show-current 2>/dev/null || true)"
+    trunk_branch="$(detect_trunk_branch)"
     is_detached=0
     if [[ -z "${starting_branch:-}" ]]; then
       is_detached=1
@@ -274,21 +289,26 @@ checkpoint_repo() {
     needs_auto_branch=0
     current_branch="$starting_branch"
 
-    # Check if already on auto-checkpoint branch (reuse it)
+    # Canonical safety rule:
+    # - If already on auto-checkpoint/*, reuse it.
+    # - Otherwise, ALWAYS checkpoint into auto-checkpoint/<hostname> (even if on a feature branch).
+    # This keeps canonical clones safe and predictable (always returns to trunk after checkpoint).
     if [[ "$starting_branch" =~ ^auto-checkpoint/ ]]; then
       log "  On auto-checkpoint branch, reusing: $starting_branch"
       current_branch="$starting_branch"
-    elif [[ "$is_detached" -eq 1 ]]; then
-      log "  Detached HEAD, switching to auto-checkpoint branch..."
-      needs_auto_branch=1
-    elif is_trunk_branch "$starting_branch"; then
-      log "  On trunk branch ($starting_branch), switching to auto-checkpoint branch..."
+    else
+      if [[ "$is_detached" -eq 1 ]]; then
+        log "  Detached HEAD, switching to auto-checkpoint branch..."
+      elif is_trunk_branch "$starting_branch"; then
+        log "  On trunk branch ($starting_branch), switching to auto-checkpoint branch..."
+      else
+        log "  On non-trunk branch ($starting_branch), relocating changes to auto-checkpoint branch..."
+      fi
       needs_auto_branch=1
     fi
 
     # Create or switch to auto-checkpoint branch
     if [ "$needs_auto_branch" -eq 1 ]; then
-      hostname=$(hostname -s 2>/dev/null || echo "unknown")
       auto_branch="auto-checkpoint/${hostname}"
 
       # Check if branch already exists (local or remote)
@@ -353,8 +373,42 @@ checkpoint_repo() {
     # Push is best-effort (don't fail if push fails)
     if git push -u origin "$current_branch" >/dev/null 2>&1; then
       log "  Pushed to origin/$current_branch"
+
+      # Best-effort: ensure a single rolling draft PR exists for this host branch.
+      if [ "${AUTO_CHECKPOINT_CREATE_PR:-1}" = "1" ] && command -v gh >/dev/null 2>&1; then
+        if gh pr list --head "$current_branch" --state open --json number >/dev/null 2>&1; then
+          existing_pr="$(gh pr list --head "$current_branch" --state open --json number --jq '.[0].number' 2>/dev/null || true)"
+          if [ -n "${existing_pr:-}" ] && [ "$existing_pr" != "null" ]; then
+            log "  PR exists for $current_branch: #$existing_pr"
+          else
+            pr_title="WIP: auto-checkpoint (${hostname})"
+            pr_body=$'Automated durability PR (rolling).\n\n- Branch: '"$current_branch"$'\n- Host: '"$hostname"$'\n\nIf this is noise: fix the agent to use worktrees. This PR exists to prevent lost work.'
+            if gh pr create --draft --base "$trunk_branch" --head "$current_branch" --title "$pr_title" --body "$pr_body" >/dev/null 2>&1; then
+              new_pr="$(gh pr view --json number --jq '.number' 2>/dev/null || true)"
+              if [ -n "${new_pr:-}" ] && [ "$new_pr" != "null" ]; then
+                log "  Created draft PR: #$new_pr"
+              else
+                log "  Created draft PR (number unavailable)"
+              fi
+            else
+              log "  PR create skipped/failed (gh auth? permissions?)"
+            fi
+          fi
+        else
+          log "  PR checks skipped (gh auth? permissions?)"
+        fi
+      fi
     else
       log "  Push failed (changes saved locally)"
+    fi
+
+    # Always return canonical clone to trunk so automation (ru sync, baseline sync, etc.) can proceed.
+    if [ -n "${trunk_branch:-}" ] && [ "$trunk_branch" != "$current_branch" ]; then
+      if git checkout -f "$trunk_branch" >/dev/null 2>&1; then
+        log "  Restored trunk: $trunk_branch"
+      else
+        log "  Restore trunk failed (manual attention may be required): $trunk_branch"
+      fi
     fi
   )
 }

@@ -15,9 +15,16 @@
 set -e
 
 # Configuration
-BEADS_DIR="/Users/fengning/agent-skills/.beads"
+if [ -z "${BEADS_DIR:-}" ]; then
+  echo "❌ BEADS_DIR not set. V5 requires external beads DB."
+  echo "   Fix: export BEADS_DIR=\"$HOME/bd/.beads\""
+  exit 1
+fi
+
+BD_BIN="${BD_BIN:-bd}"
 MAX_PARALLEL=${MAX_PARALLEL:-3}  # Default: 3 parallel workers
-WORKSPACE="/Users/fengning/agent-skills"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WORKSPACE="${WORKSPACE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 LOG_DIR="$WORKSPACE/.ralph-parallel-logs"
 
 # Colors for output
@@ -121,7 +128,7 @@ log "Fetching task data from Beads..."
 for task_id in $TASK_IDS; do
   # Get full task data including dependencies
   # Use --allow-stale to bypass stale check when database has sync issues
-  task_json=$(BEADS_DIR="$BEADS_DIR" /opt/homebrew/bin/bd --no-daemon --allow-stale show "$task_id" --json 2>/dev/null)
+  task_json=$(BEADS_DIR="$BEADS_DIR" "$BD_BIN" --no-daemon --allow-stale show "$task_id" --json 2>/dev/null)
 
   if [ -z "$task_json" ]; then
     log_error "Task $task_id not found"

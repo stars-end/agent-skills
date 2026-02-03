@@ -36,6 +36,10 @@ ln -sfn "$AGENTS_ROOT" "$HOME/.agent/skills"
 echo -e "${GREEN} -> Ensuring ~/bin tools...${RESET}"
 "$AGENTS_ROOT/scripts/dx-ensure-bins.sh" >/dev/null 2>&1 || true
 
+# 3.0 Canonical sync script (used by cron on all VMs)
+ln -sf "$AGENTS_ROOT/scripts/canonical-sync.sh" "$HOME/canonical-sync.sh" 2>/dev/null || true
+chmod +x "$HOME/canonical-sync.sh" 2>/dev/null || true
+
 # 3.0 Auto-checkpoint (CRITICAL durability plane)
 if [ "${DX_DISABLE_AUTO_CHECKPOINT:-0}" != "1" ] && command -v auto-checkpoint-install >/dev/null 2>&1; then
   echo -e "${GREEN} -> Enabling auto-checkpoint scheduler (critical)...${RESET}"

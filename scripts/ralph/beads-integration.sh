@@ -11,7 +11,11 @@ if [ -z "$EPIC_ID" ]; then
   exit 1
 fi
 
-export BEADS_DIR=/Users/fengning/agent-skills/.beads
+if [ -z "${BEADS_DIR:-}" ]; then
+  echo "❌ BEADS_DIR not set. V5 requires external beads DB."
+  echo "   Fix: export BEADS_DIR=\"$HOME/bd/.beads\""
+  exit 1
+fi
 
 # Configuration
 BASE="http://127.0.0.1:4105"
@@ -26,7 +30,8 @@ REV_MODEL="glm-4.7"
 AGENT_TIMEOUT=180         # Per-agent call timeout (3 minutes)
 MAX_ATTEMPTS=3            # Max revision attempts per task
 
-WORKSPACE="/Users/fengning/agent-skills"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE="${WORKSPACE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 WORK_DIR="$WORKSPACE/.ralph-work-$$"
 mkdir -p "$WORK_DIR/logs"
 LOG_DIR="$WORK_DIR/logs"
@@ -48,10 +53,6 @@ fi
 mkdir -p "$WORK_DIR"
 mkdir -p "$WORK_DIR/logs"  # Create logs directory BEFORE logging starts
 cd "$WORK_DIR"
-git init -q
-git config user.email "ralph-beads@local"
-git config user.name "Ralph Beads Integration"
-git commit --allow-empty -m "Initial commit" -q
 
 log "=== Ralph Beads Integration ==="
 log "Epic ID: $EPIC_ID"
@@ -60,7 +61,7 @@ log ""
 
 # Get epic details
 log "Fetching epic details..."
-EPIC_JSON=$(bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale show "$EPIC_ID" --json 2>/dev/null)
+EPIC_JSON=$(bd --no-daemon --allow-stale show "$EPIC_ID" --json 2>/dev/null)
 if [ -z "$EPIC_JSON" ]; then
   error "Epic $EPIC_ID not found"
   exit 1

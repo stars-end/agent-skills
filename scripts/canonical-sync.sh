@@ -56,12 +56,37 @@ for repo in "${REPOS[@]}"; do
     git clean -fdx 2>/dev/null || true
     
     # Clean up old WIP branches
-    git branch | grep -E 'wip/auto|auto-checkpoint/' | xargs -r git branch -D 2>/dev/null || true
+    # Never delete branches that have unpushed commits (safety against work loss).
+    while IFS= read -r branch; do
+        branch="$(echo "$branch" | sed 's/^[* ]*//g' | sed 's/ *$//g')"
+        [[ -n "$branch" ]] || continue
+
+        upstream="$(git rev-parse --abbrev-ref "${branch}@{upstream}" 2>/dev/null || echo "")"
+        if [[ -z "$upstream" ]]; then
+            echo "$LOG_PREFIX $repo: Keeping $branch (no upstream)"
+            continue
+        fi
+
+        ahead="$(git rev-list --count "${upstream}..${branch}" 2>/dev/null || echo 0)"
+        if [[ "$ahead" != "0" ]]; then
+            echo "$LOG_PREFIX $repo: Keeping $branch (ahead of $upstream by $ahead)"
+            continue
+        fi
+
+        git branch -D "$branch" 2>/dev/null || true
+    done < <(git branch 2>/dev/null | grep -E 'wip/auto|auto-checkpoint/' 2>/dev/null || true)
     
     # Enforce V5 External Beads (Phase 4)
     if [[ -d ".beads" ]]; then
         echo "$LOG_PREFIX $repo: Removing legacy .beads/ directory"
         rm -rf .beads
+    fi
+
+    # Ensure hooks are installed (best-effort).
+    if [[ -f "./scripts/setup-git-hooks.sh" ]]; then
+        ./scripts/setup-git-hooks.sh >/dev/null 2>&1 || true
+    elif [[ -f "./Makefile" ]] && grep -q "^setup-git-hooks:" Makefile; then
+        make setup-git-hooks >/dev/null 2>&1 || true
     fi
     
     echo "$LOG_PREFIX $repo: ✅ Synced to origin/master"
