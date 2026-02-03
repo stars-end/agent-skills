@@ -340,7 +340,7 @@ git rebase master           # No .beads/ conflicts possible
 For multi-VM synchronization:
 
 ```bash
-# On one VM, create GitHub repo (one-time)
+# On one VM, create GitHub repo (one-time, if missing)
 cd ~/bd
 gh repo create stars-end/bd --private
 git remote add origin git@github.com:stars-end/bd.git
@@ -350,6 +350,12 @@ git push -u origin master
 cd ~
 git clone git@github.com:stars-end/bd.git bd
 # BEADS_DIR already points to ~/bd/.beads
+
+# If you see a repo fingerprint mismatch after clone (common after changing remotes):
+#   "Repo Fingerprint Database belongs to different repository"
+cd ~/bd
+printf 'y\n' | bd migrate --update-repo-id
+bd doctor
 ```
 
 ### Troubleshooting

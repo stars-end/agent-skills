@@ -40,4 +40,13 @@ source ~/.zshrc
 | Each repo isolated | Single shared database |
 | Multi-VM sync complex | One `~/bd` repo via git |
 | Agent context fragments | All agents see same issues |
+
+### Cross-VM Sync (Required for durability)
+
+- `~/bd` should be a git repo with remote `stars-end/bd`.
+- If `bd doctor` reports a **Repo Fingerprint mismatch**, run:
+  ```bash
+  cd ~/bd
+  printf 'y\n' | bd migrate --update-repo-id
+  ```
 ```
