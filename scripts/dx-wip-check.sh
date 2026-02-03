@@ -21,8 +21,10 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     exit 0
 fi
 
-# Find all wip/auto/ branches
-WIP_BRANCHES=$(git branch -a | grep -E "wip/auto/" | sed 's/[* ] //' | sed 's|remotes/origin/||' | sort -u)
+# Find all wip/auto/ branches.
+# Important: grep exits 1 on no matches; avoid failing dx-check in clean repos.
+raw_wip_branches="$(git branch -a | grep -E "wip/auto/" || true)"
+WIP_BRANCHES="$(printf '%s\n' "$raw_wip_branches" | sed 's/[* ] //' | sed 's|remotes/origin/||' | sort -u)"
 
 if [[ -z "$WIP_BRANCHES" ]]; then
     info "No WIP auto-checkpoint branches found"
