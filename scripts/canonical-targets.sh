@@ -117,20 +117,20 @@ esac
 # Required vs optional tools (by host role)
 case "$CANONICAL_HOST_KEY" in
   homedesktop-wsl)
-    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "op" "railway" "ru" )
-    export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" )
+    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "railway" "ru" )
+    export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" "op" )
     ;;
   macmini)
     export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "op" "railway" "ru" )
     export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" )
     ;;
   epyc6)
-    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "op" "railway" "ru" )
-    export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" )
+    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "railway" "ru" )
+    export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" "op" )
     ;;
   *)
-    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "op" "railway" "ru" )
-    export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" )
+    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "railway" "ru" )
+    export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" "op" )
     ;;
 esac
 
