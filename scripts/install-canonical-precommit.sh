@@ -18,6 +18,9 @@ install_for_repo() {
 
   mkdir -p "$hooks_dir"
 
+  # If a previous system installed symlinked hooks, remove them first so we do not write through the symlink target.
+  rm -f "$hooks_dir/pre-commit" 2>/dev/null || true
+
   cat > "$hooks_dir/pre-commit" <<'HOOK'
 #!/usr/bin/env bash
 set -euo pipefail
