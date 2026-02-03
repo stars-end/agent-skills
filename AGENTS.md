@@ -67,8 +67,9 @@ Act only when: task is blocking, founder is looping, hidden complexity exists, o
 
 ### Rules:
 1. ❌ **NEVER commit directly to canonical repos**
-2. ✅ **ALWAYS use worktrees for development work**
-3. 🔄 **Canonical repos reset to origin/master at 3am daily**
+2. ❌ **NEVER edit files in canonical repos** (keep `git status` clean; no “quick docs edits”)
+3. ✅ **ALWAYS use worktrees for any change** (code, docs, config, etc.)
+4. 🔄 **Canonical repos reset to origin/master at 3am daily**
 
 ### Workflow:
 ```bash
