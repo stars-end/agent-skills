@@ -15,6 +15,12 @@ warn() { echo -e "${YELLOW}⚠${NC} $*"; }
 
 echo "=== WIP Auto-Checkpoint Branches ==="
 
+# dx-check can be run from anywhere. If we're not in a git repo, skip cleanly.
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    info "Not in a git repository; skipping WIP branch check"
+    exit 0
+fi
+
 # Find all wip/auto/ branches
 WIP_BRANCHES=$(git branch -a | grep -E "wip/auto/" | sed 's/[* ] //' | sed 's|remotes/origin/||' | sort -u)
 
