@@ -6,6 +6,8 @@ Small “fresh agent” proof-of-work runs live here (one draft PR per run).
 
 ## Minimal POC Prompt (copy/paste)
 
+Before creating any files, ensure you are working in a worktree (canonical clones must remain clean).
+
 Create a new file at `docs/poc_runs/poc_run.md` with:
 - Output of: `ls -la AGENTS.md GEMINI.md`
 - Output of: `rg -n "CANONICAL REPOSITORY RULES|NEVER commit|ALWAYS use worktrees" AGENTS.md | head -5`
