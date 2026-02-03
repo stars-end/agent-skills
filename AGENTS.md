@@ -616,6 +616,14 @@ cc-glm --resume <session-id>
 | `dx-dispatch` | Cross-VM and cloud dispatch |
 | `dx-status` | Show repo and environment status |
 
+---
+
+## DX Fleet Spec (V7)
+
+Single-source spec for the current fleet contract lives at:
+
+- `docs/DX_FLEET_SPEC_V7.md`
+
 ### Optional Commands (use when needed)
 
 | Command | Purpose |
