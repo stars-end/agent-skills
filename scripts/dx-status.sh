@@ -283,7 +283,7 @@ if [ -e "$PRIME_HOOK" ]; then
         if [ $PRIME_REQUIRED -eq 1 ]; then
             echo -e "${RED}❌ Hook invalid in prime-radiant-ai${RESET}"
             echo "   Target: $(resolve_path $PRIME_HOOK)"
-            echo "   Fix: Run ~/agent-skills/git-safety-guard/install.sh --global"
+            echo "   Fix: cd ~/prime-radiant-ai && make setup-git-hooks"
             ERRORS=$((ERRORS+1))
         else
             warn_only "Hook invalid in prime-radiant-ai (optional on this host)"
@@ -292,7 +292,7 @@ if [ -e "$PRIME_HOOK" ]; then
 else
     if [ $PRIME_REQUIRED -eq 1 ]; then
         echo -e "${RED}❌ Hook missing in prime-radiant-ai${RESET}"
-        echo "   Fix: Run ~/agent-skills/git-safety-guard/install.sh --global"
+        echo "   Fix: cd ~/prime-radiant-ai && make setup-git-hooks"
         ERRORS=$((ERRORS+1))
     else
         warn_only "Hook missing in prime-radiant-ai (optional on this host)"
@@ -342,9 +342,9 @@ fi
 
 # 4. Invoke MCP Doctor
 echo "--- MCP & Tooling Status ---"
-if [ -f "$HOME/agent-skills/mcp-doctor/check.sh" ]; then
+if [ -f "$HOME/agent-skills/health/mcp-doctor/check.sh" ]; then
     # mcp-doctor is warn-only by default; strict mode should be enabled explicitly.
-    bash "$HOME/agent-skills/mcp-doctor/check.sh" || true
+    bash "$HOME/agent-skills/health/mcp-doctor/check.sh" || true
 else
     echo -e "${RED}❌ MCP Doctor script missing${RESET}"
     ERRORS=$((ERRORS+1))
@@ -353,7 +353,7 @@ fi
 # 5. SSH Key Doctor (warn-only by default)
 echo ""
 echo "--- SSH Key Doctor ---"
-SSH_DOCTOR="$HOME/agent-skills/ssh-key-doctor/check.sh"
+SSH_DOCTOR="$HOME/agent-skills/health/ssh-key-doctor/check.sh"
 if [ -x "$SSH_DOCTOR" ]; then
     # Local-only is fast and safe; remote checks are opt-in.
     if ! "$SSH_DOCTOR" --local-only; then

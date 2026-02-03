@@ -19,7 +19,9 @@
 # These are the primary VMs used for development and deployment.
 # Format: "user@hostname:OS:Description"
 
-export CANONICAL_TRUNK_BRANCH="main"
+# Canonical repos use the default branch on GitHub. In this org we standardize on `master`.
+# Override for experiments via: export CANONICAL_TRUNK_BRANCH=main
+export CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
 
 export CANONICAL_VMS=(
   "feng@epyc6:linux:Primary Linux dev host (this machine)"
