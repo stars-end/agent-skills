@@ -42,7 +42,7 @@ create() {
   "$AGENTS_ROOT/scripts/dx-ensure-bins.sh" >/dev/null 2>&1 || true
 
   local path
-  path="$(worktree-setup.sh "$beads_id" "$repo")"
+  path="$("$AGENTS_ROOT/scripts/worktree-setup.sh" "$beads_id" "$repo")"
   if [[ -z "$path" ]]; then
     die "worktree-setup failed"
   fi
@@ -53,7 +53,7 @@ create() {
 cleanup() {
   local beads_id="${1:-}"
   [[ -n "$beads_id" ]] || die "usage: dx-worktree cleanup <beads-id>"
-  worktree-cleanup.sh "$beads_id"
+  "$AGENTS_ROOT/scripts/worktree-cleanup.sh" "$beads_id"
 }
 
 prune_repo() {
@@ -102,4 +102,3 @@ case "$cmd" in
   explain|help|-h|--help) explain ;;
   *) die "unknown command: $cmd" ;;
 esac
-
