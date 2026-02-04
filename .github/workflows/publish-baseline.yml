@@ -12,6 +12,10 @@ on:
       - 'railway/**/SKILL.md'
       - 'fragments/**'
       - 'scripts/publish-baseline.zsh'
+
+permissions:
+  contents: write
+
 jobs:
   publish:
     runs-on: ubuntu-latest  # Runner policy: hosted for deterministic automation
