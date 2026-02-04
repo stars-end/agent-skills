@@ -19,6 +19,12 @@ RESET='\033[0m'
 # Get repo name from current directory
 REPO_NAME="$(basename "$(git rev-parse --show-toplevel)")"
 
+# NOTE: The Beads planning repo ("bd") is not part of dx-triage's canonical scan.
+# Allow pushes so ~/bd can sync issues.jsonl across VMs without requiring DX_TRIAGE_STATUS files.
+if [[ "$REPO_NAME" == "bd" ]]; then
+    exit 0
+fi
+
 # Get current branch
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
 
