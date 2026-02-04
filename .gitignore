@@ -22,3 +22,4 @@ node_modules/
 .ralph-test-*/
 .ralph-validate-*
 .ralph-work-*/
+.CANONICAL_REPO
