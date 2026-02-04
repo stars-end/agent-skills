@@ -2,11 +2,16 @@
 
 **Date**: 2026-02-04  
 **Status**: Active  
-**Replaces**: v7.6
+**Extends**: v7.6 (V7.7 is an add-on, not a replacement)
 
 ## Summary
 
-v7.7 introduces repo-plane baseline inheritance and an optional tool-global "tiny rail" for cross-IDE constraints.
+v7.7 introduces **repo-plane baseline inheritance** (mandatory) and an **optional tool-global "tiny rail"** for cross-IDE constraints. V7.7 does NOT replace V7.6 — it builds on top of it.
+
+**Key Points**:
+- V7.6 enforcement layer (Sweeper/Janitor) remains active
+- V7.7 adds baseline inheritance across product repos
+- The optional per-VM symlink setup (tiny rail) is NOT required for repo-plane inheritance to work
 
 ## 1. Repo-Plane Inheritance (Mandatory)
 
