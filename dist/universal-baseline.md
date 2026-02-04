@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 1cd92849d9d4589c6bb92b98fa7b45242b8d6a9b -->
-<!-- Last updated: 2026-02-04 18:26:02 -->
+<!-- Source SHA: b26e1c3cd50bcc1cf8d0bdc3610f733347f91e99 -->
+<!-- Last updated: 2026-02-04T18:26:10Z -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Operating Contract (Layer A — Curated)
@@ -334,71 +334,69 @@ dx-janitor --dry-run --verbose
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
+| beads-workflow | Beads issue tracking and workflow management with automatic  | `See SKILL.md` | workflow,beads,issue-tracking,git |
+| create-pull-request | Create GitHub pull request with atomic Beads issue closure.  | `See SKILL.md` | workflow,github,pr,beads,review |
+| feature-lifecycle | A suite of skills to manage the full development lifecycle f | `See SKILL.md` | workflow,git,feature,beads,dx |
+| finish-feature | Complete epic with cleanup and archiving, or verify feature  | `See SKILL.md` | workflow,beads,cleanup,archiving |
+| fix-pr-feedback | Address PR feedback with iterative refinement. MUST BE USED  | `See SKILL.md` | workflow,pr,beads,debugging,iteration |
+| issue-first | Enforce Issue-First pattern by creating Beads tracking issue | `See SKILL.md` | workflow,beads,issue-tracking,implementation |
+| merge-pr | Prepare PR for merge and guide human to merge via GitHub web | `See SKILL.md` | workflow,pr,github,merge,deployment |
+| session-end | End Claude Code session with Beads sync and summary. MUST BE | `See SKILL.md` | workflow,beads,session,cleanup |
+| sync-feature-branch | Commit current work to feature branch with Beads metadata tr | `See SKILL.md` | workflow,git,beads,commit |
 
 ### Extended Workflows
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
+| bv-integration | Beads Viewer (BV) integration for visual task management and | `See SKILL.md` | workflow,beads,visualization,task-selection |
+| coordinator-dx | Coordinator playbook for running multi‑repo, multi‑VM work i | `See SKILL.md` |  |
+| jules-dispatch | Dispatches work to Jules agents via the CLI. Automatically g | `See SKILL.md` | workflow,jules,cloud,automation,dx |
+| lint-check | Run quick linting checks on changed files. MUST BE USED when | `See SKILL.md` | workflow,quality,linting,validation |
+| parallelize-cloud-work | Delegate independent work to Claude Code Web cloud sessions  | `See SKILL.md` | workflow,cloud,parallelization,dx |
+| plan-refine | Iteratively refine implementation plans using the "Convexity | `See SKILL.md` | architecture,planning,review,refinement,apr |
+| skill-creator | Create new Claude Code skills following V3 DX patterns with  | `See SKILL.md` | meta,skill-creation,automation,v3 |
+| slack-coordination | Optional coordinator stack: Slack-based coordination loops ( | `See SKILL.md` | slack,coordination,workflow,optional |
+| worktree-workflow | Create and manage task workspaces using git worktrees (witho | `See SKILL.md` | dx,git,worktree,workspace,workflow |
 
 ### Health & Monitoring
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
+| bd-doctor | Check and fix common Beads workflow issues across all repos. | `See SKILL.md` |  |
+| lockfile-doctor | Check and fix lockfile drift across Poetry (Python) and pnpm | `See SKILL.md` |  |
+| mcp-doctor | Warn-only health check for canonical MCP configuration and r | `See SKILL.md` | dx,mcp,health,verification |
+| railway-doctor | Pre-flight checks for Railway deployments to catch failures  | `See SKILL.md` | railway,deployment,validation,pre-flight |
+| skills-doctor | Validate that the current VM has the right `agent-skills` in | `See SKILL.md` |  |
+| ssh-key-doctor | Fast, deterministic SSH health check for canonical VMs (no h | `See SKILL.md` | dx,ssh,verification |
+| toolchain-health | Validate Python toolchain alignment between mise, Poetry, an | `See SKILL.md` | dx,tooling,python |
+| verify-pipeline | Run project verification checks using standard Makefile targ | `See SKILL.md` | workflow,testing,verification,makefile,railway |
 
 ### Infrastructure
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
+| canonical-targets | Single source of truth for canonical VMs, canonical IDEs, an | `See SKILL.md` | dx,ide,vm,canonical,targets |
+| devops-dx | GitHub/Railway housekeeping for CI env/secret management and | `See SKILL.md` | devops,github,env,ci,railway |
+| dx-alerts | Lightweight “news wire” for DX changes and breakages, posted | `See SKILL.md` |  |
+| github-runner-setup | GitHub Actions self-hosted runner setup and maintenance. Use | `See SKILL.md` | github-actions,devops,runner,systemd,infrastructure |
+| vm-bootstrap | Linux VM bootstrap verification skill. MUST BE USED when set | `See SKILL.md` | dx,tooling,setup,linux |
 
 ### Railway Deployment
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
-|  |   | `See SKILL.md` |  |
+| database | This skill should be used when the user wants to add a datab | `See SKILL.md` |  |
+| deploy | This skill should be used when the user wants to push code t | `See SKILL.md` |  |
+| deployment | This skill should be used when the user wants to manage Rail | `See SKILL.md` |  |
+| domain | This skill should be used when the user wants to add a domai | `See SKILL.md` |  |
+| environment | This skill should be used when the user asks "what's the con | `See SKILL.md` |  |
+| metrics | This skill should be used when the user asks about resource  | `See SKILL.md` |  |
+| new | This skill should be used when the user says "setup", "deplo | `See SKILL.md` |  |
+| projects | This skill should be used when the user wants to list all pr | `See SKILL.md` |  |
+| railway-docs | This skill should be used when the user asks about Railway f | `See SKILL.md` |  |
+| service | This skill should be used when the user asks about service s | `See SKILL.md` |  |
+| status | This skill should be used when the user asks "railway status | `See SKILL.md` |  |
+| templates | This skill should be used when the user wants to add a servi | `See SKILL.md` |  |
 
 
 ---
