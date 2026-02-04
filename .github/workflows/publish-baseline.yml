@@ -11,9 +11,6 @@ on:
       - 'railway/**/SKILL.md'
       - 'fragments/**'
       - 'scripts/publish-baseline.zsh'
-    paths-ignore:
-      - 'dist/**'  # FIX 3: Prevent loop
-
 jobs:
   publish:
     runs-on: ubuntu-latest  # Runner policy: hosted for deterministic automation
@@ -37,7 +34,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dist/universal-baseline.md
+          git add dist/universal-baseline.md dist/dx-global-constraints.md
           
           if git diff --staged --quiet; then
             echo "No changes to baseline"
