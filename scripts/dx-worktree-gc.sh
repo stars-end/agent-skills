@@ -53,7 +53,10 @@ check_merged() {
     local repo_path="$1"
     local branch="$2"
     cd "$repo_path"
-    
+
+    # Best-effort fetch to ensure origin/* refs exist
+    git fetch --quiet --prune origin master main >/dev/null 2>&1 || true
+
     # Check if branch is merged into origin/master or origin/main
     local base="origin/master"
     if ! git rev-parse "$base" >/dev/null 2>&1; then
@@ -123,8 +126,13 @@ process_worktree() {
             if [[ "$age_hours" -ge "$COOLDOWN_HOURS" ]]; then
                 success "SAFE DELETE: $name/$repo ($branch)"
                 if [[ "$DRY_RUN" == false ]]; then
-                    # Remove worktree safely using git semantics
-                    git -C "$WORKTREE_BASE" worktree remove -f "$path" 2>/dev/null || rm -rf "$path"
+                    # Remove worktree using canonical repo git semantics (do not rm -rf fallback; avoid metadata corruption)
+                    local canonical_repo="$HOME/$repo"
+                    if [[ -d "$canonical_repo/.git" ]]; then
+                        git -C "$canonical_repo" worktree remove -f "$path"
+                    else
+                        error "Cannot remove worktree safely: canonical repo missing at $canonical_repo (leaving intact)"
+                    fi
                 fi
             else
                 log "KEEP: Merged but in cooldown (${age_hours}h < ${COOLDOWN_HOURS}h)"
