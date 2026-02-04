@@ -16,6 +16,17 @@
 
 set -euo pipefail
 
+# Ensure bash >= 4 for associative arrays (macOS may default to bash 3.2)
+if [[ -n "${BASH_VERSINFO:-}" ]] && [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
+    for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+        if [[ -x "$candidate" ]]; then
+            exec "$candidate" "$0" "$@"
+        fi
+    done
+    echo "dx-triage requires bash >= 4 (install via Homebrew: brew install bash)" >&2
+    exit 1
+fi
+
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -314,9 +325,12 @@ if [[ "$MODE" == "fix" ]]; then
     for repo in "${ALL_REPOS[@]}"; do
         [[ "${REPO_EXISTS[$repo]:-0}" -eq 0 ]] && continue
         repo_path="$HOME/$repo"
-        triage_file="$repo_path/.git/DX_TRIAGE_REQUIRED"
-        ack_file="$repo_path/.git/DX_TRIAGE_ACK"
-        status_file="$repo_path/.git/DX_TRIAGE_STATUS"
+        common_dir="$(git -C "$repo_path" rev-parse --git-common-dir 2>/dev/null || echo .git)"
+if [[ "$common_dir" != /* ]]; then common_dir="$repo_path/$common_dir"; fi
+common_dir="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$common_dir")"
+triage_file="$common_dir/DX_TRIAGE_REQUIRED"
+        ack_file="$common_dir/DX_TRIAGE_ACK"
+        status_file="$common_dir/DX_TRIAGE_STATUS"
 
         if [[ -f "$triage_file" ]]; then
             rm -f "$triage_file"
@@ -360,8 +374,11 @@ elif [[ "$MODE" == "ack" ]]; then
     for repo in "${ALL_REPOS[@]}"; do
         [[ "${REPO_EXISTS[$repo]:-0}" -eq 0 ]] && continue
         repo_path="$HOME/$repo"
-        triage_file="$repo_path/.git/DX_TRIAGE_REQUIRED"
-        ack_file="$repo_path/.git/DX_TRIAGE_ACK"
+        common_dir="$(git -C "$repo_path" rev-parse --git-common-dir 2>/dev/null || echo .git)"
+if [[ "$common_dir" != /* ]]; then common_dir="$repo_path/$common_dir"; fi
+common_dir="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$common_dir")"
+triage_file="$common_dir/DX_TRIAGE_REQUIRED"
+        ack_file="$common_dir/DX_TRIAGE_ACK"
 
         # Clear DX_TRIAGE_REQUIRED if exists
         if [[ -f "$triage_file" ]]; then
@@ -376,7 +393,10 @@ elif [[ "$MODE" == "ack" ]]; then
         fi
 
         # Update ACK file with fingerprint (forced review gating)
-        status_file="$repo_path/.git/DX_TRIAGE_STATUS"
+        common_dir="$(git -C "$repo_path" rev-parse --git-common-dir 2>/dev/null || echo .git)"
+if [[ "$common_dir" != /* ]]; then common_dir="$repo_path/$common_dir"; fi
+common_dir="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$common_dir")"
+status_file="$common_dir/DX_TRIAGE_STATUS"
         if [[ -f "$status_file" ]]; then
             # Extract fingerprint and trim leading/trailing whitespace
             current_fingerprint=$(grep "^X_FINGERPRINT:" "$status_file" 2>/dev/null | cut -d':' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
