@@ -139,6 +139,16 @@ cat >> "$OUTFILE" <<'EOF'
 **Source**: Generated from agent-skills commit shown in header
 EOF
 
+# Publish tiny global constraints rail
+CONSTRAINTS_SRC="$REPO_ROOT/fragments/dx-global-constraints.md"
+CONSTRAINTS_DST="$REPO_ROOT/dist/dx-global-constraints.md"
+if [[ -f "$CONSTRAINTS_SRC" ]]; then
+    cp "$CONSTRAINTS_SRC" "$CONSTRAINTS_DST"
+    echo "✅ Published constraints: $CONSTRAINTS_DST"
+else
+    echo "⚠️  Warning: dx-global-constraints.md not found"
+fi
+
 LINES=$(wc -l < "$OUTFILE")
 echo "✅ Published baseline: $OUTFILE ($LINES lines, SHA: ${COMMIT_SHA:0:8})"
 
