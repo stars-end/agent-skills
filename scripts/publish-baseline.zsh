@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 OUTFILE="$REPO_ROOT/dist/universal-baseline.md"
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+TIMESTAMP=$(git show -s --format=%cI HEAD)
 COMMIT_SHA=$(git rev-parse HEAD)
 
 mkdir -p "$REPO_ROOT/dist"
@@ -14,41 +14,34 @@ extract_frontmatter() {
     awk '/^---$/{if(++count==2) exit; next} count==1' "$skill_file"
 }
 
-# Parse YAML field from frontmatter (FIX 1: stdin piping + FIX 2: dotted paths)
+# Parse YAML field from frontmatter (stdin) with dotted paths
 parse_yaml_field() {
     local field=$1
-    python3 - "$field" <<'PY'
-import sys
-import yaml
-
-field = sys.argv[1]
-fm_text = sys.stdin.read()
+    python3 -c 'import sys, yaml
+field=sys.argv[1]
+fm_text=sys.stdin.read()
 
 try:
-    data = yaml.safe_load(fm_text) or {}
-    
-    # Support dotted paths (e.g., "metadata.display_example")
+    data=yaml.safe_load(fm_text) or {}
+
     def get_path(obj, path):
-        parts = path.split(".")
-        current = obj
-        for part in parts:
-            if not isinstance(current, dict):
+        cur=obj
+        for part in path.split("."):
+            if not isinstance(cur, dict):
                 return ""
-            current = current.get(part, "")
-        return current
-    
-    value = get_path(data, field)
-    
-    # Format output
+            cur=cur.get(part, "")
+        return cur
+
+    value=get_path(data, field)
     if isinstance(value, list):
         print(",".join(str(x) for x in value))
     elif isinstance(value, dict):
-        print("")  # Dicts need subfield queries
+        print("")
     else:
         print(str(value) if value else "")
 except Exception:
     print("")
-PY
+' "$field"
 }
 
 # Header
@@ -110,6 +103,11 @@ generate_skill_table() {
         # Fallback to top-level tags during migration
         [[ -z "$tags" ]] && tags=$(printf '%s' "$fm" | parse_yaml_field "tags")
         
+        # Skip empty/invalid rows (prevents empty tables when parsing fails)
+        if [[ ! "$name" =~ [A-Za-z0-9] || ! "$desc" =~ [A-Za-z0-9] ]]; then
+            continue
+        fi
+
         # Write to temp file for deterministic sorting
         echo "| $name | $desc | \`$example\` | $tags |" >> "$temp_rows"
     done
