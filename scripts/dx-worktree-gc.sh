@@ -134,12 +134,11 @@ process_worktree() {
         fi
     elif [[ "$age_hours" -ge $((ARCHIVE_THRESHOLD_DAYS * 24)) ]]; then
         if [[ -z "$dirty" ]]; then
-            warn "ARCHIVE: Stale clean worktree: $name/$repo"
+            warn "ARCHIVE (Copy-only): Stale clean worktree: $name/$repo"
             if [[ "$DRY_RUN" == false ]]; then
                 local archive_name="${name}_${repo}_$(date +%Y%m%d).tar.gz"
                 tar -czf "$ARCHIVE_BASE/$archive_name" -C "$(dirname "$path")" "$repo"
-                git -C "$WORKTREE_BASE" worktree remove -f "$path" 2>/dev/null || rm -rf "$path"
-                info "Archived to $ARCHIVE_BASE/$archive_name"
+                info "Archived to $ARCHIVE_BASE/$archive_name (Original intact)"
             fi
         else
             error "ESCALATE: Stale but DIRTY: $name/$repo"
