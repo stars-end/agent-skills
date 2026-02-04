@@ -70,6 +70,7 @@ Act only when: task is blocking, founder is looping, hidden complexity exists, o
 2. ❌ **NEVER edit files in canonical repos** (keep `git status` clean; no “quick docs edits”)
 3. ✅ **ALWAYS use worktrees for any change** (code, docs, config, etc.)
 4. 🔄 **Canonical repos reset to origin/master at 3am daily**
+5. ❌ **NO exceptions**: “infra/system/DX workflow work” still MUST happen in a worktree
 
 ### Workflow:
 ```bash
@@ -623,6 +624,7 @@ cc-glm --resume <session-id>
 Single-source spec for the current fleet contract lives at:
 
 - `docs/DX_FLEET_SPEC_V7.md`
+- `docs/DX_FLEET_SPEC_V7.6.md`
 
 ### Optional Commands (use when needed)
 

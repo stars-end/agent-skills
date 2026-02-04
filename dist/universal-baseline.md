@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: df07514ad1e3404b36ee4a11a7dd3b35cbae083c -->
-<!-- Last updated: 2026-02-03 15:36:19 -->
+<!-- Source SHA: 2a1450763b3bb25255bcc6b4cf08f73677842f0b -->
+<!-- Last updated: 2026-02-04 07:21:15 -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Operating Contract (Layer A — Curated)
@@ -45,6 +45,13 @@ When uncertain, escalate one tier up.
 - Purpose: Ensure canonical clones stay aligned
 - Note: Does NOT reset uncommitted changes
 
+### V7.6: Sweeper Enforcement
+
+The **dx-sweeper** handles dirty canonicals automatically:
+- Creates rolling rescue PR per host+repo (bounded)
+- Resets canonical to clean master after preserving work
+- See: `fragments/v7.6-mechanisms.md`
+
 ### Workflow
 
 Always use worktrees for development:
@@ -70,6 +77,8 @@ cd /tmp/agents/bd-recovery/repo
 git cherry-pick <commit-hash>
 git push origin bd-recovery
 ```
+
+**Or**: Let dx-sweeper handle it (rescue PR will be created automatically)
 
 ## External Beads Database (CRITICAL)
 
@@ -149,6 +158,19 @@ echo $BEADS_DIR
 # Expected: /home/$USER/bd/.beads
 ```
 
+### 4. Create a Workspace (V7.6)
+
+Before making **any** file changes, you MUST work in a workspace (worktree), not a canonical clone:
+
+```bash
+dx-worktree create <beads-id> <repo>
+cd /tmp/agents/<beads-id>/<repo>
+```
+
+**Rule:** If you find yourself editing `~/<repo>` (canonical), STOP and create a worktree.
+
+See: `fragments/v7.6-mechanisms.md`
+
 ## Landing the Plane (Session Completion)
 
 When ending a work session, MUST complete ALL steps:
@@ -163,11 +185,146 @@ When ending a work session, MUST complete ALL steps:
    git push
    git status  # MUST show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+5. **Verify canonicals are clean** (V7.6):
+   ```bash
+   ~/agent-skills/scripts/dx-verify-clean.sh
+   ```
+6. **Clean up** - Clear stashes, prune branches
+7. **Verify** - All changes committed AND pushed
+8. **Hand off** - Provide context for next session
 
 **CRITICAL**: Work is NOT complete until `git push` succeeds.
+
+### PR-or-It-Didn't-Happen (V7.6)
+
+After landing the plane:
+- Canonical work → Sweeper creates rescue PR automatically
+- Worktree work → Ensure PR exists (Janitor will create draft if missing)
+- No PR visibility = Work is invisible and at risk
+
+See: `fragments/v7.6-mechanisms.md` for sweeper/janitor details
+
+## DX Fleet V7.6 Mechanisms
+
+Fleet automation for bounded, visible work with minimal cognitive load.
+
+### Reality Check (Why V7.6 Exists)
+
+Agents will sometimes violate the “no writes in canonicals” rule (even capable agents), especially during complex multi-repo work.
+
+V7.6 is **mechanical self-healing**:
+- Move hidden local state → visible PRs (bounded)
+- Restore canonicals → clean trunk
+- Remove “archaeology” (stashes/branches) as the default recovery path
+
+### Sweeper vs Janitor
+
+| Aspect | Sweeper (dx-sweeper) | Janitor (dx-janitor) |
+|--------|---------------------|---------------------|
+| **Scope** | Canonical repos only | Worktrees only |
+| **Trigger** | Dirty OR branch≠master | Unpushed commits OR no PR |
+| **Action** | Rescue branch + PR + reset canonical | Push commits + create draft PR |
+| **Safety** | Index.lock check; preserve-before-reset | Non-destructive; never closes PRs |
+| **Destructive** | Yes (resets canonical after rescue) | No (never delete/close) |
+
+### Canonical Sweeper (dx-sweeper)
+
+**Purpose:** Convert dirty canonical state to rescue PR, restore clean master.
+
+**Rescue Branch Naming (Rolling):**
+```
+canonical-rescue-<host>-<repo>
+```
+
+**Rolling Rescue PR Contract (Bounded Inbox):**
+- Exactly one open rescue PR per `<host>,<repo>` pair
+- Title: `chore: [RESCUE] canonical rescue (<host> <repo>)`
+- Labels: `wip/rescue`, `host/<host>`, `repo/<repo>`
+- PR head branch is the rolling rescue branch above
+- Body updated with: "Latest rescue commit: `<sha>` @ `<time>`"
+
+**Safety Gates:**
+1. Skip if `.git/index.lock` exists
+2. Preserve before reset:
+   - If canonical is on a feature branch with commits, push that branch first (even if it has no upstream)
+3. Only reset after rescue push succeeds
+
+**Recovery Process:**
+```
+Dirty canonical → Create rescue branch → Commit changes → Push → 
+Update/create rescue PR → Reset canonical to origin/master
+```
+
+### Worktree Janitor (dx-janitor)
+
+**Purpose:** Ensure worktree durability (pushed + PR exists).
+
+**Quiet Mode Principles:**
+- No duplicate PRs for same branch
+- Minimal notification churn
+- Label-only updates for existing PRs
+
+**Abandonment Detection (Optional, Manual-First):**
+- Trigger: PR has `wip:abandon` label
+- Threshold: >72 hours old AND still draft
+- Action: Inform only (no automatic closure)
+
+**Labels:**
+- `wip/worktree` - Auto-applied to all worktree PRs
+- `wip:abandon` - Manual marker for stale work
+
+### Baseline Sync
+
+**Product Repos:** Self-update via GitHub Actions
+- `baseline-sync.yml` - Daily rolling PR for baseline updates
+- `verify-agents-md.yml` - Fail if AGENTS.md is stale
+- No per-VM cron required
+- No cross-repo tokens needed
+
+**Fragment Architecture:**
+```
+fragments/
+├── v7.6-mechanisms.md     (this file)
+├── canonical-rules.md     (updated for V7.6)
+├── session-start.md       (worktree-first)
+├── landing-the-plane.md   (dx-verify-clean)
+└── universal-baseline.md  (generated)
+```
+
+### Deterministic Automation
+
+**Sweeper/Janitor:** Pure bash, no LLM
+- Deterministic logic
+- Predictable outcomes
+- Fast execution
+
+**LLM Triage (Optional):** GitHub Actions only
+- Classifies PRs: `SAFE_TO_MERGE`, `NEEDS_REVIEW`, `ABANDON_CANDIDATE`
+- Applies labels and comments only
+- Never touches branches or pushes
+
+### Rollout Schedule
+
+| Week | Phase | Scope |
+|------|-------|-------|
+| 1 | Manual runs | homedesktop-wsl only |
+| 2 | Sweeper cron | Daily 2am (before 3am canonical-sync) |
+| 3 | Janitor cron | Business hours |
+| 4 | Multi-VM + abandon | macmini, epyc6; wip:abandon automation |
+
+### Commands
+
+```bash
+# Manual sweeper (dry-run)
+dx-sweeper --dry-run --verbose
+
+# Manual janitor (dry-run)
+dx-janitor --dry-run --verbose
+
+# Production runs (via cron)
+~/agent-skills/scripts/dx-sweeper.sh
+~/agent-skills/scripts/dx-janitor.sh
+```
 
 ---
 
