@@ -1,6 +1,7 @@
 name: Publish Universal Baseline
 
 on:
+  workflow_dispatch:
   push:
     branches: [master]
     paths:
