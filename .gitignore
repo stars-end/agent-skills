@@ -18,8 +18,12 @@ mcp_agent_mail_reference/
 .beads/interactions.jsonl
 node_modules/
 
-# Ralph work directories
+
+# Ralph artifacts (local-only)
+.ralph/
+.ralph
+.ralph-*/
+.ralph-*
 .ralph-test-*/
-.ralph-validate-*
 .ralph-work-*/
-.CANONICAL_REPO
+.ralph-parallel-logs/
