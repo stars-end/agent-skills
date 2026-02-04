@@ -167,8 +167,14 @@ process_repo() {
         warn "$repo_name: Found $stash_count stash(es). Evacuating via worktree..."
         
         local i=0
-        while [[ $i -lt $stash_count ]]; do
-            # We always target stash@{0} because we drop them as we go
+        while true; do
+            # Refetch list to handle changing indices
+            local current_stash_list
+            current_stash_list=$(git stash list 2>/dev/null || echo "")
+            if [[ -z "$current_stash_list" ]]; then break; fi
+            
+            # We always target the top-most stash that hasn't been rescued yet
+            # After a successful drop, stash@{0} will be the NEXT stash.
             local stash_ref="stash@{0}"
             local timestamp
             timestamp=$(iso_timestamp)
@@ -179,19 +185,18 @@ process_repo() {
             
             if [[ "$DRY_RUN" == true ]]; then
                 echo "  [DRY-RUN] Would create worktree $rescue_path, apply $stash_ref, push, and drop."
-                ((i++))
-                continue
+                # In dry run, we must break to avoid infinite loop as indices don't change
+                break
             fi
 
             # 1. Create temporary worktree
             if ! git worktree add -b "$rescue_branch" "$rescue_path" origin/master >/dev/null 2>&1; then
                 error "Failed to create rescue worktree at $rescue_path"
-                ((i++))
-                continue
+                break # Avoid infinite loop on failure
             fi
 
             # 2. Apply stash in worktree
-            if git -C "$rescue_path" stash apply "stash@{$i}" >/dev/null 2>&1; then
+            if git -C "$rescue_path" stash apply "$stash_ref" >/dev/null 2>&1; then
                 # 3. Commit changes
                 git -C "$rescue_path" add -A
                 git -C "$rescue_path" commit -m "chore(rescue): evacuate canonical stash (${host} ${repo_name})
@@ -208,19 +213,23 @@ Agent: dx-sweeper" >/dev/null 2>&1
                     if [[ -n "$pr_url" ]]; then
                         success "Rescued stash to $pr_url"
                         # 6. ONLY NOW drop the stash in canonical
-                        git stash drop "stash@{$i}" >/dev/null 2>&1 || warn "Failed to drop $stash_ref in canonical after rescue"
+                        git stash drop "$stash_ref" >/dev/null 2>&1 || {
+                            warn "Failed to drop $stash_ref in canonical after rescue. Breaking to avoid loop."
+                            break
+                        }
                     else
-                        warn "Pushed $rescue_branch but failed to create PR. Stash NOT dropped."
+                        warn "Pushed $rescue_branch but failed to create PR. Stash NOT dropped. Breaking loop."
+                        break
                     fi
                 else
-                    error "Failed to push $rescue_branch. Stash NOT dropped."
+                    error "Failed to push $rescue_branch. Stash NOT dropped. Breaking loop."
+                    break
                 fi
             else
-                error "Failed to apply $stash_ref in worktree. Stash NOT dropped."
+                error "Failed to apply $stash_ref in worktree. Stash NOT dropped. Breaking loop."
+                break
             fi
             
-            # Note: We don't remove the worktree here; it will be cleaned up by GC later.
-            # This ensures the work remains visible in /tmp/agents if things fail.
             ((i+=1))
         done
     fi

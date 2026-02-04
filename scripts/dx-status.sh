@@ -469,8 +469,8 @@ echo ""
 echo "--- V7.8 Lifecycle & GC Metrics ---"
 WORKTREE_BASE="/tmp/agents"
 if [[ -d "$WORKTREE_BASE" ]]; then
-    # Depth-agnostic discovery (find .git files/dirs anywhere under WORKTREE_BASE)
-    total_wt=$(find "$WORKTREE_BASE" -name ".git" 2>/dev/null | wc -l | tr -d ' ')
+    # Strict root discovery (/tmp/agents/<id>/<repo>/.git)
+    total_wt=$(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" 2>/dev/null | wc -l | tr -d ' ')
     dirty_active=0
     dirty_stale=0
     no_upstream_wt=0
@@ -499,8 +499,9 @@ if [[ -d "$WORKTREE_BASE" ]]; then
             fi
         fi
 
-        # Dirty check
-        if [[ -n $(git -C "$wt_path" status --porcelain=v1 2>/dev/null) ]]; then
+        # Dirty check (ignoring .ralph tool artifacts)
+        status_output=$(git -C "$wt_path" status --porcelain=v1 2>/dev/null | grep -v "\.ralph" || true)
+        if [[ -n "$status_output" ]]; then
             if [[ "$is_active" == true ]]; then
                 ((dirty_active++))
             else
@@ -523,8 +524,9 @@ if [[ -d "$WORKTREE_BASE" ]]; then
         if [[ -n "$branch" && "$branch" != "master" && "$branch" != "main" ]]; then
             if git -C "$wt_path" merge-base --is-ancestor "$branch" origin/master >/dev/null 2>&1 || \
                git -C "$wt_path" merge-base --is-ancestor "$branch" origin/main >/dev/null 2>&1; then
-                # Only if clean
-                if [[ -z $(git -C "$wt_path" status --porcelain=v1 2>/dev/null) ]]; then
+                # Only if clean (ignoring .ralph)
+                status_check=$(git -C "$wt_path" status --porcelain=v1 2>/dev/null | grep -v "\.ralph" || true)
+                if [[ -z "$status_check" ]]; then
                     last_commit_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
                     if (( current_ts - last_commit_ts > 86400 )); then
                         ((safe_delete_wt++))
@@ -532,9 +534,11 @@ if [[ -d "$WORKTREE_BASE" ]]; then
                 fi
             fi
         fi
-    done < <(find "$WORKTREE_BASE" -name ".git" 2>/dev/null)
+    done < <(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" 2>/dev/null)
 
     echo -e "   Total Worktrees: $total_wt"
+    find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" -exec dirname {} \; | sort | sed 's/^/      - /'
+    
     echo -e "   Dirty (Active): $dirty_active"
     
     if [[ $dirty_stale -gt 0 ]]; then

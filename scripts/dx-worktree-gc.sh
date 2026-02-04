@@ -102,7 +102,7 @@ process_worktree() {
     if [[ -z "$branch" || "$branch" == "master" || "$branch" == "main" ]]; then return 0; fi
     
     local dirty
-    dirty=$(git status --porcelain=v1)
+    dirty=$(git status --porcelain=v1 | grep -v "\.ralph" || true)
     local age_hours
     age_hours=$(get_last_commit_hours "$path")
     
@@ -153,7 +153,7 @@ main() {
     [[ "$DRY_RUN" == true ]] && info "[DRY-RUN MODE] No deletions will occur"
     
     local worktrees
-    worktrees=$(find "$WORKTREE_BASE" -name ".git" -exec dirname {} \; 2>/dev/null)
+    worktrees=$(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" -exec dirname {} \; 2>/dev/null)
     
     for wt in $worktrees; do
         process_worktree "$wt"
