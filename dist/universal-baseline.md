@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: b26e1c3cd50bcc1cf8d0bdc3610f733347f91e99 -->
-<!-- Last updated: 2026-02-04T18:26:10Z -->
+<!-- Source SHA: 9f39dde96c8907af453b77b68213b51788ccbf72 -->
+<!-- Last updated: 2026-02-04T10:47:33-08:00 -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Operating Contract (Layer A — Curated)
@@ -349,7 +349,7 @@ dx-janitor --dry-run --verbose
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
 | bv-integration | Beads Viewer (BV) integration for visual task management and | `See SKILL.md` | workflow,beads,visualization,task-selection |
-| coordinator-dx | Coordinator playbook for running multi‑repo, multi‑VM work i | `See SKILL.md` |  |
+| coordinator-dx | Coordinator playbook for running multi‑repo, multi‑VM wo | `See SKILL.md` |  |
 | jules-dispatch | Dispatches work to Jules agents via the CLI. Automatically g | `See SKILL.md` | workflow,jules,cloud,automation,dx |
 | lint-check | Run quick linting checks on changed files. MUST BE USED when | `See SKILL.md` | workflow,quality,linting,validation |
 | parallelize-cloud-work | Delegate independent work to Claude Code Web cloud sessions  | `See SKILL.md` | workflow,cloud,parallelization,dx |
@@ -377,7 +377,7 @@ dx-janitor --dry-run --verbose
 |-------|-------------|---------|------|
 | canonical-targets | Single source of truth for canonical VMs, canonical IDEs, an | `See SKILL.md` | dx,ide,vm,canonical,targets |
 | devops-dx | GitHub/Railway housekeeping for CI env/secret management and | `See SKILL.md` | devops,github,env,ci,railway |
-| dx-alerts | Lightweight “news wire” for DX changes and breakages, posted | `See SKILL.md` |  |
+| dx-alerts | Lightweight “news wire” for DX changes and breakages, po | `See SKILL.md` |  |
 | github-runner-setup | GitHub Actions self-hosted runner setup and maintenance. Use | `See SKILL.md` | github-actions,devops,runner,systemd,infrastructure |
 | vm-bootstrap | Linux VM bootstrap verification skill. MUST BE USED when set | `See SKILL.md` | dx,tooling,setup,linux |
 
