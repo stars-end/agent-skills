@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Ralph Parallel Execution via Beads Dependencies
 # Usage: ./beads-parallel.sh <task-id-1> <task-id-2> ... [--max-parallel N] [--resume <checkpoint-file>]
 # Bash 3.2 compatible (macOS default)
@@ -14,10 +14,24 @@
 
 set -e
 
+# Required: external beads DB
+if [[ -z "${BEADS_DIR:-}" ]]; then
+  echo "BEADS_DIR is required (external Beads DB)." >&2
+  exit 1
+fi
+
+# bd binary (allow override)
+BD_BIN="${BD_BIN:-bd}"
+if [[ "$BD_BIN" == */* ]]; then
+  [[ -x "$BD_BIN" ]] || { echo "BD_BIN not executable: $BD_BIN" >&2; exit 1; }
+else
+  command -v "$BD_BIN" >/dev/null 2>&1 || { echo "bd binary not found: $BD_BIN" >&2; exit 1; }
+fi
+
 # Configuration
-BEADS_DIR="/Users/fengning/agent-skills/.beads"
 MAX_PARALLEL=${MAX_PARALLEL:-3}  # Default: 3 parallel workers
-WORKSPACE="/Users/fengning/agent-skills"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE="${WORKSPACE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 LOG_DIR="$WORKSPACE/.ralph-parallel-logs"
 
 # Colors for output
@@ -121,7 +135,7 @@ log "Fetching task data from Beads..."
 for task_id in $TASK_IDS; do
   # Get full task data including dependencies
   # Use --allow-stale to bypass stale check when database has sync issues
-  task_json=$(BEADS_DIR="$BEADS_DIR" /opt/homebrew/bin/bd --no-daemon --allow-stale show "$task_id" --json 2>/dev/null)
+  task_json=$(BEADS_DIR="$BEADS_DIR" "$BD_BIN" --no-daemon --allow-stale show "$task_id" --json 2>/dev/null)
 
   if [ -z "$task_json" ]; then
     log_error "Task $task_id not found"

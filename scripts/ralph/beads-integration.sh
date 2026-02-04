@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 # Ralph Autonomous Loop with Beads Integration
@@ -11,7 +11,24 @@ if [ -z "$EPIC_ID" ]; then
   exit 1
 fi
 
-export BEADS_DIR=/Users/fengning/agent-skills/.beads
+# Required: external beads DB
+if [[ -z "${BEADS_DIR:-}" ]]; then
+  echo "BEADS_DIR is required (external Beads DB)." >&2
+  exit 1
+fi
+
+# bd binary (allow override)
+BD_BIN="${BD_BIN:-bd}"
+if [[ "$BD_BIN" == */* ]]; then
+  [[ -x "$BD_BIN" ]] || { echo "BD_BIN not executable: $BD_BIN" >&2; exit 1; }
+else
+  command -v "$BD_BIN" >/dev/null 2>&1 || { echo "bd binary not found: $BD_BIN" >&2; exit 1; }
+fi
+
+# Workspace root (allow override)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE="${WORKSPACE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+
 
 # Configuration
 BASE="http://127.0.0.1:4105"
@@ -26,7 +43,6 @@ REV_MODEL="glm-4.7"
 AGENT_TIMEOUT=180         # Per-agent call timeout (3 minutes)
 MAX_ATTEMPTS=3            # Max revision attempts per task
 
-WORKSPACE="/Users/fengning/agent-skills"
 WORK_DIR="$WORKSPACE/.ralph-work-$$"
 mkdir -p "$WORK_DIR/logs"
 LOG_DIR="$WORK_DIR/logs"
@@ -39,19 +55,11 @@ error() {
   echo "[$(date +%H:%M:%S)] ERROR: $*" | tee -a "$LOG_DIR/beads-integration.log" >&2
 }
 
-# Initialize git workspace
+# Initialize work directory (no git side effects)
 cd "$WORKSPACE"
-# Clean up existing work directory if it exists
-if [ -d "$WORK_DIR" ]; then
-  rm -rf "$WORK_DIR" 2>/dev/null || true
-fi
-mkdir -p "$WORK_DIR"
-mkdir -p "$WORK_DIR/logs"  # Create logs directory BEFORE logging starts
+rm -rf "$WORK_DIR" 2>/dev/null || true
+mkdir -p "$WORK_DIR/logs"
 cd "$WORK_DIR"
-git init -q
-git config user.email "ralph-beads@local"
-git config user.name "Ralph Beads Integration"
-git commit --allow-empty -m "Initial commit" -q
 
 log "=== Ralph Beads Integration ==="
 log "Epic ID: $EPIC_ID"
@@ -60,7 +68,7 @@ log ""
 
 # Get epic details
 log "Fetching epic details..."
-EPIC_JSON=$(bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale show "$EPIC_ID" --json 2>/dev/null)
+EPIC_JSON=$(BEADS_DIR="$BEADS_DIR" "$BD_BIN" --no-daemon --allow-stale show "$EPIC_ID" --json 2>/dev/null)
 if [ -z "$EPIC_JSON" ]; then
   error "Epic $EPIC_ID not found"
   exit 1
@@ -174,7 +182,7 @@ for TASK_ID in $SUBTASK_IDS; do
   log "$(printf '=%.0s' {1..60})"
 
   # Get task details
-  TASK_JSON=$(bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale show "$TASK_ID" --json 2>/dev/null)
+  TASK_JSON=$(BEADS_DIR="$BEADS_DIR" "$BD_BIN" --no-daemon --allow-stale show "$TASK_ID" --json 2>/dev/null)
   TASK_TITLE=$(echo "$TASK_JSON" | jq -r '.[0].title')
   TASK_DESC=$(echo "$TASK_JSON" | jq -r '.[0].description // "No description"')
 
