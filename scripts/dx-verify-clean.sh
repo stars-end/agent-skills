@@ -38,6 +38,15 @@ for repo in "${CANONICAL_REPOS[@]}"; do
   else
     echo "✅ $repo: clean"
   fi
+
+  # Check for stashes
+  stashes="$(git -C "$repo_path" stash list 2>/dev/null || true)"
+  if [[ -n "$stashes" ]]; then
+    stash_count=$(echo "$stashes" | wc -l | tr -d ' ')
+    echo "❌ $repo: has $stash_count stash(es) (hidden state)"
+    echo "$stashes" | sed 's/^/   /'
+    fail=1
+  fi
 done
 
 if [[ "$fail" -ne 0 ]]; then

@@ -125,6 +125,13 @@ process_repo() {
         has_changes=true
     fi
     
+    local has_stashes=false
+    local stash_list
+    stash_list=$(git stash list 2>/dev/null || echo "")
+    if [[ -n "$stash_list" ]]; then
+        has_stashes=true
+    fi
+    
     # Determine if action needed
     local needs_rescue=false
     
@@ -135,6 +142,11 @@ process_repo() {
     
     if [[ "$has_changes" == true ]]; then
         log "$repo_name: Has uncommitted changes"
+        needs_rescue=true
+    fi
+    
+    if [[ "$has_stashes" == true ]]; then
+        log "$repo_name: Has stashes"
         needs_rescue=true
     fi
     
@@ -150,17 +162,44 @@ process_repo() {
         return 0
     fi
     
-    # Rolling rescue branch name (bounded inbox: one PR per host+repo)
-    local rescue_branch="canonical-rescue-${host}-${repo_name}"
-    local timestamp
-    timestamp=$(iso_timestamp)
-    
-    # Check gh auth
-    if ! check_gh_auth; then
-        error "$repo_name: Cannot proceed without gh CLI auth"
-        return 1
+    # Step 0: Handle stashes (V7.8)
+    if [[ "$has_stashes" == true ]]; then
+        warn "$repo_name: Found $(echo "$stash_list" | wc -l | tr -d ' ') stash(es). Evacuating..."
+        
+        local stash_idx=0
+        while IFS= read -r stash_line; do
+            if [[ -z "$stash_line" ]]; then continue; fi
+            
+            local stash_desc
+            stash_desc=$(echo "$stash_line" | cut -d: -f3- | sed 's/^ //' | tr -dc '[:alnum:]-')
+            local stash_branch="stash-rescue-${host}-${repo_name}-${timestamp}-${stash_idx}"
+            
+            log "Evacuating stash to '$stash_branch'..."
+            
+            if [[ "$DRY_RUN" == true ]]; then
+                echo "  [DRY-RUN] Would create branch $stash_branch from stash and push"
+            else
+                # Create branch from stash
+                # git stash branch <branchname> [<stash>] - this drops the stash too
+                if git stash branch "$stash_branch" "stash@{$stash_idx}" >/dev/null 2>&1; then
+                    git push -u origin "$stash_branch" >/dev/null 2>&1 || warn "Failed to push stash branch $stash_branch"
+                    success "Evacuated stash to $stash_branch and dropped from canonical"
+                    # After git stash branch, we are on the new branch. We need to get back to master
+                    git checkout master >/dev/null 2>&1 || git checkout -b master origin/master >/dev/null 2>&1 || true
+                else
+                    # Fallback if git stash branch fails (e.g. index/worktree conflict)
+                    error "Failed 'git stash branch' for stash@{$stash_idx}. Manual intervention needed."
+                    ((stash_idx++)) # Move to next
+                    continue
+                fi
+            fi
+            # Note: git stash branch DROPS the stash if successful, so the next stash in line becomes stash@{0}
+            # Thus we don't necessarily increment stash_idx if it was dropped.
+            # But to be safe and avoid loops, we'll refetch stash list if we were to support multiple.
+            # For V7.8, we prioritize safety.
+        done <<< "$stash_list"
     fi
-    
+
     # Step 1: Preserve current branch if not master (push commits before we reset)
     if [[ "$current_branch" != "master" ]]; then
         log "Preserving branch '$current_branch'..."

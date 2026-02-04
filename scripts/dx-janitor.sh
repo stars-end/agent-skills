@@ -154,9 +154,15 @@ process_worktree() {
         has_upstream=true
         unpushed_commits=$(git rev-list --count "$current_branch"@{upstream}.."$current_branch" 2>/dev/null || echo "0")
     else
-        # No upstream: treat as unpushed if branch has any commits not in origin.
-        # (We will push -u below.)
-        unpushed_commits=$(git rev-list --count "origin/master..$current_branch" 2>/dev/null || echo "0")
+        # No upstream: branch exists locally but not in origin.
+        # Check if it has any commits ahead of master (or main)
+        local base="origin/master"
+        if ! git rev-parse "$base" >/dev/null 2>&1; then
+            base="origin/main"
+        fi
+        
+        unpushed_commits=$(git rev-list --count "$base..$current_branch" 2>/dev/null || echo "0")
+        log "No upstream found. Commits ahead of $base: $unpushed_commits"
     fi
     
     if [[ "$unpushed_commits" -gt 0 ]]; then
@@ -254,18 +260,28 @@ Branch: \`$current_branch\`
 Path: \`$worktree_path\`
 
 ---
-*Created by dx-janitor (V7.6)*"
+*Created by dx-janitor (V7.8)*"
             
+            # Extract Feature-Key from commits if possible
+            local feature_key=""
+            feature_key=$(git log -1 --pretty=format:%B | grep -i "Feature-Key:" | head -1 | awk '{print $2}' || true)
+            
+            local pr_title="WIP: $current_branch"
+            if [[ -n "$feature_key" ]]; then
+                pr_title="WIP: $feature_key ($current_branch)"
+            fi
+
             if gh pr create \
                 --repo "$repo_full_name" \
-                --title "WIP: $current_branch" \
+                --title "$pr_title" \
                 --body "$pr_body" \
                 --draft \
                 --label "wip/worktree" 2>/dev/null; then
                 success "Created draft PR for $current_branch"
             else
-                error "Failed to create PR"
-                return 1
+                # Maybe PR already exists but search failed
+                error "Failed to create PR (it might already exist or need manual push)"
+                return 0 # Non-fatal
             fi
         fi
     fi
@@ -280,7 +296,7 @@ find_worktrees() {
         return 0
     fi
     
-    find "$WORKTREE_BASE" -maxdepth 2 -type d -name ".git" -exec dirname {} \; 2>/dev/null
+    find "$WORKTREE_BASE" -maxdepth 3 -name ".git" -exec dirname {} \; 2>/dev/null
 }
 
 # Main execution

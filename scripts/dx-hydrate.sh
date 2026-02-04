@@ -95,6 +95,7 @@ echo -e "${GREEN} -> Creating worktree directories...${RESET}"
 mkdir -p "$HOME/affordabot-worktrees"
 mkdir -p "$HOME/prime-radiant-worktrees"
 mkdir -p "$HOME/agent-skills-worktrees"
+mkdir -p "$HOME/.dx-archives"
 
 # 3.6 Configure Beads Merge Driver
 echo -e "${GREEN} -> Configuring Beads merge driver...${RESET}"

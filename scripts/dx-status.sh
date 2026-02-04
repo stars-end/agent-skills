@@ -464,6 +464,63 @@ else
     WARNINGS=$((WARNINGS+1))
 fi
 
+# 8. V7.8 Lifecycle / GC Metrics
+echo ""
+echo "--- V7.8 Lifecycle & GC Metrics ---"
+WORKTREE_BASE="/tmp/agents"
+if [[ -d "$WORKTREE_BASE" ]]; then
+    total_wt=$(find "$WORKTREE_BASE" -maxdepth 3 -name ".git" | wc -l | tr -d ' ')
+    dirty_wt=0
+    no_upstream_wt=0
+    safe_delete_wt=0
+    
+    while IFS= read -r gitfile; do
+        wt_path=$(dirname "$gitfile")
+        # Dirty check
+        if [[ -n $(git -C "$wt_path" status --porcelain=v1 2>/dev/null) ]]; then
+            ((dirty_wt++))
+        fi
+        # Upstream check
+        if ! git -C "$wt_path" rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
+            ((no_upstream_wt++))
+        fi
+        # Safe delete check (merged to master)
+        branch=$(git -C "$wt_path" branch --show-current 2>/dev/null)
+        if [[ -n "$branch" && "$branch" != "master" && "$branch" != "main" ]]; then
+            if git -C "$wt_path" merge-base --is-ancestor "$branch" origin/master >/dev/null 2>&1 || \
+               git -C "$wt_path" merge-base --is-ancestor "$branch" origin/main >/dev/null 2>&1; then
+                # Only if clean
+                if [[ -z $(git -C "$wt_path" status --porcelain=v1 2>/dev/null) ]]; then
+                    ((safe_delete_wt++))
+                fi
+            fi
+        fi
+    done < <(find "$WORKTREE_BASE" -maxdepth 3 -name ".git" 2>/dev/null)
+
+    echo -e "   Total Worktrees: $total_wt"
+    
+    if [[ $dirty_wt -gt 0 ]]; then
+        echo -e "   ${YELLOW}⚠️  Dirty Worktrees: $dirty_wt${RESET}"
+    else
+        echo -e "   ${GREEN}✅ Dirty Worktrees: 0${RESET}"
+    fi
+
+    if [[ $no_upstream_wt -gt 5 ]]; then
+        echo -e "   ${RED}❌ No Upstream branches: $no_upstream_wt (high surface area)${RESET}"
+        WARNINGS=$((WARNINGS+1))
+    elif [[ $no_upstream_wt -gt 0 ]]; then
+        echo -e "   ${YELLOW}⚠️  No Upstream branches: $no_upstream_wt${RESET}"
+    else
+        echo -e "   ${GREEN}✅ No Upstream branches: 0${RESET}"
+    fi
+
+    if [[ $safe_delete_wt -gt 0 ]]; then
+        echo -e "   ${BLUE}ℹ️  SAFE DELETE Candidates: $safe_delete_wt (run 'dx-worktree-gc')${RESET}"
+    fi
+else
+    echo "   /tmp/agents not found (skipping)"
+fi
+
 echo ""
 if [ $ERRORS -eq 0 ]; then
     echo -e "${GREEN}✨ SYSTEM READY. All systems nominal.${RESET}"
