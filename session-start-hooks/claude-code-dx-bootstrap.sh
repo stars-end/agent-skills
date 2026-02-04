@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Claude Code SessionStart Hook: DX Bootstrap
+# Claude Code SessionStart Hook: DX Bootstrap (V7.6)
 #
 # Installation:
 #   mkdir -p .claude/hooks/SessionStart
@@ -34,6 +34,19 @@ fi
 if [[ -f "$HOME/agent-skills/scripts/auto-checkpoint-notify.sh" ]]; then
     "$HOME/agent-skills/scripts/auto-checkpoint-notify.sh" 2>&1 || true
 fi
+
+# 2.6 Canonical warning (V7.6)
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+case "$REPO_ROOT" in
+  "$HOME/agent-skills"|"$HOME/prime-radiant-ai"|"$HOME/affordabot"|"$HOME/llm-common")
+    echo ""
+    echo "🚨 WARNING: You are in a canonical clone: $REPO_ROOT"
+    echo "🚨 Canonicals are automation-owned and MUST stay clean."
+    echo "🚨 Create a worktree before making changes:"
+    echo "   dx-worktree create <beads-id> $(basename "$REPO_ROOT")"
+    echo ""
+    ;;
+esac
 
 # 3. Coordinator stack checks (OPTIONAL)
 if [[ "${DX_BOOTSTRAP_COORDINATOR:-0}" == "1" ]]; then

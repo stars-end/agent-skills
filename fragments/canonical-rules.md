@@ -15,6 +15,13 @@
 - Purpose: Ensure canonical clones stay aligned
 - Note: Does NOT reset uncommitted changes
 
+### V7.6: Sweeper Enforcement
+
+The **dx-sweeper** handles dirty canonicals automatically:
+- Creates rolling rescue PR per host+repo (bounded)
+- Resets canonical to clean master after preserving work
+- See: `fragments/v7.6-mechanisms.md`
+
 ### Workflow
 
 Always use worktrees for development:
@@ -40,3 +47,5 @@ cd /tmp/agents/bd-recovery/repo
 git cherry-pick <commit-hash>
 git push origin bd-recovery
 ```
+
+**Or**: Let dx-sweeper handle it (rescue PR will be created automatically)

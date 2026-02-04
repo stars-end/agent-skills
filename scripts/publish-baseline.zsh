@@ -65,7 +65,7 @@ EOF
 echo "## Operating Contract (Layer A — Curated)" >> "$OUTFILE"
 echo "" >> "$OUTFILE"
 
-for fragment in nakomi-protocol canonical-rules beads-external-db session-start landing-the-plane; do
+for fragment in nakomi-protocol canonical-rules beads-external-db session-start landing-the-plane v7.6-mechanisms; do
     if [[ -f "$REPO_ROOT/fragments/$fragment.md" ]]; then
         cat "$REPO_ROOT/fragments/$fragment.md" >> "$OUTFILE"
         echo "" >> "$OUTFILE"

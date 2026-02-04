@@ -27,3 +27,6 @@ node_modules/
 .ralph-test-*/
 .ralph-work-*/
 .ralph-parallel-logs/
+
+# DX Session locks (V7.6)
+.dx-session-lock

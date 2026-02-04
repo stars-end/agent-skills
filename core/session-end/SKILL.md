@@ -58,7 +58,15 @@ Show top 3-5 ready tasks by priority:
 - Next phase tasks in current epic
 - High-value backlog items
 
-### 5. Context Summary
+### 5. Verify Canonicals Are Clean (V7.6)
+
+Run the invariant check before claiming you're “done”:
+
+```bash
+~/agent-skills/scripts/dx-verify-clean.sh
+```
+
+### 6. Context Summary
 
 Show what to resume in next session:
 ```
@@ -78,6 +86,7 @@ Current Work:
   Epic: bd-xpi (DX_V3_BEADS_INTEGRATION)
 
 ✅ Beads synced to git
+✅ Canonicals verified clean
 
 📍 Next Session:
   Top ready tasks:
