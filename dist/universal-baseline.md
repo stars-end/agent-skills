@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 86d88ea8dac3645366b420f7a2bc68f7d803c548 -->
-<!-- Last updated: 2026-02-04 09:35:17 -->
+<!-- Source SHA: 1cd92849d9d4589c6bb92b98fa7b45242b8d6a9b -->
+<!-- Last updated: 2026-02-04 18:26:02 -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Operating Contract (Layer A — Curated)
