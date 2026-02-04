@@ -296,7 +296,7 @@ find_worktrees() {
         return 0
     fi
     
-    find "$WORKTREE_BASE" -maxdepth 3 -name ".git" -exec dirname {} \; 2>/dev/null
+    find "$WORKTREE_BASE" -name ".git" -exec dirname {} \; 2>/dev/null
 }
 
 # Main execution

@@ -123,7 +123,7 @@ process_worktree() {
             if [[ "$age_hours" -ge "$COOLDOWN_HOURS" ]]; then
                 success "SAFE DELETE: $name/$repo ($branch)"
                 if [[ "$DRY_RUN" == false ]]; then
-                    # Remove worktree safely
+                    # Remove worktree safely using git semantics
                     git -C "$WORKTREE_BASE" worktree remove -f "$path" 2>/dev/null || rm -rf "$path"
                 fi
             else
@@ -153,7 +153,7 @@ main() {
     [[ "$DRY_RUN" == true ]] && info "[DRY-RUN MODE] No deletions will occur"
     
     local worktrees
-    worktrees=$(find "$WORKTREE_BASE" -maxdepth 3 -name ".git" -exec dirname {} \; 2>/dev/null)
+    worktrees=$(find "$WORKTREE_BASE" -name ".git" -exec dirname {} \; 2>/dev/null)
     
     for wt in $worktrees; do
         process_worktree "$wt"

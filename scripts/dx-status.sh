@@ -469,40 +469,81 @@ echo ""
 echo "--- V7.8 Lifecycle & GC Metrics ---"
 WORKTREE_BASE="/tmp/agents"
 if [[ -d "$WORKTREE_BASE" ]]; then
-    total_wt=$(find "$WORKTREE_BASE" -maxdepth 3 -name ".git" | wc -l | tr -d ' ')
-    dirty_wt=0
+    # Depth-agnostic discovery (find .git files/dirs anywhere under WORKTREE_BASE)
+    total_wt=$(find "$WORKTREE_BASE" -name ".git" 2>/dev/null | wc -l | tr -d ' ')
+    dirty_active=0
+    dirty_stale=0
     no_upstream_wt=0
     safe_delete_wt=0
+    stale_paths=()
+    
+    current_ts=$(date +%s)
     
     while IFS= read -r gitfile; do
         wt_path=$(dirname "$gitfile")
+        
+        # Check if active via .dx-session-lock (< 4h)
+        is_active=false
+        if [[ -f "$wt_path/.dx-session-lock" ]]; then
+            lock_ts=$(cut -d: -f1 "$wt_path/.dx-session-lock" 2>/dev/null || echo "0")
+            if (( current_ts - lock_ts < 14400 )); then
+                is_active=true
+            fi
+        fi
+        
+        # If not already active, check last commit timestamp (< 4h)
+        if [[ "$is_active" == false ]]; then
+            last_commit_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
+            if (( current_ts - last_commit_ts < 14400 )); then
+                is_active=true
+            fi
+        fi
+
         # Dirty check
         if [[ -n $(git -C "$wt_path" status --porcelain=v1 2>/dev/null) ]]; then
-            ((dirty_wt++))
+            if [[ "$is_active" == true ]]; then
+                ((dirty_active++))
+            else
+                ((dirty_stale++))
+                stale_paths+=("$wt_path")
+            fi
         fi
+        
         # Upstream check
         if ! git -C "$wt_path" rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
-            ((no_upstream_wt++))
+            # Ignore master/main with no upstream (canonical worktrees)
+            branch=$(git -C "$wt_path" branch --show-current 2>/dev/null)
+            if [[ -n "$branch" && "$branch" != "master" && "$branch" != "main" ]]; then
+                ((no_upstream_wt++))
+            fi
         fi
-        # Safe delete check (merged to master)
+        
+        # Safe delete check (merged to master + clean + > 24h)
         branch=$(git -C "$wt_path" branch --show-current 2>/dev/null)
         if [[ -n "$branch" && "$branch" != "master" && "$branch" != "main" ]]; then
             if git -C "$wt_path" merge-base --is-ancestor "$branch" origin/master >/dev/null 2>&1 || \
                git -C "$wt_path" merge-base --is-ancestor "$branch" origin/main >/dev/null 2>&1; then
                 # Only if clean
                 if [[ -z $(git -C "$wt_path" status --porcelain=v1 2>/dev/null) ]]; then
-                    ((safe_delete_wt++))
+                    last_commit_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
+                    if (( current_ts - last_commit_ts > 86400 )); then
+                        ((safe_delete_wt++))
+                    fi
                 fi
             fi
         fi
-    done < <(find "$WORKTREE_BASE" -maxdepth 3 -name ".git" 2>/dev/null)
+    done < <(find "$WORKTREE_BASE" -name ".git" 2>/dev/null)
 
     echo -e "   Total Worktrees: $total_wt"
+    echo -e "   Dirty (Active): $dirty_active"
     
-    if [[ $dirty_wt -gt 0 ]]; then
-        echo -e "   ${YELLOW}⚠️  Dirty Worktrees: $dirty_wt${RESET}"
+    if [[ $dirty_stale -gt 0 ]]; then
+        echo -e "   ${YELLOW}⚠️  Dirty (Stale): $dirty_stale${RESET}"
+        for p in "${stale_paths[@]}"; do
+            echo "      - $p"
+        done
     else
-        echo -e "   ${GREEN}✅ Dirty Worktrees: 0${RESET}"
+        echo -e "   ${GREEN}✅ Dirty (Stale): 0${RESET}"
     fi
 
     if [[ $no_upstream_wt -gt 5 ]]; then
