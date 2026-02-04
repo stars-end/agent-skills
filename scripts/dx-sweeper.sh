@@ -125,6 +125,13 @@ process_repo() {
         has_changes=true
     fi
     
+    local has_stashes=false
+    local stash_list
+    stash_list=$(git stash list 2>/dev/null || echo "")
+    if [[ -n "$stash_list" ]]; then
+        has_stashes=true
+    fi
+    
     # Determine if action needed
     local needs_rescue=false
     
@@ -138,6 +145,11 @@ process_repo() {
         needs_rescue=true
     fi
     
+    if [[ "$has_stashes" == true ]]; then
+        log "$repo_name: Has stashes"
+        needs_rescue=true
+    fi
+    
     if [[ "$needs_rescue" == false ]]; then
         log "$repo_name: Clean and on master, no action needed"
         return 0
@@ -145,22 +157,83 @@ process_repo() {
     
     echo "🚨 $repo_name needs rescue (branch: $current_branch, dirty: $has_changes)"
     
-    if [[ "$DRY_RUN" == true ]]; then
-        echo "  [DRY-RUN] Would create rescue branch and PR"
-        return 0
+    echo "🚨 $repo_name needs rescue (branch: $current_branch, dirty: $has_changes)"
+    log "Audit: branch=$current_branch, changes=$has_changes, stashes=$has_stashes"
+    
+    # Step 0: Handle stashes (V7.8 - Safe Evacuation)
+    if [[ "$has_stashes" == true ]]; then
+        local stash_count
+        stash_count=$(echo "$stash_list" | wc -l | tr -d ' ')
+        warn "$repo_name: Found $stash_count stash(es). Evacuating via worktree..."
+        
+        local i=0
+        while true; do
+            # Refetch list to handle changing indices
+            local current_stash_list
+            current_stash_list=$(git stash list 2>/dev/null || echo "")
+            if [[ -z "$current_stash_list" ]]; then break; fi
+            
+            # We always target the top-most stash that hasn't been rescued yet
+            # After a successful drop, stash@{0} will be the NEXT stash.
+            local stash_ref="stash@{0}"
+            local timestamp
+            timestamp=$(iso_timestamp)
+            local rescue_branch="stash-rescue-${host}-${repo_name}-${timestamp}-${i}"
+            local rescue_path="/tmp/agents/rescue-${host}-${repo_name}-${timestamp}-${i}"
+            
+            log "Evacuating $stash_ref to $rescue_branch via $rescue_path..."
+            
+            if [[ "$DRY_RUN" == true ]]; then
+                echo "  [DRY-RUN] Would create worktree $rescue_path, apply $stash_ref, push, and drop."
+                # In dry run, we must break to avoid infinite loop as indices don't change
+                break
+            fi
+
+            # 1. Create temporary worktree
+            if ! git worktree add -b "$rescue_branch" "$rescue_path" origin/master >/dev/null 2>&1; then
+                error "Failed to create rescue worktree at $rescue_path"
+                break # Avoid infinite loop on failure
+            fi
+
+            # 2. Apply stash in worktree
+            if git -C "$rescue_path" stash apply "$stash_ref" >/dev/null 2>&1; then
+                # 3. Commit changes
+                git -C "$rescue_path" add -A
+                git -C "$rescue_path" commit -m "chore(rescue): evacuate canonical stash (${host} ${repo_name})
+                
+Feature-Key: STASH-RESCUE-${host}-${repo_name}
+Agent: dx-sweeper" >/dev/null 2>&1
+                
+                # 4. Push branch
+                if git -C "$rescue_path" push -u origin "$rescue_branch" >/dev/null 2>&1; then
+                    # 5. Create draft PR
+                    local pr_url
+                    pr_url=$(gh pr create --repo "stars-end/$repo_name" --head "$rescue_branch" --title "WIP: Stash Rescue ($host $repo_name)" --body "Rescued stash from canonical clone on $host." --draft 2>/dev/null || echo "")
+                    
+                    if [[ -n "$pr_url" ]]; then
+                        success "Rescued stash to $pr_url"
+                        # 6. ONLY NOW drop the stash in canonical
+                        git stash drop "$stash_ref" >/dev/null 2>&1 || {
+                            warn "Failed to drop $stash_ref in canonical after rescue. Breaking to avoid loop."
+                            break
+                        }
+                    else
+                        warn "Pushed $rescue_branch but failed to create PR. Stash NOT dropped. Breaking loop."
+                        break
+                    fi
+                else
+                    error "Failed to push $rescue_branch. Stash NOT dropped. Breaking loop."
+                    break
+                fi
+            else
+                error "Failed to apply $stash_ref in worktree. Stash NOT dropped. Breaking loop."
+                break
+            fi
+            
+            ((i+=1))
+        done
     fi
-    
-    # Rolling rescue branch name (bounded inbox: one PR per host+repo)
-    local rescue_branch="canonical-rescue-${host}-${repo_name}"
-    local timestamp
-    timestamp=$(iso_timestamp)
-    
-    # Check gh auth
-    if ! check_gh_auth; then
-        error "$repo_name: Cannot proceed without gh CLI auth"
-        return 1
-    fi
-    
+
     # Step 1: Preserve current branch if not master (push commits before we reset)
     if [[ "$current_branch" != "master" ]]; then
         log "Preserving branch '$current_branch'..."
@@ -184,7 +257,11 @@ process_repo() {
 
     # If we're only off-trunk (clean working tree), just restore canonical to master after preserving commits.
     if [[ "$has_changes" == false ]]; then
-        log "$repo_name: Off-trunk but clean; restoring canonical to master"
+        log "$repo_name: Off-trunk but clean; plan: restore master"
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "  [DRY-RUN] Would reset clean canonical to master"
+            return 0
+        fi
         git checkout master >/dev/null 2>&1 || true
         git fetch origin master >/dev/null 2>&1 || true
         git reset --hard origin/master >/dev/null 2>&1 || true
@@ -194,8 +271,10 @@ process_repo() {
     fi
 
     # Step 2: Dirty working tree → commit changes onto the rolling rescue branch and push it
-    local rescue_sha=""
-    log "Creating rescue commit on '$rescue_branch'..."
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "  [DRY-RUN] Would create rescue PR for dirty worktree"
+        return 0
+    fi
 
         # Stash current dirty state (including untracked) so we can safely switch branches
         git stash push --include-untracked -m "dx-sweeper: ${host}/${repo_name} ${timestamp}" >/dev/null 2>&1 || true
@@ -324,11 +403,11 @@ main() {
     
     for repo in "${CANONICAL_REPOS[@]}"; do
         if process_repo "$repo"; then
-            ((processed++))
+            ((processed+=1))
             # Check if rescue was needed by looking at output
             # This is simplified - in production, track actual rescues
         else
-            ((skipped++))
+            ((skipped+=1))
         fi
     done
     

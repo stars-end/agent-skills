@@ -464,6 +464,108 @@ else
     WARNINGS=$((WARNINGS+1))
 fi
 
+# 8. V7.8 Lifecycle / GC Metrics
+echo ""
+echo "--- V7.8 Lifecycle & GC Metrics ---"
+WORKTREE_BASE="/tmp/agents"
+if [[ -d "$WORKTREE_BASE" ]]; then
+    # Strict root discovery (/tmp/agents/<id>/<repo>/.git)
+    total_wt=$(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" 2>/dev/null | wc -l | tr -d ' ')
+    dirty_active=0
+    dirty_stale=0
+    no_upstream_wt=0
+    safe_delete_wt=0
+    stale_paths=()
+    
+    current_ts=$(date +%s)
+    
+    while IFS= read -r gitfile; do
+        wt_path=$(dirname "$gitfile")
+        
+        # Check if active via .dx-session-lock (< 4h)
+        is_active=false
+        if [[ -f "$wt_path/.dx-session-lock" ]]; then
+            lock_ts=$(cut -d: -f1 "$wt_path/.dx-session-lock" 2>/dev/null || echo "0")
+            if (( current_ts - lock_ts < 14400 )); then
+                is_active=true
+            fi
+        fi
+        
+        # If not already active, check last commit timestamp (< 4h)
+        if [[ "$is_active" == false ]]; then
+            last_commit_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
+            if (( current_ts - last_commit_ts < 14400 )); then
+                is_active=true
+            fi
+        fi
+
+        # Dirty check (ignoring .ralph tool artifacts)
+        status_output=$(git -C "$wt_path" status --porcelain=v1 2>/dev/null | grep -v "\.ralph" || true)
+        if [[ -n "$status_output" ]]; then
+            if [[ "$is_active" == true ]]; then
+                ((dirty_active++))
+            else
+                ((dirty_stale++))
+                stale_paths+=("$wt_path")
+            fi
+        fi
+        
+        # Upstream check
+        if ! git -C "$wt_path" rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
+            # Ignore master/main with no upstream (canonical worktrees)
+            branch=$(git -C "$wt_path" branch --show-current 2>/dev/null)
+            if [[ -n "$branch" && "$branch" != "master" && "$branch" != "main" ]]; then
+                ((no_upstream_wt++))
+            fi
+        fi
+        
+        # Safe delete check (merged to master + clean + > 24h)
+        branch=$(git -C "$wt_path" branch --show-current 2>/dev/null)
+        if [[ -n "$branch" && "$branch" != "master" && "$branch" != "main" ]]; then
+            if git -C "$wt_path" merge-base --is-ancestor "$branch" origin/master >/dev/null 2>&1 || \
+               git -C "$wt_path" merge-base --is-ancestor "$branch" origin/main >/dev/null 2>&1; then
+                # Only if clean (ignoring .ralph)
+                status_check=$(git -C "$wt_path" status --porcelain=v1 2>/dev/null | grep -v "\.ralph" || true)
+                if [[ -z "$status_check" ]]; then
+                    last_commit_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
+                    if (( current_ts - last_commit_ts > 86400 )); then
+                        ((safe_delete_wt++))
+                    fi
+                fi
+            fi
+        fi
+    done < <(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" 2>/dev/null)
+
+    echo -e "   Total Worktrees: $total_wt"
+    find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" -exec dirname {} \; | sort | sed 's/^/      - /'
+    
+    echo -e "   Dirty (Active): $dirty_active"
+    
+    if [[ $dirty_stale -gt 0 ]]; then
+        echo -e "   ${YELLOW}⚠️  Dirty (Stale): $dirty_stale${RESET}"
+        for p in "${stale_paths[@]}"; do
+            echo "      - $p"
+        done
+    else
+        echo -e "   ${GREEN}✅ Dirty (Stale): 0${RESET}"
+    fi
+
+    if [[ $no_upstream_wt -gt 5 ]]; then
+        echo -e "   ${RED}❌ No Upstream branches: $no_upstream_wt (high surface area)${RESET}"
+        WARNINGS=$((WARNINGS+1))
+    elif [[ $no_upstream_wt -gt 0 ]]; then
+        echo -e "   ${YELLOW}⚠️  No Upstream branches: $no_upstream_wt${RESET}"
+    else
+        echo -e "   ${GREEN}✅ No Upstream branches: 0${RESET}"
+    fi
+
+    if [[ $safe_delete_wt -gt 0 ]]; then
+        echo -e "   ${BLUE}ℹ️  SAFE DELETE Candidates: $safe_delete_wt (run 'dx-worktree-gc')${RESET}"
+    fi
+else
+    echo "   /tmp/agents not found (skipping)"
+fi
+
 echo ""
 if [ $ERRORS -eq 0 ]; then
     echo -e "${GREEN}✨ SYSTEM READY. All systems nominal.${RESET}"
