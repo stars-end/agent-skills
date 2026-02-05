@@ -62,6 +62,17 @@ if [[ -x "$HOME/agent-skills/scripts/dx-status.sh" ]]; then
 fi
 
 # Optional: Check PR inbox via gh (best-effort)
+if [[ -x "$SCRIPT_DIR/dx-pr-gate.sh" ]]; then
+  PR_GATE_OUT=$("$SCRIPT_DIR/dx-pr-gate.sh" | head -1 || true)
+  if [[ -n "$PR_GATE_OUT" ]]; then
+    if [[ "$PR_GATE_OUT" == *"NOT OK"* ]]; then
+      ERRORS+=("pr_gate=NOT_OK")
+    fi
+    PR_HINT=" | $PR_GATE_OUT"
+  fi
+fi
+
+# Optional: Check rescue PRs
 if command -v gh >/dev/null 2>&1; then
   RESCUE_PRS=$(gh pr list --search "rescue" --json url --limit 1 --jq 'length' 2>/dev/null || echo "0")
   if [[ "$RESCUE_PRS" -gt 0 ]]; then
@@ -79,17 +90,13 @@ fi
 
 # Output formatting
 if [[ ${#ERRORS[@]} -eq 0 ]]; then
-  echo "DX PULSE OK ($HOSTNAME): canonicals clean; worktrees=OK; upstream=OK; PRs=OK${BEADS_HINT:-}"
+  echo "DX PULSE OK ($HOSTNAME): canonicals clean; worktrees=OK; upstream=OK${PR_HINT:-}${BEADS_HINT:-}"
 else
   ERROR_SUMMARY=$(IFS=" " ; echo "${ERRORS[*]}")
   echo "DX PULSE NOT OK ($HOSTNAME): $ERROR_SUMMARY"
-
-  if [[ ${#DIRTY_STALE_LIST[@]} -gt 0 ]]; then
-    echo "DirtyStale: ${DIRTY_STALE_LIST[0]}${DIRTY_STALE_COUNT:+ ...(+$((DIRTY_STALE_COUNT-1)))}"
-  fi
-
-  if [[ ${#NO_UPSTREAM_LIST[@]} -gt 0 ]]; then
-    echo "NoUpstream: ${NO_UPSTREAM_LIST[0]}${NO_UPSTREAM_COUNT:+ ...(+$((NO_UPSTREAM_COUNT-1)))}"
+  
+  if [[ -n "${PR_HINT:-}" ]]; then
+    "$SCRIPT_DIR/dx-pr-gate.sh"
   fi
 
   if [[ ${#NEXT_COMMANDS[@]} -gt 0 ]]; then

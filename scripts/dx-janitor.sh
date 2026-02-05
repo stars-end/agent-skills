@@ -122,6 +122,14 @@ process_worktree() {
     
     log "\n📁 Processing: $worktree_name/$repo_name"
     
+    # Check for active session lock (V7.8)
+    if [[ -f "$(dirname "$0")/dx-session-lock.sh" ]]; then
+        if "$(dirname "$0")/dx-session-lock.sh" is-fresh "$worktree_path"; then
+            log "KEEP: Active session lock found, skipping janitor"
+            return 0
+        fi
+    fi
+    
     # Verify it's a git repo (worktrees use a .git *file*, not a directory)
     if ! git -C "$worktree_path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         log "Not a git repository, skipping"

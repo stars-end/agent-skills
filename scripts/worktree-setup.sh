@@ -45,17 +45,18 @@ if [ -d "$TARGET_DIR" ]; then
     exit 0
 fi
 
-# Try creating worktree with new branch
-if git worktree add "$TARGET_DIR" -b "feature-$BEADS_ID" origin/master > /dev/null 2>&1; then
-    echo "$TARGET_DIR"
-    exit 0
-fi
+    # Try creating worktree with new branch
+    if git worktree add "$TARGET_DIR" -b "feature-$BEADS_ID" origin/master > /dev/null 2>&1; then
+        "$SCRIPT_DIR/dx-session-lock.sh" touch "$TARGET_DIR"
+        echo "$TARGET_DIR"
+        exit 0
+    fi
 
-# Fallback: Branch might already exist, try checking it out
-if git worktree add "$TARGET_DIR" "feature-$BEADS_ID" > /dev/null 2>&1; then
-    echo "$TARGET_DIR"
-    exit 0
-fi
-
+    # Fallback: Branch might already exist, try checking it out
+    if git worktree add "$TARGET_DIR" "feature-$BEADS_ID" > /dev/null 2>&1; then
+        "$SCRIPT_DIR/dx-session-lock.sh" touch "$TARGET_DIR"
+        echo "$TARGET_DIR"
+        exit 0
+    fi
 echo "Error: Failed to create worktree at $TARGET_DIR" >&2
 exit 1

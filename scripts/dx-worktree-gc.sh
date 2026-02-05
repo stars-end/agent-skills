@@ -16,6 +16,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKTREE_BASE="/tmp/agents"
 COOLDOWN_HOURS=24
 ARCHIVE_THRESHOLD_DAYS=7
@@ -109,16 +110,10 @@ process_worktree() {
     local age_hours
     age_hours=$(get_last_commit_hours "$path")
     
-    # Check for active session lock
-    if [[ -f "$path/.dx-session-lock" ]]; then
-        local lock_ts
-        lock_ts=$(cut -d: -f1 "$path/.dx-session-lock" 2>/dev/null || echo "0")
-        local current_ts
-        current_ts=$(date +%s)
-        if (( current_ts - lock_ts < 14400 )); then
-            log "KEEP: Active session lock found"
-            return 0
-        fi
+    # Check for active session lock (V7.8)
+    if "$SCRIPT_DIR/dx-session-lock.sh" is-fresh "$path"; then
+        log "KEEP: Active session lock found"
+        return 0
     fi
     
     if check_merged "$path" "$branch"; then
