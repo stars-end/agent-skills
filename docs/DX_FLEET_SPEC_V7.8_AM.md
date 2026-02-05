@@ -1,0 +1,283 @@
+# DX Fleet Spec V7.8 (A–M) — Operating System
+Date: 2026-02-05  
+Owner: fengning  
+Scope: macmini + homedesktop-wsl + epyc6; repos: `agent-skills`, `prime-radiant-ai`, `affordabot`, `llm-common`  
+Slack Heartbeat Channel: `#all-stars-end`  
+
+This document consolidates the current DX fleet operating model across all layers (host-plane automation, repo-plane baseline inheritance, PR-plane visibility, and Beads planning) and the additional “A–M” workstreams.
+
+The core problem this system solves:
+- Work became **hidden** (stashes, WIP branches, orphan worktrees, unpushed commits) → founder context switching and archaeology.
+- The fleet needs to convert hidden state into **bounded visible state** (PR inbox + short daily inbox).
+
+---
+
+## 0) Definitions
+
+### Canonical clone
+The read-mostly clone in `~/<repo>`:
+- `~/agent-skills`
+- `~/prime-radiant-ai`
+- `~/affordabot`
+- `~/llm-common`
+
+### Workspace / worktree
+All real work happens in an isolated worktree under:
+- `/tmp/agents/<id>/<repo>`
+
+Worktrees are created using `dx-worktree` (do not use `git worktree` directly).
+
+### External Beads DB
+Beads state is centralized and shared across VMs:
+- `BEADS_DIR="$HOME/bd/.beads"`
+- Repo-local `.beads/` directories in product repos are forbidden.
+
+### PR-plane visibility
+“If it doesn’t have a PR, it’s not real work.”  
+V7.8 enforces that any WIP becomes visible via draft PRs or (rare) rescue PRs.
+
+---
+
+## 1) Invariants (MUST / MUST NOT)
+
+### 1.1 Canonical rules
+- MUST keep canonicals on `master`.
+- MUST keep canonicals clean (`git status --porcelain` empty).
+- MUST NOT commit in canonicals.
+- MUST NOT stash in canonicals (hidden state).
+
+### 1.2 Worktree rules
+- MUST create a worktree before making any repo change:
+  - `dx-worktree create <id> <repo>`
+- MUST push worktree commits to origin.
+- MUST ensure a draft PR exists for any branch with meaningful work.
+
+### 1.3 “Done gate”
+Before claiming “done” on any task:
+- MUST pass: `~/agent-skills/scripts/dx-verify-clean.sh`
+- MUST ensure PR(s) exist for all changes.
+
+---
+
+## 2) Planes of the system (what runs where)
+
+### 2.1 Host-plane automation (runs on VMs)
+These scripts run locally (cron/systemd/launchd) to keep hygiene bounded:
+- `dx-sweeper` (canonical rescue → rolling rescue PR; then restore canonical)
+- `dx-janitor` (worktree PR surfacing; push no-upstream; create draft PR)
+- `dx-worktree-gc` (safe delete/archive of stale worktrees)
+- `dx-status` (fleet snapshot)
+- `dx-triage-cron` (worktree-safe triage gating artifacts)
+- `ru sync` (repo updater; canonical-only)
+- `auto-checkpoint` (safety net only; not a delivery mechanism)
+
+### 2.2 Repo-plane baseline inheritance (runs in GitHub Actions)
+Product repos inherit `agent-skills` baseline:
+- `baseline-sync.yml` (rolling draft PR updating `fragments/universal-baseline.md` + regenerated `AGENTS.md`)
+- `verify-agents-md.yml` (CI freshness check)
+- `scripts/agents-md-compile.zsh` + `make regenerate-agents-md`
+
+### 2.3 PR-plane (GitHub)
+The founder inbox should be bounded to:
+- baseline-sync draft PRs (one per product repo, rolling branch)
+- a small number of active feature PRs
+- rescue PRs: one rolling rescue PR per host+repo (rare)
+
+### 2.4 Beads-plane (planning)
+Beads is the persistent work graph:
+- Epics and tasks live in external DB (`~/bd/.beads`).
+- All V7.8 workstreams map to epics with child tasks and dependencies.
+
+---
+
+## 3) Scripts (authoritative entry points)
+
+All scripts referenced below live in `~/agent-skills/scripts/`.
+
+### 3.1 `dx-verify-clean.sh` (hard “done” gate)
+Purpose:
+- Fail fast if any canonical repo is dirty or off trunk.
+- Fail if canonical stashes exist (hidden state).
+
+Usage:
+- Run before claiming completion: `dx-verify-clean`
+
+Expected output:
+- PASS: all canonicals clean + on `master`
+- FAIL: explicit repo(s) + remediation hints
+
+### 3.2 `dx-status.sh` (snapshot)
+Purpose:
+- Show totals + exceptions:
+  - Total worktrees
+  - Dirty stale worktrees
+  - No-upstream worktrees
+  - auto-checkpoint health
+
+Usage:
+- `dx-status`
+
+Rule:
+- Treat `Dirty (Stale)` and `No Upstream` as the two main hygiene signals.
+
+### 3.3 `dx-sweeper.sh` (canonical rescue)
+Purpose:
+- If canonical repo violates invariants (dirty / off trunk / stashes), rescue to PR-plane then restore canonical.
+
+Core safety properties:
+- Never reset canonical until the rescued work is durable (pushed and PR exists).
+- Uses a rolling rescue PR per host+repo to avoid PR explosion.
+
+### 3.4 `dx-janitor.sh` (worktree PR surfacing)
+Purpose:
+- Ensure worktrees don’t become hidden local state.
+- For any worktree with commits:
+  - push branch (including no-upstream branches)
+  - ensure a draft PR exists (or reuse existing)
+
+Safety:
+- Non-destructive by default.
+- Avoids duplicate PR creation.
+
+### 3.5 `dx-worktree-gc.sh` (cleanup/GC)
+Purpose:
+- Keep `/tmp/agents` from ballooning.
+
+Policy:
+- SAFE DELETE only if:
+  - worktree clean
+  - branch merged to master
+  - cooldown elapsed
+- ARCHIVE is copy-based (tarball) before deletion paths are considered.
+
+---
+
+## 4) Schedules (conservative by default)
+
+This section defines the intended schedule. Actual rollout must be done per VM and verified.
+
+### 4.1 Schedule ordering (important)
+Reason:
+- Avoid conflicts between rescue and “hard reset” safety nets.
+
+Recommended daily order:
+1) `dx-sweeper` (canonical rescue; create rolling PR if needed)
+2) `dx-worktree-gc` (cleanup)
+3) `canonical-sync.sh` (safety net alignment)
+
+### 4.2 Janitor cadence (business hours)
+Recommended:
+- Run `dx-janitor` 2× daily during business hours to keep PR-plane visibility.
+
+### 4.3 External Beads DB sync cadence
+Use `bd-sync-safe.sh` wrapper (Group K) so `~/bd` stays git-clean and durable.
+
+---
+
+## 5) Clawdbot heartbeat (founder attention UX)
+
+### 5.1 Philosophy
+Heartbeat is the “attention router”, not the hygiene actor.
+- Heartbeat runs read-only checks and posts a bounded report.
+- Hygiene scripts do the actual cleanup (janitor/sweeper/gc) via scheduled host-plane automation.
+
+### 5.2 Heartbeat channel
+Slack channel: `#all-stars-end`.
+
+### 5.3 Heartbeat payload (recommended)
+The heartbeat should post:
+- `dx-inbox` output (see Group L)
+- When healthy: a single “OK” + 1–2 summary lines.
+- When unhealthy: short report + explicit remediation commands.
+
+### 5.4 Heartbeat implementation notes (current state)
+On macmini, Clawdbot workspaces exist (e.g. `~/clawd-all-stars-end`), but the Clawdbot cron jobs file at:
+- `~/.clawdbot/cron/jobs.json`
+currently contains `jobs: []`.
+
+This spec does not assume a specific gateway config format; it only defines the contract:
+- A periodic heartbeat posts to `#all-stars-end`.
+- The heartbeat runs read-only commands only.
+
+---
+
+## 6) BV integration (Beads acceleration)
+
+BV is already available locally (`bv --help`).
+
+### 6.1 Founder “what next” standard
+Recommended minimal commands:
+- `bv --robot-next` (single next best action)
+- `bv --robot-triage-by-track` (tracks view for parallelization)
+
+### 6.2 Fleet recipe/workspace (planned)
+Define a BV workspace or recipe that scopes to DX fleet epics so the heartbeat can embed a short “Beads next”.
+
+---
+
+## 7) Workstreams A–M (epic map)
+
+This section maps the workstreams to Beads epics. IDs are tracked in the external DB.
+
+### A–J (existing V7.8 epics)
+- Host-plane activation + cross-VM hygiene: `bd-l99g`
+- DX Audit dashboard + optional LLM triage: `bd-636z`
+- GitHub Actions cleanup + standardization: `bd-pf4f`
+- Beads-first workflow + dx-worktree alignment: `bd-z3pu`
+
+### K (new): Beads durability + backlog hygiene
+- Epic: `bd-e0tp`
+  - Ensure `~/bd` is git-clean after scheduled sync
+  - Close/supersede legacy DX epics so `bd ready` reflects current work
+
+### L (new): Founder inbox + heartbeat
+- Epic: `bd-4n6b`
+  - Implement `dx-inbox` (read-only)
+  - Integrate into Clawdbot heartbeat in `#all-stars-end`
+  - Optional: on-demand “/dx” commands (confirm-first)
+
+### M (new): Fleet registry + helpers
+- Epic: `bd-w8p6`
+  - `configs/fleet_hosts.yaml`
+  - `dx-fleet-check.sh` read-only cross-VM report
+
+---
+
+## 8) Tight feedback loop (mistakes → improvements)
+
+### 8.1 What we have today
+Signals:
+- `dx-status` highlights hygiene exceptions (dirty stale, no-upstream).
+- `dx-verify-clean` gates “done”.
+- PR-plane: baseline-sync drafts show repo-plane inheritance is working.
+
+### 8.2 What’s missing (to tighten the loop)
+We need a durable “mistake capture → action item” path:
+- When an agent leaves hidden state (dirty stale, no-upstream, stash), it should be:
+  1) surfaced in the heartbeat
+  2) converted into a Beads task (auto or semi-auto)
+  3) optionally triaged by an LLM on GitHub (labels/comments only)
+
+### 8.3 GitHub Actions (planned)
+DX audit is tracked under `bd-636z`:
+- Deterministic collector posts a rolling DX audit issue.
+- Optional LLM triage layer adds labels/comments (no destructive actions).
+- Allowlisted auto-merge reduces baseline-sync review load (bounded scope).
+
+---
+
+## 9) Current known hygiene exceptions (macmini snapshot)
+At time of writing, macmini `dx-status` reports:
+- Dirty (Stale): 1
+  - `/tmp/agents/bd-pr-triage/agent-skills`
+- No Upstream: 2
+  - prime-radiant-ai worktrees (paths listed in `dx-status`)
+
+These are the canonical “feedback loop” test cases: they should become visible, get resolved, and then stop recurring.
+
+---
+
+## 10) Non-goals
+- This spec does not attempt to solve multi-agent file contention inside a single repo beyond worktrees.
+- This spec does not require additional global instruction files per IDE; the repo-plane baseline + tiny rails should be sufficient.
+
