@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import threading
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -636,6 +637,26 @@ def build_review_prompt(worktree: Path, epic: EpicNode, ci_tail: str | None) -> 
     ).strip()
 
 
+def build_close_prompt(worktree: Path, epic: EpicNode, pr_url: str) -> str:
+    return textwrap.dedent(
+        f"""\
+        {constraints_prelude(worktree, epic.id, epic.repo or "")}
+
+        CLOSE TASK:
+        Close Beads epic {epic.id} now that PR is created: {pr_url}
+
+        Commands:
+          bd close {epic.id} --reason "dx-ralph: {pr_url}"
+
+        Then verify:
+          bd show {epic.id}
+
+        Output ONE line only:
+        ✅ CLOSED
+        """
+    ).strip()
+
+
 def run_single_epic(
     base_url: str,
     epic: EpicNode,
@@ -646,14 +667,19 @@ def run_single_epic(
     keep_worktrees: bool,
     ckpt: "Checkpoint",
     ckpt_path: Path,
+    ckpt_lock: threading.Lock,
 ) -> None:
     epic_state = ckpt.epics[epic.id]
-    epic_state.state = "running"
-    write_checkpoint(ckpt_path, ckpt)
+    def ckpt_update(**fields: object) -> None:
+        with ckpt_lock:
+            for k, v in fields.items():
+                setattr(epic_state, k, v)
+            write_checkpoint(ckpt_path, ckpt)
+
+    ckpt_update(state="running")
 
     worktree = dx_worktree_create(epic.id, epic.repo or "")
-    epic_state.worktree = str(worktree)
-    write_checkpoint(ckpt_path, ckpt)
+    ckpt_update(worktree=str(worktree))
 
     impl_model = {"providerID": "zai-coding-plan", "modelID": "glm-4.7"}
     rev_model = {"providerID": "zai-coding-plan", "modelID": "glm-4.7"}
@@ -664,9 +690,7 @@ def run_single_epic(
     last_head = git_head(worktree)
 
     for attempt in range(1, max_attempts + 1):
-        epic_state.attempts = attempt
-        epic_state.state = "implementing"
-        write_checkpoint(ckpt_path, ckpt)
+        ckpt_update(attempts=attempt, state="implementing")
 
         sid = opencode_create_session(base_url, f"dx-ralph-impl-{epic.id}-a{attempt}")
         try:
@@ -678,10 +702,11 @@ def run_single_epic(
         head_after = git_head(worktree)
         porcelain = git_porcelain(worktree).strip()
         if head_after == last_head and not porcelain:
-            epic_state.state = "needs_human"
-            epic_state.last_signal = "NO_PROGRESS"
-            epic_state.last_reason = "No progress detected (HEAD unchanged and worktree clean)"
-            write_checkpoint(ckpt_path, ckpt)
+            ckpt_update(
+                state="needs_human",
+                last_signal="NO_PROGRESS",
+                last_reason="No progress detected (HEAD unchanged and worktree clean)",
+            )
             return
         last_head = head_after
 
@@ -689,15 +714,11 @@ def run_single_epic(
         ci_exit = None
         ci_tail = None
         if makefile.exists() and detect_ci_lite(makefile):
-            epic_state.state = "verifying"
-            write_checkpoint(ckpt_path, ckpt)
+            ckpt_update(state="verifying")
             ci_exit, ci_tail = ci_lite_run(worktree)
-            epic_state.ci_lite_exit = ci_exit
-            epic_state.ci_lite_tail = ci_tail
-            write_checkpoint(ckpt_path, ckpt)
+            ckpt_update(ci_lite_exit=ci_exit, ci_lite_tail=ci_tail)
 
-        epic_state.state = "reviewing"
-        write_checkpoint(ckpt_path, ckpt)
+        ckpt_update(state="reviewing")
         sid = opencode_create_session(base_url, f"dx-ralph-rev-{epic.id}-a{attempt}")
         try:
             review_prompt = build_review_prompt(worktree, epic, ci_tail)
@@ -706,84 +727,80 @@ def run_single_epic(
             opencode_delete_session(base_url, sid)
 
         signal, reason = parse_reviewer_signal(rev_text)
-        epic_state.last_signal = signal
-        epic_state.last_reason = reason
-        write_checkpoint(ckpt_path, ckpt)
+        ckpt_update(last_signal=signal, last_reason=reason)
 
         if signal == "APPROVED":
             if ci_exit is not None and ci_exit != 0:
                 reviewer_feedback = f"ci-lite failed (exit={ci_exit}). Fix failures before approval.\n{ci_tail}"
                 continue
-            epic_state.state = "approved"
-            write_checkpoint(ckpt_path, ckpt)
+            ckpt_update(state="approved")
             break
 
         if signal == "REVISION_REQUIRED":
             reviewer_feedback = rev_text
             continue
 
-        epic_state.state = "needs_human"
-        epic_state.last_signal = "UNKNOWN_REVIEW"
-        epic_state.last_reason = f"Unknown reviewer signal: {reason}"
-        write_checkpoint(ckpt_path, ckpt)
+        ckpt_update(state="needs_human", last_signal="UNKNOWN_REVIEW", last_reason=f"Unknown reviewer signal: {reason}")
         return
     else:
-        epic_state.state = "needs_human"
-        epic_state.last_signal = "MAX_ATTEMPTS"
-        epic_state.last_reason = f"Max attempts reached ({max_attempts})"
-        write_checkpoint(ckpt_path, ckpt)
+        ckpt_update(state="needs_human", last_signal="MAX_ATTEMPTS", last_reason=f"Max attempts reached ({max_attempts})")
         return
 
-    epic_state.state = "surfacing_pr"
-    write_checkpoint(ckpt_path, ckpt)
+    ckpt_update(state="surfacing_pr")
 
     if dry_run:
-        epic_state.pr_url = "DRY_RUN"
-        epic_state.state = "done"
-        write_checkpoint(ckpt_path, ckpt)
+        ckpt_update(pr_url="DRY_RUN", state="done")
         if not keep_worktrees:
             dx_worktree_cleanup(epic.id)
         return
 
     _ = git_commit_if_needed(worktree, epic.id)
     if not git_push(worktree):
-        epic_state.state = "needs_human"
-        epic_state.last_signal = "PUSH_FAILED"
-        epic_state.last_reason = "git push failed"
-        write_checkpoint(ckpt_path, ckpt)
+        ckpt_update(state="needs_human", last_signal="PUSH_FAILED", last_reason="git push failed")
         return
 
     pr_url = gh_create_draft_pr(worktree)
     if not pr_url:
-        epic_state.state = "needs_human"
-        epic_state.last_signal = "PR_FAILED"
-        epic_state.last_reason = "gh pr create failed (no PR URL captured)"
-        write_checkpoint(ckpt_path, ckpt)
+        ckpt_update(state="needs_human", last_signal="PR_FAILED", last_reason="gh pr create failed (no PR URL captured)")
         return
 
-    epic_state.pr_url = pr_url
-    write_checkpoint(ckpt_path, ckpt)
+    ckpt_update(pr_url=pr_url)
 
-    if close_mode == "orchestrator":
-        epic_state.state = "closing"
-        write_checkpoint(ckpt_path, ckpt)
-        reason = f"dx-ralph: {pr_url}"
+    ckpt_update(state="closing")
+    reason = f"dx-ralph: {pr_url}"
+
+    if close_mode == "reviewer":
+        sid = opencode_create_session(base_url, f"dx-ralph-close-{epic.id}")
+        try:
+            close_prompt = build_close_prompt(worktree, epic, pr_url)
+            _ = opencode_message(base_url, sid, "ralph-reviewer", rev_model, close_prompt, timeout_sec=300)
+        finally:
+            opencode_delete_session(base_url, sid)
+
+        epic_json = bd_show(epic.id) or {}
+        if not is_closed(str(epic_json.get("status") or "")):
+            ckpt_update(state="needs_human", last_signal="CLOSE_FAILED", last_reason="Reviewer did not close epic in Beads")
+            return
+    else:
         _ = bd_close(epic.id, reason)
         epic_json = bd_show(epic.id) or {}
-        deps = epic_json.get("dependents") or []
-        if isinstance(deps, list):
-            for child in deps:
-                if not isinstance(child, dict):
-                    continue
-                if child.get("dependency_type") != "parent-child":
-                    continue
-                child_id = child.get("id")
-                child_status = str(child.get("status") or "")
-                if child_id and not is_closed(child_status):
-                    bd_close(str(child_id), f"Closed with parent epic {epic.id}")
+        if not is_closed(str(epic_json.get("status") or "")):
+            ckpt_update(state="needs_human", last_signal="CLOSE_FAILED", last_reason="Epic not closed in Beads")
+            return
 
-    epic_state.state = "done"
-    write_checkpoint(ckpt_path, ckpt)
+    deps = epic_json.get("dependents") or []
+    if isinstance(deps, list):
+        for child in deps:
+            if not isinstance(child, dict):
+                continue
+            if child.get("dependency_type") != "parent-child":
+                continue
+            child_id = child.get("id")
+            child_status = str(child.get("status") or "")
+            if child_id and not is_closed(child_status):
+                bd_close(str(child_id), f"Closed with parent epic {epic.id}")
+
+    ckpt_update(state="done")
 
     if not keep_worktrees:
         dx_worktree_cleanup(epic.id)
@@ -888,6 +905,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 0
 
     import concurrent.futures
+    ckpt_lock = threading.Lock()
 
     for layer_num, layer in enumerate(layers):
         if not layer:
@@ -923,6 +941,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                         args.keep_worktrees,
                         ckpt,
                         ckpt_path,
+                        ckpt_lock,
                     )
                 )
             for f in concurrent.futures.as_completed(futs):
@@ -931,8 +950,9 @@ def cmd_run(args: argparse.Namespace) -> int:
                 except Exception as e:
                     log(f"Epic execution exception: {e}", "ERROR")
 
-        write_checkpoint(ckpt_path, ckpt)
-        print(status_table(ckpt))
+        with ckpt_lock:
+            write_checkpoint(ckpt_path, ckpt)
+            print(status_table(ckpt))
 
     log("Run complete")
     return 0
