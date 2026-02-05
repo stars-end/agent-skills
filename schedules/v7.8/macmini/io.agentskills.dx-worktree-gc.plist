@@ -6,10 +6,10 @@
     <string>io.agentskills.dx-worktree-gc</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/fengning/agent-skills/scripts/dx-job-wrapper.sh</string>
+        <string>__HOME__/agent-skills/scripts/dx-job-wrapper.sh</string>
         <string>dx-worktree-gc</string>
         <string>--</string>
-        <string>/Users/fengning/agent-skills/scripts/dx-worktree-gc.sh</string>
+        <string>__HOME__/agent-skills/scripts/dx-worktree-gc.sh</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
@@ -19,8 +19,8 @@
         <integer>0</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/fengning/logs/dx/dx-worktree-gc.launchd.log</string>
+    <string>__HOME__/logs/dx/dx-worktree-gc.launchd.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/fengning/logs/dx/dx-worktree-gc.launchd.log</string>
+    <string>__HOME__/logs/dx/dx-worktree-gc.launchd.log</string>
 </dict>
 </plist>

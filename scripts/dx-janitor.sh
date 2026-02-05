@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# DX Worktree Janitor (V7.6)
+# DX Worktree Janitor (V7.8)
 #
 # Purpose: Ensure all worktree work is durable (pushed + has draft PR)
 #
@@ -9,6 +9,7 @@
 # Safety:
 # - No destructive actions (no close, no delete, no rebase, no squash)
 # - Quiet mode by default (minimal notifications)
+# - Bounded PR creation to prevent spam
 #
 # Usage:
 #   dx-janitor [--dry-run] [--verbose] [--check-abandon]
@@ -20,6 +21,11 @@ export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
 # Configuration
 WORKTREE_BASE="/tmp/agents"
 ABANDON_THRESHOLD_HOURS=72
+DX_JANITOR_MAX_NEW_PRS=${DX_JANITOR_MAX_NEW_PRS:-3}
+
+# Internal state
+PRS_CREATED=0
+PRS_DEFERRED=0
 
 # Colors for output
 RED='\033[0;31m'
@@ -221,7 +227,7 @@ process_worktree() {
         return 0
     fi
     
-    # Check for existing PR (only if branch has meaningful diffs vs base, or is dirty)
+    # Check for existing PR
     if ! check_gh_auth; then
         warn "gh CLI not available, skipping PR check"
         return 0
@@ -270,6 +276,13 @@ process_worktree() {
         # No PR exists, create draft PR
         info "No PR exists for branch '$current_branch'"
         
+        # Check budget
+        if [[ "$PRS_CREATED" -ge "$DX_JANITOR_MAX_NEW_PRS" ]]; then
+            warn "PR budget exhausted ($DX_JANITOR_MAX_NEW_PRS). Deferring PR for $current_branch."
+            PRS_DEFERRED=$((PRS_DEFERRED + 1))
+            return 0
+        fi
+
         # Get the remote repo name
         local remote_url
         remote_url=$(git remote get-url origin 2>/dev/null || echo "")
@@ -286,6 +299,7 @@ process_worktree() {
         
         if [[ "$DRY_RUN" == true ]]; then
             echo "  [DRY-RUN] Would create draft PR for $repo_full_name"
+            PRS_CREATED=$((PRS_CREATED + 1))
         else
             # Create draft PR
             local pr_body="Worktree: \`$worktree_name\`
@@ -311,6 +325,7 @@ Path: \`$worktree_path\`
                 --draft \
                 --label "wip/worktree" 2>/dev/null; then
                 success "Created draft PR for $current_branch"
+                PRS_CREATED=$((PRS_CREATED + 1))
             else
                 # Maybe PR already exists but search failed
                 error "Failed to create PR (it might already exist or need manual push)"
@@ -334,8 +349,9 @@ find_worktrees() {
 
 # Main execution
 main() {
-    echo "🧹 DX Worktree Janitor (V7.6)"
+    echo "🧹 DX Worktree Janitor (V7.8)"
     echo "=============================="
+    echo "Budget: $DX_JANITOR_MAX_NEW_PRS new PRs"
     
     if [[ "$DRY_RUN" == true ]]; then
         echo "[DRY-RUN MODE] No changes will be made"
@@ -350,13 +366,11 @@ main() {
     fi
     
     local processed=0
-    local pushed=0
-    local created=0
     
     while IFS= read -r worktree; do
         if [[ -n "$worktree" ]]; then
             if process_worktree "$worktree"; then
-                ((processed++))
+                processed=$((processed + 1))
             fi
         fi
     done <<< "$worktrees"
@@ -364,6 +378,8 @@ main() {
     echo ""
     echo "=============================="
     echo "Janitor complete: $processed worktrees processed"
+    echo "PRs Created:  $PRS_CREATED"
+    echo "PRs Deferred: $PRS_DEFERRED"
     
     if [[ "$DRY_RUN" == true ]]; then
         echo "[DRY-RUN] No actual changes made"

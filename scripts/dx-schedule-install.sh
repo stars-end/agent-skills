@@ -44,16 +44,19 @@ install_macmini() {
         local base_plist=$(basename "$plist")
         local target_plist="$target_dir/$base_plist"
         
+        # Expand placeholders in a temporary file for comparison
+        local expanded_source=$(mktemp)
+        sed "s|__HOME__|$HOME|g" "$plist" > "$expanded_source"
+        
         if [[ -f "$target_plist" ]]; then
-            if diff -q "$plist" "$target_plist" >/dev/null; then
+            if diff -q "$expanded_source" "$target_plist" >/dev/null; then
                 log "✅ $base_plist: No drift"
             else
                 log "⚠️ $base_plist: Drift detected"
                 if [[ "$MODE" == "apply" ]]; then
                     log "  Applying update..."
-                    # We use bootout/bootstrap if available, but unload/load is classic
                     launchctl unload "$target_plist" 2>/dev/null || true
-                    cp "$plist" "$target_plist"
+                    cp "$expanded_source" "$target_plist"
                     launchctl load "$target_plist"
                 fi
             fi
@@ -61,10 +64,11 @@ install_macmini() {
             log "➕ $base_plist: New schedule"
             if [[ "$MODE" == "apply" ]]; then
                 log "  Installing..."
-                cp "$plist" "$target_plist"
+                cp "$expanded_source" "$target_plist"
                 launchctl load "$target_plist"
             fi
         fi
+        rm -f "$expanded_source"
     done
 }
 

@@ -6,10 +6,10 @@
     <string>io.agentskills.canonical-sync</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/fengning/agent-skills/scripts/dx-job-wrapper.sh</string>
+        <string>__HOME__/agent-skills/scripts/dx-job-wrapper.sh</string>
         <string>canonical-sync</string>
         <string>--</string>
-        <string>/Users/fengning/agent-skills/scripts/canonical-sync.sh</string>
+        <string>__HOME__/agent-skills/scripts/canonical-sync.sh</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
@@ -19,8 +19,8 @@
         <integer>0</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/fengning/logs/dx/canonical-sync.launchd.log</string>
+    <string>__HOME__/logs/dx/canonical-sync.launchd.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/fengning/logs/dx/canonical-sync.launchd.log</string>
+    <string>__HOME__/logs/dx/canonical-sync.launchd.log</string>
 </dict>
 </plist>

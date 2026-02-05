@@ -6,16 +6,16 @@
     <string>io.agentskills.bd-sync-safe</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/fengning/agent-skills/scripts/dx-job-wrapper.sh</string>
+        <string>__HOME__/agent-skills/scripts/dx-job-wrapper.sh</string>
         <string>bd-sync-safe</string>
         <string>--</string>
-        <string>/Users/fengning/agent-skills/scripts/bd-sync-safe.sh</string>
+        <string>__HOME__/agent-skills/scripts/bd-sync-safe.sh</string>
     </array>
     <key>StartInterval</key>
     <integer>600</integer>
     <key>StandardOutPath</key>
-    <string>/Users/fengning/logs/dx/bd-sync-safe.launchd.log</string>
+    <string>__HOME__/logs/dx/bd-sync-safe.launchd.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/fengning/logs/dx/bd-sync-safe.launchd.log</string>
+    <string>__HOME__/logs/dx/bd-sync-safe.launchd.log</string>
 </dict>
 </plist>

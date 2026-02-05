@@ -24,7 +24,8 @@ case "$CMD" in
             echo "Error: target directory $TARGET_PATH does not exist"
             exit 1
         fi
-        echo "$(date +%s)::" > "$LOCK_FILE"
+        # Format: <unix_ts>:<hostname>:<pid>
+        echo "$(date +%s):$(hostname -s):$$" > "$LOCK_FILE"
         ;;
     is-fresh)
         if [[ ! -f "$LOCK_FILE" ]]; then
@@ -35,7 +36,16 @@ case "$CMD" in
             exit 1
         fi
         
-        LOCK_TS=$(cut -d':' -f1 "$LOCK_FILE" 2>/dev/null || echo "0")
+        # Parse format: <unix_ts>:<hostname>:<pid>
+        # Safely handle missing/garbled files
+        LOCK_CONTENT=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+        LOCK_TS=$(echo "$LOCK_CONTENT" | cut -d':' -f1 2>/dev/null || echo "0")
+        
+        # Validate LOCK_TS is a number
+        if [[ ! "$LOCK_TS" =~ ^[0-9]+$ ]]; then
+            LOCK_TS=0
+        fi
+
         NOW=$(date +%s)
         AGE=$((NOW - LOCK_TS))
         

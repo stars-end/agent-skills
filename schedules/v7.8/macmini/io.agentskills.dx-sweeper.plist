@@ -6,10 +6,10 @@
     <string>io.agentskills.dx-sweeper</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/fengning/agent-skills/scripts/dx-job-wrapper.sh</string>
+        <string>__HOME__/agent-skills/scripts/dx-job-wrapper.sh</string>
         <string>dx-sweeper</string>
         <string>--</string>
-        <string>/Users/fengning/agent-skills/scripts/dx-sweeper.sh</string>
+        <string>__HOME__/agent-skills/scripts/dx-sweeper.sh</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
@@ -19,8 +19,8 @@
         <integer>0</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/fengning/logs/dx/dx-sweeper.launchd.log</string>
+    <string>__HOME__/logs/dx/dx-sweeper.launchd.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/fengning/logs/dx/dx-sweeper.launchd.log</string>
+    <string>__HOME__/logs/dx/dx-sweeper.launchd.log</string>
 </dict>
 </plist>
