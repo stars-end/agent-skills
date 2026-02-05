@@ -34,11 +34,11 @@ fi
 if [[ -x "$HOME/agent-skills/scripts/dx-status.sh" ]]; then
   STATUS_OUTPUT=$("$HOME/agent-skills/scripts/dx-status.sh" 2>/dev/null || true)
 
-  DIRTY_STALE=$(echo "$STATUS_OUTPUT" | grep -i "dirty.*stale" | head -1 || true)
-  NO_UPSTREAM=$(echo "$STATUS_OUTPUT" | grep -i "no upstream" | head -1 || true)
+  DIRTY_STALE=$(echo "$STATUS_OUTPUT" | grep "Dirty (Stale):" | head -1 || true)
+  NO_UPSTREAM=$(echo "$STATUS_OUTPUT" | grep "No Upstream branches:" | head -1 || true)
 
   if [[ -n "$DIRTY_STALE" ]]; then
-    DIRTY_STALE_COUNT=$(echo "$DIRTY_STALE" | grep -oE '[0-9]+' | head -1 || echo "1")
+    DIRTY_STALE_COUNT=$(echo "$DIRTY_STALE" | sed 's/.*: \([0-9]*\).*/\1/' || echo "0")
     DIRTY_STALE_PATH=$(echo "$DIRTY_STALE" | grep -oE '/tmp/agents/[^[:space:]]+' | head -1 || true)
     if [[ -n "$DIRTY_STALE_COUNT" ]]; then
       ERRORS+=("dirty_stale=$DIRTY_STALE_COUNT")
@@ -48,7 +48,7 @@ if [[ -x "$HOME/agent-skills/scripts/dx-status.sh" ]]; then
   fi
 
   if [[ -n "$NO_UPSTREAM" ]]; then
-    NO_UPSTREAM_COUNT=$(echo "$NO_UPSTREAM" | grep -oE '[0-9]+' | head -1 || echo "1")
+    NO_UPSTREAM_COUNT=$(echo "$NO_UPSTREAM" | sed 's/.*: \([0-9]*\).*/\1/' || echo "0")
     NO_UPSTREAM_PATH=$(echo "$NO_UPSTREAM" | grep -oE '/tmp/agents/[^[:space:]]+' | head -1 || true)
     if [[ -n "$NO_UPSTREAM_COUNT" ]]; then
       ERRORS+=("no_upstream=$NO_UPSTREAM_COUNT")
