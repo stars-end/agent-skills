@@ -832,6 +832,12 @@ def cmd_plan(args: argparse.Namespace) -> int:
     repo_map = parse_repo_map(args.repo_map or [])
     nodes, plan, layers, errors = compute_plan(args.universe, repo_map)
 
+    print_plan(plan, layers, errors)
+
+    return 0
+
+
+def print_plan(plan: dict[str, "PlanEntry"], layers: list[list[str]], errors: dict[str, str]) -> None:
     if errors:
         log("Universe fetch errors:", "WARN")
         for k, v in sorted(errors.items()):
@@ -854,8 +860,6 @@ def cmd_plan(args: argparse.Namespace) -> int:
     print("\n== LAYERS ==")
     for i, layer in enumerate(layers):
         print(f"Layer {i}: {' '.join(layer)}")
-
-    return 0
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -898,6 +902,13 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     if errors:
         log("Universe fetch errors present; see plan output for details", "WARN")
+
+    if args.smoke:
+        log("Smoke mode: skipping OpenCode execution", "INFO")
+        print_plan(plan, layers, errors)
+        print("\n== CHECKPOINT ==")
+        print(status_table(ckpt))
+        return 0
 
     runnable_ids = [p.id for p in plan.values() if p.state == "runnable"]
     if not runnable_ids:
@@ -979,6 +990,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_universe_flags(sp_run)
     sp_run.add_argument("--checkpoint", default=None, help="Checkpoint JSON path (default under ~/.dx/ralph/)")
     sp_run.add_argument("--resume", default=None, help="Resume from checkpoint JSON")
+    sp_run.add_argument("--smoke", action="store_true", help="Wiring smoke test: plan + checkpoint only (no OpenCode calls)")
     sp_run.add_argument("--dry-run", action="store_true", help="Do not push/PR/close; still runs planning and loops")
     sp_run.add_argument("--keep-worktrees", action="store_true", help="Keep worktrees after run")
     sp_run.set_defaults(func=cmd_run)
