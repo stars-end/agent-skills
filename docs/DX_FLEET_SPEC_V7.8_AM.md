@@ -268,13 +268,28 @@ Recommended pattern:
 - Daily review = run the evidence collector as a background exec, then deliver the summary via heartbeat.
 
 ### 5.8 Heartbeat implementation notes (current state)
-On macmini, Clawdbot workspaces exist (e.g. `~/clawd-all-stars-end`), but the Clawdbot cron jobs file at:
-- `~/.clawdbot/cron/jobs.json`
-currently contains `jobs: []`.
+On macmini (captain VM), Clawdbot runs via the local gateway (loopback):
+- Gateway: `ws://127.0.0.1:18789`
+- Cron jobs store: `~/.clawdbot/cron/jobs.json`
 
-This spec does not assume a specific gateway config format; it only defines the contract:
-- A periodic heartbeat posts to `#all-stars-end`.
-- The heartbeat runs read-only commands only.
+Verification (macmini):
+```bash
+# Gateway is listening
+lsof -nP -iTCP:18789 -sTCP:LISTEN
+
+# Cron scheduler health + jobs
+clawdbot cron status
+clawdbot cron list --all --json
+```
+
+Provider note:
+- Heartbeat jobs MUST pin the model/provider explicitly (fleet standard: **ZAI GLM-4.7**).
+- If jobs omit `--model`, Clawdbot may default to another provider (e.g. Anthropic) and fail auth unexpectedly.
+- Ensure `ZAI_API_KEY` is available to the **gateway process environment** (launchd/systemd shells may not inherit your interactive shell env).
+
+Contract reminder:
+- Heartbeat posts to `#all-stars-end`.
+- Heartbeat runs read-only commands only (no cleanup actions).
 
 ---
 

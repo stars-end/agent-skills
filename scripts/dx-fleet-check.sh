@@ -36,6 +36,7 @@ get_ssh_target() {
 check_remote_host() {
   local host="$1"
   local ssh_target
+  local remote_payload
 
   ssh_target=$(get_ssh_target "$host")
   if [[ -z "$ssh_target" ]]; then
@@ -45,48 +46,54 @@ check_remote_host() {
 
   echo "📡 $host ($ssh_target)"
 
-  # Run read-only checks via SSH
-  if ssh -o ConnectTimeout=5 -o BatchMode=yes "$ssh_target" "
-    export BEADS_DIR=\"\$HOME/bd/.beads\"
+  remote_payload="$(cat <<'EOS'
+export BEADS_DIR="$HOME/bd/.beads"
 
-    echo '  Canonical hygiene:'
-    for repo in agent-skills prime-radiant-ai affordabot llm-common; do
-      repo_path=\"\$HOME/\$repo\"
-      if [[ -d \"\$repo_path/.git\" ]]; then
-        branch=\$(git -C \"\$repo_path\" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')
-        status=\$(git -C \"\$repo_path\" status --porcelain=v1 2>/dev/null || true)
-        stash_count=\$(git -C \"\$repo_path\" stash list 2>/dev/null | wc -l | tr -d ' ')
+echo '  Canonical hygiene:'
+for repo in agent-skills prime-radiant-ai affordabot llm-common; do
+  repo_path="$HOME/$repo"
+  if [[ -d "$repo_path/.git" ]]; then
+    branch=$(git -C "$repo_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')
+    git_status=$(git -C "$repo_path" status --porcelain=v1 2>/dev/null || true)
+    stash_count=$(git -C "$repo_path" stash list 2>/dev/null | wc -l | tr -d ' ')
 
-        if [[ -n \"\$status\" ]] || [[ \"\$stash_count\" -gt 0 ]]; then
-          echo \"    ❌ \$repo: branch=\$branch dirty=\$([ -n \"\$status\" ] && echo 'yes' || echo 'no') stashes=\$stash_count\"
-        else
-          echo \"    ✅ \$repo: branch=\$branch clean\"
-        fi
-      else
-        echo \"    ⚠️  \$repo: not found\"
-      fi
-    done
-
-    echo ''
-    echo '  DX verify-clean:'
-    if [[ -x \"\$HOME/agent-skills/scripts/dx-verify-clean.sh\" ]]; then
-      if \"\$HOME/agent-skills/scripts/dx-verify-clean.sh\" >/dev/null 2>&1; then
-        echo '    ✅ PASS'
-      else
-        echo '    ❌ FAIL'
-      fi
+    if [[ -n "$git_status" ]] || [[ "$stash_count" -gt 0 ]]; then
+      echo "    ❌ $repo: branch=$branch dirty=$([ -n "$git_status" ] && echo 'yes' || echo 'no') stashes=$stash_count"
     else
-      echo '    ⚠️  script not found'
+      echo "    ✅ $repo: branch=$branch clean"
     fi
+  else
+    echo "    ⚠️  $repo: not found"
+  fi
+done
 
-    echo ''
-    echo '  DX status (last 10 lines):'
-    if [[ -x \"\$HOME/agent-skills/scripts/dx-status.sh\" ]]; then
-      \"\$HOME/agent-skills/scripts/dx-status.sh\" 2>/dev/null | tail -10 | sed 's/^/    /' || echo '    (no output)'
-    else
-      echo '    script not found'
-    fi
-  " 2>/dev/null; then
+echo ''
+echo '  DX verify-clean:'
+if [[ -x "$HOME/agent-skills/scripts/dx-verify-clean.sh" ]]; then
+  if "$HOME/agent-skills/scripts/dx-verify-clean.sh" >/dev/null 2>&1; then
+    echo '    ✅ PASS'
+  else
+    echo '    ❌ FAIL'
+  fi
+else
+  echo '    ⚠️  script not found'
+fi
+
+echo ''
+echo '  DX status (last 10 lines):'
+if [[ -x "$HOME/agent-skills/scripts/dx-status.sh" ]]; then
+  "$HOME/agent-skills/scripts/dx-status.sh" 2>/dev/null | tail -10 | sed 's/^/    /' || echo '    (no output)'
+else
+  echo '    script not found'
+fi
+EOS
+)"
+
+  # Run read-only checks via SSH using the remote user's login shell (non-interactive).
+  #
+  # NOTE: We intentionally do NOT force `zsh -lc` or `bash -lc` here because some hosts
+  # print noisy login banners or suppress output for non-interactive `-lc` shells.
+  if ssh -o ConnectTimeout=5 -o BatchMode=yes "$ssh_target" "$remote_payload" 2>/dev/null; then
     return 0
   else
     echo "  ⚠️  SSH failed or host unreachable"
@@ -104,11 +111,11 @@ check_local_host() {
     repo_path="$HOME/$repo"
     if [[ -d "$repo_path/.git" ]]; then
       branch=$(git -C "$repo_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')
-      status=$(git -C "$repo_path" status --porcelain=v1 2>/dev/null || true)
+      git_status=$(git -C "$repo_path" status --porcelain=v1 2>/dev/null || true)
       stash_count=$(git -C "$repo_path" stash list 2>/dev/null | wc -l | tr -d ' ')
 
-      if [[ -n "$status" ]] || [[ "$stash_count" -gt 0 ]]; then
-        echo "    ❌ $repo: branch=$branch dirty=$([ -n "$status" ] && echo 'yes' || echo 'no') stashes=$stash_count"
+      if [[ -n "$git_status" ]] || [[ "$stash_count" -gt 0 ]]; then
+        echo "    ❌ $repo: branch=$branch dirty=$([ -n "$git_status" ] && echo 'yes' || echo 'no') stashes=$stash_count"
       else
         echo "    ✅ $repo: branch=$branch clean"
       fi
@@ -157,7 +164,7 @@ for host in $(parse_hosts); do
   if [[ "$host" == "$LOCAL_HOST" ]]; then
     check_local_host "$host"
   else
-    check_remote_host "$host"
+    check_remote_host "$host" || true
   fi
   echo ""
 done

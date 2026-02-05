@@ -5,6 +5,7 @@
 hosts:
   macmini:
     ssh: "fengning@Fengs-Mac-mini-3.local"
+    shell: "zsh"
     os: "macos"
     user: "fengning"
     canonical_repos:
@@ -17,6 +18,7 @@ hosts:
 
   homedesktop-wsl:
     ssh: "fengning@homedesktop-wsl"
+    shell: "zsh"
     os: "linux"
     user: "fengning"
     canonical_repos:
@@ -29,6 +31,7 @@ hosts:
 
   epyc6:
     ssh: "feng@epyc6"
+    shell: "zsh"
     os: "linux"
     user: "feng"
     canonical_repos:
