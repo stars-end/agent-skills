@@ -30,6 +30,7 @@ link "$AGENTS_ROOT/scripts/dx-worktree.sh" "$BIN_DIR/dx-worktree"
 link "$AGENTS_ROOT/scripts/dx-status.sh" "$BIN_DIR/dx-status"
 link "$AGENTS_ROOT/scripts/dx-check.sh" "$BIN_DIR/dx-check"
 link "$AGENTS_ROOT/scripts/dx-doctor.sh" "$BIN_DIR/dx-doctor"
+link "$AGENTS_ROOT/scripts/dx-ralph.py" "$BIN_DIR/dx-ralph"
 
 # Fleet visibility + toolchain consistency
 link "$AGENTS_ROOT/scripts/dx-fleet-status.sh" "$BIN_DIR/dx-fleet-status"
