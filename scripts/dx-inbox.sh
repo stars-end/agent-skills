@@ -37,10 +37,13 @@ if [[ -x "$HOME/agent-skills/scripts/dx-status.sh" ]]; then
   DIRTY_STALE=$(echo "$STATUS_OUTPUT" | grep "Dirty (Stale):" | head -1 || true)
   NO_UPSTREAM=$(echo "$STATUS_OUTPUT" | grep "No Upstream branches:" | head -1 || true)
 
+  DIRTY_STALE_PATH=$(echo "$DIRTY_STALE" | grep -oE '/tmp/agents/[^[:space:]]+' | head -1 || true)
+  NO_UPSTREAM_PATH=$(echo "$NO_UPSTREAM" | grep -oE '/tmp/agents/[^[:space:]]+' | head -1 || true)
+
   if [[ -n "$DIRTY_STALE" ]]; then
     DIRTY_STALE_COUNT=$(echo "$DIRTY_STALE" | sed 's/.*: \([0-9]*\).*/\1/' || echo "0")
-    DIRTY_STALE_PATH=$(echo "$DIRTY_STALE" | grep -oE '/tmp/agents/[^[:space:]]+' | head -1 || true)
-    if [[ -n "$DIRTY_STALE_COUNT" ]]; then
+    DIRTY_STALE_COUNT="${DIRTY_STALE_COUNT:-0}"
+    if [[ "$DIRTY_STALE_COUNT" -gt 0 ]]; then
       ERRORS+=("dirty_stale=$DIRTY_STALE_COUNT")
       [[ -n "$DIRTY_STALE_PATH" ]] && DIRTY_STALE_LIST+=("$DIRTY_STALE_PATH")
       NEXT_COMMANDS+=("run ~/agent-skills/scripts/dx-janitor.sh --dry-run")
@@ -49,11 +52,11 @@ if [[ -x "$HOME/agent-skills/scripts/dx-status.sh" ]]; then
 
   if [[ -n "$NO_UPSTREAM" ]]; then
     NO_UPSTREAM_COUNT=$(echo "$NO_UPSTREAM" | sed 's/.*: \([0-9]*\).*/\1/' || echo "0")
-    NO_UPSTREAM_PATH=$(echo "$NO_UPSTREAM" | grep -oE '/tmp/agents/[^[:space:]]+' | head -1 || true)
-    if [[ -n "$NO_UPSTREAM_COUNT" ]]; then
+    NO_UPSTREAM_COUNT="${NO_UPSTREAM_COUNT:-0}"
+    if [[ "$NO_UPSTREAM_COUNT" -gt 0 ]]; then
       ERRORS+=("no_upstream=$NO_UPSTREAM_COUNT")
       [[ -n "$NO_UPSTREAM_PATH" ]] && NO_UPSTREAM_LIST+=("$NO_UPSTREAM_PATH")
-      NEXT_COMMANDS+=("run ~/agent-skills/scripts/dx-worktree-gc.sh --dry-run")
+      NEXT_COMMANDS+=("run ~/agent-skills/scripts/dx-janitor.sh --dry-run")
     fi
   fi
 fi
@@ -89,7 +92,10 @@ else
     echo "NoUpstream: ${NO_UPSTREAM_LIST[0]}${NO_UPSTREAM_COUNT:+ ...(+$((NO_UPSTREAM_COUNT-1)))}"
   fi
 
-  for cmd in "${NEXT_COMMANDS[@]}"; do
-    echo "Next: $cmd"
-  done
+  if [[ ${#NEXT_COMMANDS[@]} -gt 0 ]]; then
+    UNIQUE_COMMANDS=$(printf "%s\n" "${NEXT_COMMANDS[@]}" | sort -u)
+    while IFS= read -r cmd; do
+      echo "Next: $cmd"
+    done <<< "$UNIQUE_COMMANDS"
+  fi
 fi
