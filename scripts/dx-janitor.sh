@@ -147,22 +147,36 @@ process_worktree() {
         return 0
     fi
     
-    # Check for unpushed commits
+    # Compute divergence / durability signals
+    local base="origin/master"
+    if ! git rev-parse "$base" >/dev/null 2>&1; then
+        base="origin/main"
+    fi
+
+    local worktree_dirty=false
+    if [[ -n "$(git status --porcelain=v1 2>/dev/null)" ]]; then
+        worktree_dirty=true
+    fi
+
+    # "Ahead of base" is the single gate for "should this have a PR?"
+    local ahead_of_base=0
+    ahead_of_base=$(git rev-list --count "$base..$current_branch" 2>/dev/null || echo "0")
+
+    # Check for unpushed commits (if upstream exists)
     local unpushed_commits=0
     local has_upstream=false
     if git rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
         has_upstream=true
         unpushed_commits=$(git rev-list --count "$current_branch"@{upstream}.."$current_branch" 2>/dev/null || echo "0")
     else
-        # No upstream: branch exists locally but not in origin.
-        # Check if it has any commits ahead of master (or main)
-        local base="origin/master"
-        if ! git rev-parse "$base" >/dev/null 2>&1; then
-            base="origin/main"
-        fi
-        
-        unpushed_commits=$(git rev-list --count "$base..$current_branch" 2>/dev/null || echo "0")
-        log "No upstream found. Commits ahead of $base: $unpushed_commits"
+        log "No upstream found. Commits ahead of $base: $ahead_of_base"
+    fi
+
+    # If the branch has no changes relative to base and is clean, skip entirely.
+    # This avoids creating no-op PRs for already-merged / identical branches.
+    if [[ "$ahead_of_base" -eq 0 && "$worktree_dirty" == false ]]; then
+        log "Branch has no changes vs $base and worktree is clean; skipping"
+        return 0
     fi
     
     if [[ "$unpushed_commits" -gt 0 ]]; then
@@ -188,7 +202,7 @@ process_worktree() {
         log "No unpushed commits"
     fi
     
-    # Check for existing PR
+    # Check for existing PR (only if branch has meaningful diffs vs base, or is dirty)
     if ! check_gh_auth; then
         warn "gh CLI not available, skipping PR check"
         return 0
