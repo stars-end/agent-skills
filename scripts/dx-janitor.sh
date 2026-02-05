@@ -170,6 +170,7 @@ process_worktree() {
         unpushed_commits=$(git rev-list --count "$current_branch"@{upstream}.."$current_branch" 2>/dev/null || echo "0")
     else
         log "No upstream found. Commits ahead of $base: $ahead_of_base"
+        unpushed_commits="$ahead_of_base"
     fi
 
     # If the branch has no changes relative to base and is clean, skip entirely.
@@ -200,6 +201,16 @@ process_worktree() {
         fi
     else
         log "No unpushed commits"
+    fi
+
+    # If the branch has no commits vs base, a PR cannot carry uncommitted work.
+    # Janitor is intentionally non-destructive; it never auto-commits.
+    if [[ "$worktree_dirty" == true && "$ahead_of_base" -eq 0 ]]; then
+        warn "Dirty worktree with no commits vs $base — commit changes before janitor can open a PR"
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "  [DRY-RUN] Would skip PR creation (no commits to PR)"
+        fi
+        return 0
     fi
     
     # Check for existing PR (only if branch has meaningful diffs vs base, or is dirty)
