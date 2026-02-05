@@ -411,7 +411,7 @@ clawdbot agents list --json
 ```
 
 #### 11.3.2 Pulse cron (06:00–16:00 PST, every 2h)
-Run in the agent’s **main** session so it stays “single chat” behavior.
+Run in an **isolated** session by default (keeps long-running main sessions clean).
 
 Recommended:
 ```bash
@@ -419,10 +419,13 @@ clawdbot cron add \
   --name dx-pulse \
   --description "DX pulse heartbeat (V7.8) — one line when OK" \
   --agent all-stars-end \
-  --session main \
+  --session isolated \
+  --wake next-heartbeat \
   --cron "0 6-16/2 * * *" \
   --tz "America/Los_Angeles" \
-  --message "Run dx-inbox. If healthy, output exactly one line: 'DX PULSE OK …'. If not healthy, output <=6 lines: summary + top exceptions + next command. Do not run destructive actions." \
+  --thinking low \
+  --model "zai/glm-4.7" \
+  --message "Deterministic heartbeat (do NOT guess). If ~/agent-skills/scripts/dx-inbox.sh is missing: output exactly one line 'DX PULSE BLOCKED (agent-skills missing dx-inbox.sh; merge agent-skills#113 and pull)' and stop. Otherwise run ~/agent-skills/scripts/dx-inbox.sh and output its result verbatim. Do not run destructive actions." \
   --deliver \
   --channel slack \
   --to "#all-stars-end" \
@@ -438,11 +441,13 @@ clawdbot cron add \
   --name dx-daily \
   --description "DX daily compliance review (last 24h) — V7.8 deviations only" \
   --agent all-stars-end \
-  --session main \
+  --session isolated \
+  --wake next-heartbeat \
   --cron "0 5 * * *" \
   --tz "America/Los_Angeles" \
   --thinking low \
-  --message "Perform a V7.8 compliance review of the last 24h. Use: dx-fleet-check (read-only) + PR inbox (baseline-sync/rescue) + bd/bv next pick. If no deviations, output exactly one line: 'DX DAILY OK …'. If deviations, list them grouped by plane with severity; include @fengning only if egregious per spec §5.6. Do not run destructive actions." \
+  --model "zai/glm-4.7" \
+  --message "Deterministic daily review (do NOT guess). If ~/agent-skills/scripts/dx-fleet-check.sh is missing: output exactly one line 'DX DAILY BLOCKED (agent-skills missing dx-fleet-check.sh; merge agent-skills#113 and pull)' and stop. Otherwise run ~/agent-skills/scripts/dx-fleet-check.sh and use it as evidence; if available also include bv --robot-next one-line summary. If no deviations, output exactly one line starting with 'DX DAILY OK'. If deviations, list them grouped by plane with severity; include @fengning only if egregious per spec §5.6. Do not run destructive actions." \
   --deliver \
   --channel slack \
   --to "#all-stars-end" \
@@ -452,6 +457,7 @@ clawdbot cron add \
 Notes:
 - These cron jobs are intended to replace ad-hoc notification scripts.
 - Hygiene actions remain deterministic and separate (janitor/sweeper/gc schedules), not performed by heartbeat jobs.
+ - Create/enable these jobs only after `agent-skills` has the scripts on `master`; otherwise they should produce `DX *_BLOCKED` and stop.
 
 ### 11.4 Host-plane hygiene schedules (all VMs)
 This spec assumes V7.8 hygiene jobs are scheduled per VM (tracked in `bd-l99g`):

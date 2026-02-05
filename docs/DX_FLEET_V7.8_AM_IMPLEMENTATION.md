@@ -86,7 +86,8 @@ Steps:
    - Daily review: 05:00 PST daily
 
 Critical requirement:
-- Cron jobs MUST pin provider/model explicitly (fleet default: **ZAI GLM-4.7**) and the gateway must have `ZAI_API_KEY` available in its environment.
+- Cron jobs MUST pin provider/model explicitly (fleet default: **ZAI GLM-4.7**).
+- The gateway must have ZAI credentials available (either via Clawdbot auth profiles or `ZAI_API_KEY` in the gateway environment).
 
 Acceptance:
 - `clawdbot cron list --all --json` shows both jobs enabled.
@@ -130,4 +131,3 @@ In the canonical clone:
 ```
 
 PR must only include the intended files (no accidental tool artifacts).
-
