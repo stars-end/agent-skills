@@ -184,13 +184,90 @@ Heartbeat is the “attention router”, not the hygiene actor.
 ### 5.2 Heartbeat channel
 Slack channel: `#all-stars-end`.
 
-### 5.3 Heartbeat payload (recommended)
-The heartbeat should post:
-- `dx-inbox` output (see Group L)
-- When healthy: a single “OK” + 1–2 summary lines.
-- When unhealthy: short report + explicit remediation commands.
+### 5.3 Heartbeat modes
+We run two heartbeat modes:
 
-### 5.4 Heartbeat implementation notes (current state)
+1) **Pulse** (every 2 hours during working hours):
+- Purpose: keep attention tight and bounded; detect drift early.
+- Output: **one line when OK**; short exception list when not OK.
+
+2) **Daily compliance review** (once per day):
+- Purpose: a meta-evaluation against the intended V7.8 happy path:
+  - “Given the last 24h evidence, list every deviation from the V7.8 intended workflow.”
+- Output: one line when OK; otherwise a short list of deviations + severity + next actions.
+- Escalation: if egregious, include `@fengning`.
+
+### 5.4 Heartbeat schedule (captain VM only)
+To avoid duplicates, **only macmini** is the heartbeat captain.
+
+Pulse window (PST):
+- Start: **06:00**
+- End: **16:00**
+- Cadence: **every 2 hours** (06, 08, 10, 12, 14, 16).
+
+Daily compliance review (PST):
+- Runs at **05:00** and covers the prior 24 hours.
+
+### 5.5 Heartbeat payload contracts
+
+#### Pulse payload
+Collect (read-only):
+- Local: `dx-verify-clean` + `dx-status` (and/or `dx-inbox` once it exists)
+- Optional cross-VM: `dx-fleet-check` (read-only SSH), but only if it stays fast/reliable.
+
+Output:
+- OK: **exactly one line** with a short summary (no multi-line dumps).
+- Not OK: still bounded; list only top exceptions + a “next command”.
+
+#### Daily compliance review payload
+This is not a status update; it is a compliance audit:
+
+Input evidence bundle should include:
+- For each VM (via SSH):
+  - canonical hygiene (branch/dirty/stash counts)
+  - `dx-status` metrics (worktree roots, dirty-stale list, no-upstream list)
+  - last-run timestamps for: `ru sync`, `canonical-sync`, `auto-checkpoint`, `dx-janitor`, `dx-sweeper`, `dx-worktree-gc`
+- GitHub PR-plane:
+  - rescue PRs created/updated in last 24h
+  - baseline-sync PRs created/updated
+- Beads-plane (optional):
+  - top “next” pick via BV (e.g. `bv --robot-next`)
+
+Prompt (conceptual):
+> “Here is the V7.8 intended happy path. Given the last 24h evidence bundle, tell me everything that didn’t follow this.”
+
+Output:
+- OK: **exactly one line**.
+- Not OK: list deviations grouped by (Host-plane / Repo-plane / PR-plane / Beads-plane), with severity.
+
+### 5.6 Egregious escalation (silent failure awareness)
+If any of these happen, the daily review (and sometimes pulse) should include `@fengning`:
+
+Canonical integrity:
+- Any canonical repo is dirty or off trunk.
+- Any canonical stash exists (hidden state).
+
+Durability / lost-work risk:
+- Rescue PR updated/created (means canonical rules were violated).
+- No-upstream worktrees persist >24h (work at risk of being stranded).
+- Worktree count spikes above threshold (e.g. >30).
+
+Automation failure (silent drift):
+- Expected schedule did not run (janitor/sweeper/gc/ru sync/canonical-sync) within its expected window.
+- External Beads repo (`~/bd`) is git-dirty after scheduled sync (durability regression).
+- Heartbeat not delivered (gateway down, main queue stuck, channel routing misconfigured).
+
+### 5.7 Background process vs heartbeat (OpenClaw gateway)
+Use the two tools intentionally:
+
+- **Heartbeat**: periodic, bounded turns in the agent session; best for short read-only checks + attention routing.
+- **Background process (`exec`/`process`)**: best for longer-running audit tasks; can be configured to notify on exit by enqueuing a system event that requests a heartbeat.
+
+Recommended pattern:
+- Pulse = heartbeat only (fast).
+- Daily review = run the evidence collector as a background exec, then deliver the summary via heartbeat.
+
+### 5.8 Heartbeat implementation notes (current state)
 On macmini, Clawdbot workspaces exist (e.g. `~/clawd-all-stars-end`), but the Clawdbot cron jobs file at:
 - `~/.clawdbot/cron/jobs.json`
 currently contains `jobs: []`.
@@ -280,4 +357,3 @@ These are the canonical “feedback loop” test cases: they should become visib
 ## 10) Non-goals
 - This spec does not attempt to solve multi-agent file contention inside a single repo beyond worktrees.
 - This spec does not require additional global instruction files per IDE; the repo-plane baseline + tiny rails should be sufficient.
-
