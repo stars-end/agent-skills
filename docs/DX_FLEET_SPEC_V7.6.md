@@ -174,7 +174,7 @@ Optional triage can run as GitHub Actions:
 
 - Perfect agent compliance via documentation alone
 - Auto-merging feature work
-- Complex file-level reservation systems (Agent-Mail) for this layer
+- Complex file-level reservation systems for this layer
 
 V7.6 aims for:
 **bounded inbox, minimal archaeology, and durable work even under noncompliance.**
