@@ -741,6 +741,8 @@ def run_single_epic(
         epic_state.pr_url = "DRY_RUN"
         epic_state.state = "done"
         write_checkpoint(ckpt_path, ckpt)
+        if not keep_worktrees:
+            dx_worktree_cleanup(epic.id)
         return
 
     _ = git_commit_if_needed(worktree, epic.id)
