@@ -1,11 +1,25 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Ralph Test Framework
 # Creates and runs test epics to validate Ralph autonomous loop
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BEADS_DIR="/Users/fengning/agent-skills/.beads"
+WORKSPACE="${WORKSPACE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+
+# Required: external beads DB
+if [[ -z "${BEADS_DIR:-}" ]]; then
+    echo "BEADS_DIR is required (external Beads DB)." >&2
+    exit 1
+fi
+
+# bd binary (allow override)
+BD_BIN="${BD_BIN:-bd}"
+if [[ "$BD_BIN" == */* ]]; then
+    [[ -x "$BD_BIN" ]] || { echo "BD_BIN not executable: $BD_BIN" >&2; exit 1; }
+else
+    command -v "$BD_BIN" >/dev/null 2>&1 || { echo "bd binary not found: $BD_BIN" >&2; exit 1; }
+fi
 
 # Colors
 GREEN='\033[0;32m'
@@ -38,7 +52,7 @@ create_test_epic() {
     log "Creating test epic: $epic_id"
 
     # Create epic
-    bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale create \
+    BEADS_DIR="$BEADS_DIR" "$BD_BIN" --no-daemon --allow-stale create \
         --id "$epic_id" \
         --title "$epic_title" \
         --type epic \
@@ -51,7 +65,7 @@ create_test_epic() {
         local filename="test-file-$i.txt"
         local content="This is test file $i created by Ralph"
 
-        bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale create \
+        BEADS_DIR="$BEADS_DIR" "$BD_BIN" --no-daemon --allow-stale create \
             --id "$task_id" \
             --title "Create test file $i" \
             --type task \
@@ -60,7 +74,7 @@ create_test_epic() {
             --acceptance "File exists with correct content" >/dev/null
 
         # Link task to epic
-        bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale dep add "$task_id" "$epic_id" >/dev/null 2>&1 || true
+        BEADS_DIR="$BEADS_DIR" "$BD_BIN" --no-daemon --allow-stale dep add "$task_id" "$epic_id" >/dev/null 2>&1 || true
     done
 
     log_pass "Test epic created with 5 tasks"
@@ -139,6 +153,8 @@ main() {
     log "Starting test sequence..."
     echo ""
 
+    cd "$WORKSPACE"
+
     # Create test epic
     local epic_id=$(create_test_epic)
     echo ""
@@ -154,7 +170,7 @@ main() {
         if [ $cycle -gt 1 ]; then
             log "Re-creating test epic for cycle $cycle..."
             # Close previous epic
-            bd --no-daemon --db "$BEADS_DIR/beads.db" --allow-stale close "$epic_id" >/dev/null 2>&1 || true
+            BEADS_DIR="$BEADS_DIR" "$BD_BIN" --no-daemon --allow-stale close "$epic_id" >/dev/null 2>&1 || true
             # Create new epic
             epic_id=$(create_test_epic)
         fi
