@@ -1,0 +1,40 @@
+# DX Fleet Host Registry (V7.8)
+# Canonical VMs for DX fleet operations
+# Authoritative source for ssh targets and repo paths
+
+hosts:
+  macmini:
+    ssh: "fengning@Fengs-Mac-mini-3.local"
+    os: "macos"
+    user: "fengning"
+    canonical_repos:
+      - "$HOME/agent-skills"
+      - "$HOME/prime-radiant-ai"
+      - "$HOME/affordabot"
+      - "$HOME/llm-common"
+    beads_db: "$HOME/bd/.beads"
+    notes: "Captain VM - heartbeat origin"
+
+  homedesktop-wsl:
+    ssh: "fengning@homedesktop-wsl"
+    os: "linux"
+    user: "fengning"
+    canonical_repos:
+      - "$HOME/agent-skills"
+      - "$HOME/prime-radiant-ai"
+      - "$HOME/affordabot"
+      - "$HOME/llm-common"
+    beads_db: "$HOME/bd/.beads"
+    notes: "Primary dev environment with DCG, CASS"
+
+  epyc6:
+    ssh: "feng@epyc6"
+    os: "linux"
+    user: "feng"
+    canonical_repos:
+      - "$HOME/agent-skills"
+      - "$HOME/prime-radiant-ai"
+      - "$HOME/affordabot"
+      - "$HOME/llm-common"
+    beads_db: "$HOME/bd/.beads"
+    notes: "GPU work, ML training (user differs: feng vs fengning)"
