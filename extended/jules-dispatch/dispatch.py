@@ -3,7 +3,7 @@
 jules-dispatch/dispatch.py - Cross-repo Jules dispatcher
 
 Scans for 'jules-ready' Beads tasks and dispatches them to Jules.
-Works from any Beads-enabled repository.
+Works from any directory with BEADS_DIR pointing to stars-end/bd.
 
 Usage:
     python ~/.agent/skills/jules-dispatch/dispatch.py [options]
@@ -26,9 +26,11 @@ from pathlib import Path
 from typing import List, Dict, Optional
 
 # Constants
-BEADS_FILE = ".beads/issues.jsonl"
 DOCS_DIR = "docs"
 LABEL_TRIGGER = "jules-ready"
+
+# Beads DB path (external DB - stars-end/bd)
+BEADS_DIR = os.environ.get("BEADS_DIR", os.path.expanduser("~/bd/.beads"))
 
 QUOTA_ERROR_PATTERNS: List[re.Pattern[str]] = [
     re.compile(r"\bRESOURCE_EXHAUSTED\b", re.IGNORECASE),
@@ -42,13 +44,13 @@ def _looks_like_quota_error(output: str) -> bool:
 
 
 def find_repo_root() -> Optional[Path]:
-    """Find the git repository root from current directory."""
+    """Find git repository root from current directory."""
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
         return Path(result.stdout.strip())
     except subprocess.CalledProcessError:
@@ -56,48 +58,49 @@ def find_repo_root() -> Optional[Path]:
 
 
 def get_repo_name() -> Optional[str]:
-    """Get the GitHub owner/repo from git remote."""
+    """Get GitHub owner/repo from git remote."""
     try:
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
         url = result.stdout.strip()
-        
+
         # Handle SSH format: git@github.com:owner/repo.git
         if url.startswith("git@"):
             parts = url.split(":")[-1]
             return parts.replace(".git", "")
-        
+
         # Handle HTTPS format: https://github.com/owner/repo.git
         if "github.com" in url:
             parts = url.split("github.com/")[-1]
             return parts.replace(".git", "")
-        
+
         return None
     except subprocess.CalledProcessError:
         return None
 
 
-def load_issues(repo_root: Path) -> List[Dict]:
-    """Load all issues from the JSONL file."""
-    issues = []
-    beads_path = repo_root / BEADS_FILE
-    
-    if not beads_path.exists():
-        print(f"❌ Error: Beads file not found at {beads_path}")
+def load_issues() -> List[Dict]:
+    """Load all issues from Beads CLI using external BEADS_DIR."""
+    try:
+        # Use 'bd list --json --status open' to get all open issues
+        result = subprocess.run(
+            ["bd", "list", "--status", "open", "--json"],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={**os.environ, "BEADS_DIR": BEADS_DIR},
+        )
+        return json.loads(result.stdout)
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error loading issues from Beads: {e}")
         return []
-    
-    with open(beads_path, "r") as f:
-        for line in f:
-            try:
-                if line.strip():
-                    issues.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    return issues
+    except json.JSONDecodeError as e:
+        print(f"❌ Error parsing Beads JSON output: {e}")
+        return []
 
 
 def get_tech_plan(repo_root: Path, issue_id: str) -> Optional[str]:
@@ -115,23 +118,23 @@ def get_tech_plan(repo_root: Path, issue_id: str) -> Optional[str]:
 
 def construct_prompt(issue: Dict, tech_plan: Optional[str]) -> str:
     """Build the Mega-Prompt for Jules."""
-    
+
     design_content = issue.get("design", "")
     if not design_content:
         design_content = "See TECH PLAN below."
-        
+
     prompt = f"""
-TASK: {issue['title']} (ID: {issue['id']})
+TASK: {issue["title"]} (ID: {issue["id"]})
 
 DESCRIPTION:
-{issue.get('description', '')}
+{issue.get("description", "")}
 
 DESIGN SPEC:
 {design_content}
 
 ----------
 TECH PLAN / DOCS:
-{tech_plan if tech_plan else 'No external tech plan provided. Rely on Description and Design Spec.'}
+{tech_plan if tech_plan else "No external tech plan provided. Rely on Description and Design Spec."}
 ----------
 
 CRITICAL INSTRUCTIONS:
@@ -147,29 +150,35 @@ DEFINITION OF DONE (REQUIRED):
     return prompt
 
 
-def dispatch(issue: Dict, repo_name: str, repo_root: Path, dry_run: bool = True) -> bool:
+def dispatch(
+    issue: Dict, repo_name: str, repo_root: Optional[Path] = None, dry_run: bool = True
+) -> bool:
     """Dispatch a single issue to Jules."""
-    issue_id = issue['id']
-    title = issue['title']
-    
+    issue_id = issue["id"]
+    title = issue["title"]
+
     print(f"🔍 Analyzing {issue_id}: {title}...")
-    
-    # 1. Fetch Context
-    tech_plan = get_tech_plan(repo_root, issue_id)
-    
+
+    # 1. Fetch Context (optional, if repo_root is provided)
+    tech_plan = get_tech_plan(repo_root, issue_id) if repo_root else None
+
     # 2. Build Prompt
     prompt = construct_prompt(issue, tech_plan)
-    
+
     # 3. Construct Command
     cmd = [
-        "jules", "remote", "new",
-        "--repo", repo_name, 
-        "--session", prompt,
+        "jules",
+        "remote",
+        "new",
+        "--repo",
+        repo_name,
+        "--session",
+        prompt,
     ]
-    
+
     if dry_run:
         print(f"  [DRY RUN] Would execute:")
-        print(f"  jules remote new --repo {repo_name} --session \"...\"")
+        print(f'  jules remote new --repo {repo_name} --session "..."')
         print(f"  [Prompt Length]: {len(prompt)} chars")
         return True
 
@@ -183,7 +192,9 @@ def dispatch(issue: Dict, repo_name: str, repo_root: Path, dry_run: bool = True)
         combined = (result.stdout or "") + "\n" + (result.stderr or "")
 
         if _looks_like_quota_error(combined):
-            print(f"❌ Jules quota/rate-limit error detected while dispatching {issue_id}.")
+            print(
+                f"❌ Jules quota/rate-limit error detected while dispatching {issue_id}."
+            )
             if combined.strip():
                 print("---- Jules output ----")
                 print(combined.rstrip())
@@ -212,13 +223,30 @@ def dispatch(issue: Dict, repo_name: str, repo_root: Path, dry_run: bool = True)
 def main():
     # Argument parsing
     parser = argparse.ArgumentParser(description="Cross-repo Jules Manager")
-    parser.add_argument("--action", choices=["dispatch", "list", "pull"], default="dispatch", help="Action to perform")
-    
+    parser.add_argument(
+        "--action",
+        choices=["dispatch", "list", "pull"],
+        default="dispatch",
+        help="Action to perform",
+    )
+
     # Dispatch args
-    parser.add_argument("--dry-run", action="store_true", help="[Dispatch] Print commands without executing")
-    parser.add_argument("--force", action="store_true", help="[Dispatch] Ignore 'jules-ready' label check")
-    parser.add_argument("--issue", type=str, help="[Dispatch] Dispatch specific issue only")
-    parser.add_argument("--repo", type=str, help="Override auto-detected repo (owner/name)")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="[Dispatch] Print commands without executing",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="[Dispatch] Ignore 'jules-ready' label check",
+    )
+    parser.add_argument(
+        "--issue", type=str, help="[Dispatch] Dispatch specific issue only"
+    )
+    parser.add_argument(
+        "--repo", type=str, help="Override auto-detected repo (owner/name)"
+    )
     parser.add_argument(
         "--max-sessions-per-run",
         type=int,
@@ -231,18 +259,15 @@ def main():
         default=0.0,
         help="[Dispatch] Sleep N seconds between dispatches (helps avoid rate limits)",
     )
-    
+
     # Pull args
     parser.add_argument("--session", type=str, help="[Pull] Session ID to pull")
 
     args = parser.parse_args()
 
-    # Find repo root
+    # Find repo root (optional, used for tech_plan lookup)
     repo_root = find_repo_root()
-    if not repo_root:
-        print("❌ Error: Not in a git repository")
-        sys.exit(1)
-    
+
     # Get repo name
     repo_name = args.repo or get_repo_name()
     if not repo_name:
@@ -262,11 +287,12 @@ def main():
 
     # Dispatch Logic
     print(f"📁 Repo: {repo_name}")
-    print(f"📍 Root: {repo_root}")
+    if repo_root:
+        print(f"📍 Root: {repo_root}")
 
-    # Load issues
-    issues = load_issues(repo_root)
-    
+    # Load issues from Beads (external DB)
+    issues = load_issues()
+
     if not issues:
         print("❌ No issues found in Beads.")
         sys.exit(1)
@@ -281,13 +307,13 @@ def main():
                 candidates.append(issue)
                 break
             continue
-        
+
         status = issue.get("status", "todo")
         labels = issue.get("labels", [])
 
         if status not in ["todo", "open", "in_progress"]:
             continue
-            
+
         is_ready = LABEL_TRIGGER in labels
         if not is_ready and not args.force:
             continue
@@ -304,7 +330,9 @@ def main():
     print(f"Found {len(candidates)} candidates.")
     if args.max_sessions_per_run and args.max_sessions_per_run > 0:
         candidates = candidates[: args.max_sessions_per_run]
-        print(f"Limiting to {len(candidates)} candidates due to --max-sessions-per-run.")
+        print(
+            f"Limiting to {len(candidates)} candidates due to --max-sessions-per-run."
+        )
 
     for idx, issue in enumerate(candidates):
         ok = dispatch(issue, repo_name, repo_root, dry_run=args.dry_run)
@@ -328,38 +356,43 @@ def list_sessions(repo_name: str):
         print("❌ 'jules' CLI not found.")
 
 
-def pull_session(session_id: str, repo_root: Path):
+def pull_session(session_id: str, repo_root: Optional[Path] = None):
     """Pull code from a Jules session and apply it to a feature branch."""
     print(f"📥 Pulling Session {session_id}...")
-    
+
     # 1. Fetch Session Info to find Issue ID (Parsing stdout is tricky, maybe just prompt?)
     # For now, we will inspect the session diff to guess or just use a generic branch.
     # Actually, we can assume the user wants to apply it to CURRENT branch if they already checked it out,
-    # OR we can try to be smart. 
+    # OR we can try to be smart.
     # Let's use 'feature-jules-<session_id>' if we can't find the ID, but 'feature-<issue_id>' if we can.
-    
+
     # We'll just fetch and apply. The user (Agent) should handle branching before calling this if they want strict control.
     # BUT the strategy says "Create branch".
-    
+
     branch_name = f"feature-jules-{session_id}"
-    
+
     try:
         # Create branch
         print(f"🌿 Creating/Switching to branch {branch_name}...")
-        subprocess.run(["git", "checkout", "-b", branch_name], check=False) # Helper, ignore error if exists
+        subprocess.run(
+            ["git", "checkout", "-b", branch_name], check=False
+        )  # Helper, ignore error if exists
         subprocess.run(["git", "checkout", branch_name], check=True)
-        
+
         # Pull and Apply
         print(f"⚡ applying patch...")
-        subprocess.run(["jules", "remote", "pull", "--session", session_id, "--apply"], check=True)
-        
+        subprocess.run(
+            ["jules", "remote", "pull", "--session", session_id, "--apply"], check=True
+        )
+
         print("\n✅ Patch applied!")
         print("Next Steps:")
         print("1. Run `make ci-lite` to verify.")
-        print("2. Commit and PR.")
-        
+        print("2. Commit and PR with Feature-Key: bd-xxxx in commit message.")
+
     except subprocess.CalledProcessError as e:
         print(f"❌ Failed to pull session: {e}")
+
 
 if __name__ == "__main__":
     main()

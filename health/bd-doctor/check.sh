@@ -24,17 +24,23 @@ else
   echo "✅ Beads JSONL in sync with database"
 fi
 
-# Check 2: Unstaged JSONL changes
+# Check 2: Unstaged JSONL changes (only in stars-end/bd)
 echo ""
 echo "📋 Checking for unstaged Beads changes..."
-# Check for unstaged changes only (second character is M or D)
-if git status --porcelain 2>/dev/null | grep "^.M .beads/issues.jsonl" || \
-   git status --porcelain 2>/dev/null | grep "^.D .beads/issues.jsonl"; then
-  echo "⚠️  .beads/issues.jsonl has unstaged changes"
-  echo "   Stage with: git add .beads/issues.jsonl"
-  ISSUES_FOUND=$((ISSUES_FOUND + 1))
+# Per Beads-only product specs, only stars-end/bd should have .beads/issues.jsonl
+REPO_URL=$(git config --get remote.origin.url 2>/dev/null || echo "")
+if [[ "$REPO_URL" == *"stars-end/bd"* ]] || [[ "$REPO_URL" == *"bd.git"* ]]; then
+  # Check for unstaged changes only (second character is M or D)
+  if git status --porcelain 2>/dev/null | grep "^.M .beads/issues.jsonl" || \
+     git status --porcelain 2>/dev/null | grep "^.D .beads/issues.jsonl"; then
+    echo "⚠️  .beads/issues.jsonl has unstaged changes"
+    echo "   Stage with: git add .beads/issues.jsonl"
+    ISSUES_FOUND=$((ISSUES_FOUND + 1))
+  else
+    echo "✅ No unstaged Beads changes"
+  fi
 else
-  echo "✅ No unstaged Beads changes"
+  echo "✅ Product repo (no .beads/issues.jsonl check required)"
 fi
 
 # Check 3: Branch/Issue alignment

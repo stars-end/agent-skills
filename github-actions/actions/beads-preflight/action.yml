@@ -43,12 +43,16 @@ runs:
         ISSUES=""
         STATUS="ok"
 
-        # Check 1: JSONL timestamp skew
-        if git status --porcelain 2>/dev/null | grep -q ".beads/issues.jsonl"; then
-          if [ "$(git status --porcelain 2>/dev/null | grep ".beads/issues.jsonl" | cut -c1-2)" != "M " ]; then
-            ISSUES="${ISSUES}unstaged-jsonl,"
-            STATUS="warning"
-            echo "⚠️  .beads/issues.jsonl has unstaged changes"
+        # Check 1: JSONL timestamp skew (only in stars-end/bd)
+        # Per Beads-only product specs, only stars-end/bd should have .beads/issues.jsonl
+        REPO_URL=$(git config --get remote.origin.url)
+        if [[ "$REPO_URL" == *"stars-end/bd"* ]] || [[ "$REPO_URL" == *"bd.git"* ]]; then
+          if git status --porcelain 2>/dev/null | grep -q ".beads/issues.jsonl"; then
+            if [ "$(git status --porcelain 2>/dev/null | grep ".beads/issues.jsonl" | cut -c1-2)" != "M " ]; then
+              ISSUES="${ISSUES}unstaged-jsonl,"
+              STATUS="warning"
+              echo "⚠️  .beads/issues.jsonl has unstaged changes"
+            fi
           fi
         fi
 
