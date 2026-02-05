@@ -357,3 +357,143 @@ These are the canonical “feedback loop” test cases: they should become visib
 ## 10) Non-goals
 - This spec does not attempt to solve multi-agent file contention inside a single repo beyond worktrees.
 - This spec does not require additional global instruction files per IDE; the repo-plane baseline + tiny rails should be sufficient.
+
+---
+
+## 11) Implementation runbook (jr-agent executable)
+
+This section is intentionally concrete. It is the “do this, then test that” version of the spec.
+
+### 11.1 Prerequisites (macmini captain)
+- Captain VM: **macmini only** (other VMs MUST NOT send heartbeat messages to Slack).
+- Slack: Clawdbot Slack channel must be configured and able to deliver messages.
+- Repos: canonical clones exist under `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`.
+- Beads external DB: `BEADS_DIR="$HOME/bd/.beads"` and `~/bd` has a git remote.
+
+### 11.2 Required scripts to implement (agent-skills)
+This spec assumes these scripts exist (they are tracked as workstreams K/L/M):
+
+K — Beads durability:
+- `scripts/bd-sync-safe.sh` (wrapper): runs `bd sync` then commits/pushes `~/bd` if dirty.
+
+L — Founder inbox:
+- `scripts/dx-inbox.sh` (read-only): bounded output, one-liner when healthy.
+
+M — Fleet helpers:
+- `configs/fleet_hosts.yaml` (authoritative list of canonical VMs + ssh targets)
+- `scripts/dx-fleet-check.sh` (read-only): runs `dx-verify-clean` + `dx-status` on all VMs and prints a short report.
+
+### 11.3 Clawdbot wiring (macmini)
+We implement pulse + daily review via Clawdbot cron jobs delivered to Slack.
+
+#### 11.3.1 Ensure an isolated agent exists for `clawd-all-stars-end`
+This creates a dedicated “DX ops” agent identity and workspace.
+
+Recommended:
+```bash
+clawdbot agents add all-stars-end --workspace ~/clawd-all-stars-end --non-interactive
+clawdbot agents list --json
+```
+
+#### 11.3.2 Pulse cron (06:00–16:00 PST, every 2h)
+Run in the agent’s **main** session so it stays “single chat” behavior.
+
+Recommended:
+```bash
+clawdbot cron add \
+  --name dx-pulse \
+  --description "DX pulse heartbeat (V7.8) — one line when OK" \
+  --agent all-stars-end \
+  --session main \
+  --cron "0 6-16/2 * * *" \
+  --tz "America/Los_Angeles" \
+  --message "Run dx-inbox. If healthy, output exactly one line: 'DX PULSE OK …'. If not healthy, output <=6 lines: summary + top exceptions + next command. Do not run destructive actions." \
+  --deliver \
+  --channel slack \
+  --to "#all-stars-end" \
+  --best-effort-deliver
+```
+
+#### 11.3.3 Daily compliance review cron (05:00 PST)
+This is an evaluation against the intended happy path.
+
+Recommended:
+```bash
+clawdbot cron add \
+  --name dx-daily \
+  --description "DX daily compliance review (last 24h) — V7.8 deviations only" \
+  --agent all-stars-end \
+  --session main \
+  --cron "0 5 * * *" \
+  --tz "America/Los_Angeles" \
+  --thinking low \
+  --message "Perform a V7.8 compliance review of the last 24h. Use: dx-fleet-check (read-only) + PR inbox (baseline-sync/rescue) + bd/bv next pick. If no deviations, output exactly one line: 'DX DAILY OK …'. If deviations, list them grouped by plane with severity; include @fengning only if egregious per spec §5.6. Do not run destructive actions." \
+  --deliver \
+  --channel slack \
+  --to "#all-stars-end" \
+  --best-effort-deliver
+```
+
+Notes:
+- These cron jobs are intended to replace ad-hoc notification scripts.
+- Hygiene actions remain deterministic and separate (janitor/sweeper/gc schedules), not performed by heartbeat jobs.
+
+### 11.4 Host-plane hygiene schedules (all VMs)
+This spec assumes V7.8 hygiene jobs are scheduled per VM (tracked in `bd-l99g`):
+- `dx-sweeper` daily before `canonical-sync`
+- `dx-worktree-gc` daily
+- `dx-janitor` business hours
+- `ru sync` canonical-only
+- `auto-checkpoint` remains safety net only
+
+---
+
+## 12) Testing & validation
+
+### 12.1 Script-level tests (macmini)
+Run locally:
+```bash
+~/agent-skills/scripts/dx-verify-clean.sh
+~/agent-skills/scripts/dx-status.sh
+~/agent-skills/scripts/dx-inbox.sh
+```
+
+Expected:
+- `dx-verify-clean` PASS when healthy.
+- `dx-status` prints explicit paths for exceptions.
+- `dx-inbox` prints **one line** when healthy.
+
+### 12.2 Clawdbot tests (macmini)
+Verify cron jobs exist and run history is recorded:
+```bash
+clawdbot cron list
+clawdbot cron runs --json | head
+```
+
+Trigger a manual run:
+```bash
+clawdbot cron run --name dx-pulse
+clawdbot cron run --name dx-daily
+```
+
+Expected:
+- Slack message delivered to `#all-stars-end`.
+- When healthy: exactly one line.
+
+### 12.3 Failure-injection tests (safe)
+These tests validate that the daily review finds deviations.
+
+1) Create a no-upstream worktree with a commit (safe):
+- Create worktree, commit, do not push.
+- Run `dx-status` and confirm `No Upstream` > 0.
+- Run `dx-pulse` → should report exception.
+
+2) Create a stale dirty worktree (safe):
+- Add an untracked file in a worktree.
+- Wait >4h or simulate stale by removing any session lock.
+- Run `dx-status` → should report Dirty (Stale).
+- Run `dx-daily` → should list deviation.
+
+3) Simulate schedule drift:
+- Temporarily disable `dx-janitor` schedule on a non-captain VM.
+- Daily review should report “expected schedule did not run”.
