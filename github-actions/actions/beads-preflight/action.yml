@@ -43,10 +43,8 @@ runs:
         ISSUES=""
         STATUS="ok"
 
-        # Check 1: JSONL timestamp skew (only in stars-end/bd)
-        # Per Beads-only product specs, only stars-end/bd should have .beads/issues.jsonl
-        REPO_URL=$(git config --get remote.origin.url)
-        if [[ "$REPO_URL" == *"stars-end/bd"* ]] || [[ "$REPO_URL" == *"bd.git"* ]]; then
+        # Check 1: JSONL timestamp skew (only in repos with .beads/issues.jsonl)
+        if [ -f ".beads/issues.jsonl" ]; then
           if git status --porcelain 2>/dev/null | grep -q ".beads/issues.jsonl"; then
             if [ "$(git status --porcelain 2>/dev/null | grep ".beads/issues.jsonl" | cut -c1-2)" != "M " ]; then
               ISSUES="${ISSUES}unstaged-jsonl,"
@@ -54,6 +52,8 @@ runs:
               echo "⚠️  .beads/issues.jsonl has unstaged changes"
             fi
           fi
+        else
+          echo "ℹ️  product repo: no local beads file"
         fi
 
         # Check 2: Feature-Key in recent commits (if on feature branch)
