@@ -280,14 +280,10 @@ def should_route_to_jules(text: str, issue_id: Optional[str]) -> bool:
     except Exception:
         return False
 
-    # Gate 3: Check for docs/bd-xxxx/ spec directory
-    # Check in likely repo locations
-    for repo_name in ["affordabot", "prime-radiant-ai"]:
-        spec_path = Path.home() / repo_name / "docs" / issue_id
-        if spec_path.is_dir():
-            return True
+    # Gate 3 removed: Per Beads-only product specs, we no longer check for docs/bd-xxxx/ directories
+    # Spec is read from stars-end/bd via bd show, not from product repo docs
 
-    return False
+    return True
 
 
 async def dispatch_to_jules(issue_id: str, repo: str) -> Optional[str]:
