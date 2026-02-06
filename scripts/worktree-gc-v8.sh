@@ -63,6 +63,33 @@ success() {
     echo -e "${GREEN}✅ $1${NC}"
 }
 
+update_heartbeat() {
+    local heartbeat="$HOME/.dx-state/HEARTBEAT.md"
+    [[ -f "$heartbeat" ]] || return 0
+
+    local section_start="### Worktree Health"
+    local status="$1"  # OK, WARNING, ERROR
+    local details="$2"
+
+    local tmpfile
+    tmpfile=$(mktemp)
+    awk -v start="$section_start" -v status="$status" -v details="$details" -v now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '
+        BEGIN { in_section=0; printed=0 }
+        $0 == start {
+            in_section=1; printed=1
+            print start
+            print "<!-- Updated by worktree-gc-v8.sh -->"
+            print "Status: " status
+            print "Last run: " now
+            if (details != "") print details
+            print ""
+            next
+        }
+        /^### / && in_section { in_section=0 }
+        !in_section { print }
+    ' "$heartbeat" > "$tmpfile" && mv "$tmpfile" "$heartbeat"
+}
+
 process_worktree() {
     local wt_path="$1"
     local wt_head="$2"
@@ -108,22 +135,28 @@ process_worktree() {
             git worktree remove "$wt_path" --force >/dev/null 2>&1 || true
             rm -rf "$wt_path" 2>/dev/null || true
             success "Pruned $wt_path"
+            return 1 # Signify pruned
         else
             log "  [DRY-RUN] Would remove $wt_path"
+            return 0
         fi
     else
         log "  Keeping worktree: $wt_path (branch: $wt_branch)"
+        return 0
     fi
 }
 
 process_repo() {
     local repo="$1"
     local repo_path="$HOME/$repo"
+    local pruned_count=0
+    local total_count=0
     
     log "\n📁 Processing repo: $repo"
     
     if [[ ! -d "$repo_path/.git" ]]; then
         warn "$repo_path is not a git repository, skipping"
+        echo "0 0"
         return 0
     fi
     
@@ -142,11 +175,13 @@ process_repo() {
     
     while IFS= read -r line; do
         if [[ $line =~ ^worktree\ (.*) ]]; then
-            # If we have a previous entry, process it
             if [[ -n "$path" ]]; then
                 local is_main=false
                 if [[ $count -eq 0 ]]; then is_main=true; fi
-                process_worktree "$path" "$head" "$branch" "$is_detached" "$is_main"
+                total_count=$((total_count + 1))
+                if ! process_worktree "$path" "$head" "$branch" "$is_detached" "$is_main"; then
+                    pruned_count=$((pruned_count + 1))
+                fi
                 ((count+=1))
             fi
             path="${BASH_REMATCH[1]}"
@@ -162,17 +197,20 @@ process_repo() {
         fi
     done < <(git worktree list --porcelain)
     
-    # Process last entry
     if [[ -n "$path" ]]; then
         local is_main=false
         if [[ $count -eq 0 ]]; then is_main=true; fi
-        process_worktree "$path" "$head" "$branch" "$is_detached" "$is_main"
+        total_count=$((total_count + 1))
+        if ! process_worktree "$path" "$head" "$branch" "$is_detached" "$is_main"; then
+            pruned_count=$((pruned_count + 1))
+        fi
     fi
     
-    # Final cleanup of stale entries
     if [[ "$DRY_RUN" == false ]]; then
         git worktree prune
     fi
+    
+    echo "$total_count $pruned_count"
 }
 
 main() {
@@ -183,9 +221,16 @@ main() {
         echo "[DRY-RUN MODE]"
     fi
     
+    local grand_total=0
+    local grand_pruned=0
+    
     for repo in "${CANONICAL_REPOS[@]}"; do
-        process_repo "$repo" || warn "$repo: GC failed"
+        read -r t p < <(process_repo "$repo")
+        grand_total=$((grand_total + t))
+        grand_pruned=$((grand_pruned + p))
     done
+    
+    update_heartbeat "OK" "Count: $grand_total\nPruned: $grand_pruned"
 }
 
 main "$@"

@@ -72,6 +72,33 @@ short_hostname() {
     hostname -s 2>/dev/null || hostname | cut -d'.' -f1
 }
 
+update_heartbeat() {
+    local heartbeat="$HOME/.dx-state/HEARTBEAT.md"
+    [[ -f "$heartbeat" ]] || return 0
+
+    local section_start="### Canonical Repos"
+    local status="$1"  # OK, WARNING, ERROR
+    local details="$2"
+
+    local tmpfile
+    tmpfile=$(mktemp)
+    awk -v start="$section_start" -v status="$status" -v details="$details" -v now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '
+        BEGIN { in_section=0; printed=0 }
+        $0 == start {
+            in_section=1; printed=1
+            print start
+            print "<!-- Updated by canonical-sync-v8.sh -->"
+            print "Status: " status
+            print "Last run: " now
+            if (details != "") print details
+            print ""
+            next
+        }
+        /^### / && in_section { in_section=0 }
+        !in_section { print }
+    ' "$heartbeat" > "$tmpfile" && mv "$tmpfile" "$heartbeat"
+}
+
 process_repo() {
     local repo="$1"
     local repo_path="$HOME/$repo"
@@ -243,13 +270,19 @@ main() {
         echo "[DRY-RUN MODE]"
     fi
     
+    local fail_count=0
     for repo in "${CANONICAL_REPOS[@]}"; do
-        process_repo "$repo" || warn "$repo: Process failed"
+        process_repo "$repo" || ((fail_count++))
     done
 
     echo ""
     echo "======================="
     echo "Canonical sync complete"
+    
+    local status="OK"
+    if [[ $fail_count -gt 0 ]]; then status="WARNING"; fi
+    update_heartbeat "$status" "Failed: $fail_count"
+
     if [[ "$DRY_RUN" == true ]]; then
         echo "[DRY-RUN] No actual changes made"
     fi
