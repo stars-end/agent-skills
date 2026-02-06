@@ -114,6 +114,14 @@ process_repo() {
         warn "$repo_name: .git/index.lock exists, skipping"
         return 0
     fi
+
+    # Safety check 2: DX session lock (V7.8)
+    if [[ -f "$SCRIPT_DIR/dx-session-lock.sh" ]]; then
+        if "$SCRIPT_DIR/dx-session-lock.sh" is-fresh "$repo_path"; then
+            warn "$repo_name: Active session lock found, skipping"
+            return 0
+        fi
+    fi
     
     # Check current state
     local current_branch

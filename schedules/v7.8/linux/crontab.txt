@@ -1,0 +1,24 @@
+# DX Fleet Crontab V7.8
+# Authoritative cron definitions for Linux hosts (homedesktop-wsl, epyc6)
+SHELL=/bin/bash
+
+# ru
+*/15 * * * * __HOME__/agent-skills/scripts/dx-job-wrapper.sh ru -- __HOME__/.local/bin/ru
+
+# canonical-sync
+0 3 * * * __HOME__/agent-skills/scripts/dx-job-wrapper.sh canonical-sync -- __HOME__/agent-skills/scripts/canonical-sync.sh
+
+# auto-checkpoint
+*/30 * * * * __HOME__/agent-skills/scripts/dx-job-wrapper.sh auto-checkpoint -- __HOME__/agent-skills/scripts/auto-checkpoint.sh
+
+# dx-sweeper
+0 2 * * * __HOME__/agent-skills/scripts/dx-job-wrapper.sh dx-sweeper -- __HOME__/agent-skills/scripts/dx-sweeper.sh
+
+# dx-janitor
+0 * * * * __HOME__/agent-skills/scripts/dx-job-wrapper.sh dx-janitor -- __HOME__/agent-skills/scripts/dx-janitor.sh
+
+# dx-worktree-gc
+0 4 * * * __HOME__/agent-skills/scripts/dx-job-wrapper.sh dx-worktree-gc -- __HOME__/agent-skills/scripts/dx-worktree-gc.sh
+
+# dx-triage-cron
+0 */2 * * * __HOME__/agent-skills/scripts/dx-job-wrapper.sh dx-triage-cron -- __HOME__/agent-skills/scripts/dx-triage-cron

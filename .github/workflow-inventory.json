@@ -1,0 +1,20 @@
+{
+  "workflows": [
+    {
+      "name": "Repo Consistency",
+      "path": ".github/workflows/consistency.yml"
+    },
+    {
+      "name": "DX Audit",
+      "path": ".github/workflows/dx-audit.yml"
+    },
+    {
+      "name": "Nightly Dispatch",
+      "path": ".github/workflows/nightly.yml"
+    },
+    {
+      "name": "Publish Universal Baseline",
+      "path": ".github/workflows/publish-baseline.yml"
+    }
+  ]
+}

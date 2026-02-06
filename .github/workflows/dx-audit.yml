@@ -1,0 +1,100 @@
+name: DX Audit
+
+on:
+  schedule:
+    - cron: '30 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Assert jq availability
+        run: jq --version
+      
+      - name: Run Audit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPOS=(
+            "stars-end/agent-skills"
+            "stars-end/prime-radiant-ai"
+            "stars-end/affordabot"
+            "stars-end/llm-common"
+          )
+          
+          TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          jq -n --arg ts "$TS" '{generatedAt: $ts, repos: {}}' > dx-audit.json
+          
+          echo "# DX Audit Report (Rolling)" > dx-audit.md
+          echo "Generated at: $TS" >> dx-audit.md
+          echo "" >> dx-audit.md
+          
+          for repo in "${REPOS[@]}"; do
+            echo "Auditing $repo..."
+            
+            # Fetch PR metrics
+            prs=$(gh pr list --repo "$repo" --limit 50 --json number,title,isDraft,updatedAt,labels --jq '.')
+            
+            draft_count=$(echo "$prs" | jq '[.[] | select(.isDraft == true)] | length')
+            rescue_count=$(echo "$prs" | jq '[.[] | select(.labels[].name | contains("rescue"))] | length')
+            
+            # Stale PRs > 7d
+            seven_days_ago=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+            stale_count=$(echo "$prs" | jq --arg cutoff "$seven_days_ago" '[.[] | select(.updatedAt < $cutoff)] | length')
+            
+            # Update JSON
+            tmp=$(mktemp)
+            jq --arg repo "$repo" \
+               --argjson draft "$draft_count" \
+               --argjson rescue "$rescue_count" \
+               --argjson stale "$stale_count" \
+               '.repos[$repo] = {draft: $draft, rescue: $rescue, stale: $stale}' dx-audit.json > "$tmp" && mv "$tmp" dx-audit.json
+               
+            # Update Markdown
+            echo "## $repo" >> dx-audit.md
+            echo "- Draft PRs: $draft_count" >> dx-audit.md
+            echo "- Rescue PRs: $rescue_count" >> dx-audit.md
+            echo "- Stale PRs (>7d): $stale_count" >> dx-audit.md
+            echo "" >> dx-audit.md
+          done
+          
+          # Workflow Inventory
+          jq -n '{inventory: {}}' > workflow-inventory.json
+          for repo in "${REPOS[@]}"; do
+            workflows=$(gh api "repos/$repo/actions/workflows" --jq '.workflows | map({id, name, state, path})')
+            tmp=$(mktemp)
+            jq --arg repo "$repo" --argjson wfs "$workflows" '.inventory[$repo] = $wfs' workflow-inventory.json > "$tmp" && mv "$tmp" workflow-inventory.json
+          done
+
+      - name: Update Rolling Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_TITLE="DX Audit (Rolling)"
+          ISSUE_NUMBER=$(gh issue list --repo "stars-end/agent-skills" --label "dx-audit" --state open --search "$ISSUE_TITLE" --json number --jq '.[0].number')
+          
+          if [ -z "$ISSUE_NUMBER" ] || [ "$ISSUE_NUMBER" == "null" ]; then
+            echo "Creating new rolling issue..."
+            gh issue create --repo "stars-end/agent-skills" --title "$ISSUE_TITLE" --body-file dx-audit.md --label "dx-audit"
+          else
+            echo "Updating issue #$ISSUE_NUMBER..."
+            gh issue edit "$ISSUE_NUMBER" --repo "stars-end/agent-skills" --body-file dx-audit.md
+          fi
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dx-audit-results
+          path: |
+            dx-audit.json
+            dx-audit.md
+            workflow-inventory.json
