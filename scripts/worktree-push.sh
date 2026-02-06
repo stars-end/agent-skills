@@ -129,7 +129,7 @@ process_repo() {
     
     # Fetch origin to have latest remote refs
     if [[ "$DRY_RUN" == false ]]; then
-        git fetch origin --quiet || { warn "$repo: Failed to fetch origin"; }
+        git fetch origin --quiet --prune || { warn "$repo: Failed to fetch origin"; }
     fi
     
     local path=""

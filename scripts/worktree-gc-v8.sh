@@ -64,12 +64,11 @@ success() {
 }
 
 process_worktree() {
-    local repo_path="$1"
-    local wt_path="$2"
-    local wt_head="$3"
-    local wt_branch="$4"
-    local wt_is_detached="$5"
-    local is_main="$6"
+    local wt_path="$1"
+    local wt_head="$2"
+    local wt_branch="$3"
+    local wt_is_detached="$4"
+    local is_main="$5"
     
     if [[ "$is_main" == true ]]; then
         log "  Skipping main worktree: $wt_path"
@@ -147,7 +146,7 @@ process_repo() {
             if [[ -n "$path" ]]; then
                 local is_main=false
                 if [[ $count -eq 0 ]]; then is_main=true; fi
-                process_worktree "$repo_path" "$path" "$head" "$branch" "$is_detached" "$is_main"
+                process_worktree "$path" "$head" "$branch" "$is_detached" "$is_main"
                 ((count+=1))
             fi
             path="${BASH_REMATCH[1]}"
@@ -167,7 +166,7 @@ process_repo() {
     if [[ -n "$path" ]]; then
         local is_main=false
         if [[ $count -eq 0 ]]; then is_main=true; fi
-        process_worktree "$repo_path" "$path" "$head" "$branch" "$is_detached" "$is_main"
+        process_worktree "$path" "$head" "$branch" "$is_detached" "$is_main"
     fi
     
     # Final cleanup of stale entries

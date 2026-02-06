@@ -161,18 +161,32 @@ process_repo() {
             return 1
         fi
         
-        # 2. Copy changed files
-        local changed_files
-        changed_files=$(git diff --name-only HEAD 2>/dev/null || echo "")
-        local untracked_files
-        untracked_files=$(git ls-files --others --exclude-standard || echo "")
-        
-        for file in $changed_files $untracked_files; do
-            # Skip if file was deleted
-            if [[ -f "$repo_path/$file" ]]; then
-                mkdir -p "$rescue_dir/$(dirname "$file")"
-                cp "$repo_path/$file" "$rescue_dir/$file"
+        # 2. Copy changed files via porcelain status (staged + unstaged + untracked)
+        git status --porcelain | while IFS= read -r status_line; do
+            # status_line format: "XY filename" or "XY filename -> renamed"
+            local xy="${status_line:0:2}"
+            local file="${status_line:3}"
+
+            # Handle renames: "R  old -> new"
+            if [[ "$file" == *" -> "* ]]; then
+                file="${file##* -> }"
             fi
+
+            # Skip deletions — nothing to copy
+            local x="${xy:0:1}"
+            local y="${xy:1:1}"
+            if [[ "$x" == "D" || "$y" == "D" ]]; then
+                continue
+            fi
+
+            # Skip if file doesn't exist (race condition safety)
+            if [[ ! -e "$repo_path/$file" ]]; then
+                continue
+            fi
+
+            # Copy preserving directory structure
+            mkdir -p "$rescue_dir/$(dirname "$file")"
+            cp -a "$repo_path/$file" "$rescue_dir/$file"
         done
         
         # 3. Commit in rescue worktree
@@ -194,9 +208,9 @@ Agent: canonical-sync-v8" --quiet; then
             
             # NOW safe to reset canonical
             cd "$repo_path"
-            git checkout master --quiet 2>/dev/null || git checkout -f master --quiet
-            git reset --hard origin/master --quiet
-            git clean -fd --quiet
+            git checkout master -q
+            git reset --hard origin/master
+            git clean -fdq
             git worktree remove "$rescue_dir" --force >/dev/null 2>&1 || true
             rm -rf "$rescue_dir" 2>/dev/null || true
             success "$repo: Reset to clean master"
@@ -214,9 +228,9 @@ Agent: canonical-sync-v8" --quiet; then
             return 0
         fi
         
-        git checkout master --quiet 2>/dev/null || git checkout -f master --quiet
-        git reset --hard origin/master --quiet
-        git clean -fd --quiet
+        git checkout master -q
+        git reset --hard origin/master
+        git clean -fdq
         success "$repo: Reset to clean master"
     fi
 }
@@ -232,6 +246,13 @@ main() {
     for repo in "${CANONICAL_REPOS[@]}"; do
         process_repo "$repo" || warn "$repo: Process failed"
     done
+
+    echo ""
+    echo "======================="
+    echo "Canonical sync complete"
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "[DRY-RUN] No actual changes made"
+    fi
 }
 
 main "$@"
