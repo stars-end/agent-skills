@@ -256,6 +256,24 @@ Beads durability:
 - `scripts/bd-sync-safe.sh` is the canonical wrapper for keeping `~/bd` git-clean.
 - Multi-VM concurrency is best-effort: git rebase + retries + Beads conflict strategy must converge.
 
+### 6.3 IDE Global Constraints Rail (cross-IDE enforcement)
+
+V7.8 relies on a tiny, always-on “global constraints” header to prevent tunnel-vision failures:
+
+- Single source (tracked in git): `dist/dx-global-constraints.md`
+- Install into IDE-global instruction files via:
+  - `scripts/dx-ide-global-constraints-install.sh --apply`
+
+This avoids maintaining multiple copies. Every IDE reads its own global file, but all are symlinked to the same source.
+
+Verification (per VM):
+```bash
+~/agent-skills/scripts/dx-ide-global-constraints-install.sh --check
+```
+
+Prompt discipline:
+- Use the `extended/prompt-writing` skill when drafting prompts for other agents.
+
 ---
 
 ## 7) Founder Workflow (Happy Path)
