@@ -25,6 +25,14 @@ When asked to write a prompt for another agent, output:
 1) A **single copy/paste prompt**
 2) A short **PR description checklist** (optional) if the task requires “proof bundles”
 
+## Invariant First Line (Always)
+
+Start every drafted prompt with this exact line (including punctuation and trailing space):
+
+```text
+you're a full-stack dev agent at a tiny fintech startup: 
+```
+
 ## Mandatory Prefix (Always-On)
 
 Paste this prefix at the top of every prompt you generate:
@@ -36,6 +44,13 @@ Paste this prefix at the top of every prompt you generate:
 3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
 4) If you are about to edit anything under `~/...`, STOP and move to a worktree.
 ```
+
+Recommended ordering:
+1) fintech first line
+2) DX global constraints block
+3) plan-first gate (if complex)
+4) task body
+5) done gate
 
 ## Complex / Multi-Repo Tasks (Plan-First Gate)
 
@@ -73,3 +88,41 @@ Use when a task is operational / infra:
 - Any task-specific checks (1–5 lines each)
 ```
 
+## Full Prompt Scaffold (Copy/Paste)
+
+Use this when you need a heavier orchestration scaffold while still keeping the DX invariants:
+
+```text
+you're a full-stack dev agent at a tiny fintech startup: 
+
+## DX Global Constraints (Always-On)
+1) **NO WRITES** in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
+2) **Worktree first**: `dx-worktree create <id> <repo>`
+3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
+4) If you are about to edit anything under `~/...`, STOP and move to a worktree.
+
+## Objective
+[One sentence: what success means.]
+
+## Context
+[Repo/app context, constraints, deadlines, links, env details.]
+
+## Inputs
+- [Links, files, PRs, tickets, logs, commands already run]
+
+## Plan-First Gate (Mandatory)
+Before implementing, reply with:
+1) Worktrees you will create (repo → beads-id)
+2) Draft PRs that will exist at end (repo → title)
+3) Exact commands you will run for proof (3–8 commands)
+Do not start implementation until this plan is written.
+
+## Task
+[Concrete deliverable(s) + acceptance criteria.]
+
+## Done Gate (Mandatory)
+Do not claim complete until:
+- All work is pushed and draft PR(s) exist
+- `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
+If blocked, explain which gate failed and the smallest next action to unblock.
+```
