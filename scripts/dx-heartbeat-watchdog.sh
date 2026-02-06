@@ -19,8 +19,43 @@ STATE_DIR="$HOME/.dx-state"
 log_slack() {
     local msg="$1"
     echo "Slack alert: $msg"
-    # Use internal tool if available, or just log to stdout for now
-    # slack_conversations_add_message --channel "$CHANNEL" --text "$msg"
+
+    local token="${SLACK_BOT_TOKEN:-${SLACK_MCP_XOXB_TOKEN:-}}"
+    if [[ -z "${token:-}" ]]; then
+        return 0
+    fi
+
+    local payload=""
+    if command -v python3 >/dev/null 2>&1; then
+        payload="$(python3 - <<PY
+import json
+print(json.dumps({"channel": "${CHANNEL}", "text": "${msg}"}))
+PY
+)" || payload=""
+    fi
+    if [[ -z "${payload:-}" ]]; then
+        local esc="${msg//\\/\\\\}"
+        esc="${esc//\"/\\\"}"
+        payload="{\"channel\":\"${CHANNEL}\",\"text\":\"${esc}\"}"
+    fi
+
+    curl -sS -X POST "https://slack.com/api/chat.postMessage" \
+        -H "Authorization: Bearer ${token}" \
+        -H "Content-type: application/json; charset=utf-8" \
+        --data "$payload" >/dev/null 2>&1 || true
+}
+
+rate_limit_key() {
+    local key="$1"
+    local today
+    today="$(date +%Y-%m-%d)"
+    local f="$STATE_DIR/dx-heartbeat-watchdog.${key}.last_sent"
+    mkdir -p "$STATE_DIR" >/dev/null 2>&1 || true
+    if [[ -f "$f" && "$(cat "$f" 2>/dev/null || true)" == "$today" ]]; then
+        return 1
+    fi
+    echo "$today" > "$f" 2>/dev/null || true
+    return 0
 }
 
 check_pulse() {
@@ -40,9 +75,13 @@ check_pulse() {
     # Only monitor during 06:00-16:00
     if [[ "$hour" -ge 6 && "$hour" -le 16 ]]; then
         if [[ $age -gt $PULSE_FAIL_THRESHOLD ]]; then
-            log_slack "🚨 EGREGIOUS: @fengning DX Pulse missing for >6h ($((age/3600))h). Next: dx-schedule-install.sh --apply"
+            if rate_limit_key "pulse.fail"; then
+                log_slack "🚨 EGREGIOUS: @fengning DX Pulse missing for >6h ($((age/3600))h). Next: dx-schedule-install.sh --apply"
+            fi
         elif [[ $age -gt $PULSE_WARN_THRESHOLD ]]; then
-            log_slack "⚠️ WARN: DX Pulse missing for >3h ($((age/3600))h). Next: dx-schedule-install.sh --apply"
+            if rate_limit_key "pulse.warn"; then
+                log_slack "⚠️ WARN: DX Pulse missing for >3h ($((age/3600))h). Next: dx-schedule-install.sh --apply"
+            fi
         fi
     fi
 }
@@ -62,9 +101,13 @@ check_daily() {
     
     if [[ $last_ok -lt $today_start ]]; then
         if [[ "$hour" -ge $DAILY_FAIL_HOUR ]]; then
-            log_slack "🚨 EGREGIOUS: @fengning DX Daily missing for today. Next: dx-schedule-install.sh --apply"
+            if rate_limit_key "daily.fail"; then
+                log_slack "🚨 EGREGIOUS: @fengning DX Daily missing for today. Next: dx-schedule-install.sh --apply"
+            fi
         elif [[ "$hour" -ge $DAILY_WARN_HOUR ]]; then
-            log_slack "⚠️ WARN: DX Daily missing for today. Next: dx-schedule-install.sh --apply"
+            if rate_limit_key "daily.warn"; then
+                log_slack "⚠️ WARN: DX Daily missing for today. Next: dx-schedule-install.sh --apply"
+            fi
         fi
     fi
 }
