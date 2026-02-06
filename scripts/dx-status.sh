@@ -143,7 +143,6 @@ is_in_list() {
 # 1. Check Configs
 echo "--- Core Configs ---"
 check_file "$HOME/.ntm.yaml"
-# NOTE: serena is deprecated (V4.2.1) - removed from checks
 check_file "$HOME/.cass/settings.json"
 
 # Check local GEMINI symlink if we are inside a repo
@@ -152,7 +151,6 @@ if [ -f AGENTS.md ]; then
         echo -e "${GREEN}✅ GEMINI.md -> AGENTS.md linked${RESET}"
     else
         echo -e "${YELLOW}⚠️  GEMINI.md symlink missing or invalid in current dir${RESET}"
-        # Warn only, as we might be running from /tmp
     fi
 fi
 
@@ -168,300 +166,91 @@ if declare -p CANONICAL_REQUIRED_REPOS >/dev/null 2>&1 && [ "${#CANONICAL_REQUIR
         done
     fi
 else
-    warn_only "canonical-targets.sh missing CANONICAL_REQUIRED_REPOS list (expected in $CANONICAL_TARGETS_SH)"
+    warn_only "canonical-targets.sh missing CANONICAL_REQUIRED_REPOS list"
 fi
 
-# 2.6 Check for .beads/.local_version tracking (should be gitignored)
+# 2.6 Check for .beads/.local_version tracking
 echo ""
 echo "--- Beads .local_version Check ---"
 check_beads_local_version() {
     local repo="$1"
     local required="${2:-0}"
     local repo_path="$HOME/$repo"
-
-    if [ ! -d "$repo_path/.git" ]; then
-        return 0
-    fi
-
+    if [ ! -d "$repo_path/.git" ]; then return 0; fi
     if git -C "$repo_path" ls-files --error-unmatch .beads/.local_version >/dev/null 2>&1; then
         if [ "$required" -eq 1 ]; then
             echo -e "${RED}❌ $repo: .beads/.local_version is tracked in git${RESET}"
-            echo "   Fix: cd ~/$repo && echo '.local_version' >> .beads/.gitignore && git rm --cached .beads/.local_version && git commit -m 'fix(beads): stop tracking .local_version'"
             ERRORS=$((ERRORS+1))
         else
-            warn_only "$repo: .beads/.local_version is tracked in git (should be gitignored)"
+            warn_only "$repo: .beads/.local_version is tracked in git"
         fi
     else
         echo -e "${GREEN}✅ $repo: .beads/.local_version not tracked${RESET}"
     fi
 }
 
-# Check all canonical repos
 ALL_REPOS=()
-if declare -p CANONICAL_REQUIRED_REPOS >/dev/null 2>&1; then
-    ALL_REPOS+=("${CANONICAL_REQUIRED_REPOS[@]}")
-fi
-if declare -p CANONICAL_OPTIONAL_REPOS >/dev/null 2>&1; then
-    ALL_REPOS+=("${CANONICAL_OPTIONAL_REPOS[@]}")
-fi
-
+if declare -p CANONICAL_REQUIRED_REPOS >/dev/null 2>&1; then ALL_REPOS+=("${CANONICAL_REQUIRED_REPOS[@]}"); fi
+if declare -p CANONICAL_OPTIONAL_REPOS >/dev/null 2>&1; then ALL_REPOS+=("${CANONICAL_OPTIONAL_REPOS[@]}"); fi
 for repo in "${ALL_REPOS[@]}"; do
-    if is_in_list "$repo" "${CANONICAL_REQUIRED_REPOS[@]:-}"; then
-        check_beads_local_version "$repo" 1
-    else
-        check_beads_local_version "$repo" 0
-    fi
+    check_beads_local_version "$repo" "$(is_in_list "$repo" "${CANONICAL_REQUIRED_REPOS[@]:-}" && echo 1 || echo 0)"
 done
 
-# 2.7 BEADS_DIR Check (CRITICAL - External Database Requirement)
+# 2.7 BEADS_DIR Check
 echo ""
 echo "--- External Beads Database (BEADS_DIR) ---"
 check_beads_dir() {
     local expected_path="$HOME/bd/.beads"
-
     if [ -z "${BEADS_DIR:-}" ]; then
         echo -e "${RED}❌ BEADS_DIR not set${RESET}"
-        echo "   All agents MUST use the external beads database."
-        echo "   Fix: cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh && source ~/.bashrc"
         ERRORS=$((ERRORS+1))
         return
     fi
-
-    # Normalize paths for comparison
     local beads_dir_real=$(resolve_path "$BEADS_DIR")
     local expected_real=$(resolve_path "$expected_path")
-
     if [ "$beads_dir_real" != "$expected_real" ]; then
-        echo -e "${YELLOW}⚠️  BEADS_DIR points to non-standard location${RESET}"
-        echo "   Current: $BEADS_DIR"
-        echo "   Expected: $expected_path"
-        echo "   If this is intentional, ensure all VMs use the same path."
-        WARNINGS=$((WARNINGS+1))
+        warn_only "BEADS_DIR points to non-standard location: $BEADS_DIR"
     else
         echo -e "${GREEN}✅ BEADS_DIR = $BEADS_DIR${RESET}"
     fi
-
-    # Verify database exists
     if [ ! -f "$BEADS_DIR/beads.db" ]; then
         echo -e "${RED}❌ Beads database not found at $BEADS_DIR${RESET}"
-        echo "   Fix: cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh"
         ERRORS=$((ERRORS+1))
     else
         echo -e "${GREEN}✅ Database exists at $BEADS_DIR${RESET}"
     fi
 }
-
 check_beads_dir
 
-# 2. Check Hooks (V3 Logic)
+# 2. Check Hooks
 echo "--- Git Hooks ---"
 PRIME_HOOK="$HOME/prime-radiant-ai/.git/hooks/pre-commit"
-PRIME_REQUIRED=0
-if declare -p CANONICAL_REQUIRED_REPOS >/dev/null 2>&1; then
-    if is_in_list "prime-radiant-ai" "${CANONICAL_REQUIRED_REPOS[@]}"; then
-        PRIME_REQUIRED=1
-    fi
-fi
-
-# Check if hook exists (symlink or file)
 if [ -e "$PRIME_HOOK" ]; then
-    IS_VALID=0
-    
-    # Method A: V3 Symlink
-    if [ -L "$PRIME_HOOK" ]; then
-        TARGET=$(resolve_path "$PRIME_HOOK")
-    fi
-    
-    # Method B: Content Check
-    if [ $IS_VALID -eq 0 ] && [ -f "$PRIME_HOOK" ]; then
-        if grep -q "CANONICAL COMMIT BLOCKED" "$PRIME_HOOK" 2>/dev/null; then
-            IS_VALID=1
-        elif grep -q "validate_beads" "$PRIME_HOOK" 2>/dev/null; then
-            IS_VALID=1
-        fi
-    fi
-
-    if [ $IS_VALID -eq 1 ]; then
+    if grep -q "CANONICAL COMMIT BLOCKED" "$PRIME_HOOK" 2>/dev/null || grep -q "validate_beads" "$PRIME_HOOK" 2>/dev/null; then
         echo -e "${GREEN}✅ Hook installed in prime-radiant-ai${RESET}"
     else
-        if [ $PRIME_REQUIRED -eq 1 ]; then
-            echo -e "${RED}❌ Hook invalid in prime-radiant-ai${RESET}"
-            echo "   Target: $(resolve_path $PRIME_HOOK)"
-            echo "   Fix: cd ~/agent-skills && scripts/install-canonical-precommit.sh"
-            ERRORS=$((ERRORS+1))
-        else
-            warn_only "Hook invalid in prime-radiant-ai (optional on this host)"
-        fi
+        warn_only "Hook invalid in prime-radiant-ai"
     fi
 else
-    if [ $PRIME_REQUIRED -eq 1 ]; then
-        echo -e "${RED}❌ Hook missing in prime-radiant-ai${RESET}"
-        echo "   Fix: cd ~/agent-skills && scripts/install-canonical-precommit.sh"
-        ERRORS=$((ERRORS+1))
-    else
-        warn_only "Hook missing in prime-radiant-ai (optional on this host)"
-    fi
+    warn_only "Hook missing in prime-radiant-ai"
 fi
 
 # 3. Check Binaries
 echo "--- Required Tools ---"
 if declare -p CANONICAL_REQUIRED_TOOLS >/dev/null 2>&1; then
-    for t in "${CANONICAL_REQUIRED_TOOLS[@]}"; do
-        check_binary "$t" 1
-    done
-fi
-if declare -p CANONICAL_OPTIONAL_TOOLS >/dev/null 2>&1; then
-    for t in "${CANONICAL_OPTIONAL_TOOLS[@]}"; do
-        check_binary "$t" 0
-    done
+    for t in "${CANONICAL_REQUIRED_TOOLS[@]}"; do check_binary "$t" 1; done
 fi
 
-# 3.1 Auth sanity (warn-only; binaries are the hard requirement)
+# 3.1 Auth sanity
 echo ""
 echo "--- Auth Sanity (warn-only) ---"
+command -v gh >/dev/null 2>&1 && { gh auth status >/dev/null 2>&1 && echo -e "${GREEN}✅ gh auth: OK${RESET}" || warn_only "gh auth: not logged in"; }
+command -v railway >/dev/null 2>&1 && { railway status >/dev/null 2>&1 && echo -e "${GREEN}✅ railway auth: OK${RESET}" || warn_only "railway auth: not logged in"; }
 
-if command -v gh >/dev/null 2>&1; then
-    if gh auth status >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ gh auth: OK${RESET}"
-    else
-        warn_only "gh auth: not logged in (run: gh auth login)"
-    fi
-fi
-
-if command -v railway >/dev/null 2>&1; then
-    if railway status >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ railway auth: OK${RESET}"
-    else
-        warn_only "railway auth: not logged in (run: railway login) or set RAILWAY_TOKEN"
-    fi
-fi
-
-if command -v op >/dev/null 2>&1; then
-    if op whoami >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ op auth: OK${RESET}"
-    else
-        warn_only "op auth: not available (expected if using service tokens only); verify op account/sign-in if needed"
-    fi
-fi
-
-# 4. Invoke MCP Doctor
+# 4. MCP & Tooling Status
 echo "--- MCP & Tooling Status ---"
 if [ -f "$HOME/agent-skills/health/mcp-doctor/check.sh" ]; then
-    # mcp-doctor is warn-only by default; strict mode should be enabled explicitly.
     bash "$HOME/agent-skills/health/mcp-doctor/check.sh" || true
-else
-    echo -e "${RED}❌ MCP Doctor script missing${RESET}"
-    ERRORS=$((ERRORS+1))
-fi
-
-# 5. SSH Key Doctor (warn-only by default)
-echo ""
-echo "--- SSH Key Doctor ---"
-SSH_DOCTOR="$HOME/agent-skills/health/ssh-key-doctor/check.sh"
-if [ -x "$SSH_DOCTOR" ]; then
-    # Local-only is fast and safe; remote checks are opt-in.
-    if ! "$SSH_DOCTOR" --local-only; then
-        WARNINGS=$((WARNINGS+1))
-    fi
-
-    if [ "${DX_SSH_DOCTOR_REMOTE:-0}" = "1" ]; then
-        if ! "$SSH_DOCTOR" --remote-only; then
-            WARNINGS=$((WARNINGS+1))
-        fi
-    else
-        echo "ℹ Remote SSH checks skipped (set DX_SSH_DOCTOR_REMOTE=1 to enable)."
-    fi
-else
-    echo -e "${YELLOW}⚠️  ssh-key-doctor not installed${RESET}"
-    echo "   Run: ~/agent-skills/ssh-key-doctor/check.sh"
-    WARNINGS=$((WARNINGS+1))
-fi
-
-# 6. Railway Requirements Check (hard-fail only when required by ENV_SOURCES_MODE)
-echo ""
-echo "--- Railway Requirements ---"
-if [ -f "$SCRIPT_DIR/railway-requirements-check.sh" ]; then
-    # Default to local-dev unless caller explicitly sets ENV_SOURCES_MODE
-    # (important: dx-status is often run in non-interactive tooling).
-    RAILWAY_MODE="${ENV_SOURCES_MODE:-}"
-    if [ -z "$RAILWAY_MODE" ] && [ -n "${CI:-}" ]; then
-        RAILWAY_MODE="ci"
-    fi
-    RAILWAY_MODE="${RAILWAY_MODE:-local-dev}"
-
-    if ! bash "$SCRIPT_DIR/railway-requirements-check.sh" --mode "$RAILWAY_MODE"; then
-        ERRORS=$((ERRORS+1))
-    fi
-else
-    echo -e "${YELLOW}⚠️  Railway requirements check script missing${RESET}"
-    WARNINGS=$((WARNINGS+1))
-fi
-
-# 7. Auto-checkpoint Status (Phase 1: warn-only during rollout)
-echo ""
-echo "--- Auto-checkpoint Status ---"
-CHECKPOINT_SCRIPT="$SCRIPT_DIR/auto-checkpoint.sh"
-CHECKPOINT_LOG_DIR="${AUTO_CHECKPOINT_LOG_DIR:-$HOME/.auto-checkpoint}"
-
-if [ -f "$CHECKPOINT_SCRIPT" ]; then
-    echo -e "${GREEN}✅ auto-checkpoint installed${RESET}"
-
-    # Check scheduler status
-    case "$(uname -s)" in
-        Linux*)
-            if systemctl --user is-active auto-checkpoint.timer >/dev/null 2>&1; then
-                echo -e "${GREEN}✅ auto-checkpoint timer active (systemd)${RESET}"
-            else
-                echo -e "${YELLOW}⚠️  auto-checkpoint timer not active${RESET}"
-                echo "   Fix: auto-checkpoint-install --status"
-                WARNINGS=$((WARNINGS+1))
-            fi
-            ;;
-        Darwin*)
-            if launchctl list 2>/dev/null | grep -q "auto-checkpoint"; then
-                echo -e "${GREEN}✅ auto-checkpoint timer active (launchd)${RESET}"
-            else
-                echo -e "${YELLOW}⚠️  auto-checkpoint timer not active${RESET}"
-                echo "   Fix: auto-checkpoint-install --status"
-                WARNINGS=$((WARNINGS+1))
-            fi
-            ;;
-        *)
-            echo -e "${YELLOW}⚠️  Unknown OS, cannot verify scheduler${RESET}"
-            WARNINGS=$((WARNINGS+1))
-            ;;
-    esac
-
-    # Check last run
-    if [ -f "$CHECKPOINT_LOG_DIR/last-run" ]; then
-        last_run_ts=$(cat "$CHECKPOINT_LOG_DIR/last-run")
-        current_ts=$(date +%s)
-        minutes_since=$(( (current_ts - last_run_ts) / 60 ))
-
-        # auto-checkpoint-install schedules every 4 hours. Allow reasonable slack before erroring:
-        # - < 4h: healthy
-        # - < 6h: warning (missed/late run)
-        # - >= 6h: error (stale)
-        if [ $minutes_since -lt 240 ]; then
-            echo -e "${GREEN}✅ Last run: ${minutes_since}m ago${RESET}"
-        elif [ $minutes_since -lt 360 ]; then
-            echo -e "${YELLOW}⚠️  Last run: ${minutes_since}m ago (may be delayed)${RESET}"
-            echo "   Fix: auto-checkpoint-install --status"
-            WARNINGS=$((WARNINGS+1))
-        else
-            echo -e "${RED}❌ Last run: ${minutes_since}m ago (stale; expected <= ~6h)${RESET}"
-            echo "   Fix: auto-checkpoint-install --status (then auto-checkpoint-install --run to test)"
-            ERRORS=$((ERRORS+1))
-        fi
-    else
-        echo -e "${YELLOW}⚠️  Auto-checkpoint never ran${RESET}"
-        echo "   Fix: auto-checkpoint-install --run (test run)"
-        WARNINGS=$((WARNINGS+1))
-    fi
-else
-    echo -e "${YELLOW}⚠️  auto-checkpoint not installed${RESET}"
-    echo "   Run: auto-checkpoint-install (or dx-hydrate)"
-    WARNINGS=$((WARNINGS+1))
 fi
 
 # 8. V7.8 Lifecycle / GC Metrics
@@ -469,94 +258,91 @@ echo ""
 echo "--- V7.8 Lifecycle & GC Metrics ---"
 WORKTREE_BASE="/tmp/agents"
 if [[ -d "$WORKTREE_BASE" ]]; then
-    # Strict root discovery (/tmp/agents/<id>/<repo>/.git)
     total_wt=$(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" 2>/dev/null | wc -l | tr -d ' ')
     dirty_active=0
     dirty_stale=0
-    no_upstream_wt=0
+    no_upstream_unmerged=0
+    no_upstream_merged_clean=0
     safe_delete_wt=0
     stale_paths=()
+    unmerged_paths=()
+    merged_clean_paths=()
     
     current_ts=$(date +%s)
     
     while IFS= read -r gitfile; do
         wt_path=$(dirname "$gitfile")
         
-        # Check if active via .dx-session-lock (< 4h)
+        # Freshness Check (Active Session)
         is_active=false
         if [[ -f "$wt_path/.dx-session-lock" ]]; then
             lock_ts=$(cut -d: -f1 "$wt_path/.dx-session-lock" 2>/dev/null || echo "0")
-            if (( current_ts - lock_ts < 14400 )); then
-                is_active=true
-            fi
+            if (( current_ts - lock_ts < 14400 )); then is_active=true; fi
         fi
-        
-        # If not already active, check last commit timestamp (< 4h)
         if [[ "$is_active" == false ]]; then
             last_commit_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
-            if (( current_ts - last_commit_ts < 14400 )); then
-                is_active=true
-            fi
+            if (( current_ts - last_commit_ts < 14400 )); then is_active=true; fi
         fi
 
-        # Dirty check (ignoring .ralph tool artifacts)
+        # Dirty Check
         status_output=$(git -C "$wt_path" status --porcelain=v1 2>/dev/null | grep -v "\.ralph" || true)
-        if [[ -n "$status_output" ]]; then
-            if [[ "$is_active" == true ]]; then
-                ((dirty_active++))
-            else
-                ((dirty_stale++))
-                stale_paths+=("$wt_path")
-            fi
+        dirty_count=$(echo "$status_output" | grep -v "^$" | wc -l | tr -d ' ')
+        
+        if [[ $dirty_count -gt 0 ]]; then
+            if [[ "$is_active" == true ]]; then ((dirty_active++)); else ((dirty_stale++)); stale_paths+=("$wt_path"); fi
         fi
         
-        # Upstream check
+        # Classification of No-Upstream
         if ! git -C "$wt_path" rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
-            # Ignore master/main with no upstream (canonical worktrees)
             branch=$(git -C "$wt_path" branch --show-current 2>/dev/null)
             if [[ -n "$branch" && "$branch" != "master" && "$branch" != "main" ]]; then
-                ((no_upstream_wt++))
+                # Determine merge status
+                base="origin/master"
+                git -C "$wt_path" rev-parse "$base" >/dev/null 2>&1 || base="origin/main"
+                
+                is_merged=false
+                git -C "$wt_path" merge-base --is-ancestor HEAD "$base" 2>/dev/null && is_merged=true
+                
+                if [[ "$is_merged" == true && $dirty_count -eq 0 ]]; then
+                    ((no_upstream_merged_clean++))
+                    merged_clean_paths+=("$wt_path")
+                else
+                    ((no_upstream_unmerged++))
+                    unmerged_paths+=("$wt_path")
+                fi
             fi
         fi
         
-        # Safe delete check (merged to master + clean + > 24h)
+        # Legacy SAFE DELETE metric
         branch=$(git -C "$wt_path" branch --show-current 2>/dev/null)
-        if [[ -n "$branch" && "$branch" != "master" && "$branch" != "main" ]]; then
-            if git -C "$wt_path" merge-base --is-ancestor "$branch" origin/master >/dev/null 2>&1 || \
-               git -C "$wt_path" merge-base --is-ancestor "$branch" origin/main >/dev/null 2>&1; then
-                # Only if clean (ignoring .ralph)
-                status_check=$(git -C "$wt_path" status --porcelain=v1 2>/dev/null | grep -v "\.ralph" || true)
-                if [[ -z "$status_check" ]]; then
-                    last_commit_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
-                    if (( current_ts - last_commit_ts > 86400 )); then
-                        ((safe_delete_wt++))
-                    fi
-                fi
+        if [[ -n "$branch" && "$branch" != "master" && "$branch" != "main" && $dirty_count -eq 0 ]]; then
+            if git -C "$wt_path" merge-base --is-ancestor HEAD origin/master >/dev/null 2>&1 || \
+               git -C "$wt_path" merge-base --is-ancestor HEAD origin/main >/dev/null 2>&1; then
+                last_commit_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
+                if (( current_ts - last_commit_ts > 86400 )); then ((safe_delete_wt++)); fi
             fi
         fi
     done < <(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" 2>/dev/null)
 
     echo -e "   Total Worktrees: $total_wt"
-    find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" -exec dirname {} \; | sort | sed 's/^/      - /'
-    
     echo -e "   Dirty (Active): $dirty_active"
     
     if [[ $dirty_stale -gt 0 ]]; then
         echo -e "   ${YELLOW}⚠️  Dirty (Stale): $dirty_stale${RESET}"
-        for p in "${stale_paths[@]}"; do
-            echo "      - $p"
-        done
+        for p in "${stale_paths[@]}"; do echo "      - $p"; done
     else
         echo -e "   ${GREEN}✅ Dirty (Stale): 0${RESET}"
     fi
 
-    if [[ $no_upstream_wt -gt 5 ]]; then
-        echo -e "   ${RED}❌ No Upstream branches: $no_upstream_wt (high surface area)${RESET}"
+    if [[ $no_upstream_unmerged -gt 0 ]]; then
+        echo -e "   ${RED}❌ No Upstream (Unmerged/Dirty): $no_upstream_unmerged${RESET}"
+        for p in "${unmerged_paths[@]}"; do echo "      - $p"; done
         WARNINGS=$((WARNINGS+1))
-    elif [[ $no_upstream_wt -gt 0 ]]; then
-        echo -e "   ${YELLOW}⚠️  No Upstream branches: $no_upstream_wt${RESET}"
-    else
-        echo -e "   ${GREEN}✅ No Upstream branches: 0${RESET}"
+    fi
+
+    if [[ $no_upstream_merged_clean -gt 0 ]]; then
+        echo -e "   ${BLUE}ℹ️  No Upstream (Merged/Clean): $no_upstream_merged_clean (GC Candidates)${RESET}"
+        for p in "${merged_clean_paths[@]}"; do echo "      - $p"; done
     fi
 
     if [[ $safe_delete_wt -gt 0 ]]; then
@@ -569,15 +355,10 @@ fi
 echo ""
 if [ $ERRORS -eq 0 ]; then
     echo -e "${GREEN}✨ SYSTEM READY. All systems nominal.${RESET}"
-    if [ $WARNINGS -gt 0 ]; then
-        echo -e "${YELLOW}ℹ Found $WARNINGS warning(s).${RESET}"
-    fi
+    [ $WARNINGS -gt 0 ] && echo -e "${YELLOW}ℹ Found $WARNINGS warning(s).${RESET}"
     exit 0
 else
     echo -e "${RED}⚠️  SYSTEM UNHEALTHY. Found $ERRORS errors.${RESET}"
-    if [ $WARNINGS -gt 0 ]; then
-        echo -e "${YELLOW}ℹ Also found $WARNINGS warning(s).${RESET}"
-    fi
-    echo -e "${YELLOW}💡 TROUBLESHOOTING: Read ~/agent-skills/memory/playbooks/99_TROUBLESHOOTING.md for fixes.${RESET}"
+    [ $WARNINGS -gt 0 ] && echo -e "${YELLOW}ℹ Also found $WARNINGS warning(s).${RESET}"
     exit 1
 fi

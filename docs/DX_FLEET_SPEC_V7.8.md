@@ -111,10 +111,35 @@ This is the founder’s “green light” check.
 ### 4.4 `dx-janitor` (worktree PR surfacing)
 **Purpose**: ensure work in worktrees becomes visible/durable.
 
-Deterministic behavior:
-- Push branches that are ahead / have no upstream (when safe).
-- Create draft PRs if no PR exists for that branch.
-- Avoid duplicates (“quiet mode”: do nothing if PR already exists).
+**No-Upstream Closure Policy (V7.8)**:
+To prevent `no_upstream` from becoming a permanent pulse blocker, the following deterministic closure path is enforced:
+
+1. **SAFE DISCARD** (no PR):
+   - **Criteria**: Branch is **MERGED** into `origin/master` AND worktree is **CLEAN**.
+   - **Action**: Remove the worktree (`git worktree remove`) and delete the local branch.
+2. **MUST SURFACE** (Push + PR):
+   - **Criteria**: Branch is **NOT_MERGED** OR has **AHEAD** commits.
+   - **Action**: Push to set upstream. Create a draft PR (within budget) if none exists.
+3. **DIRTY (No Commits)**:
+   - **Criteria**: Worktree has uncommitted changes but no new commits vs `origin/master`.
+   - **Action**: Revert tool-junk (e.g. logs, venvs) OR refresh `.dx-session-lock` if genuinely active.
+
+**Pulse Semantics**:
+- `no_upstream_unmerged`: Actionable (push/PR required).
+- `no_upstream_merged_clean`: Not an emergency; represents a GC queue.
+
+**If you're stuck (Archaeology Command)**:
+```bash
+for wt in $(find /tmp/agents -mindepth 3 -maxdepth 3 -name ".git" -exec dirname {} \; 2>/dev/null); do
+    if ! git -C "$wt" rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
+        branch=$(git -C "$wt" branch --show-current)
+        dirty=$(git -C "$wt" status --porcelain | wc -l | xargs)
+        merged="NOT_MERGED"
+        git -C "$wt" merge-base --is-ancestor HEAD origin/master 2>/dev/null && merged="MERGED"
+        echo "$wt | $branch | dirty:$dirty | $merged"
+    fi
+done
+```
 
 ### 4.5 `dx-worktree-gc` (lifecycle + GC)
 **Purpose**: safely reduce `/tmp/agents/**` over time.

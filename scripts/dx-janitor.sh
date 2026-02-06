@@ -8,19 +8,14 @@
 #
 # Safety:
 # - No destructive actions (no close, no delete, no rebase, no squash)
-# - Quiet mode by default (minimal notifications)
 # - Bounded PR creation to prevent spam
 #
-# Usage:
-#   dx-janitor [--dry-run] [--verbose] [--check-abandon]
-
 set -euo pipefail
 
 export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
 
 # Configuration
 WORKTREE_BASE="/tmp/agents"
-ABANDON_THRESHOLD_HOURS=72
 DX_JANITOR_MAX_NEW_PRS=${DX_JANITOR_MAX_NEW_PRS:-3}
 
 # Internal state
@@ -32,90 +27,34 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Parse arguments
 DRY_RUN=false
 VERBOSE=false
-CHECK_ABANDON=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --dry-run)
-            DRY_RUN=true
-            shift
-            ;;
-        --verbose)
-            VERBOSE=true
-            shift
-            ;;
-        --check-abandon)
-            CHECK_ABANDON=true
-            shift
-            ;;
-        *)
-            echo "Unknown option: $1"
-            echo "Usage: dx-janitor [--dry-run] [--verbose] [--check-abandon]"
-            exit 1
-            ;;
+        --dry-run) DRY_RUN=true; shift ;;
+        --verbose) VERBOSE=true; shift ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
     esac
+    shift
 done
 
-log() {
-    if [[ "$VERBOSE" == true ]]; then
-        echo -e "$1"
-    fi
-}
+log() { if [[ "$VERBOSE" == true ]]; then echo -e "$1"; fi; }
+warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
+error() { echo -e "${RED}❌ $1${NC}"; }
+success() { echo -e "${GREEN}✅ $1${NC}"; }
+info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
 
-warn() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
-
-error() {
-    echo -e "${RED}❌ $1${NC}"
-}
-
-success() {
-    echo -e "${GREEN}✅ $1${NC}"
-}
-
-info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
-}
-
-# Check if gh CLI is available and authenticated
-check_gh_auth() {
-    if ! command -v gh &>/dev/null; then
-        error "gh CLI not found"
-        return 1
-    fi
-    
-    if ! gh auth status &>/dev/null 2>&1; then
-        error "gh CLI not authenticated"
-        return 1
-    fi
-    
-    return 0
-}
-
-# Get PR details for a branch
-get_pr_for_branch() {
-    local branch="$1"
-    local repo_path="$2"
-    
-    cd "$repo_path"
-    gh pr list --head "$branch" --json number,state,labels,updatedAt --jq '.[0]' 2>/dev/null || echo "null"
-}
-
-# Calculate hours since a timestamp
-hours_since() {
-    local iso_date="$1"
-    local pr_ts
-    pr_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$iso_date" +%s 2>/dev/null || date -d "$iso_date" +%s 2>/dev/null || echo "0")
-    local current_ts
-    current_ts=$(date +%s)
-    local diff=$((current_ts - pr_ts))
-    echo $((diff / 3600))
+# Determine repo slug from path
+get_repo_slug() {
+    local wt_path="$1"
+    local repo_name
+    repo_name=$(basename "$wt_path")
+    # Mapping for stars-end
+    echo "stars-end/$repo_name"
 }
 
 # Process a single worktree
@@ -125,10 +64,12 @@ process_worktree() {
     worktree_name=$(basename "$(dirname "$worktree_path")")
     local repo_name
     repo_name=$(basename "$worktree_path")
+    local repo_slug
+    repo_slug=$(get_repo_slug "$worktree_path")
     
-    log "\n📁 Processing: $worktree_name/$repo_name"
+    log "\n📁 Processing: $worktree_name/$repo_name ($repo_slug)"
     
-    # Check for active session lock (V7.8)
+    # Session Lock Check
     if [[ -f "$(dirname "$0")/dx-session-lock.sh" ]]; then
         if "$(dirname "$0")/dx-session-lock.sh" is-fresh "$worktree_path"; then
             log "KEEP: Active session lock found, skipping janitor"
@@ -136,254 +77,88 @@ process_worktree() {
         fi
     fi
     
-    # Verify it's a git repo (worktrees use a .git *file*, not a directory)
     if ! git -C "$worktree_path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        log "Not a git repository, skipping"
         return 0
     fi
     
     cd "$worktree_path"
-    
-    # Get current branch
     local current_branch
     current_branch=$(git branch --show-current 2>/dev/null || echo "")
-    
-    if [[ -z "$current_branch" ]]; then
-        warn "Could not determine branch, skipping"
+    if [[ -z "$current_branch" || "$current_branch" == "master" || "$current_branch" == "main" ]]; then
         return 0
     fi
     
-    log "Branch: $current_branch"
-    
-    # Skip master/main branches
-    if [[ "$current_branch" == "master" || "$current_branch" == "main" ]]; then
-        log "On default branch, skipping"
-        return 0
-    fi
-    
-    # Compute divergence / durability signals
+    # Compute signals
     local base="origin/master"
-    if ! git rev-parse "$base" >/dev/null 2>&1; then
-        base="origin/main"
-    fi
+    git rev-parse "$base" >/dev/null 2>&1 || base="origin/main"
 
     local worktree_dirty=false
-    if [[ -n "$(git status --porcelain=v1 2>/dev/null)" ]]; then
-        worktree_dirty=true
-    fi
+    [[ -n "$(git status --porcelain=v1 2>/dev/null | grep -v "\.ralph" || true)" ]] && worktree_dirty=true
 
-    # "Ahead of base" is the single gate for "should this have a PR?"
-    local ahead_of_base=0
+    local ahead_of_base
     ahead_of_base=$(git rev-list --count "$base..$current_branch" 2>/dev/null || echo "0")
 
-    # Check for unpushed commits (if upstream exists)
-    local unpushed_commits=0
+    # If clean and not ahead, ignore
+    if [[ "$ahead_of_base" -eq 0 && "$worktree_dirty" == false ]]; then
+        return 0
+    fi
+    
+    # Upstream check
     local has_upstream=false
     if git rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
         has_upstream=true
-        unpushed_commits=$(git rev-list --count "$current_branch"@{upstream}.."$current_branch" 2>/dev/null || echo "0")
-    else
-        log "No upstream found. Commits ahead of $base: $ahead_of_base"
-        unpushed_commits="$ahead_of_base"
     fi
 
-    # If the branch has no changes relative to base and is clean, skip entirely.
-    # This avoids creating no-op PRs for already-merged / identical branches.
-    if [[ "$ahead_of_base" -eq 0 && "$worktree_dirty" == false ]]; then
-        log "Branch has no changes vs $base and worktree is clean; skipping"
-        return 0
-    fi
-    
-    if [[ "$unpushed_commits" -gt 0 ]]; then
-        info "Found $unpushed_commits unpushed commits"
-        
+    if [[ "$has_upstream" == false && "$ahead_of_base" -gt 0 ]]; then
+        info "No upstream found for $current_branch. Pushing..."
         if [[ "$DRY_RUN" == true ]]; then
-            echo "  [DRY-RUN] Would push $unpushed_commits commits"
+            echo "  [DRY-RUN] Would push $current_branch"
         else
-            if [[ "$has_upstream" == true ]]; then
-                push_cmd=(git push origin "$current_branch")
-            else
-                push_cmd=(git push -u origin "$current_branch")
-            fi
-
-            if "${push_cmd[@]}"; then
-                success "Pushed $unpushed_commits commits"
-            else
-                error "Failed to push commits"
-                return 1
-            fi
+            git push -u origin "$current_branch"
         fi
-    else
-        log "No unpushed commits"
     fi
 
-    # If the branch has no commits vs base, a PR cannot carry uncommitted work.
-    # Janitor is intentionally non-destructive; it never auto-commits.
-    if [[ "$worktree_dirty" == true && "$ahead_of_base" -eq 0 ]]; then
-        warn "Dirty worktree with no commits vs $base — commit changes before janitor can open a PR"
-        if [[ "$DRY_RUN" == true ]]; then
-            echo "  [DRY-RUN] Would skip PR creation (no commits to PR)"
-        fi
-        return 0
-    fi
-    
-    # Check for existing PR
-    if ! check_gh_auth; then
-        warn "gh CLI not available, skipping PR check"
-        return 0
-    fi
-    
-    local pr_info
-    pr_info=$(get_pr_for_branch "$current_branch" "$worktree_path")
-    
-    if [[ "$pr_info" != "null" && -n "$pr_info" ]]; then
+    # PR Check
+    if command -v gh &>/dev/null; then
         local pr_number
-        pr_number=$(printf '%s' "$pr_info" | python3 -c 'import json,sys; o=json.load(sys.stdin); print(o.get("number",""))' 2>/dev/null || true)
-        local pr_state
-        pr_state=$(printf '%s' "$pr_info" | python3 -c 'import json,sys; o=json.load(sys.stdin); print(o.get("state",""))' 2>/dev/null || true)
-        local pr_labels
-        pr_labels=$(printf '%s' "$pr_info" | python3 -c 'import json,sys; o=json.load(sys.stdin); print(\"\\n\".join([l.get(\"name\",\"\") for l in (o.get(\"labels\",[]) or [])]))' 2>/dev/null || true)
+        pr_number=$(gh pr list --repo "$repo_slug" --head "$current_branch" --state all --json number --jq '.[0].number' 2>/dev/null || echo "null")
         
-        log "Existing PR found: #$pr_number (state: $pr_state)"
-        
-        # Ensure labels are present
-        if [[ "$DRY_RUN" == false && "$pr_state" == "OPEN" ]]; then
-            # Add wip/worktree label if not present
-            if [[ ! "$pr_labels" =~ "wip/worktree" ]]; then
-                gh pr edit "$pr_number" --add-label "wip/worktree" 2>/dev/null || true
-            fi
-        fi
-        
-        # Check for abandonment (optional)
-        if [[ "$CHECK_ABANDON" == true ]]; then
-            local pr_updated
-            pr_updated=$(printf '%s' "$pr_info" | python3 -c 'import json,sys; o=json.load(sys.stdin); print(o.get(\"updatedAt\",\"\"))' 2>/dev/null || true)
-            
-            if [[ -n "$pr_updated" && "$pr_state" == "OPEN" ]]; then
-                local hours_old
-                hours_old=$(hours_since "$pr_updated")
-                
-                if [[ "$hours_old" -gt $ABANDON_THRESHOLD_HOURS ]]; then
-                    # Check if it has wip:abandon label
-                    if [[ "$pr_labels" =~ "wip:abandon" ]]; then
-                        warn "PR #$pr_number is ${hours_old}h old with wip:abandon label"
-                        info "Consider closing or updating this PR"
+        if [[ "$pr_number" != "null" && -n "$pr_number" ]]; then
+            log "Existing PR found: #$pr_number"
+        elif [[ "$ahead_of_base" -gt 0 ]]; then
+            if [[ "$PRS_CREATED" -ge "$DX_JANITOR_MAX_NEW_PRS" ]]; then
+                warn "PR budget exhausted. Deferring PR for $current_branch."
+                PRS_DEFERRED=$((PRS_DEFERRED + 1))
+            else
+                info "Creating draft PR for $current_branch..."
+                if [[ "$DRY_RUN" == true ]]; then
+                    echo "  [DRY-RUN] Would create draft PR"
+                    PRS_CREATED=$((PRS_CREATED + 1))
+                else
+                    if gh pr create --repo "$repo_slug" --draft --head "$current_branch" --base master \
+                        --title "WIP: $current_branch (janitor surfaced)" \
+                        --body "Surfaced by V7.8 janitor closure policy." 2>/dev/null; then
+                        success "Created draft PR"
+                        PRS_CREATED=$((PRS_CREATED + 1))
                     fi
                 fi
             fi
         fi
-    else
-        # No PR exists, create draft PR
-        info "No PR exists for branch '$current_branch'"
-        
-        # Check budget
-        if [[ "$PRS_CREATED" -ge "$DX_JANITOR_MAX_NEW_PRS" ]]; then
-            warn "PR budget exhausted ($DX_JANITOR_MAX_NEW_PRS). Deferring PR for $current_branch."
-            PRS_DEFERRED=$((PRS_DEFERRED + 1))
-            return 0
-        fi
-
-        # Get the remote repo name
-        local remote_url
-        remote_url=$(git remote get-url origin 2>/dev/null || echo "")
-        local repo_full_name=""
-        
-        if [[ "$remote_url" =~ github.com[/:]([^/]+)/([^/\.]+) ]]; then
-            repo_full_name="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
-        fi
-        
-        if [[ -z "$repo_full_name" ]]; then
-            warn "Could not determine repo name from remote"
-            return 0
-        fi
-        
-        if [[ "$DRY_RUN" == true ]]; then
-            echo "  [DRY-RUN] Would create draft PR for $repo_full_name"
-            PRS_CREATED=$((PRS_CREATED + 1))
-        else
-            # Create draft PR
-            local pr_body="Worktree: \`$worktree_name\`
-Branch: \`$current_branch\`
-Path: \`$worktree_path\`
-
----
-*Created by dx-janitor (V7.8)*"
-            
-            # Extract Feature-Key from commits if possible
-            local feature_key=""
-            feature_key=$(git log -1 --pretty=format:%B | grep -i "Feature-Key:" | head -1 | awk '{print $2}' || true)
-            
-            local pr_title="WIP: $current_branch"
-            if [[ -n "$feature_key" ]]; then
-                pr_title="WIP: $feature_key ($current_branch)"
-            fi
-
-            if gh pr create \
-                --repo "$repo_full_name" \
-                --title "$pr_title" \
-                --body "$pr_body" \
-                --draft \
-                --label "wip/worktree" 2>/dev/null; then
-                success "Created draft PR for $current_branch"
-                PRS_CREATED=$((PRS_CREATED + 1))
-            else
-                # Maybe PR already exists but search failed
-                error "Failed to create PR (it might already exist or need manual push)"
-                return 0 # Non-fatal
-            fi
-        fi
     fi
-    
-    return 0
 }
 
-# Find all worktrees
-find_worktrees() {
-    if [[ ! -d "$WORKTREE_BASE" ]]; then
-        log "Worktree base directory not found: $WORKTREE_BASE"
-        return 0
-    fi
-    
-    find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" -exec dirname {} \; 2>/dev/null
-}
-
-# Main execution
 main() {
     echo "🧹 DX Worktree Janitor (V7.8)"
-    echo "=============================="
     echo "Budget: $DX_JANITOR_MAX_NEW_PRS new PRs"
     
-    if [[ "$DRY_RUN" == true ]]; then
-        echo "[DRY-RUN MODE] No changes will be made"
-    fi
-    
     local worktrees
-    worktrees=$(find_worktrees)
+    worktrees=$(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" -exec dirname {} \; 2>/dev/null)
     
-    if [[ -z "$worktrees" ]]; then
-        echo "No worktrees found"
-        exit 0
-    fi
+    for wt in $worktrees; do
+        process_worktree "$wt"
+    done
     
-    local processed=0
-    
-    while IFS= read -r worktree; do
-        if [[ -n "$worktree" ]]; then
-            if process_worktree "$worktree"; then
-                processed=$((processed + 1))
-            fi
-        fi
-    done <<< "$worktrees"
-    
-    echo ""
-    echo "=============================="
-    echo "Janitor complete: $processed worktrees processed"
-    echo "PRs Created:  $PRS_CREATED"
-    echo "PRs Deferred: $PRS_DEFERRED"
-    
-    if [[ "$DRY_RUN" == true ]]; then
-        echo "[DRY-RUN] No actual changes made"
-    fi
+    echo -e "\nSummary: PRs Created: $PRS_CREATED, Deferred: $PRS_DEFERRED"
 }
 
 main "$@"

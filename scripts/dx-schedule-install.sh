@@ -72,7 +72,7 @@ install_macmini() {
     done
 }
 
-install_linux() {
+install_linux_local() {
     local source_file="$AGENTSKILLS_DIR/schedules/v7.8/linux/crontab.txt"
     local tmp_cron=$(mktemp)
     
@@ -97,13 +97,48 @@ install_linux() {
     rm -f "$tmp_cron" "$current_cron"
 }
 
-if [[ "$OS_TYPE" == "Darwin" ]]; then
-    install_macmini
-elif [[ "$OS_TYPE" == "Linux" ]]; then
-    install_linux
+install_remote() {
+    local host="$1"
+    local source_file="$AGENTSKILLS_DIR/schedules/v7.8/linux/crontab.txt"
+    
+    log "Processing remote host: $host"
+    
+    # Get remote HOME
+    local remote_home
+    remote_home=$(ssh "$host" "echo \$HOME")
+    
+    local tmp_cron=$(mktemp)
+    sed "s|__HOME__|$remote_home|g" "$source_file" > "$tmp_cron"
+    
+    local current_cron=$(mktemp)
+    ssh "$host" "crontab -l" > "$current_cron" 2>/dev/null || touch "$current_cron"
+    
+    if diff -q "$tmp_cron" "$current_cron" >/dev/null; then
+        log "✅ $host Crontab: No drift"
+    else
+        log "⚠️ $host Crontab: Drift detected"
+        if [[ "$MODE" == "apply" ]]; then
+            log "  Applying crontab to $host..."
+            scp "$tmp_cron" "$host:/tmp/new_crontab"
+            ssh "$host" "crontab /tmp/new_crontab && rm /tmp/new_crontab"
+        fi
+    fi
+    
+    rm -f "$tmp_cron" "$current_cron"
+}
+
+if [[ "$HOST_TARGET" == "local" ]]; then
+    if [[ "$OS_TYPE" == "Darwin" ]]; then
+        install_macmini
+    elif [[ "$OS_TYPE" == "Linux" ]]; then
+        install_linux_local
+    else
+        log "❌ Unsupported local OS: $OS_TYPE"
+        exit 1
+    fi
 else
-    log "❌ Unsupported OS: $OS_TYPE"
-    exit 1
+    # For now, assume remote targets are Linux
+    install_remote "$HOST_TARGET"
 fi
 
 log "✨ Schedule installation check complete ($MODE)"
