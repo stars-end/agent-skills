@@ -393,6 +393,9 @@ K — Beads durability:
 
 L — Founder inbox:
 - `scripts/dx-inbox.sh` (read-only): bounded output, one-liner when healthy.
+  - **Quietable closure rule**: `no_upstream` must be actionable without PR spam.
+    - If `no_upstream` is primarily **merged+clean** candidates, `dx-inbox` MUST recommend `dx-worktree-gc --dry-run` (SAFE DISCARD) rather than “open PRs”.
+    - If `no_upstream` includes **unmerged/ahead** branches, `dx-inbox` MUST recommend `dx-janitor --dry-run` (push + bounded PR creation).
 
 M — Fleet helpers:
 - `configs/fleet_hosts.yaml` (authoritative list of canonical VMs + ssh targets)

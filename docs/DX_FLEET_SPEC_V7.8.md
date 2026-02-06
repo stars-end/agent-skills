@@ -5,6 +5,7 @@
 **Extends**: `docs/DX_FLEET_SPEC_V7.7.md` (baseline inheritance)  
 **Includes**: `docs/DX_FLEET_SPEC_V7.6.md` (enforcement: Sweeper/Janitor/done-gate)  
 **Historical context**: `docs/DX_FLEET_SPEC_V7.md` (V7 invariants)
+**Companion (OS / A–M)**: `docs/DX_FLEET_SPEC_V7.8_AM.md` (heartbeat + inbox + audits)
 
 ---
 
@@ -22,6 +23,7 @@ V7.8 adds **deterministic lifecycle + garbage collection (GC)** so work stays:
 - visible (PR inbox)
 - bounded (worktrees don’t grow unbounded)
 - safe (no destructive cleanup unless provably safe)
+- quietable (there is always a deterministic closure path for “no-upstream” work)
 
 ---
 
@@ -32,6 +34,7 @@ V7.8 adds **deterministic lifecycle + garbage collection (GC)** so work stays:
 - **Bounded WIP surface area**: worktrees do not grow unbounded over time.
 - **Safe-by-default cleanup**: only auto-delete worktrees that are provably safe to delete.
 - **Founder cognitive load reduction**: replace “archaeology” (stashes/branches/worktrees) with a small number of visible PR decisions.
+- **Quietable pulse**: the fleet heartbeat must have a closure path that does not require opening dozens of PRs.
 
 ### Non-Goals
 - V7.8 does **not** make agents perfectly compliant (assumes some violations).
@@ -48,6 +51,7 @@ V7.8 adds **deterministic lifecycle + garbage collection (GC)** so work stays:
   - All code work happens here (including docs/config changes).
 - **External Beads DB**: `$BEADS_DIR` (fleet standard: `$HOME/bd/.beads`).
   - Product repos must **not** track `.beads/**` in git.
+- **Beads Git Remote**: `~/bd` is a git repo with remote `stars-end/bd` used to make Beads durable across VMs.
 - **PR-or-it-didn’t-happen**: if a workstream has commits, it must have a PR (draft is fine).
 
 ---
@@ -66,6 +70,12 @@ V7.8 adds **deterministic lifecycle + garbage collection (GC)** so work stays:
 - **MUST** use `BEADS_DIR=$HOME/bd/.beads`.
 - **MUST NOT** track `.beads/**` in product repos.
 
+### I3.1 — Beads is durable across VMs (V7.8 extension)
+- **MUST** treat `~/bd` as the durable Beads replication mechanism across all canonical VMs.
+- **MUST** keep `~/bd` git-clean after sync runs (no long-lived “dirty `issues.jsonl`” state).
+- **MUST** avoid manual edits inside `~/bd/.beads/**`.
+- Sync is performed via `bd sync` + git commit/push (wrapped by `scripts/bd-sync-safe.sh`).
+
 ### I4 — Repo-plane baseline inheritance (V7.7)
 - Product repos vendor the universal baseline into `fragments/universal-baseline.md`.
 - `AGENTS.md` is generated deterministically from fragments + repo context skills.
@@ -78,12 +88,25 @@ V7.8 adds **deterministic lifecycle + garbage collection (GC)** so work stays:
 
 ## 4) V7.8 Components (New/Extended)
 
+### 4.0 OS substrate (host-plane determinism)
+V7.8 adds “OS-as-code” substrate so scheduled jobs are reproducible and observable:
+
+- `scripts/dx-job-wrapper.sh`: wraps scheduled jobs and records last-ok/last-fail timestamps in `~/.dx-state/`.
+- `scripts/dx-schedule-install.sh`: idempotently installs the schedule matrix:
+  - macOS: `~/Library/LaunchAgents/*.plist`
+  - Linux: `crontab`
+- `docs/DX_FLEET_SCHEDULES_V7.8.md`: the schedule matrix (authoritative).
+
+All schedule definitions must be portable:
+- macOS `.plist` templates use `__HOME__` placeholders (expanded by installer).
+- Linux `crontab.txt` uses `__HOME__` placeholders (expanded by installer).
+
 ### 4.1 `dx-status` (visibility)
 **Purpose**: one command that summarizes fleet hygiene:
 - canonical health (branch + dirty)
 - external Beads DB status
 - worktree counts (total, dirty active/stale)
-- no-upstream worktrees
+- no-upstream worktrees (split into closure buckets; see §4.6)
 - SAFE DELETE candidates (GC)
 
 **Worktree discovery requirement**: do not confuse nested git repos (e.g. vendored repos, venvs) with `dx-worktree` roots.
@@ -111,35 +134,18 @@ This is the founder’s “green light” check.
 ### 4.4 `dx-janitor` (worktree PR surfacing)
 **Purpose**: ensure work in worktrees becomes visible/durable.
 
-**No-Upstream Closure Policy (V7.8)**:
-To prevent `no_upstream` from becoming a permanent pulse blocker, the following deterministic closure path is enforced:
+Deterministic behavior:
+- Push branches that are ahead / have no upstream (when safe).
+- Create draft PRs if no PR exists for that branch.
+- Avoid duplicates (“quiet mode”: do nothing if PR already exists).
+- **Bounded PR creation**: Janitor enforces a per-run budget to prevent PR spam:
+  - `DX_JANITOR_MAX_NEW_PRS` (default: 3)
+  - If budget is exhausted, Janitor may still push (durability) but must defer PR creation.
 
-1. **SAFE DISCARD** (no PR):
-   - **Criteria**: Branch is **MERGED** into `origin/master` AND worktree is **CLEAN**.
-   - **Action**: Remove the worktree (`git worktree remove`) and delete the local branch.
-2. **MUST SURFACE** (Push + PR):
-   - **Criteria**: Branch is **NOT_MERGED** OR has **AHEAD** commits.
-   - **Action**: Push to set upstream. Create a draft PR (within budget) if none exists.
-3. **DIRTY (No Commits)**:
-   - **Criteria**: Worktree has uncommitted changes but no new commits vs `origin/master`.
-   - **Action**: Revert tool-junk (e.g. logs, venvs) OR refresh `.dx-session-lock` if genuinely active.
-
-**Pulse Semantics**:
-- `no_upstream_unmerged`: Actionable (push/PR required).
-- `no_upstream_merged_clean`: Not an emergency; represents a GC queue.
-
-**If you're stuck (Archaeology Command)**:
-```bash
-for wt in $(find /tmp/agents -mindepth 3 -maxdepth 3 -name ".git" -exec dirname {} \; 2>/dev/null); do
-    if ! git -C "$wt" rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
-        branch=$(git -C "$wt" branch --show-current)
-        dirty=$(git -C "$wt" status --porcelain | wc -l | xargs)
-        merged="NOT_MERGED"
-        git -C "$wt" merge-base --is-ancestor HEAD origin/master 2>/dev/null && merged="MERGED"
-        echo "$wt | $branch | dirty:$dirty | $merged"
-    fi
-done
-```
+**No-upstream closure**:
+- Janitor must follow the closure policy in §4.6. In particular:
+  - do not create PRs for merged+clean no-upstream worktrees (GC queue)
+  - push (durability) for unmerged+ahead branches; PR is optional and budgeted
 
 ### 4.5 `dx-worktree-gc` (lifecycle + GC)
 **Purpose**: safely reduce `/tmp/agents/**` over time.
@@ -160,6 +166,53 @@ V7.8 introduces deterministic buckets:
 
 Tool-noise filtering:
 - `.ralph*` artifacts are **ignored** for “dirty” classification.
+
+### 4.6 Worktree closure policy (PERMANENT unblock for `no_upstream`)
+V7.8’s pulse is only useful if it is **quietable** without forcing PR spam.
+
+This policy defines how to close `no_upstream` worktrees deterministically.
+
+#### Definitions
+- **No Upstream**: branch has no tracking remote (`@{u}` missing).
+- **Merged+Clean**: `HEAD` is an ancestor of `origin/master` and `git status` is empty.
+- **Unmerged+Ahead**: `HEAD` is not merged and has commits ahead of `origin/master`.
+- **Dirty+No-Commits**: uncommitted changes but no commits ahead of `origin/master`.
+
+#### Evidence commands (required for manual closure)
+For a worktree `WT`:
+```bash
+git -C "$WT" branch --show-current
+git -C "$WT" status --porcelain | wc -l
+git -C "$WT" fetch origin --prune
+git -C "$WT" rev-list --left-right --count origin/master...HEAD
+git -C "$WT" merge-base --is-ancestor HEAD origin/master && echo MERGED || echo NOT_MERGED
+```
+
+#### Closure actions (MUST follow)
+**A) SAFE DISCARD (NO PR)**  
+If **Merged+Clean**:
+- remove the worktree via GC (preferred) or `git worktree remove`
+- do not push and do not create a PR
+
+**B) MUST SURFACE (push; PR optional)**  
+If **Unmerged+Ahead**:
+- `git push -u origin HEAD` (durability)
+- create a draft PR only if:
+  - there is no existing PR for the branch, and
+  - the Janitor PR budget is not exhausted
+
+**C) DIRTY+No-Commits (NO PR)**  
+If **Dirty+No-Commits**:
+- do not PR
+- revert obvious tool junk, or refresh `.dx-session-lock` if the workspace is truly active
+
+#### Required output semantics
+- `dx-status` should split “no upstream” into:
+  - **No Upstream (Merged/Clean)**: GC queue (quietable)
+  - **No Upstream (Unmerged/Ahead)**: actionable (push / possible PR)
+- `dx-inbox` should recommend:
+  - `dx-worktree-gc --dry-run` when the no-upstream set is primarily “merged/clean”
+  - `dx-janitor --dry-run` when there are “unmerged/ahead” items
 
 ---
 
@@ -185,6 +238,7 @@ Optional LLM triage (low risk):
 ### 6.1 GitHub Actions (repo-plane)
 - `agent-skills`: publish baseline → `dist/universal-baseline.md` + `dist/dx-global-constraints.md`
 - product repos: baseline-sync + verify-agents-md + agents-md-compile
+- `agent-skills`: `dx-audit.yml` (optional) audits PR-plane and workflow inventory
 
 ### 6.2 VM cron (host-plane)
 V7.8 assumes VM automation exists and **must not create hidden state**.
@@ -197,6 +251,10 @@ Recommended ordering (example):
 Auto-checkpoint:
 - safety net only; it must not be the delivery mechanism.
 - V7.8 relies on Janitor + PR surfacing to prevent “lost WIP”.
+
+Beads durability:
+- `scripts/bd-sync-safe.sh` is the canonical wrapper for keeping `~/bd` git-clean.
+- Multi-VM concurrency is best-effort: git rebase + retries + Beads conflict strategy must converge.
 
 ---
 
@@ -234,7 +292,8 @@ On any VM:
   - canonicals clean/on `master`
   - stashes = 0
   - “dirty stale” list is short and actionable
-  - “no upstream” count is near 0 (or explicitly explained)
+  - “no upstream (unmerged/ahead)” is near 0
+  - “no upstream (merged/clean)” is handled via GC (quietable)
 
 Across repos:
 - baseline inheritance present (V7.7)
@@ -248,4 +307,3 @@ Across repos:
 2. Enable scheduled Janitor + GC (business hours)
 3. Enable Sweeper before canonical-sync
 4. Monitor PR creation rate; tune cooldowns/thresholds as needed
-

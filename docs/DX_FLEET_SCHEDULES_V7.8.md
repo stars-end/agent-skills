@@ -25,5 +25,14 @@ Example:
 
 ## Host-Specific Notes
 
-- **macmini**: Only host that performs `bd-sync-safe`. Only host that posts Slack heartbeats (configured in job scripts).
-- **linux**: Uses standard crontab.
+- **macmini**:
+  - Runs the scheduled Beads durability job (`bd-sync-safe`) by default.
+  - Hosts the Slack heartbeat jobs (Clawdbot cron) and the local heartbeat watchdog (if enabled).
+- **homedesktop-wsl / epyc6 (linux)**:
+  - Use standard `crontab`.
+  - May run `bd-sync-safe` manually when needed; scheduled Beads sync is optional and can be enabled later.
+
+Notes:
+- Schedule definitions are OS-as-code templates and must be portable:
+  - macOS: `__HOME__` placeholders expanded by `scripts/dx-schedule-install.sh`
+  - Linux: `__HOME__` placeholders expanded by `scripts/dx-schedule-install.sh`
