@@ -27,15 +27,20 @@ ensure_clean_or_checkpoint() {
   dirty=$(git -C "$repo_path" status --porcelain=v1 2>/dev/null || echo "")
 
   if [[ -n "$dirty" || "$current_branch" != "master" ]]; then
-    echo "$LOG_PREFIX $repo_name: dirty or off-trunk (branch=$current_branch). Running auto-checkpoint..."
-    if command -v auto-checkpoint >/dev/null 2>&1; then
-      # Best-effort. If checkpoint fails, do NOT proceed with destructive sync.
-      if ! auto-checkpoint "$repo_path" >/dev/null 2>&1; then
-        echo "$LOG_PREFIX $repo_name: auto-checkpoint failed; skipping sync to avoid data loss"
+    echo "$LOG_PREFIX $repo_name: dirty or off-trunk (branch=$current_branch). Running dx-sweeper rescue..."
+    # Best-effort. If rescue fails, do NOT proceed with destructive sync.
+    if command -v dx-sweeper >/dev/null 2>&1; then
+      if ! dx-sweeper >/dev/null 2>&1; then
+        echo "$LOG_PREFIX $repo_name: dx-sweeper failed; skipping sync to avoid data loss"
+        return 1
+      fi
+    elif [[ -x "$HOME/agent-skills/scripts/dx-sweeper.sh" ]]; then
+      if ! "$HOME/agent-skills/scripts/dx-sweeper.sh" >/dev/null 2>&1; then
+        echo "$LOG_PREFIX $repo_name: dx-sweeper.sh failed; skipping sync to avoid data loss"
         return 1
       fi
     else
-      echo "$LOG_PREFIX $repo_name: auto-checkpoint not installed; skipping sync to avoid data loss"
+      echo "$LOG_PREFIX $repo_name: dx-sweeper not installed; skipping sync to avoid data loss"
       return 1
     fi
   fi

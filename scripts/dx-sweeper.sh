@@ -278,51 +278,111 @@ Agent: dx-sweeper" >/dev/null 2>&1
         return 0
     fi
 
-    # Step 2: Dirty working tree → commit changes onto the rolling rescue branch and push it
+    # Step 2: Dirty working tree -> evacuate into a worktree, commit there, push rescue branch, then reset canonical.
+    #
+    # Canonical invariant: never rely on committing inside the canonical clone (hooks may block it).
+    local timestamp
+    timestamp=$(iso_timestamp)
+    local rescue_branch="rescue-${host}-${repo_name}"
+    local rescue_sha=""
+
     if [[ "$DRY_RUN" == true ]]; then
         echo "  [DRY-RUN] Would create rescue PR for dirty worktree"
         return 0
     fi
 
-        # Stash current dirty state (including untracked) so we can safely switch branches
-        git stash push --include-untracked -m "dx-sweeper: ${host}/${repo_name} ${timestamp}" >/dev/null 2>&1 || true
+    local tmp_dir rescue_path
+    tmp_dir="$(mktemp -d "/tmp/dx-sweeper.${repo_name}.${timestamp}.XXXX" 2>/dev/null || mktemp -d)"
+    rescue_path="$(mktemp -d "/tmp/agents/rescue-${host}-${repo_name}-${timestamp}.XXXX" 2>/dev/null || mktemp -d)"
 
-        # Ensure rescue branch exists locally (track remote if it exists)
-        if git show-ref --verify --quiet "refs/remotes/origin/${rescue_branch}"; then
-            git checkout -B "$rescue_branch" "origin/${rescue_branch}" || {
-                error "Failed to checkout origin/${rescue_branch}"
-                return 1
-            }
-        else
-            git fetch origin master >/dev/null 2>&1 || true
-            git checkout -B "$rescue_branch" "origin/master" || {
-                error "Failed to create rescue branch from origin/master"
-                return 1
-            }
+    local unstaged_patch="$tmp_dir/unstaged.patch"
+    local staged_patch="$tmp_dir/staged.patch"
+    local untracked_list="$tmp_dir/untracked.list"
+
+    # Snapshot canonical changes without modifying canonical state.
+    git diff >"$unstaged_patch" 2>/dev/null || true
+    git diff --cached >"$staged_patch" 2>/dev/null || true
+    git ls-files -o --exclude-standard >"$untracked_list" 2>/dev/null || true
+
+    # Create rescue worktree (reuse rolling rescue branch if it exists).
+    git fetch origin master >/dev/null 2>&1 || true
+    if git show-ref --verify --quiet "refs/remotes/origin/${rescue_branch}"; then
+        if ! git worktree add -B "$rescue_branch" "$rescue_path" "origin/${rescue_branch}" >/dev/null 2>&1; then
+            error "Failed to create rescue worktree for origin/${rescue_branch}"
+            rm -rf "$tmp_dir" "$rescue_path" >/dev/null 2>&1 || true
+            return 1
         fi
+    else
+        if ! git worktree add -B "$rescue_branch" "$rescue_path" "origin/master" >/dev/null 2>&1; then
+            error "Failed to create rescue worktree from origin/master"
+            rm -rf "$tmp_dir" "$rescue_path" >/dev/null 2>&1 || true
+            return 1
+        fi
+    fi
 
-        # Apply stash and commit
-        if git stash pop >/dev/null 2>&1; then
-            git add -A
-            if git commit -m "chore(rescue): canonical rescue (${host} ${repo_name}) ${timestamp}
+    # Apply patches and untracked files into the rescue worktree.
+    if [[ -s "$staged_patch" ]]; then
+        if ! git -C "$rescue_path" apply --whitespace=nowarn "$staged_patch" >/dev/null 2>&1; then
+            error "Failed to apply staged patch to rescue worktree"
+            git worktree remove --force "$rescue_path" >/dev/null 2>&1 || true
+            rm -rf "$tmp_dir" "$rescue_path" >/dev/null 2>&1 || true
+            return 1
+        fi
+    fi
+    if [[ -s "$unstaged_patch" ]]; then
+        if ! git -C "$rescue_path" apply --whitespace=nowarn "$unstaged_patch" >/dev/null 2>&1; then
+            error "Failed to apply unstaged patch to rescue worktree"
+            git worktree remove --force "$rescue_path" >/dev/null 2>&1 || true
+            rm -rf "$tmp_dir" "$rescue_path" >/dev/null 2>&1 || true
+            return 1
+        fi
+    fi
+    if [[ -s "$untracked_list" ]]; then
+        # Best-effort: tar can fail if files disappear mid-run; treat that as fatal (avoid resetting canonical).
+        if ! tar -C "$repo_path" -czf "$tmp_dir/untracked.tgz" -T "$untracked_list" >/dev/null 2>&1; then
+            error "Failed to snapshot untracked files"
+            git worktree remove --force "$rescue_path" >/dev/null 2>&1 || true
+            rm -rf "$tmp_dir" "$rescue_path" >/dev/null 2>&1 || true
+            return 1
+        fi
+        if ! tar -C "$rescue_path" -xzf "$tmp_dir/untracked.tgz" >/dev/null 2>&1; then
+            error "Failed to restore untracked files into rescue worktree"
+            git worktree remove --force "$rescue_path" >/dev/null 2>&1 || true
+            rm -rf "$tmp_dir" "$rescue_path" >/dev/null 2>&1 || true
+            return 1
+        fi
+    fi
+
+    # Commit + push from the rescue worktree (this is where hooks allow commits).
+    git -C "$rescue_path" add -A >/dev/null 2>&1 || true
+    if ! git -C "$rescue_path" diff --cached --quiet >/dev/null 2>&1; then
+        if git -C "$rescue_path" commit -m "chore(rescue): canonical rescue (${host} ${repo_name}) ${timestamp}
 
 Original branch: ${current_branch}
 
 Feature-Key: RESCUE-${host}-${repo_name}
 Agent: dx-sweeper" >/dev/null 2>&1; then
-                rescue_sha="$(git rev-parse HEAD 2>/dev/null || echo "")"
-            else
-                warn "No changes to commit after stash pop"
-            fi
+            rescue_sha="$(git -C "$rescue_path" rev-parse HEAD 2>/dev/null || echo "")"
         else
-            warn "Failed to apply stash; rescue commit may be incomplete"
-        fi
-
-        # Push rolling rescue branch (fast-forward)
-        if ! git push origin "$rescue_branch" >/dev/null 2>&1; then
-            error "Failed to push rescue branch '$rescue_branch' (will NOT reset canonical)"
+            error "Failed to commit rescue changes (will NOT reset canonical)"
+            git worktree remove --force "$rescue_path" >/dev/null 2>&1 || true
+            rm -rf "$tmp_dir" "$rescue_path" >/dev/null 2>&1 || true
             return 1
         fi
+    else
+        warn "No changes to commit in rescue worktree (unexpected for dirty canonical)"
+    fi
+
+    if ! git -C "$rescue_path" push -u origin "$rescue_branch" >/dev/null 2>&1; then
+        error "Failed to push rescue branch '$rescue_branch' (will NOT reset canonical)"
+        git worktree remove --force "$rescue_path" >/dev/null 2>&1 || true
+        rm -rf "$tmp_dir" "$rescue_path" >/dev/null 2>&1 || true
+        return 1
+    fi
+
+    # Cleanup rescue worktree after successful push.
+    git worktree remove --force "$rescue_path" >/dev/null 2>&1 || true
+    rm -rf "$tmp_dir" "$rescue_path" >/dev/null 2>&1 || true
 
     success "Pushed rolling rescue branch: $rescue_branch"
 

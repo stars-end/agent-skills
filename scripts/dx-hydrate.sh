@@ -36,10 +36,14 @@ ln -sfn "$AGENTS_ROOT" "$HOME/.agent/skills"
 echo -e "${GREEN} -> Ensuring ~/bin tools...${RESET}"
 "$AGENTS_ROOT/scripts/dx-ensure-bins.sh" >/dev/null 2>&1 || true
 
-# 3.0 Auto-checkpoint (CRITICAL durability plane)
-if [ "${DX_DISABLE_AUTO_CHECKPOINT:-0}" != "1" ] && command -v auto-checkpoint-install >/dev/null 2>&1; then
-  echo -e "${GREEN} -> Enabling auto-checkpoint scheduler (critical)...${RESET}"
+# 3.0 Auto-checkpoint (DEPRECATED in V7.8)
+# V7.8 expectation: canonical clones should stay clean; rescue is handled by dx-sweeper + canonical-sync.
+# Keep opt-in for legacy rigs.
+if [ "${DX_ENABLE_AUTO_CHECKPOINT:-0}" = "1" ] && command -v auto-checkpoint-install >/dev/null 2>&1; then
+  echo -e "${GREEN} -> Enabling auto-checkpoint scheduler (opt-in)...${RESET}"
   auto-checkpoint-install >/dev/null 2>&1 || true
+else
+  echo -e "${GREEN} -> Auto-checkpoint scheduler disabled (default in V7.8)...${RESET}"
 fi
 
 # 3.0 Ensure ru is present (sync control plane)
