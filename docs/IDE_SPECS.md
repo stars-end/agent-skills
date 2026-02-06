@@ -4,7 +4,30 @@
 
 **4 IDEs**: antigravity, claude-code, codex-cli, opencode
 
-**Note**: gemini-cli is **DEPRECATED** as of V4.2.1. Use antigravity instead.
+**Note**: gemini-cli is not part of the canonical IDE set, but may be used for deterministic cron/heartbeat jobs.
+
+## DX Global Constraints Rail (All IDEs)
+
+All IDE agents must see the same “hard constraints” (no canonical writes, worktree-first, done gate).
+
+Single source:
+- `~/agent-skills/dist/dx-global-constraints.md`
+
+Recommended install (per VM / per user):
+```bash
+~/agent-skills/scripts/dx-ide-global-constraints-install.sh --apply
+```
+
+Verification:
+```bash
+~/agent-skills/scripts/dx-ide-global-constraints-install.sh --check
+```
+
+Installed targets:
+- codex-cli: `~/.codex/AGENTS.md`
+- claude-code: `~/.claude/CLAUDE.md`
+- opencode: `~/.config/opencode/AGENTS.md`
+- gemini-cli (optional): `~/.gemini/GEMINI.md`
 
 ## Supported IDEs
 

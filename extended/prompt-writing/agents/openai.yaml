@@ -1,0 +1,6 @@
+---
+interface:
+  display_name: "Prompt Writing"
+  short_description: "Orchestration prompt scaffold (plan + done gates)"
+  default_prompt: "Use $prompt-writing to draft an orchestration prompt with invariant first line, DX constraints, plan-first, and done gates."
+

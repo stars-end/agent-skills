@@ -1,3 +1,12 @@
+# DX Global Constraints (Always-On)
+
+1) **NO WRITES** in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
+2) **Worktree first**: `dx-worktree create <id> <repo>`
+3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
+4) For full rules, read this repo `AGENTS.md` / `GEMINI.md`.
+
+---
+
 # Nakomi Agent Protocol
 
 > This protocol applies to all agents (Claude Code, Antigravity, Gemini CLI, Codex CLI).
@@ -428,6 +437,7 @@ Skills are organized into categories for easy discovery:
 | Search past sessions | `/skill search/cass-search` | search/ |
 | Debug environment | `/skill health/bd-doctor` | health/ |
 | Set up new VM | `/skill infra/vm-bootstrap` | infra/ |
+| Write robust prompts | `/skill extended/prompt-writing` | extended/ |
 
 **Agent Skill Discovery:**
 
@@ -444,6 +454,7 @@ Skills are organized into categories for easy discovery:
 - `beads-workflow` - Issue tracking with dependency management
 - `sync-feature-branch` - Git workflows
 - `fix-pr-feedback` - PR iteration
+- `prompt-writing` - Draft DX-invariant prompts for other agents
 - `dcg-safety` - Destructive command guard (blocks dangerous git/rm commands)
 - `bv-integration` - Beads Viewer and robot-plan API
 - `cass-search` - Search past agent sessions
