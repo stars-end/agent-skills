@@ -60,9 +60,16 @@ else
   ERROR_SUMMARY=$(IFS=" " ; echo "${ERRORS[*]}")
   echo "DX PULSE NOT OK ($HOSTNAME): $ERROR_SUMMARY"
   
-  if [[ -n "${PR_HINT:-}" ]]; then "$SCRIPT_DIR/dx-pr-gate.sh"; fi
+  printed_pr_gate=false
+  if [[ -n "${PR_HINT:-}" ]]; then
+    "$SCRIPT_DIR/dx-pr-gate.sh"
+    printed_pr_gate=true
+  fi
 
-  if [[ ${#NEXT_COMMANDS[@]} -gt 0 ]]; then
-    printf "%s\n" "${NEXT_COMMANDS[@]}" | sort -u | sed 's/^/Next: /'
+  # Keep output bounded (<=6 lines total in common failure modes).
+  # If we already printed PR gate details, omit "Next:" suggestions here.
+  if [[ ${#NEXT_COMMANDS[@]} -gt 0 && "$printed_pr_gate" != true ]]; then
+    next=$(printf "%s\n" "${NEXT_COMMANDS[@]}" | sort -u | head -1)
+    [[ -n "$next" ]] && echo "Next: $next"
   fi
 fi

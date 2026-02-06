@@ -58,11 +58,12 @@ if [[ "$BLOCKED" -eq 0 && "$QUEUED" -eq 0 ]]; then
     echo "PR GATE OK (0 blocked, 0 queued)"
 else
     if [[ "$BLOCKED" -gt 0 ]]; then
-        echo "PR GATE NOT OK (blocked=$BLOCKED queued=$QUEUED)"
+        # Keep output bounded for heartbeats (dx-inbox has an overall line budget).
+        # 1 header line + up to 4 blocker lines.
+        echo "PR GATE NOT OK (blocked=$BLOCKED queued=$QUEUED) — Next: gh pr view <number>"
         for blocker in "${BLOCKERS[@]}"; do
-            echo "  - $blocker"
+            echo "- $blocker"
         done
-        echo "  Next: gh pr view <number>"
     else
         echo "PR GATE OK (0 blocked, $QUEUED queued)"
     fi
