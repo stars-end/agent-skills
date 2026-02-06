@@ -41,3 +41,16 @@ hosts:
       - "$HOME/llm-common"
     beads_db: "$HOME/bd/.beads"
     notes: "GPU work, ML training (user differs: feng vs fengning)"
+
+  epyc12:
+    ssh: "fengning@epyc12"
+    shell: "zsh"
+    os: "linux"
+    user: "fengning"
+    canonical_repos:
+      - "$HOME/agent-skills"
+      - "$HOME/prime-radiant-ai"
+      - "$HOME/affordabot"
+      - "$HOME/llm-common"
+    beads_db: "$HOME/bd/.beads"
+    notes: "Expanded canonical VM universe (Linux; user fengning)"
