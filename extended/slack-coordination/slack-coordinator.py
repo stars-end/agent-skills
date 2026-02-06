@@ -228,7 +228,7 @@ def format_agent_message(message: str, vm: str = None) -> str:
 
 # Jules Integration (Three-Gate Routing)
 JULES_DISPATCH_SCRIPT = str(
-    Path.home() / "agent-skills" / "jules-dispatch" / "dispatch.py"
+    Path.home() / "agent-skills" / "extended" / "jules-dispatch" / "dispatch.py"
 )
 
 
@@ -309,9 +309,6 @@ async def dispatch_to_jules(issue_id: str, repo: str) -> Optional[str]:
         else:
             logger.error(f"Jules dispatch failed: {result.stderr}")
             return None
-    except Exception as e:
-        logger.error(f"Jules dispatch error: {e}")
-        return None
     except Exception as e:
         logger.error(f"Jules dispatch error: {e}")
         return None
