@@ -1,0 +1,45 @@
+# DX Heartbeat Status
+
+> Runtime location: ~/.dx-state/HEARTBEAT.md
+> Template source: ~/agent-skills/docs/HEARTBEAT.md.template
+> This file is read by clawdbot (glm-4.7) every 2 hours.
+> Clawdbot summarizes this to Slack #all-stars-end.
+> This file is GENERATED — do not edit manually.
+
+## Reading Instructions for Clawdbot
+
+You are a DX health summarizer. Read the status sections below and post a
+1-3 line summary to Slack. Rules:
+- If ALL sections show OK: post "DX PULSE OK (hostname): all green"
+- If ANY section shows problems: post the section name + count
+- Never post more than 4 lines
+- Never suggest fixes — just report status
+- Use emoji: ✅ for OK, ⚠️ for warning, 🚨 for critical
+
+## Status Sections
+
+### Canonical Repos
+<!-- Updated by canonical-sync-v8.sh -->
+Status: UNKNOWN
+Last run: never
+
+### Worktree Health
+<!-- Updated by worktree-gc-v8.sh -->
+Status: UNKNOWN
+Last run: never
+Count: 0
+Pruned: 0
+
+### PR Queue
+<!-- Updated by queue-hygiene-enforcer.sh -->
+Status: UNKNOWN
+Last run: never
+Blocked: 0
+Queued: 0
+Actions taken: 0
+
+### Cron Jobs
+<!-- Updated by dx-job-wrapper.sh state files -->
+Status: UNKNOWN
+Last check: never
+Failed jobs: none
