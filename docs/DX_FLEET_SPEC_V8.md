@@ -2,7 +2,8 @@
 
 > Replaces: DX_FLEET_SPEC_V7.6.md
 > Epic: bd-cuxy
-> Date: 2026-02-06
+> Implemented: 2026-02-07
+> Status: **DEPLOYED** on macmini (burn-in started)
 
 ## Architecture
 
@@ -133,3 +134,85 @@ The following V5-V7 components are removed in V8:
    real-time. A stuck PR won't alert until the next enforcer run (up to 4h).
 3. **Single controller:** If macmini is down, no enforcer runs. This is
    acceptable for the current fleet size (<12 agents).
+
+## Implementation Record
+
+### Phase 0: Kill (executed 2026-02-07)
+
+| Bead | Action | PR/Result |
+|------|--------|-----------|
+| bd-8x6l | Kill 8 DX LaunchAgents | Unloaded + quarantined to `~/.v7-quarantine/` |
+| bd-ype9 | Clean duplicate crontab | Removed `dx-triage-cron`; V7 canonical-sync kept until V8 scripts ready |
+| bd-d25k | Disable slack-coordinator | Process killed, plist quarantined |
+| bd-x2ux | Delete dead scripts + update dx-hydrate | PR #120 merged |
+| bd-v39u | Close 30+ pre-V8 DX beads | V7.9, V7.8, V5/V6 beads closed as superseded |
+
+### Phase 1: Mechanical Scripts (implemented by Gemini 2.5 Flash, reviewed by Claude Code)
+
+| Bead | Script | PR | Notes |
+|------|--------|----|-------|
+| bd-obyk | canonical-sync-v8.sh | #123 | Diff-based evacuation via `git status --porcelain`. Never resets unless push succeeds. |
+| bd-7jpo | worktree-gc-v8.sh | #123, #124 (fix) | `--porcelain` parsing. Detached HEAD: prune only if `merge-base --is-ancestor`. Bug found: stdout corruption from emoji in return values — fixed in #124. |
+| bd-s7a3 | worktree-push.sh | #123 | Push all unpushed worktree branches. No PR creation. `--prune` on fetch. |
+
+### Phase 2: Enforcer (implemented by Gemini 2.5 Flash, reviewed by Claude Code)
+
+| Bead | Script | PR | Notes |
+|------|--------|----|-------|
+| bd-gdlr | queue-hygiene-enforcer.sh | #123 | DX_CONTROLLER=1 guard. 4 rules: DIRTY→disable auto-merge, BEHIND>6h→update branch, empty rescue→delete, stuck>72h→disable. Bug found: stdout corruption (same pattern as gc) — fixed in review. |
+
+### Phase 3: Alerting (implemented by Gemini 2.5 Flash, reviewed by Claude Code)
+
+| Bead | Deliverable | PR | Notes |
+|------|-------------|----|-------|
+| bd-suaw | dx-job-wrapper.sh Slack alerts | #123 | Transition-only alerts (ok↔fail). `DX_SLACK_WEBHOOK` env var. `-m 5` timeout. |
+| bd-2w7c | HEARTBEAT.md.template | #123 | Runtime at `~/.dx-state/HEARTBEAT.md`. Machine-readable for clawdbot. |
+
+### Phase 4: Rollout (executed by Claude Code directly)
+
+| Bead | Action | Result |
+|------|--------|--------|
+| bd-lnn2 | AGENTS.md V8 rules + DX_FLEET_SPEC_V8.md + dx-hydrate V8 crontab install | PR #123 merged |
+| bd-ipzs | macmini crontab installed + HEARTBEAT.md initialized | Deployed 2026-02-07 |
+| bd-h3ky | Replicate to epyc6 | **Deferred** (P1, after burn-in) |
+| bd-dwcb | Replicate to homedesktop-wsl | **Deferred** (P1, after burn-in) |
+
+### Bugs Found During Implementation
+
+1. **stdout corruption pattern** (P0, found in gc + enforcer): Functions that
+   use `echo` for both logging and return values corrupt stdout when captured
+   by `read`. Fix: redirect all log lines to `>&2`.
+2. **`git diff --name-only HEAD` misses staged files** (P0, found in sync):
+   Replaced with `git status --porcelain` parsing.
+3. **`\n` literal in awk variables** (P1, found in heartbeat update): awk
+   doesn't interpret `\n` in variables. Fix: `gsub(/\\n/, "\n", details)`.
+4. **Gemini agent self-report inaccuracy**: Agent claimed headRefOid was added
+   to enforcer query; it wasn't. Trust-but-verify reviews are essential.
+
+### Beads Traceability
+
+**Epic:** bd-cuxy (V8: Radical Simplification)
+
+**All child beads (16 total, all CLOSED):**
+
+| Phase | Bead | Title | Status |
+|-------|------|-------|--------|
+| 0 | bd-8x6l | Kill all DX LaunchAgents | CLOSED |
+| 0 | bd-ype9 | Kill duplicate crontab | CLOSED |
+| 0 | bd-d25k | Disable slack-coordinator | CLOSED |
+| 0 | bd-x2ux | Delete dead scripts + update dx-hydrate | CLOSED |
+| 0 | bd-v39u | Close pre-V8 DX beads | CLOSED |
+| 1 | bd-obyk | canonical-sync-v8.sh | CLOSED |
+| 1 | bd-7jpo | worktree-gc-v8.sh | CLOSED |
+| 1 | bd-s7a3 | worktree-push.sh | CLOSED |
+| 2 | bd-gdlr | queue-hygiene-enforcer.sh | CLOSED |
+| 3 | bd-2w7c | HEARTBEAT.md template | CLOSED |
+| 3 | bd-suaw | dx-job-wrapper Slack alerts | CLOSED |
+| 4 | bd-ipzs | macmini deployment | CLOSED |
+| 4 | bd-lnn2 | Agent discipline rules + fleet spec | CLOSED |
+| 4 | bd-h3ky | Replicate to epyc6 | OPEN (deferred) |
+| 4 | bd-dwcb | Replicate to homedesktop-wsl | OPEN (deferred) |
+
+**Superseded epics (all CLOSED):**
+- bd-fp85 (V7.9), bd-xpnr (V7.8), bd-gpac (DX Alerts), bd-dwql (V7.8 closeout)
+- bd-fleet-v5-hardening.1 (V5/V6 fleet), bd-v5-* (V5 control plane)
