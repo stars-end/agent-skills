@@ -100,15 +100,18 @@ HEARTBEAT="$STATE_DIR/HEARTBEAT.md"
 if [[ -f "$HEARTBEAT" ]]; then
     FAILED_JOBS=$(find "$STATE_DIR" -name "*.last_fail" -maxdepth 1 -exec basename {} \; | sed 's/\.last_fail//' | tr '\n' ',' | sed 's/,$//')
     if [[ -z "$FAILED_JOBS" ]]; then FAILED_JOBS="none"; fi
+
+    hb_status="OK"
+    if [[ "$FAILED_JOBS" != "none" ]]; then hb_status="ERROR"; fi
     
     tmpfile=$(mktemp)
-    awk -v status="$CURR_STATE" -v failed="$FAILED_JOBS" -v now="$TIMESTAMP" '
+    awk -v status="$hb_status" -v failed="$FAILED_JOBS" -v now="$TIMESTAMP" '
         BEGIN { in_section=0 }
         $0 == "### Cron Jobs" {
             in_section=1
             print $0
             print "<!-- Updated by dx-job-wrapper.sh -->"
-            print "Status: UNKNOWN" # Will be calculated by clawdbot
+            print "Status: " status
             print "Last check: " now
             print "Failed jobs: " failed
             print ""

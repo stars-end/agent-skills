@@ -22,10 +22,10 @@ REPOS=(
 )
 
 # Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[1;33m"
+NC="\033[0m" # No Color
 
 # Parse arguments
 DRY_RUN=false
@@ -51,20 +51,20 @@ done
 
 log() {
     if [[ "$VERBOSE" == true ]]; then
-        echo -e "$1"
+        echo -e "$1" >&2
     fi
 }
 
 warn() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+    echo -e "${YELLOW}⚠️  $1${NC}" >&2
 }
 
 error() {
-    echo -e "${RED}❌ $1${NC}"
+    echo -e "${RED}❌ $1${NC}" >&2
 }
 
 success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    echo -e "${GREEN}✅ $1${NC}" >&2
 }
 
 # DX_CONTROLLER guard
@@ -84,7 +84,7 @@ update_heartbeat() {
     local tmpfile
     tmpfile=$(mktemp)
     awk -v start="$section_start" -v status="$status" -v details="$details" -v now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '
-        BEGIN { in_section=0; printed=0 }
+        BEGIN { in_section=0; printed=0; gsub(/\\n/, "\n", details) }
         $0 == start {
             in_section=1; printed=1
             print start
@@ -119,10 +119,11 @@ process_repo() {
     
     # Query open PRs with autoMerge enabled
     local prs
-    prs=$(gh pr list --repo "$repo" --json number,title,mergeStateStatus,autoMergeRequest,updatedAt,headRefName --jq '.[] | select(.autoMergeRequest != null)' 2>/dev/null || echo "")
+    prs=$(gh pr list --repo "$repo" --json number,title,mergeStateStatus,autoMergeRequest,updatedAt,headRefName | jq -c ".[] | select(.autoMergeRequest != null)" 2>/dev/null || echo "")
     
     if [[ -z "$prs" ]]; then
         log "No PRs with autoMerge enabled found."
+        echo "0 0 0"
         return 0
     fi
 
@@ -130,13 +131,13 @@ process_repo() {
         if [[ -z "$pr" ]]; then continue; fi
         
         local number
-        number=$(echo "$pr" | jq -r '.number')
+        number=$(echo "$pr" | jq -r ".number")
         local status
-        status=$(echo "$pr" | jq -r '.mergeStateStatus')
+        status=$(echo "$pr" | jq -r ".mergeStateStatus")
         local updated_at
-        updated_at=$(echo "$pr" | jq -r '.updatedAt')
+        updated_at=$(echo "$pr" | jq -r ".updatedAt")
         local head_ref
-        head_ref=$(echo "$pr" | jq -r '.headRefName')
+        head_ref=$(echo "$pr" | jq -r ".headRefName")
         
         queued=$((queued + 1))
         
@@ -145,10 +146,10 @@ process_repo() {
         
         # Rule 1: DIRTY → disable auto-merge immediately
         if [[ "$status" == "DIRTY" ]]; then
-            echo "🚨 Rule 1: #$number is DIRTY. Disabling auto-merge."
+            echo "🚨 Rule 1: #$number is DIRTY. Disabling auto-merge." >&2
             blocked=$((blocked + 1))
             if [[ "$DRY_RUN" == false ]]; then
-                gh pr merge --disable-auto --repo "$repo" "$number"
+                gh pr merge --disable-auto --repo "$repo" "$number" >&2
                 actions_taken=$((actions_taken + 1))
             fi
             continue # Move to next PR
@@ -157,9 +158,9 @@ process_repo() {
         # Rule 2: BEHIND > 6 hours → update branch
         if [[ "$status" == "BEHIND" ]]; then
             if [[ "$hours_behind" -gt 6 ]]; then
-                echo "🔄 Rule 2: #$number is BEHIND (${hours_behind}h). Updating branch."
+                echo "🔄 Rule 2: #$number is BEHIND (${hours_behind}h). Updating branch." >&2
                 if [[ "$DRY_RUN" == false ]]; then
-                    gh api "repos/$repo/pulls/$number/update-branch" -X PUT 2>/dev/null || true
+                    gh api "repos/$repo/pulls/$number/update-branch" -X PUT >&2 2>/dev/null || true
                     actions_taken=$((actions_taken + 1))
                 fi
             fi
@@ -168,11 +169,11 @@ process_repo() {
         # Rule 3: Rescue branches with 0 commits ahead → delete
         if [[ "$head_ref" == rescue-* || "$head_ref" == stash-rescue-* ]]; then
             local ahead
-            ahead=$(gh api "repos/$repo/compare/master...$head_ref" --jq '.ahead_by' 2>/dev/null || echo "0")
+            ahead=$(gh api "repos/$repo/compare/master...$head_ref" --jq ".ahead_by" 2>/dev/null || echo "0")
             if [[ "$ahead" -eq 0 ]]; then
-                echo "🗑️  Rule 3: #$number is an empty rescue PR. Closing and deleting branch."
+                echo "🗑️  Rule 3: #$number is an empty rescue PR. Closing and deleting branch." >&2
                 if [[ "$DRY_RUN" == false ]]; then
-                    gh pr close --repo "$repo" "$number" --delete-branch
+                    gh pr close --repo "$repo" "$number" --delete-branch >&2
                     actions_taken=$((actions_taken + 1))
                 fi
                 continue
@@ -182,10 +183,10 @@ process_repo() {
         # Rule 4: DIRTY or BEHIND > 72 hours → disable auto-merge
         if [[ "$status" == "DIRTY" || "$status" == "BEHIND" ]]; then
             if [[ "$hours_behind" -gt 72 ]]; then
-                echo "🛑 Rule 4: #$number is stuck (${hours_behind}h). Disabling auto-merge."
+                echo "🛑 Rule 4: #$number is stuck (${hours_behind}h). Disabling auto-merge." >&2
                 blocked=$((blocked + 1))
                 if [[ "$DRY_RUN" == false ]]; then
-                    gh pr merge --disable-auto --repo "$repo" "$number"
+                    gh pr merge --disable-auto --repo "$repo" "$number" >&2
                     actions_taken=$((actions_taken + 1))
                 fi
                 continue

@@ -83,7 +83,7 @@ update_heartbeat() {
     local tmpfile
     tmpfile=$(mktemp)
     awk -v start="$section_start" -v status="$status" -v details="$details" -v now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '
-        BEGIN { in_section=0; printed=0 }
+        BEGIN { in_section=0; printed=0; gsub(/\\n/, "\n", details) }
         $0 == start {
             in_section=1; printed=1
             print start
