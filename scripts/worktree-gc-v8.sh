@@ -125,23 +125,23 @@ process_worktree() {
             should_prune=true
             reason="Detached HEAD ($wt_head) merged into origin/master"
         else
-            warn "  Worktree $wt_path has unmerged detached HEAD: $wt_head"
+            warn "  Worktree $wt_path has unmerged detached HEAD: $wt_head" >&2
         fi
     fi
     
     if [[ "$should_prune" == true ]]; then
-        echo "♻️  Pruning worktree: $wt_path ($reason)"
+        echo "♻️  Pruning worktree: $wt_path ($reason)" >&2
         if [[ "$DRY_RUN" == false ]]; then
             git worktree remove "$wt_path" --force >/dev/null 2>&1 || true
             rm -rf "$wt_path" 2>/dev/null || true
-            success "Pruned $wt_path"
+            success "Pruned $wt_path" >&2
             return 1 # Signify pruned
         else
-            log "  [DRY-RUN] Would remove $wt_path"
+            log "  [DRY-RUN] Would remove $wt_path" >&2
             return 0
         fi
     else
-        log "  Keeping worktree: $wt_path (branch: $wt_branch)"
+        log "  Keeping worktree: $wt_path (branch: $wt_branch)" >&2
         return 0
     fi
 }
@@ -152,10 +152,10 @@ process_repo() {
     local pruned_count=0
     local total_count=0
     
-    log "\n📁 Processing repo: $repo"
-    
+    log "\n📁 Processing repo: $repo" >&2
+
     if [[ ! -d "$repo_path/.git" ]]; then
-        warn "$repo_path is not a git repository, skipping"
+        warn "$repo_path is not a git repository, skipping" >&2
         echo "0 0"
         return 0
     fi
@@ -164,7 +164,7 @@ process_repo() {
     
     # Fetch origin master to ensure merge-base is accurate
     if [[ "$DRY_RUN" == false ]]; then
-        git fetch origin master --quiet || { warn "$repo: Failed to fetch origin master"; }
+        git fetch origin master --quiet || { warn "$repo: Failed to fetch origin master" >&2; }
     fi
     
     local path=""
