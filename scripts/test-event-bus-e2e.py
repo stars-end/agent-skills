@@ -6,7 +6,7 @@ Tests:
 1. Nightly Dispatcher - DISPATCH_REQUEST event
 2. Jules Dispatch - JULES_COMPLETE event
 3. OpenCode Dispatch - PR_CREATED event  
-4. HITL Clawdbot - Thread reply with slack_thread_ts
+4. HITL OpenClawd - Thread reply with slack_thread_ts
 5. Code Review - REVIEW_COMPLETE event
 """
 
@@ -205,7 +205,7 @@ def main():
         time.sleep(1)
 
     # Test HITL (Threaded)
-    print(f"\nTesting: HITL Clawdbot (Threaded)")
+    print(f"\nTesting: HITL OpenClawd (Threaded)")
     # 1. Post parent
     resp = post_event(client, "HITL Parent", "HITL_DISPATCH", {"req": "dispatch"})
     if "result" in resp:

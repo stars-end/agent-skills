@@ -23,14 +23,14 @@
                ▼
 ┌──────────────────────────┐
 │  ~/.dx-state/            │
-│  ├── HEARTBEAT.md        │◄── clawdbot reads (every 2h)
+│  ├── HEARTBEAT.md        │◄── openclawd reads (every 2h)
 │  ├── *.last_ok           │
 │  └── *.last_fail         │
 └──────────────────────────┘
                │ reads
                ▼
 ┌──────────────────────────┐
-│  Clawdbot (glm-4.7)     │
+│  OpenClawd (glm-4.7)    │
 │  Read-only summarizer    │
 │  Posts to Slack           │
 │  #all-stars-end          │
@@ -40,7 +40,7 @@
 ## Design Principles
 
 1. **Cron does mechanical work.** Deterministic scripts, no LLM in the loop.
-2. **Clawdbot reasons.** Reads HEARTBEAT.md, summarizes to Slack. Read-only.
+2. **OpenClawd reasons.** Reads HEARTBEAT.md, summarizes to Slack. Read-only.
 3. **Founder decides.** No automated merges, no automated PR creation.
 4. **Fail-safe defaults.** If push fails, don't reset. If alert fails, don't
    crash the job. If DX_CONTROLLER is unset, do nothing.
@@ -107,7 +107,7 @@ DX_CONTROLLER=1
 
 - **Slack webhook:** Set DX_SLACK_WEBHOOK in crontab env for dx-job-wrapper
   to post alerts on job state transitions (ok→fail, fail→ok).
-- **Clawdbot:** Reads ~/.dx-state/HEARTBEAT.md every 2h via dx-pulse cron job.
+- **OpenClawd:** Reads ~/.dx-state/HEARTBEAT.md every 2h via dx-pulse cron job.
   Posts 1-3 line summary to Slack #all-stars-end.
 - **No alert fatigue:** Only transition alerts, not every-run alerts.
 
@@ -123,7 +123,7 @@ The following V5-V7 components are removed in V8:
 - dx-trailer-check.sh (removed)
 - dx-workflow-check.sh (removed)
 - dx-heartbeat-watchdog.sh (replaced by dx-job-wrapper + Slack)
-- slack-coordinator (replaced by clawdbot)
+- slack-coordinator (replaced by openclawd)
 - auto-checkpoint (removed — conflicts with canonical pre-commit hooks)
 
 ## Known Limitations
@@ -167,7 +167,7 @@ The following V5-V7 components are removed in V8:
 | Bead | Deliverable | PR | Notes |
 |------|-------------|----|-------|
 | bd-suaw | dx-job-wrapper.sh Slack alerts | #123 | Transition-only alerts (ok↔fail). `DX_SLACK_WEBHOOK` env var. `-m 5` timeout. |
-| bd-2w7c | HEARTBEAT.md.template | #123 | Runtime at `~/.dx-state/HEARTBEAT.md`. Machine-readable for clawdbot. |
+| bd-2w7c | HEARTBEAT.md.template | #123 | Runtime at `~/.dx-state/HEARTBEAT.md`. Machine-readable for openclawd. |
 
 ### Phase 4: Rollout (executed by Claude Code directly)
 

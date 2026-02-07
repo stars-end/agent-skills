@@ -68,7 +68,7 @@ else
     echo "   OpenCode service file not found, skipping..."
 fi
 
-# 3.3 Slack Coordinator: REMOVED in V8 (replaced by clawdbot + cron)
+# 3.3 Slack Coordinator: REMOVED in V8 (replaced by openclawd + cron)
 # See bd-d25k for deprecation rationale.
 
 # 3.5 Create Worktree Directories
@@ -78,7 +78,7 @@ mkdir -p "$HOME/prime-radiant-worktrees"
 mkdir -p "$HOME/agent-skills-worktrees"
 mkdir -p "$HOME/.dx-archives"
 
-# 3.7 Initialize HEARTBEAT.md (V8 status file for clawdbot)
+# 3.7 Initialize HEARTBEAT.md (V8 status file for openclawd)
 echo -e "${GREEN} -> Initializing HEARTBEAT.md...${RESET}"
 mkdir -p "$HOME/.dx-state"
 if [ ! -f "$HOME/.dx-state/HEARTBEAT.md" ]; then

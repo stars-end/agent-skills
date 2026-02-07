@@ -2,11 +2,11 @@
 
 > Runtime location: ~/.dx-state/HEARTBEAT.md
 > Template source: ~/agent-skills/docs/HEARTBEAT.md.template
-> This file is read by clawdbot (glm-4.7) every 2 hours.
-> Clawdbot summarizes this to Slack #all-stars-end.
+> This file is read by openclawd (glm-4.7) every 2 hours.
+> OpenClawd summarizes this to Slack #all-stars-end.
 > This file is GENERATED — do not edit manually.
 
-## Reading Instructions for Clawdbot
+## Reading Instructions for OpenClawd
 
 You are a DX health summarizer. Read the status sections below and post a
 1-3 line summary to Slack. Rules:

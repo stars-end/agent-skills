@@ -31,12 +31,12 @@ For any task you claim complete, capture:
 ~/agent-skills/scripts/dx-fleet-check.sh
 ```
 
-If the workstream touches Clawdbot:
+If the workstream touches OpenClawd:
 
 ```bash
 lsof -nP -iTCP:18789 -sTCP:LISTEN
-clawdbot cron status
-clawdbot cron list --all --json | head -200
+openclaw cron status
+openclaw cron list --all --json | head -200
 ```
 
 ---
@@ -71,9 +71,9 @@ Acceptance:
   - prints remote host warnings but **does not exit early**
 - `configs/fleet_hosts.yaml` includes macmini/homedesktop-wsl/epyc6 (ssh target + login shell).
 
-### 2.2 Clawdbot setup (macmini captain)
+### 2.2 OpenClawd setup (macmini captain)
 Preconditions:
-- Slack delivery configured in Clawdbot.
+- Slack delivery configured in OpenClawd.
 - Gateway running persistently.
 
 Steps:
@@ -87,11 +87,11 @@ Steps:
 
 Critical requirement:
 - Cron jobs MUST pin provider/model explicitly (fleet default: **ZAI GLM-4.7**).
-- The gateway must have ZAI credentials available (either via Clawdbot auth profiles or `ZAI_API_KEY` in the gateway environment).
+- The gateway must have ZAI credentials available (either via OpenClawd auth profiles or `ZAI_API_KEY` in the gateway environment).
 
 Acceptance:
-- `clawdbot cron list --all --json` shows both jobs enabled.
-- Jobs can run via `clawdbot cron run <id> --force` and deliver to Slack.
+- `openclaw cron list --all --json` shows both jobs enabled.
+- Jobs can run via `openclaw cron run <id> --force` and deliver to Slack.
 
 ---
 

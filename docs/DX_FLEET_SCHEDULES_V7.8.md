@@ -27,7 +27,7 @@ Example:
 
 - **macmini**:
   - Runs the scheduled Beads durability job (`bd-sync-safe`) by default.
-  - Hosts the Slack heartbeat jobs (Clawdbot cron) and the local heartbeat watchdog (if enabled).
+  - Hosts the Slack heartbeat jobs (OpenClawd cron) and the local heartbeat watchdog (if enabled).
 - **homedesktop-wsl / epyc6 (linux)**:
   - Use standard `crontab`.
   - May run `bd-sync-safe` manually when needed; scheduled Beads sync is optional and can be enabled later.
