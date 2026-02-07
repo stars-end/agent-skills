@@ -289,14 +289,14 @@ mcp__plugin_beads_beads__close(
 
 ### "No 'jules-ready' tasks found"
 
-Either no issues have the label, or you're not in a Beads-enabled repo.
+Either no issues have the label, or there's an issue with BEADS_DIR.
 
 ```bash
-# Check Beads is initialized
-ls .beads/issues.jsonl
+# Check BEADS_DIR is set
+echo $BEADS_DIR
 
 # Check for labeled issues
-grep "jules-ready" .beads/issues.jsonl
+bd list --label jules-ready
 ```
 
 ### "'jules' CLI not found"
@@ -329,6 +329,11 @@ python ~/.agent/skills/jules-dispatch/dispatch.py --action list
 ```
 
 ## Version History
+
+- **v3.0.0** (2026-02-05): Beads-only product specs compliance
+  - Removed `.beads/issues.jsonl` assumptions (now uses external BEADS_DIR)
+  - All Beads queries go through `bd --json` CLI
+  - Works from any directory with BEADS_DIR pointing to stars-end/bd
 
 - **v2.0.0** (2025-12-15): Major upgrade
   - Cross-repo support (works from any Beads-enabled repo)

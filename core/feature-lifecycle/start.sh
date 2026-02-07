@@ -1,6 +1,8 @@
 #!/bin/bash
 # feature-lifecycle/start.sh
-# Starts a new feature by creating branch, docs, and story skeleton.
+# Starts a new feature by creating branch and story skeleton.
+# Note: Per Beads-only product specs, we no longer auto-create docs/bd-*.md stubs.
+# Use 'bd show <id>' to read the authoritative spec from stars-end/bd.
 
 set -e
 
@@ -12,7 +14,6 @@ fi
 
 ISSUE_ID=$1
 BRANCH_NAME="feature-${ISSUE_ID}"
-DOC_FILE="docs/${ISSUE_ID}.md"
 STORY_DIR="docs/testing/stories"
 STORY_FILE="${STORY_DIR}/story-${ISSUE_ID}.yml"
 
@@ -38,23 +39,18 @@ else
   git checkout -b "${BRANCH_NAME}"
 fi
 
-# 2. Create Doc Context
-if [ ! -f "${DOC_FILE}" ]; then
-  echo "📄 Creating context doc: ${DOC_FILE}..."
-  mkdir -p docs
-  cat > "${DOC_FILE}" <<EOF
-# Context: ${ISSUE_ID}
-
-## Objective
-[Link to Beads Issue]
-
-## Implementation Plan
-- [ ] Step 1
-- [ ] Step 2
-EOF
-  git add "${DOC_FILE}"
+# 2. Read spec from Beads (stars-end/bd is the source of truth)
+echo "📋 Reading spec from Beads..."
+if command -v bd >/dev/null 2>&1; then
+  echo ""
+  echo "--- Beads Spec: ${ISSUE_ID} ---"
+  bd show "$ISSUE_ID" | head -30
+  echo "..."
+  echo "Run 'bd show ${ISSUE_ID}' for full spec"
+  echo "--------------------------------"
+  echo ""
 else
-  echo "✅ Context doc exists: ${DOC_FILE}"
+  echo "⚠️  Warning: bd CLI not found. Run 'bd show ${ISSUE_ID}' manually."
 fi
 
 # 3. Create Story Skeleton (The Guardrail)
@@ -85,10 +81,9 @@ fi
 echo ""
 echo "🚀 Feature ${ISSUE_ID} started!"
 echo "   Branch: ${BRANCH_NAME}"
-echo "   Doc: ${DOC_FILE}"
 echo "   Story: ${STORY_FILE}"
 echo ""
 echo "NEXT STEPS:"
 echo "1. Edit ${STORY_FILE} to define success."
-echo "2. Edit ${DOC_FILE} to refine plan."
+echo "2. Run 'bd show ${ISSUE_ID}' for authoritative spec."
 echo "3. Run 'sync-feature \"initial setup\"' to save."
