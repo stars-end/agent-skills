@@ -78,6 +78,45 @@ mkdir -p "$HOME/prime-radiant-worktrees"
 mkdir -p "$HOME/agent-skills-worktrees"
 mkdir -p "$HOME/.dx-archives"
 
+# 3.7 Initialize HEARTBEAT.md (V8 status file for clawdbot)
+echo -e "${GREEN} -> Initializing HEARTBEAT.md...${RESET}"
+mkdir -p "$HOME/.dx-state"
+if [ ! -f "$HOME/.dx-state/HEARTBEAT.md" ]; then
+    if [ -f "$AGENTS_ROOT/docs/HEARTBEAT.md.template" ]; then
+        cp "$AGENTS_ROOT/docs/HEARTBEAT.md.template" "$HOME/.dx-state/HEARTBEAT.md"
+        echo "   Copied HEARTBEAT.md template to ~/.dx-state/"
+    fi
+else
+    echo "   HEARTBEAT.md already exists, skipping"
+fi
+
+# 3.8 Install V8 cron schedule (idempotent)
+echo -e "${GREEN} -> Installing V8 cron schedule...${RESET}"
+install_cron_entry() {
+    local marker="$1"
+    local entry="$2"
+    if ! crontab -l 2>/dev/null | grep -qF "$marker"; then
+        (crontab -l 2>/dev/null; echo ""; echo "# $marker"; echo "$entry") | crontab -
+        echo "   Added cron: $marker"
+    else
+        echo "   Cron already installed: $marker"
+    fi
+}
+
+WRAPPER="$AGENTS_ROOT/scripts/dx-job-wrapper.sh"
+
+install_cron_entry "V8: canonical-sync" \
+    "5 3 * * * /opt/homebrew/bin/bash $WRAPPER canonical-sync -- $AGENTS_ROOT/scripts/canonical-sync-v8.sh >> $HOME/logs/dx/canonical-sync.log 2>&1"
+
+install_cron_entry "V8: worktree-push" \
+    "15 3 * * * /opt/homebrew/bin/bash $WRAPPER worktree-push -- $AGENTS_ROOT/scripts/worktree-push.sh >> $HOME/logs/dx/worktree-push.log 2>&1"
+
+install_cron_entry "V8: worktree-gc" \
+    "30 3 * * * /opt/homebrew/bin/bash $WRAPPER worktree-gc -- $AGENTS_ROOT/scripts/worktree-gc-v8.sh >> $HOME/logs/dx/worktree-gc.log 2>&1"
+
+install_cron_entry "V8: queue-hygiene-enforcer" \
+    "0 */4 * * * DX_CONTROLLER=\${DX_CONTROLLER:-0} /opt/homebrew/bin/bash $WRAPPER queue-enforcer -- $AGENTS_ROOT/scripts/queue-hygiene-enforcer.sh >> $HOME/logs/dx/queue-enforcer.log 2>&1"
+
 # 3.6 Configure Beads Merge Driver
 echo -e "${GREEN} -> Configuring Beads merge driver...${RESET}"
 if command -v bd >/dev/null 2>&1; then

@@ -1,9 +1,14 @@
-# DX Global Constraints (Always-On)
+<!-- NOTE: After merging, manually sync rules 4-6 to ~/.claude/CLAUDE.md -->
+
+# DX Global Constraints (V8)
 
 1) **NO WRITES** in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
 2) **Worktree first**: `dx-worktree create <id> <repo>`
 3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
-4) For full rules, read this repo `AGENTS.md` / `GEMINI.md`.
+4) **No auto-merge**: never enable auto-merge on PRs — humans merge
+5) **No PR factory**: one PR per meaningful unit of work, not per commit
+6) **Feature-Key mandatory**: every commit needs `Feature-Key: bd-XXXX` + `Agent:` trailers
+7) For full rules, see `AGENTS.md` section "V8 DX Automation Rules"
 
 ---
 
@@ -118,6 +123,53 @@ git push origin bd-recovery
 ```
 
 **Why this matters:** Canonical repos are read-only mirrors that sync with origin/master. Any local commits will be deleted within 24 hours. All development must happen in worktrees.
+
+---
+
+## V8 DX Automation Rules
+
+> These rules apply to ALL agents across ALL VMs.
+
+### What V8 Does Automatically (agents must NOT duplicate)
+
+| Job | Schedule | What it does |
+|-----|----------|-------------|
+| canonical-sync-v8 | 3:05 AM daily | Evacuates dirty canonicals to rescue branch, resets to master |
+| worktree-push | 3:15 AM daily | Pushes all unpushed worktree branches to origin |
+| worktree-gc-v8 | 3:30 AM daily | Prunes merged worktrees + cleanup dirs |
+| queue-hygiene-enforcer | Every 4h | Disables auto-merge on stuck PRs, updates BEHIND branches |
+
+### Agent Rules
+
+1. **No auto-merge.** Never enable auto-merge on PRs. The enforcer manages
+   the PR queue. If you create a PR, leave it as a draft or ready-for-review.
+   A human merges.
+
+2. **No PR factory.** Do not create PRs for trivial changes, checkpoint
+   commits, or "just in case" saves. One PR per meaningful unit of work.
+   worktree-push ensures your commits are durable without a PR.
+
+3. **No canonical writes.** Never commit, stash, or leave dirty files in
+   canonical repos (~/agent-skills, ~/prime-radiant-ai, ~/affordabot,
+   ~/llm-common). Always use worktrees via `dx-worktree create`.
+
+4. **Feature-Key trailers are mandatory.** Every commit must include:
+   ```
+   Feature-Key: bd-XXXX
+   Agent: <DX_AGENT_ID or hostname-toolname>
+   ```
+
+5. **No duplicate automation.** Do not create cron jobs, LaunchAgents,
+   systemd timers, or scheduled tasks for DX operations. V8 cron handles
+   all automation. If something is missing, file a bead.
+
+6. **Worktree cleanup is automatic.** Do not manually run `git worktree
+   prune` or delete /tmp/agents directories. worktree-gc-v8 handles this
+   nightly. Focus on your work, not on cleanup.
+
+7. **Trust the rescue system.** If you accidentally dirty a canonical,
+   canonical-sync-v8 will evacuate your changes to a rescue branch at
+   3:05 AM. You will NOT lose work. But don't rely on this — use worktrees.
 
 ---
 
@@ -619,58 +671,33 @@ cc-glm --resume <session-id>
 
 ## dx-* Commands Reference
 
-### Core Commands (use frequently)
+### Core Commands (V8)
 
 | Command | Purpose |
 |---------|---------|
 | `dx-check` | Verify environment (git, Beads, skills) |
-| `dx-triage` | Diagnose repo state + safe recovery (see below) |
+| `dx-worktree create <id> <repo>` | Create worktree for development |
+| `dx-verify-clean.sh` | Verify canonical repos are clean |
 | `dx-dispatch` | Cross-VM and cloud dispatch |
-| `dx-status` | Show repo and environment status |
+| `dx-job-wrapper.sh <name> -- <cmd>` | Run command with state tracking + alerts |
 
 ---
 
-## DX Fleet Spec (V7)
+## DX Fleet Spec (V8)
 
 Single-source spec for the current fleet contract lives at:
 
-- `docs/DX_FLEET_SPEC_V7.md`
-- `docs/DX_FLEET_SPEC_V7.6.md`
+- `docs/DX_FLEET_SPEC_V8.md`
+
+(Superseded: `docs/DX_FLEET_SPEC_V7.md`, `docs/DX_FLEET_SPEC_V7.6.md`)
 
 ### Optional Commands (use when needed)
 
 | Command | Purpose |
 |---------|---------|
 | `dx-doctor` | Deep environment diagnostics |
-| `dx-toolchain` | Verify toolchain consistency |
 | `dx-worktree` | Manage git worktrees |
 | `dx-fleet-status` | Check all VMs at once |
-
-### dx-triage: Repo State Diagnosis
-
-When repos are in mixed states (different branches, uncommitted work, staleness), use `dx-triage`:
-
-```bash
-# Show current state of all repos
-dx-triage
-
-# Apply safe fixes only (pull stale, reset merged branches)
-dx-triage --fix
-
-# Force reset ALL to trunk (DANGEROUS - stashes WIP first)
-dx-triage --force
-```
-
-**States detected:**
-| State | Meaning | Action |
-|-------|---------|--------|
-| OK | On trunk, clean, up-to-date | None needed |
-| STALE | On trunk, behind origin | Safe to pull |
-| DIRTY | Uncommitted changes | Review first |
-| FEATURE-MERGED | On merged feature branch | Safe to reset |
-| FEATURE-ACTIVE | On unmerged feature branch | Finish or discard |
-
-**Key principle:** `dx-triage --fix` only does SAFE operations. It never touches DIRTY or FEATURE-ACTIVE repos.
 
 
 ---
