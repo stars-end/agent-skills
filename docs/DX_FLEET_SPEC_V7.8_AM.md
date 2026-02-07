@@ -174,7 +174,7 @@ Use `bd-sync-safe.sh` wrapper (Group K) so `~/bd` stays git-clean and durable.
 
 ---
 
-## 5) Clawdbot heartbeat (founder attention UX)
+## 5) OpenClawd heartbeat (founder attention UX)
 
 ### 5.1 Philosophy
 Heartbeat is the “attention router”, not the hygiene actor.
@@ -268,9 +268,9 @@ Recommended pattern:
 - Daily review = run the evidence collector as a background exec, then deliver the summary via heartbeat.
 
 ### 5.8 Heartbeat implementation notes (current state)
-On macmini (captain VM), Clawdbot runs via the local gateway (loopback):
+On macmini (captain VM), OpenClawd runs via the local gateway (loopback):
 - Gateway: `ws://127.0.0.1:18789`
-- Cron jobs store: `~/.clawdbot/cron/jobs.json`
+- Cron jobs store: `~/.openclaw/cron/jobs.json`
 
 Verification (macmini):
 ```bash
@@ -278,13 +278,13 @@ Verification (macmini):
 lsof -nP -iTCP:18789 -sTCP:LISTEN
 
 # Cron scheduler health + jobs
-clawdbot cron status
-clawdbot cron list --all --json
+openclaw cron status
+openclaw cron list --all --json
 ```
 
 Provider note:
 - Heartbeat jobs MUST pin the model/provider explicitly (fleet standard: **ZAI GLM-4.7**).
-- If jobs omit `--model`, Clawdbot may default to another provider (e.g. Anthropic) and fail auth unexpectedly.
+- If jobs omit `--model`, OpenClawd may default to another provider (e.g. Anthropic) and fail auth unexpectedly.
 - Ensure `ZAI_API_KEY` is available to the **gateway process environment** (launchd/systemd shells may not inherit your interactive shell env).
 
 Contract reminder:
@@ -325,7 +325,7 @@ This section maps the workstreams to Beads epics. IDs are tracked in the externa
 ### L (new): Founder inbox + heartbeat
 - Epic: `bd-4n6b`
   - Implement `dx-inbox` (read-only)
-  - Integrate into Clawdbot heartbeat in `#all-stars-end`
+  - Integrate into OpenClawd heartbeat in `#all-stars-end`
   - Optional: on-demand “/dx” commands (confirm-first)
 
 ### M (new): Fleet registry + helpers
@@ -381,7 +381,7 @@ This section is intentionally concrete. It is the “do this, then test that” 
 
 ### 11.1 Prerequisites (macmini captain)
 - Captain VM: **macmini only** (other VMs MUST NOT send heartbeat messages to Slack).
-- Slack: Clawdbot Slack channel must be configured and able to deliver messages.
+- Slack: OpenClawd Slack channel must be configured and able to deliver messages.
 - Repos: canonical clones exist under `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`.
 - Beads external DB: `BEADS_DIR="$HOME/bd/.beads"` and `~/bd` has a git remote.
 
@@ -401,16 +401,16 @@ M — Fleet helpers:
 - `configs/fleet_hosts.yaml` (authoritative list of canonical VMs + ssh targets)
 - `scripts/dx-fleet-check.sh` (read-only): runs `dx-verify-clean` + `dx-status` on all VMs and prints a short report.
 
-### 11.3 Clawdbot wiring (macmini)
-We implement pulse + daily review via Clawdbot cron jobs delivered to Slack.
+### 11.3 OpenClawd wiring (macmini)
+We implement pulse + daily review via OpenClawd cron jobs delivered to Slack.
 
 #### 11.3.1 Ensure an isolated agent exists for `clawd-all-stars-end`
 This creates a dedicated “DX ops” agent identity and workspace.
 
 Recommended:
 ```bash
-clawdbot agents add all-stars-end --workspace ~/clawd-all-stars-end --non-interactive
-clawdbot agents list --json
+openclaw agents add all-stars-end --workspace ~/clawd-all-stars-end --non-interactive
+openclaw agents list --json
 ```
 
 #### 11.3.2 Pulse cron (06:00–16:00 PST, every 2h)
@@ -418,7 +418,7 @@ Run in an **isolated** session by default (keeps long-running main sessions clea
 
 Recommended:
 ```bash
-clawdbot cron add \
+openclaw cron add \
   --name dx-pulse \
   --description "DX pulse heartbeat (V7.8) — one line when OK" \
   --agent all-stars-end \
@@ -440,7 +440,7 @@ This is an evaluation against the intended happy path.
 
 Recommended:
 ```bash
-clawdbot cron add \
+openclaw cron add \
   --name dx-daily \
   --description "DX daily compliance review (last 24h) — V7.8 deviations only" \
   --agent all-stars-end \
@@ -487,17 +487,17 @@ Expected:
 - `dx-status` prints explicit paths for exceptions.
 - `dx-inbox` prints **one line** when healthy.
 
-### 12.2 Clawdbot tests (macmini)
+### 12.2 OpenClawd tests (macmini)
 Verify cron jobs exist and run history is recorded:
 ```bash
-clawdbot cron list
-clawdbot cron runs --json | head
+openclaw cron list
+openclaw cron runs --json | head
 ```
 
 Trigger a manual run:
 ```bash
-clawdbot cron run --name dx-pulse
-clawdbot cron run --name dx-daily
+openclaw cron run --name dx-pulse
+openclaw cron run --name dx-daily
 ```
 
 Expected:

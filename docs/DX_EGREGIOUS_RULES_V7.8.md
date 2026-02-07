@@ -45,7 +45,7 @@ No-upstream worktrees persisting in `/tmp/agents` for >24h without an active ses
 ## Condition 6: Heartbeat Missing
 Watchdog detects that `dx-pulse` or `dx-daily` has stopped reporting.
 
-- **Detection**: `clawdbot cron list --json` (check enabled/running status)
+- **Detection**: `openclaw cron list --json` (check enabled/running status)
 - **Expected Output**: All pulse/daily jobs enabled.
 - **1-Command Remediation**: `dx-schedule-install.sh --apply --host macmini`
 - **Stop Condition**: macmini is unreachable or disk is full.

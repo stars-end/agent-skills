@@ -4,7 +4,7 @@ fleet-dispatch.py — thin CLI wrapper around lib.fleet.FleetDispatcher
 
 Purpose
 -------
-Provides a stable executable interface for Slack/Clawdbot + humans to:
+Provides a stable executable interface for Slack/OpenClawd + humans to:
 - dispatch Beads-linked work to OpenCode/Jules backends
 - check status / wait
 - finalize PR (deterministic via OpenCode /shell)
