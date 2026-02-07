@@ -74,6 +74,7 @@ not set to 1. This prevents duplicate actions across VMs.
 |----|-----------|---------------|--------|
 | macmini | All 4 + wrapper | 1 | Primary |
 | epyc6 | sync + push + gc | 0 | Replica |
+| epyc12 | sync + push + gc | 0 | Replica |
 | homedesktop-wsl | sync + push + gc | 0 | Replica |
 
 Replicas run sync/push/gc for their local canonicals but do NOT run the

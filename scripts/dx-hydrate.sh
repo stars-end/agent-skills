@@ -105,17 +105,29 @@ install_cron_entry() {
 
 WRAPPER="$AGENTS_ROOT/scripts/dx-job-wrapper.sh"
 
+# Detect bash path (macOS Homebrew vs Linux)
+if [[ -x /opt/homebrew/bin/bash ]]; then
+    BASH_PATH="/opt/homebrew/bin/bash"
+elif [[ -x /usr/bin/bash ]]; then
+    BASH_PATH="/usr/bin/bash"
+else
+    BASH_PATH="/bin/bash"
+fi
+
+# Ensure log directory exists
+mkdir -p "$HOME/logs/dx"
+
 install_cron_entry "V8: canonical-sync" \
-    "5 3 * * * /opt/homebrew/bin/bash $WRAPPER canonical-sync -- $AGENTS_ROOT/scripts/canonical-sync-v8.sh >> $HOME/logs/dx/canonical-sync.log 2>&1"
+    "5 3 * * * $BASH_PATH $WRAPPER canonical-sync -- $AGENTS_ROOT/scripts/canonical-sync-v8.sh >> $HOME/logs/dx/canonical-sync.log 2>&1"
 
 install_cron_entry "V8: worktree-push" \
-    "15 3 * * * /opt/homebrew/bin/bash $WRAPPER worktree-push -- $AGENTS_ROOT/scripts/worktree-push.sh >> $HOME/logs/dx/worktree-push.log 2>&1"
+    "15 3 * * * $BASH_PATH $WRAPPER worktree-push -- $AGENTS_ROOT/scripts/worktree-push.sh >> $HOME/logs/dx/worktree-push.log 2>&1"
 
 install_cron_entry "V8: worktree-gc" \
-    "30 3 * * * /opt/homebrew/bin/bash $WRAPPER worktree-gc -- $AGENTS_ROOT/scripts/worktree-gc-v8.sh >> $HOME/logs/dx/worktree-gc.log 2>&1"
+    "30 3 * * * $BASH_PATH $WRAPPER worktree-gc -- $AGENTS_ROOT/scripts/worktree-gc-v8.sh >> $HOME/logs/dx/worktree-gc.log 2>&1"
 
 install_cron_entry "V8: queue-hygiene-enforcer" \
-    "0 */4 * * * DX_CONTROLLER=\${DX_CONTROLLER:-0} /opt/homebrew/bin/bash $WRAPPER queue-enforcer -- $AGENTS_ROOT/scripts/queue-hygiene-enforcer.sh >> $HOME/logs/dx/queue-enforcer.log 2>&1"
+    "0 */4 * * * DX_CONTROLLER=\${DX_CONTROLLER:-0} $BASH_PATH $WRAPPER queue-enforcer -- $AGENTS_ROOT/scripts/queue-hygiene-enforcer.sh >> $HOME/logs/dx/queue-enforcer.log 2>&1"
 
 # 3.6 Configure Beads Merge Driver
 echo -e "${GREEN} -> Configuring Beads merge driver...${RESET}"
