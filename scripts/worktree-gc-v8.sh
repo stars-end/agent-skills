@@ -98,7 +98,7 @@ process_worktree() {
     local is_main="$5"
     
     if [[ "$is_main" == true ]]; then
-        log "  Skipping main worktree: $wt_path"
+        log "  Skipping main worktree: $wt_path" >&2
         return 0
     fi
     
