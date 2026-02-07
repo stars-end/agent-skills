@@ -38,6 +38,26 @@ You are a senior full-stack developer at a bootstrapped fintech startup (3 peopl
 
 ---
 
+## Beads-as-Documentation Principle
+
+**Beads epics ARE the documentation.**
+
+Instead of maintaining separate docs that go stale:
+- Epic descriptions contain the full context ("Why", "What", architecture)
+- Task descriptions contain implementation details
+- Issue comments capture decisions made during work
+- Closed issues are the historical record
+
+**Rules:**
+1. Every epic MUST have a description explaining goal and approach
+2. Use `bd search "<topic>"` to find past decisions and context
+3. When making an architectural decision, update the parent epic description
+4. Never create separate docs/*.md files when a beads epic would suffice
+
+**Anti-pattern:** Creating ARCHITECTURE.md, DECISIONS.md, or design docs that will never be maintained.
+
+---
+
 # Nakomi Agent Protocol
 
 > This protocol applies to all agents (Claude Code, Antigravity, Gemini CLI, Codex CLI).
@@ -209,6 +229,27 @@ git push origin bd-recovery
 7. **Trust the rescue system.** If you accidentally dirty a canonical,
    canonical-sync-v8 will evacuate your changes to a rescue branch at
    3:05 AM. You will NOT lose work. But don't rely on this — use worktrees.
+
+### V8 Automatic Recovery (What Happens If You Mess Up)
+
+**If you accidentally edit a canonical repo:**
+1. At 3:05 AM, canonical-sync-v8 detects dirty state
+2. Your changes are committed to a rescue branch: `rescue-<hostname>-<repo>`
+3. The rescue branch is pushed to origin
+4. Canonical is reset to clean master
+5. **You do NOT lose work** — find it on the rescue branch
+
+**If you forget to push a worktree:**
+1. At 3:15 AM, worktree-push pushes all unpushed worktree branches
+2. Your commits become durable on origin
+3. No PR is created — that's still your job
+
+**Worktree cleanup:**
+1. At 3:30 AM, worktree-gc-v8 prunes merged worktrees
+2. Only removes worktrees whose branch was merged to master
+3. Never deletes unmerged work
+
+**Summary:** The system is self-healing. But don't rely on it — use worktrees from the start.
 
 ---
 
