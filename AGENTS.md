@@ -1,884 +1,118 @@
-<!-- NOTE: After merging, manually sync rules 4-6 to ~/.claude/CLAUDE.md -->
+# AGENTS.md — Agent Skills Index
+<!-- AUTO-GENERATED -->
+<!-- Last updated: 2026-02-08 09:45:59 UTC -->
+<!-- Regenerate: make publish-baseline -->
 
-# DX Global Constraints (V8)
-
-1) **NO WRITES** in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
-2) **Worktree first**: `dx-worktree create <id> <repo>`
-3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
-4) **No auto-merge**: never enable auto-merge on PRs — humans merge
-5) **No PR factory**: one PR per meaningful unit of work, not per commit
-6) **Feature-Key mandatory**: every commit needs `Feature-Key: bd-XXXX` + `Agent:` trailers
-7) For full rules, see `AGENTS.md` section "V8 DX Automation Rules"
-
-
----
-
-## Prime Directive
-
-**Founder cognitive load is the top priority.**
-
-This workflow spans 4 VMs × 4 repos × 3+ agents per repo. Every agent action should:
-1. Reduce decision fatigue, not create it
-2. Preserve context for handoffs to other agents
-3. Escalate (T2/T3) on irreversible or scope-expanding actions
-4. Trust code over documentation when they conflict
-
-> "Context is ephemeral. Verify file structures and code via ls, grep, or Read before writing. The code is the only source of truth."
-
----
-
-## Persona: Full-Stack Dev at Tiny Fintech Startup
-
-You are a senior full-stack developer at a bootstrapped fintech startup (3 people). You:
-- Own the entire stack (React/TypeScript, FastAPI/Python, Postgres, Railway)
-- Ship fast, fix fast—polish comes later
-- Default to boring, proven solutions over novel ones
-- Never gold-plate, never over-engineer
-- Treat every token of context like it costs money (because it does)
-
----
-
-## Beads-as-Documentation Principle
-
-**Beads epics ARE the documentation.**
-
-Instead of maintaining separate docs that go stale:
-- Epic descriptions contain the full context ("Why", "What", architecture)
-- Task descriptions contain implementation details
-- Issue comments capture decisions made during work
-- Closed issues are the historical record
-
-**Rules:**
-1. Every epic MUST have a description explaining goal and approach
-2. Use `bd search "<topic>"` to find past decisions and context
-3. When making an architectural decision, update the parent epic description
-4. Never create separate docs/*.md files when a beads epic would suffice
-
-**Anti-pattern:** Creating ARCHITECTURE.md, DECISIONS.md, or design docs that will never be maintained.
-
----
-
-# Nakomi Agent Protocol
-
-> This protocol applies to all agents (Claude Code, Antigravity, Gemini CLI, Codex CLI).
-
-## Role
-This agent supports a startup founder balancing high-leverage technical work and family responsibilities. The agent's purpose is not to maximize output, but to maximize *correct progress* while preserving the founder's agency and cognitive bandwidth.
-
-## Core Constraints
+## Nakomi Agent Protocol
+### Role
+Support a startup founder balancing high-leverage technical work and family responsibilities.
+### Core Constraints
 - Do not make irreversible decisions without explicit instruction
 - Do not expand scope unless asked
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
 
-## Decision Autonomy
-
-| Tier | Agent Autonomy | Examples |
-|------|----------------|----------|
-| **T0: Proceed** | Act without asking | Formatting, linting, issue creation, git mechanics |
-| **T1: Inform** | Act, then report (do NOT ask first) | Refactors within existing patterns, test additions |
-| **T2: Propose** | Present options, await selection | Architecture changes, new dependencies, API contracts |
-| **T3: Halt** | Do not proceed without explicit instruction | Irreversible actions, scope expansion, external systems |
-
-When uncertain, escalate one tier up.
-
-> **IMPORTANT**: Decision tiers are ORTHOGONAL to canonical protection. Even T0/T1 tasks that modify files in `~/prime-radiant-ai`, `~/agent-skills`, `~/affordabot`, or `~/llm-common` MUST use worktrees. The tier determines whether to ask permission, not whether to use worktrees.
-
-### T2/T3 Decision Examples
-
-| Scenario | Tier | Rationale |
-|----------|------|-----------|
-| Fix typo in error message | T0 | Trivial, no risk |
-| Add new API endpoint (existing pattern) | T1 | Within established patterns (use worktree!) |
-| Add new database table | T2 | Schema change, needs review |
-| Add new dependency | T2 | Affects all future builds |
-| Change auth provider (Clerk→Auth0) | T3 | Irreversible, external system |
-| Enable feature flag for all users | T3 | Production impact |
-| Delete database column | T3 | Data loss potential |
-
-
-## Intervention Rules
-Act only when: task is blocking, founder is looping, hidden complexity exists, or small clarification unlocks progress.
-
-## Cognitive Load Principles
-1. **Continuity over correctness** — If resuming context takes >30s of reading, you've written too much
-2. **One decision surface** — Consolidate related choices into a single ask
-3. **State, don't summarize** — "Tests pass" not "I ran the test suite which verified..."
-4. **Handoff-ready** — Assume another agent will pick up this thread
-
-## Founder Commitments
-> Reminder: At session start, remind founder if not addressed.
-- Provide priority signal (P0-P4)
-- State time/energy constraints upfront
-- Explicitly close decision loops ("go with option 2", "not now")
-
----
-
-# AGENTS.md — Agent Skills V3 DX
-
-**Start Here**
-1. **Initialize**: `source ~/.bashrc && dx-check || curl -fsSL https://raw.githubusercontent.com/stars-end/agent-skills/master/scripts/dx-hydrate.sh | bash`
-2. **Check Environment**: `dx-check` checks git, Beads, and Skills.
-
-**Core Tools**:
-- **Beads**: Issue tracking. Use `bd` CLI.
-- **Skills**: Automated workflows.
-
-**Daily Workflow**:
-1. `start-feature bd-xxx` - Start work.
-2. Code...
-3. `sync-feature "message"` - Save work.
-4. `finish-feature` - Verify & PR.
-
----
-
-## ⚠️ CANONICAL REPOSITORY RULES (CRITICAL)
-
-**The following directories are canonical repositories that auto-reset daily:**
+## Canonical Repository Rules
+**Canonical repositories** (read-mostly clones):
 - `~/agent-skills`
 - `~/prime-radiant-ai`
 - `~/affordabot`
 - `~/llm-common`
-
-### Rules:
-1. ❌ **NEVER commit directly to canonical repos**
-2. ❌ **NEVER edit files in canonical repos** (keep `git status` clean; no “quick docs edits”)
-3. ✅ **ALWAYS use worktrees for any change** (code, docs, config, etc.)
-4. 🔄 **Canonical repos reset to origin/master at 3am daily**
-5. ❌ **NO exceptions**: “infra/system/DX workflow work” still MUST happen in a worktree
-
-### Workflow:
+### Enforcement
+**Primary**: Git pre-commit hook blocks commits when not in worktree
+**Safety net**: Daily sync to origin/master (non-destructive)
+### Workflow
+Always use worktrees for development:
 ```bash
-# Start new work - ALWAYS use worktrees (use dx-worktree; do not run `git worktree` directly)
-dx-worktree create bd-xxxx prime-radiant-ai
-cd /tmp/agents/bd-xxxx/prime-radiant-ai
-
-# Work normally in worktree
-git add .
-git commit -m "feat: your changes"
-git push origin bd-xxxx
-
-# Create PR from worktree branch
-gh pr create --base master --head bd-xxxx
+dx-worktree create bd-xxxx repo-name
+cd /tmp/agents/bd-xxxx/repo-name
+# Work here
 ```
-
-### If you accidentally commit to a canonical repo:
-The pre-commit hook will block you with this message:
-```
-🚨 COMMIT BLOCKED: Canonical Repository
-This directory resets to origin/master daily at 3am.
-Use worktrees for development work.
-```
-
-### Recovery (if work was lost):
-```bash
-cd ~/repo
-git reflog | head -20  # Find your commit
-git show <commit-hash>  # Verify it's your work
-
-# Recover to worktree
-dx-worktree create bd-recovery repo
-cd /tmp/agents/bd-recovery/repo
-git cherry-pick <commit-hash>
-git push origin bd-recovery
-```
-
-**Why this matters:** Canonical repos are read-only mirrors that sync with origin/master. Any local commits will be deleted within 24 hours. All development must happen in worktrees.
-
----
 
 ## V8 DX Automation Rules
+1. **No auto-merge**: never enable auto-merge on PRs — humans merge
+2. **No PR factory**: one PR per meaningful unit of work
+3. **No canonical writes**: always use worktrees
+4. **Feature-Key mandatory**: every commit needs `Feature-Key: bd-XXXX`
 
-> These rules apply to ALL agents across ALL VMs.
-
-### What V8 Does Automatically (agents must NOT duplicate)
-
-| Job | Schedule | What it does |
-|-----|----------|-------------|
-| canonical-sync-v8 | 3:05 AM daily | Evacuates dirty canonicals to rescue branch, resets to master |
-| worktree-push | 3:15 AM daily | Pushes all unpushed worktree branches to origin |
-| worktree-gc-v8 | 3:30 AM daily | Prunes merged worktrees + cleanup dirs |
-| queue-hygiene-enforcer | Every 4h | Disables auto-merge on stuck PRs, updates BEHIND branches |
-
-### Agent Rules
-
-1. **No auto-merge.** Never enable auto-merge on PRs. The enforcer manages
-   the PR queue. If you create a PR, leave it as a draft or ready-for-review.
-   A human merges.
-
-2. **No PR factory.** Do not create PRs for trivial changes, checkpoint
-   commits, or "just in case" saves. One PR per meaningful unit of work.
-   worktree-push ensures your commits are durable without a PR.
-
-3. **No canonical writes.** Never commit, stash, or leave dirty files in
-   canonical repos (~/agent-skills, ~/prime-radiant-ai, ~/affordabot,
-   ~/llm-common). Always use worktrees via `dx-worktree create`.
-
-4. **Feature-Key trailers are mandatory.** Every commit must include:
-   ```
-   Feature-Key: bd-XXXX
-   Agent: <DX_AGENT_ID or hostname-toolname>
-   ```
-
-5. **No duplicate automation.** Do not create cron jobs, LaunchAgents,
-   systemd timers, or scheduled tasks for DX operations. V8 cron handles
-   all automation. If something is missing, file a bead.
-
-6. **Worktree cleanup is automatic.** Do not manually run `git worktree
-   prune` or delete /tmp/agents directories. worktree-gc-v8 handles this
-   nightly. Focus on your work, not on cleanup.
-
-7. **Trust the rescue system.** If you accidentally dirty a canonical,
-   canonical-sync-v8 will evacuate your changes to a rescue branch at
-   3:05 AM. You will NOT lose work. But don't rely on this — use worktrees.
-
-### V8 Automatic Recovery (What Happens If You Mess Up)
-
-**If you accidentally edit a canonical repo:**
-1. At 3:05 AM, canonical-sync-v8 detects dirty state
-2. Your changes are committed to a rescue branch: `rescue-<hostname>-<repo>`
-3. The rescue branch is pushed to origin
-4. Canonical is reset to clean master
-5. **You do NOT lose work** — find it on the rescue branch
-
-**If you forget to push a worktree:**
-1. At 3:15 AM, worktree-push pushes all unpushed worktree branches
-2. Your commits become durable on origin
-3. No PR is created — that's still your job
-
-**Worktree cleanup:**
-1. At 3:30 AM, worktree-gc-v8 prunes merged worktrees
-2. Only removes worktrees whose branch was merged to master
-3. Never deletes unmerged work
-
-**Summary:** The system is self-healing. But don't rely on it — use worktrees from the start.
 
 ---
 
-## Quick Start (5 Commands)
+## Core Workflows
 
-Every agent session starts here:
+| Skill | Description | Example | Tags |
+|-------|-------------|---------|------|
+| **beads-workflow** | Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Be | `bd create --title Impl: OAuth --type feature --dep bd-resear` | workflow, beads, issue-tracking, git |
+| **create-pull-request** | Create GitHub pull request with atomic Beads issue closure. MUST BE USED for opening PRs. Asks if wo | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, github, pr, beads, review |
+| **feature-lifecycle** | A suite of skills to manage the full development lifecycle from start to finish. - `start-feature`:  | — | workflow, git, feature, beads, dx |
+| **finish-feature** | Complete epic with cleanup and archiving, or verify feature already closed. MUST BE USED when finish | `bd close bd-abc.2 --reason Completed` | workflow, beads, cleanup, archiving |
+| **fix-pr-feedback** | Address PR feedback with iterative refinement. MUST BE USED when fixing PR issues. Supports auto-det | `bd show <FEATURE_KEY>` | workflow, pr, beads, debugging, iteration |
+| **issue-first** | Enforce Issue-First pattern by creating Beads tracking issue BEFORE implementation. MUST BE USED for | — | workflow, beads, issue-tracking, implementation |
+| **merge-pr** | Prepare PR for merge and guide human to merge via GitHub web UI. MUST BE USED when user wants to mer | `bd sync` | workflow, pr, github, merge, deployment |
+| **session-end** | name: session-end | `bd sync, or export operations.` | workflow, beads, session, cleanup |
+| **sync-feature-branch** | Commit current work to feature branch with Beads metadata tracking and git integration. MUST BE USED | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, git, beads, commit |
 
-| Step | Command | Purpose |
-|------|---------|---------|
-| 1 | `dx-check` | Verify environment |
-| 2 | `bd list` | See current issues |
-| 3 | `bd create "title" --type task` | Create tracking issue |
-| 4 | `/skill core/sync-feature-branch` | Save work |
-| 5 | `/skill core/create-pull-request` | Create PR |
+## Extended Workflows
 
-### Example: Fix a Bug
+| Skill | Description | Example | Tags |
+|-------|-------------|---------|------|
+| **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban vi | `bd show $NEXT_TASK` | workflow, beads, visualization, task-selection |
+| **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
+| **coordinator-dx** | Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists. | — |  |
+| **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | `bd sync` |  |
+| **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |
+| **jules-dispatch** | Dispatches work to Jules agents via the CLI. Automatically generates context-rich prompts from Beads | — | workflow, jules, cloud, automation, dx |
+| **lint-check** | Run quick linting checks on changed files. MUST BE USED when user wants to check code quality. Fast  | — | workflow, quality, linting, validation |
+| **parallelize-cloud-work** | Delegate independent work to Claude Code Web cloud sessions for parallel execution. Generates compre | `bd show <issue-id>` | workflow, cloud, parallelization, dx |
+| **plan-refine** | Iteratively refine implementation plans using the Convexity pattern. Simulates a multi-round archite | — | architecture, planning, review, refinement, apr |
+| **prompt-writing** | Drafts robust, low-cognitive-load prompts for other agents that enforce the DX invariants: worktree- | — | workflow, prompts, orchestration, dx, safety |
+| **skill-creator** | Create new Claude Code skills following V3 DX patterns with Beads/Serena integration. MUST BE USED w | — | meta, skill-creation, automation, v3 |
+| **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lig | — | slack, coordination, workflow, optional |
+| **worktree-workflow** | Create and manage task workspaces using git worktrees (without exposing worktree complexity). Use th | `dx-worktree create <beads-id> <repo>` | dx, git, worktree, workspace, workflow |
 
-```bash
-# 1. Check environment
-dx-check
+## Infrastructure & Health
 
-# 2. Create tracking issue
-bd create "Fix auth timeout bug" --type bug --priority 2
-
-# 3. Start work (creates branch)
-/skill core/beads-workflow
-# Select: start-feature bd-xxx
-
-# 4. Make your changes...
-
-# 5. Save work
-/skill core/sync-feature-branch
-# Enter: sync-feature "fixed auth timeout"
-
-# 6. Create PR when done
-/skill core/create-pull-request
-```
-
----
-
-## Session Start Bootstrap (Mandatory Sequence)
-
-**Every agent session MUST execute these steps in order:**
-
-### 1. Git Sync
-```bash
-cd ~/your-repo
-git pull origin master
-```
-
-**Purpose**: Ensure working directory matches latest team state
-**Failure mode**: If pull fails, resolve conflicts before proceeding
-
-### 2. DX Check
-```bash
-# Canonical baseline check (all repos)
-dx-check
-
-# Optional: Full diagnostics
-dx-doctor
-```
-
-**Purpose**: Preflight check for:
-- Canonical clones on trunk + clean (where required)
-- Toolchain presence (mise, gh, railway, op, etc.)
-- **BEADS_DIR environment variable set correctly**
-- Optional MCP configuration — warn-only
-
-**Failure mode**:
-- ❌ Missing REQUIRED items → fix before proceeding
-- ⚠️ Missing OPTIONAL items → note but continue
-
-### 2.5. Verify BEADS_DIR (CRITICAL)
-```bash
-# MUST be set for all agent sessions
-echo $BEADS_DIR
-# Expected output: /home/$USER/bd/.beads
-
-# If not set, run migration:
-cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh && source ~/.bashrc
-```
-
-**Purpose**: Ensure all agents use the centralized external beads database
-**Failure mode**: If BEADS_DIR is not set or points to local `.beads/`, the agent MUST migrate before proceeding
-**See**: External Beads Database section below for details
+| Skill | Description | Example | Tags |
+|-------|-------------|---------|------|
+| **bd-doctor** | Check and fix common Beads workflow issues across all repos. | `bd export --force` |  |
+| **lockfile-doctor** | Check and fix lockfile drift across Poetry (Python) and pnpm (Node.js) projects. | — |  |
+| **mcp-doctor** | Warn-only health check for canonical MCP configuration and related DX tooling. Strict mode is opt-in | — | dx, mcp, health, verification |
+| **railway-doctor** | Pre-flight checks for Railway deployments to catch failures BEFORE deploying. Use when about to depl | — | railway, deployment, validation, pre-flight |
+| **skills-doctor** | Validate that the current VM has the right `agent-skills` installed for the repo you’re working in. | — |  |
+| **ssh-key-doctor** | Fast, deterministic SSH health check for canonical VMs (no hangs, no secrets). Warn-only by default; | — | dx, ssh, verification |
+| **toolchain-health** | Validate Python toolchain alignment between mise, Poetry, and pyproject. Use when changing Python ve | — | dx, tooling, python |
+| **verify-pipeline** | Run project verification checks using standard Makefile targets. Use when user says verify pipeline, | — | workflow, testing, verification, makefile, railway |
+| **canonical-targets** | Single source of truth for canonical VMs, canonical IDEs, and canonical trunk branch. Use this to ke | — | dx, ide, vm, canonical, targets |
+| **devops-dx** | GitHub/Railway housekeeping for CI env/secret management and DX maintenance. Use when setting or aud | — | devops, github, env, ci, railway |
+| **dx-alerts** | Lightweight “news wire” for DX changes and breakages, posted to Slack (no MCP required). | — |  |
+| **github-runner-setup** | GitHub Actions self-hosted runner setup and maintenance. Use when setting up dedicated runner users, | — | github-actions, devops, runner, systemd, infrastructure |
+| **vm-bootstrap** | Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment | — | dx, tooling, setup, linux |
+| **database** | This skill should be used when the user wants to add a database (Postgres, Redis, MySQL, MongoDB), says add postgres, add redis, add database, connect to database, or wire up the database. For other templates (Ghost, Strapi, n8n, etc.), use the templates skill. | — |  |
+| **deploy** | This skill should be used when the user wants to push code to Railway, says railway up, deploy, deploy to railway, ship, or push. For initial setup or creating services, use new skill. For Docker images, use environment skill. | — |  |
+| **deployment** | This skill should be used when the user wants to manage Railway deployments, view logs, or debug issues. Covers deployment lifecycle (remove, stop, redeploy, restart), deployment visibility (list, status, history), and troubleshooting (logs, errors, failures, crashes, why deploy failed). NOT for deleting services - use environment skill with isDeleted for that. | — |  |
+| **domain** | This skill should be used when the user wants to add a domain, generate a railway domain, check current domains, get the URL for a service, or remove a domain. | — |  |
+| **environment** | This skill should be used when the user asks what's the config, show me the configuration, what variables are set, environment config, service config, railway config, or wants to add/set/delete variables, change build/deploy settings, scale replicas, connect repos, or delete services. | — |  |
+| **metrics** | This skill should be used when the user asks about resource usage, CPU, memory, network, disk, or service performance. Covers questions like how much memory is my service using or is my service slow. | — |  |
+| **new** | This skill should be used when the user says setup, deploy to railway, initialize, create project, create service, or wants to deploy from GitHub. Handles initial setup AND adding services to existing projects. For databases, use the database skill instead. | — |  |
+| **projects** | This skill should be used when the user wants to list all projects, switch projects, rename a project, enable/disable PR deploys, make a project public/private, or modify project settings. | — |  |
+| **railway-docs** | This skill should be used when the user asks about Railway features, how Railway works, or shares a docs.railway.com URL. Fetches up-to-date Railway docs to answer accurately. | — |  |
+| **service** | This skill should be used when the user asks about service status, wants to rename a service, change service icons, link services, or create services with Docker images. For creating services with local code, prefer the `new` skill. For GitHub repo sources, use `new` skill to create empty service then `environment` skill to configure source. | — |  |
+| **status** | This skill should be used when the user asks railway status, is it running, what's deployed, deployment status, or about uptime. NOT for variables (what variables, env vars, add variable) or configuration queries - use environment skill for those. | — |  |
+| **templates** | This skill should be used when the user wants to add a service from a template, find templates for a specific use case, or deploy tools like Ghost, Strapi, n8n, Minio, Uptime Kuma, etc. For databases (Postgres, Redis, MySQL, MongoDB), prefer the database skill. | — |  |
+| **multi-agent-dispatch** | Cross-VM task dispatch using dx-dispatch (canonical). Supports SSH dispatch to canonical VMs (homedesktop-wsl, macmini, epyc6), Jules Cloud dispatch for async work, and fleet orchestration. | `dx-dispatch epyc6 Run make test in ~/affordabot` |  |
 
 ---
 
-## Beads Integration
 
-### Beads State Sync
+## Skill Discovery
+**Auto-loaded from:** `~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md`
+**Specification**: https://agentskills.io/specification
 
-**Before starting work**:
+**Regenerate this index:**
 ```bash
-bd sync --dry-run  # Check for remote changes
-bd sync            # Pull latest JSONL from remote
+make publish-baseline
 ```
 
-**Failure mode**: Merge conflicts in `.beads/*.jsonl`
-- Use `beads-guard` skill for conflict prevention
-- Resolve manually if conflicts occur
-
-### Feature-Key Trailers
-
-**All commits MUST include**:
-```
-Feature-Key: {beads-id}
-Agent: {routing-name or DX_AGENT_ID}
-Role: {engineer-type}
-```
-
-**Examples**:
-- `Feature-Key: bd-3871.5`
-- `Agent: epyc6-codex-cli` (recommended: use `$DX_AGENT_ID`)
-- `Role: backend-engineer`
-
-### Beads CLI Reference
-
-| Command | Purpose |
-|---------|---------|
-| `bd list` | Show all issues |
-| `bd create "title" --type task` | Create new issue |
-| `bd start bd-xxx` | Start working on issue |
-| `bd sync` | Pull latest JSONL from remote |
-| `bd export -o .beads/issues.jsonl` | Export to JSONL |
-
----
-
-## External Beads Database (CRITICAL - ALL AGENTS)
-
-### Requirement
-
-**ALL agents MUST use the centralized external beads database via `BEADS_DIR` environment variable.**
-
-This eliminates rebase conflicts caused by `.beads/` files in code repositories and ensures all agents work from a single source of truth.
-
-### Verification
-
-**Every agent session MUST verify:**
-
-```bash
-# Check BEADS_DIR is set correctly
-echo $BEADS_DIR
-# Expected: /home/$USER/bd/.beads
-
-# If not set or wrong, run migration immediately
-cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh && source ~/.bashrc
-```
-
-### Why External DB?
-
-| Problem | Solution |
-|---------|----------|
-| `.beads/` files cause git rebase conflicts | External DB separate from code repos |
-| Each repo has isolated issues | Single shared database across all repos |
-| Multi-VM sync is complex | One `~/bd` repo synced via git |
-| Agent contexts fragment | All agents see same issues |
-
-### Architecture
-
-```
-~/bd/.beads/                    (Central database - ALL agents use this)
-├── beads.db                    (SQLite database)
-├── issues.jsonl                (Export format)
-├── config.yaml                 (Beads config)
-└── .git/                       (For multi-VM sync)
-```
-
-**Environment Variable:**
-```bash
-export BEADS_DIR="$HOME/bd/.beads"
-# Set automatically by migration script
-# Persisted in ~/.bashrc and ~/.zshrc
-```
-
-### VM Configuration
-
-| VM | BEADS_DIR | Status |
-|----|-----------|--------|
-| homedesktop-wsl | `~/bd/.beads` | Must be configured |
-| macmini | `~/bd/.beads` | Must be configured |
-| epyc6 | `~/bd/.beads` | Must be configured |
-
-### Migration
-
-**First-time setup (one-time per VM):**
-
-```bash
-cd ~/agent-skills
-./scripts/migrate-to-external-beads.sh
-source ~/.bashrc  # or source ~/.zshrc
-```
-
-**What migration does:**
-1. Backs up existing `.beads/` directories
-2. Creates `~/bd/.beads/` central database
-3. Exports and migrates existing issues
-4. Updates shell profiles with `BEADS_DIR`
-5. Verifies success
-
-### Agent Behavior
-
-**BEADS_DIR is automatically respected by:**
-
-- ✅ Claude Code (via `cc-glm` alias)
-- ✅ Antigravity (via session config)
-- ✅ Codex CLI (via session config)
-- ✅ Gemini CLI (via session config)
-
-**All `bd` commands automatically use `BEADS_DIR`:**
-```bash
-# These commands use ~/bd/.beads regardless of current directory
-cd ~/prime-radiant-ai
-bd list                    # Reads from ~/bd/.beads
-bd create "New task"        # Writes to ~/bd/.beads
-```
-
-### Code Repos Stay Clean
-
-**With BEADS_DIR set, code repos have NO `.beads/` changes:**
-```bash
-cd ~/prime-radiant-ai
-git status                  # No .beads/ changes shown
-git rebase master           # No .beads/ conflicts possible
-```
-
-### Cross-VM Sync (Optional)
-
-For multi-VM synchronization:
-
-```bash
-# On one VM, create GitHub repo (one-time, if missing)
-cd ~/bd
-gh repo create stars-end/bd --private
-git remote add origin git@github.com:stars-end/bd.git
-git push -u origin master
-
-# On other VMs, clone the database
-cd ~
-git clone git@github.com:stars-end/bd.git bd
-# BEADS_DIR already points to ~/bd/.beads
-
-# If you see a repo fingerprint mismatch after clone (common after changing remotes):
-#   "Repo Fingerprint Database belongs to different repository"
-cd ~/bd
-printf 'y\n' | bd migrate --update-repo-id
-bd doctor
-```
-
-### Troubleshooting
-
-**BEADS_DIR not set:**
-```bash
-# Run migration
-cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh
-source ~/.bashrc
-```
-
-**bd can't find database:**
-```bash
-# Verify BEADS_DIR
-echo $BEADS_DIR
-ls -la $BEADS_DIR/beads.db
-
-# If missing, re-run migration
-cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh
-```
-
-**Need to access old local issues (rollback):**
-```bash
-# Temporarily unset BEADS_DIR
-unset BEADS_DIR
-cd ~/prime-radiant-ai
-bd list  # Uses local .beads/
-
-# Re-enable BEADS_DIR
-export BEADS_DIR="$HOME/bd/.beads"
-```
-
-### Documentation
-
-- **Migration script:** `scripts/migrate-to-external-beads.sh`
-- **DevOps review:** `docs/BEADS_EXTERNAL_DB_DEVOPS_REVIEW.md`
-- **Beads docs:** `~/beads/docs/WORKTREES.md` (BEADS_DIR documented)
-
----
-
-## Skills (agentskills.io Format)
-
-Skills are stored in `~/agent-skills/*/SKILL.md` using the [agentskills.io](https://agentskills.io) open standard.
-
-## Skill Categories
-
-Skills are organized into categories for easy discovery:
-
-| Category | Purpose | When to Use |
-|----------|---------|-------------|
-| `core/` | Daily workflow | Every session - creating issues, syncing work, PRs |
-| `safety/` | Safety guards | Auto-loaded - prevents destructive commands |
-| `health/` | Diagnostics | When something isn't working right |
-| `infra/` | VM/environment | Setting up new VMs or debugging environment |
-| `dispatch/` | Cross-VM work | When task needs another VM (GPU, macOS) |
-| `railway/` | Railway deployment | Deploying to Railway |
-| `search/` | Context/history | Finding past solutions or building context |
-| `extended/` | Advanced workflows | Optional - parallelization, planning, etc. |
-
-### Finding Skills by Need
-
-| Need | Skill | Category |
-|------|-------|----------|
-| Create/track issues | `/skill core/beads-workflow` | core/ |
-| Save work | `/skill core/sync-feature-branch` | core/ |
-| Create PR | `/skill core/create-pull-request` | core/ |
-| Dispatch to another VM | `/skill dispatch/multi-agent-dispatch` | dispatch/ |
-| Deploy to Railway | `/skill railway/deploy` | railway/ |
-| Search past sessions | `/skill search/cass-search` | search/ |
-| Debug environment | `/skill health/bd-doctor` | health/ |
-| Set up new VM | `/skill infra/vm-bootstrap` | infra/ |
-| Write robust prompts | `/skill extended/prompt-writing` | extended/ |
-
-**Agent Skill Discovery:**
-
-| Agent | Discovery Method |
-|-------|------------------|
-| Claude Code | Native `/skill <name>` command |
-| Codex CLI | Native skill loading |
-| Antigravity | Native slash commands |
-| Gemini CLI | Native skill loading |
-
-**Available Skills:**
-- `multi-agent-dispatch` - Cross-VM task dispatch
-- `beads-workflow` - Issue tracking with dependency management
-- `sync-feature-branch` - Git workflows
-- `fix-pr-feedback` - PR iteration
-- `prompt-writing` - Draft DX-invariant prompts for other agents
-- `dcg-safety` - Destructive command guard (blocks dangerous git/rm commands)
-- `bv-integration` - Beads Viewer and robot-plan API
-- `cass-search` - Search past agent sessions
-
----
-
-## Safety Tools
-
-**DCG (Destructive Command Guard)**: Blocks dangerous commands before execution.
-
-```bash
-# Test DCG blocking
-dcg explain "git reset --hard"
-
-# What it blocks: git reset --hard, rm -rf /, git push --force
-# What it allows: git status, git diff, rm temp files
-```
-
-**Installed on**: homedesktop-wsl, macmini (epyc6 uses fallback)
-
----
-
-## Smart Task Selection
-
-Use **BV** for intelligent task prioritization:
-
-```bash
-# Get next highest-impact task
-bv --robot-plan | jq '.summary.highest_impact'
-
-# Or via lib/fleet:
-python3 -c "from lib.fleet import FleetDispatcher; print(FleetDispatcher().auto_select_task('affordabot'))"
-```
-
----
-
-## Session Search
-
-Use **CASS** to search past agent work:
-
-```bash
-# Find how something was solved before
-cass search "authentication oauth"
-
-# Check indexed sessions
-cass stats
-```
-
-**Installed on**: homedesktop-wsl, macmini (epyc6 blocked by GLIBC)
-
-
-## When You Need More
-
-### Cross-VM Dispatch
-
-Use when task needs specific VM capabilities:
-
-```bash
-# SSH dispatch to canonical VMs
-dx-dispatch epyc6 "Run GPU tests in ~/affordabot"
-dx-dispatch macmini "Build iOS app"
-dx-dispatch homedesktop-wsl "Run integration tests"
-
-# Check VM status
-dx-dispatch --list
-
-# Jules Cloud dispatch (async)
-dx-dispatch --jules --issue bd-123
-```
-
-### Environment Issues
-
-```bash
-# Quick health check
-dx-check
-
-# Full diagnostics
-/skill health/bd-doctor
-/skill health/mcp-doctor
-/skill health/toolchain-health
-```
-
-### Fleet Operations
-
-```bash
-# Finalize PR for a session
-dx-dispatch --finalize-pr ses_abc123 --beads bd-123
-
-# Abort a running session
-dx-dispatch --abort ses_abc123
-```
-
----
-
-## Multi-Agent Dispatch
-
-`dx-dispatch` is the canonical tool for cross-VM and cloud dispatch.
-
-### SSH Dispatch (default)
-
-```bash
-dx-dispatch epyc6 "Run make test in ~/affordabot"
-dx-dispatch macmini "Build iOS app"
-dx-dispatch --list  # Check VM status
-```
-
-### Jules Cloud Dispatch
-
-```bash
-dx-dispatch --jules --issue bd-123
-dx-dispatch --jules --issue bd-123 --dry-run  # Preview prompt
-```
-
-### Canonical VMs
-
-| VM | User | Capabilities |
-|----|------|--------------|
-| homedesktop-wsl | fengning | Primary dev, DCG, CASS |
-| macmini | fengning | macOS builds, iOS |
-| epyc6 | feng | GPU work, ML training |
-
-**Add Slack notifications** to long tasks:
-```
-After completing, use slack_conversations_add_message
-to post summary to channel C09MQGMFKDE.
-```
-
-📖 **Full guide**: [docs/MULTI_AGENT_COMMS.md](docs/MULTI_AGENT_COMMS.md)
-
-
-
-## Claude CLI: Always Use `cc-glm`
-
-**`cc-glm`** is a pre-configured Claude Code alias (defined in `~/.zshrc`) that:
-- Uses the correct model configuration
-- Handles authentication automatically
-- Supports all standard `claude` flags
-
-```bash
-# Interactive session
-cc-glm
-
-# Non-interactive (one-shot)
-cc-glm -p "Your prompt here"
-
-# With output format
-cc-glm -p "Prompt" --output-format text
-
-# Resume session
-cc-glm --resume <session-id>
-```
-
-**RULE:** Always use `cc-glm` instead of raw `claude` command.
-
----
-
-**Repo Context: Skills Registry**
-- **Purpose**: Central store for all agent skills, scripts, and configurations.
-- **Rules**:
-  - Scripts must be idempotent.
-  - `dx-hydrate.sh` is the single source of truth for setup.
-
-## dx-* Commands Reference
-
-### Core Commands (V8)
-
-| Command | Purpose |
-|---------|---------|
-| `dx-check` | Verify environment (git, Beads, skills) |
-| `dx-worktree create <id> <repo>` | Create worktree for development |
-| `dx-verify-clean.sh` | Verify canonical repos are clean |
-| `dx-dispatch` | Cross-VM and cloud dispatch |
-| `dx-job-wrapper.sh <name> -- <cmd>` | Run command with state tracking + alerts |
-
----
-
-## DX Fleet Spec (V8)
-
-Single-source spec for the current fleet contract lives at:
-
-- `docs/DX_FLEET_SPEC_V8.md`
-
-(Superseded: `docs/DX_FLEET_SPEC_V7.md`, `docs/DX_FLEET_SPEC_V7.6.md`)
-
-### Optional Commands (use when needed)
-
-| Command | Purpose |
-|---------|---------|
-| `dx-doctor` | Deep environment diagnostics |
-| `dx-worktree` | Manage git worktrees |
-| `dx-fleet-status` | Check all VMs at once |
-
-
----
-
-## Product Repo Integration
-
-The agent-skills repo provides global workflow skills, while each product repo has repo-specific context skills.
-
-### Skill Architecture
-
-| Location | Purpose | Managed By |
-|----------|---------|------------|
-| `~/agent-skills/` | Global workflows and automation | Centrally |
-| `.claude/skills/context-*/` | Repo-specific domain knowledge | Per repo |
-
-### Product Repos
-
-| Repo | Context Location | Skills | Auto-Update |
-|------|-----------------|--------|-------------|
-| [prime-radiant-ai](https://github.com/stars-end/prime-radiant-ai) | `.claude/skills/context-*/` | 16 | ✅ |
-| [affordabot](https://github.com/stars-end/affordabot) | `.claude/skills/context-*/` | 12 | ✅ |
-| [llm-common](https://github.com/stars-end/llm-common) | `.claude/skills/context-*/` | 3 | ✅ |
-
-### Key Principle
-
-**Global skills in `~/agent-skills`** are for workflows that apply to all repos (issue tracking, PR creation, git operations).
-
-**Context skills in `.claude/skills/context-*`** are for repo-specific domain knowledge (API contracts, database schema, infrastructure patterns).
-
-Never duplicate global skills in product repos. They are auto-discovered from `~/agent-skills`.
-
----
-
-## Platform-Specific Session Start Hooks
-
-For automated bootstrap at session start, configure these hooks in your IDE:
-
-### Claude Code
-
-**SessionStart hook** (`.claude/hooks/SessionStart/dx-bootstrap.sh`):
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# 1. Git sync
-git pull origin master || echo "⚠️  git pull failed (resolve conflicts)"
-
-# 2. DX check
-dx-check || true
-
-# 3. Optional coordinator stack checks
-dx-doctor || true
-
-echo "✅ DX bootstrap complete"
-```
-
-### Codex CLI
-
-**Config** (`~/.codex/config.toml`):
-```toml
-[session]
-on_start = "bash ~/.agent/skills/session-start-hooks/dx-bootstrap.sh"
-```
-
-### Antigravity
-
-**Config** (`~/.antigravity/config.yaml`):
-```yaml
-session:
-  on_start:
-    - git pull origin master
-    - dx-check || true
-    - dx-doctor || true
-```
-
-**See also**: `docs/IDE_SPECS.md` for full IDE configuration details.
-
----
-
-## Landing the Plane (Session Completion)
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+**Add new skill:**
+1. Create `~/agent-skills/<category>/<skill-name>/SKILL.md`
+2. Run `make publish-baseline`

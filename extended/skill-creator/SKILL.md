@@ -225,53 +225,28 @@ Real usage scenarios
 - Create follow-up issues if needed
 ```
 
-### 5. Add Auto-Activation Rules
+### 5. Verify V8 Discovery
+V8 agents automatically index skills from `AGENTS.md` and `SKILL.md` frontmatter.
 
-**Update `.claude/skills/skill-rules.json`:**
-
-```json
-{
-  "skill-name": {
-    "triggers": [
-      "create X",
-      "make X",
-      "implement X",
-      "need X"
-    ],
-    "intents": [
-      "User wants to perform workflow X",
-      "User asks for capability X"
-    ],
-    "examples": [
-      "User: 'commit my work'",
-      "User: 'create PR'",
-      "User: 'fix the PR'"
-    ]
-  }
-}
+**Ensure frontmatter is correct:**
+```yaml
+name: skill-name
+description: ...
+tags: [...]
 ```
 
-**Pattern matching:**
-- Keywords: Exact phrases to match
+(Optional/Legacy) Update `skill-rules.json` if strict trigger matching is required for older agents.
 - Intents: Semantic patterns
 - Examples: Real usage for testing
 
-### 6. Update Documentation
+### 6. Regenerate Index
 
-**Add to CLAUDE.md:**
-
-```markdown
-### Natural Language → Skills (Auto-Invoked)
-
-- **"trigger phrase"** → skill-name skill
-  - What it does (3-5 bullets)
-  - **Total: <time>**
+**Run the V8 generator:**
+```bash
+cd ~/agent-skills
+make publish-baseline
 ```
-
-**Update skill list:**
-```markdown
-- **skill-name**: [Description] Use when [trigger patterns].
-```
+This automatically updates `AGENTS.md` with the new skill, ensuring V8 compliance (compressed table format).
 
 ### 7. Test and Commit
 
@@ -280,7 +255,6 @@ Real usage scenarios
 1. **Test auto-activation:**
    ```
    User says trigger phrase
-   → Verify hook detects it
    → Verify skill is invoked
    ```
 
@@ -291,26 +265,20 @@ Real usage scenarios
    → Verify integrations (Beads/Serena/Git)
    ```
 
-3. **Test edge cases:**
-   ```
-   Missing prerequisites
-   → Skill fails gracefully
-   Error conditions
-   → Clear error messages
-   ```
+3. **Verify Index:**
+   Check `AGENTS.md` to ensure skill is listed correctly.
 
 **Commit:**
 ```bash
 git add .claude/skills/<skill-name>/
-git add .claude/skills/skill-rules.json
-git add CLAUDE.md
+git add AGENTS.md
 
 git commit -m "feat: Add <skill-name> skill for <purpose>
 
-Implements <workflow-type> skill following V3 patterns:
+Implements <workflow-type> skill following V8 DX patterns:
 - Progressive disclosure (<500 lines main)
 - Beads/Serena integration
-- Auto-activation via skill-rules.json
+- Auto-regenerated AGENTS.md index
 - <X> second typical execution
 
 Feature-Key: <CURRENT_FEATURE>
