@@ -33,7 +33,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 1. **No auto-merge**: never enable auto-merge on PRs — humans merge
 2. **No PR factory**: one PR per meaningful unit of work
 3. **No canonical writes**: always use worktrees
-4. **Feature-Key mandatory**: every commit needs `Feature-Key: bd-XXXX`
+4. **Feature-Key mandatory**: every commit needs `Feature-Key: bd-XXXX` + `Agent:` trailers
 
 
 ---
