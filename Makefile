@@ -4,3 +4,4 @@ publish-baseline:
 setup-git-hooks:
 	@scripts/setup-git-hooks.sh
 
+.PHONY: publish-baseline setup-git-hooks
