@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
-<!-- AUTO-GENERATED from SKILL.md files -->
-<!-- Last updated: 2026-02-08 09:36:32 UTC -->
-<!-- DO NOT EDIT MANUALLY - Run: scripts/generate-agents-index.sh -->
+<!-- AUTO-GENERATED -->
+<!-- Last updated: 2026-02-08 09:45:59 UTC -->
+<!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
 ### Role
@@ -11,8 +11,6 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not expand scope unless asked
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
-
----
 
 ## Canonical Repository Rules
 **Canonical repositories** (read-mostly clones):
@@ -30,6 +28,13 @@ dx-worktree create bd-xxxx repo-name
 cd /tmp/agents/bd-xxxx/repo-name
 # Work here
 ```
+
+## V8 DX Automation Rules
+1. **No auto-merge**: never enable auto-merge on PRs — humans merge
+2. **No PR factory**: one PR per meaningful unit of work
+3. **No canonical writes**: always use worktrees
+4. **Feature-Key mandatory**: every commit needs `Feature-Key: bd-XXXX`
+
 
 ---
 
@@ -100,23 +105,14 @@ cd /tmp/agents/bd-xxxx/repo-name
 
 
 ## Skill Discovery
-
-**Auto-loaded from:**
-- \`~/agent-skills/core/*/SKILL.md\` - Core workflows
-- \`~/agent-skills/extended/*/SKILL.md\` - Extended workflows
-- \`~/agent-skills/health/*/SKILL.md\` - Health checks
-- \`~/agent-skills/infra/*/SKILL.md\` - Infrastructure
-- \`~/agent-skills/railway/*/SKILL.md\` - Deployment
-- \`~/agent-skills/dispatch/*/SKILL.md\` - Cross-VM execution
-
-**Full documentation:** Each SKILL.md contains detailed implementation, examples, and troubleshooting.
+**Auto-loaded from:** `~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md`
+**Specification**: https://agentskills.io/specification
 
 **Regenerate this index:**
-\`\`\`bash
-~/agent-skills/scripts/generate-agents-index.sh
-\`\`\`
+```bash
+make publish-baseline
+```
 
 **Add new skill:**
-1. Create \`~/agent-skills/<category>/<skill-name>/SKILL.md\`
-2. Add frontmatter: \`name:\`, \`description:\`, \`tags:\`
-3. Regenerate index (auto-triggered on commit via post-commit hook)
+1. Create `~/agent-skills/<category>/<skill-name>/SKILL.md`
+2. Run `make publish-baseline`

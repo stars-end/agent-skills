@@ -244,7 +244,7 @@ tags: [...]
 **Run the V8 generator:**
 ```bash
 cd ~/agent-skills
-make regenerate-agents-md
+make publish-baseline
 ```
 This automatically updates `AGENTS.md` with the new skill, ensuring V8 compliance (compressed table format).
 

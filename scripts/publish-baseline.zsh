@@ -2,154 +2,132 @@
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-OUTFILE="$REPO_ROOT/dist/universal-baseline.md"
-TIMESTAMP=$(git show -s --format=%cI HEAD)
-COMMIT_SHA=$(git rev-parse HEAD)
-
-mkdir -p "$REPO_ROOT/dist"
-
-# Extract YAML frontmatter from SKILL.md
-extract_frontmatter() {
-    local skill_file=$1
-    awk '/^---$/{if(++count==2) exit; next} count==1' "$skill_file"
-}
-
-# Parse YAML field from frontmatter (stdin) with dotted paths
-parse_yaml_field() {
-    local field=$1
-    python3 -c 'import sys, yaml
-field=sys.argv[1]
-fm_text=sys.stdin.read()
-
-try:
-    data=yaml.safe_load(fm_text) or {}
-
-    def get_path(obj, path):
-        cur=obj
-        for part in path.split("."):
-            if not isinstance(cur, dict):
-                return ""
-            cur=cur.get(part, "")
-        return cur
-
-    value=get_path(data, field)
-    if isinstance(value, list):
-        print(",".join(str(x) for x in value))
-    elif isinstance(value, dict):
-        print("")
-    else:
-        print(str(value) if value else "")
-except Exception:
-    print("")
-' "$field"
-}
+OUTFILE="$REPO_ROOT/AGENTS.md"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S UTC')
 
 # Header
 cat > "$OUTFILE" <<EOF
-# Universal Baseline — Agent Skills
+# AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: $COMMIT_SHA -->
 <!-- Last updated: $TIMESTAMP -->
 <!-- Regenerate: make publish-baseline -->
 
 EOF
 
-# Layer A: Operating Contract (curated)
-echo "## Operating Contract (Layer A — Curated)" >> "$OUTFILE"
+# Static V8 Content (formerly fragments)
+cat >> "$OUTFILE" <<EOF
+## Nakomi Agent Protocol
+### Role
+Support a startup founder balancing high-leverage technical work and family responsibilities.
+### Core Constraints
+- Do not make irreversible decisions without explicit instruction
+- Do not expand scope unless asked
+- Do not optimize for cleverness or novelty
+- Do not assume time availability
+
+## Canonical Repository Rules
+**Canonical repositories** (read-mostly clones):
+- \`~/agent-skills\`
+- \`~/prime-radiant-ai\`
+- \`~/affordabot\`
+- \`~/llm-common\`
+### Enforcement
+**Primary**: Git pre-commit hook blocks commits when not in worktree
+**Safety net**: Daily sync to origin/master (non-destructive)
+### Workflow
+Always use worktrees for development:
+\`\`\`bash
+dx-worktree create bd-xxxx repo-name
+cd /tmp/agents/bd-xxxx/repo-name
+# Work here
+\`\`\`
+
+## V8 DX Automation Rules
+1. **No auto-merge**: never enable auto-merge on PRs — humans merge
+2. **No PR factory**: one PR per meaningful unit of work
+3. **No canonical writes**: always use worktrees
+4. **Feature-Key mandatory**: every commit needs \`Feature-Key: bd-XXXX\`
+
+EOF
+
 echo "" >> "$OUTFILE"
-
-for fragment in nakomi-protocol canonical-rules beads-external-db session-start landing-the-plane v7.6-mechanisms; do
-    if [[ -f "$REPO_ROOT/fragments/$fragment.md" ]]; then
-        cat "$REPO_ROOT/fragments/$fragment.md" >> "$OUTFILE"
-        echo "" >> "$OUTFILE"
-    fi
-done
-
 echo "---" >> "$OUTFILE"
 echo "" >> "$OUTFILE"
 
-# Layer B: Universal Skill Index (generated)
-echo "## Universal Skill Index (Layer B — Generated)" >> "$OUTFILE"
-echo "" >> "$OUTFILE"
-
-# Generate skill table (CORRECTED: stdin piping + dotted paths + deterministic sort)
-generate_skill_table() {
-    local category=$1
-    local title=$2
-    local temp_rows=$(mktemp)
+# Skill Table Generation
+extract_skill() {
+    local skill_file="$1"
+    local name=$(grep "^name:" "$skill_file" | head -1 | cut -d: -f2- | xargs || echo "")
     
-    echo "### $title" >> "$OUTFILE"
+    # Description: try to extract quoted description first
+    local desc=$(grep "^description:" "$skill_file" | head -1 | sed 's/^description: *//' | sed 's/^"//' | sed 's/"$//' | xargs || echo "")
+    if [[ -z "$desc" || "$desc" == "|" || "$desc" == ">" ]]; then
+         desc=$(awk '/^description:/{flag=1; next} /^[a-z]+:/{flag=0} /^---/{flag=0} flag' "$skill_file" | tr '\n' ' ' | sed 's/  */ /g' | xargs | cut -c1-100 || echo "")
+    fi
+    if [[ -z "$desc" ]]; then
+         desc=$(grep -v "^---" "$skill_file" | grep -v "^#" | grep -v "^$" | head -1 | cut -c1-100 || echo "")
+    fi
+
+    local tags=$(grep "^tags:" "$skill_file" | head -1 | cut -d: -f2- | tr -d '[]' | xargs || echo "")
+    
+    # Example
+    local example=$(grep -E "^\s*(bd |dx-|/skill )" "$skill_file" | head -1 | xargs | cut -c1-60 || echo "")
+    if [[ -z "$example" ]]; then
+        example="—"
+    else
+        example="\`$example\`"
+    fi
+
+    echo "| **$name** | $desc | $example | $tags |"
+}
+
+generate_table() {
+    local title="$1"
+    shift
+    echo "## $title" >> "$OUTFILE"
     echo "" >> "$OUTFILE"
     echo "| Skill | Description | Example | Tags |" >> "$OUTFILE"
     echo "|-------|-------------|---------|------|" >> "$OUTFILE"
-    
-    for skill_dir in "$REPO_ROOT/$category"/*/; do
-        [[ -d "$skill_dir" ]] || continue
-        skill_file="${skill_dir}SKILL.md"
-        [[ -f "$skill_file" ]] || continue
-        
-        # Extract frontmatter once
-        fm=$(extract_frontmatter "$skill_file")
-        
-        # Parse fields using stdin piping (CORRECTED)
-        name=$(printf '%s' "$fm" | parse_yaml_field "name" | cut -c1-30)
-        desc=$(printf '%s' "$fm" | parse_yaml_field "description" | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-60)
-        
-        # Parse nested metadata fields directly (CORRECTED)
-        example=$(printf '%s' "$fm" | parse_yaml_field "metadata.display_example" | cut -c1-40)
-        [[ -z "$example" ]] && example="See SKILL.md"
-        
-        tags=$(printf '%s' "$fm" | parse_yaml_field "metadata.display_tags")
-        # Fallback to top-level tags during migration
-        [[ -z "$tags" ]] && tags=$(printf '%s' "$fm" | parse_yaml_field "tags")
-        
-        # Skip empty/invalid rows (prevents empty tables when parsing fails)
-        if [[ ! "$name" =~ [A-Za-z0-9] || ! "$desc" =~ [A-Za-z0-9] ]]; then
-            continue
-        fi
 
-        # Write to temp file for deterministic sorting
-        echo "| $name | $desc | \`$example\` | $tags |" >> "$temp_rows"
+    for category in "$@"; do
+        if [[ -d "$REPO_ROOT/$category" ]]; then
+            find "$REPO_ROOT/$category" -maxdepth 2 -name "SKILL.md" | sort | while read -r skill; do
+                extract_skill "$skill" >> "$OUTFILE"
+            done
+        fi
     done
-    
-    # Sort THEN append (determinism)
-    sort "$temp_rows" >> "$OUTFILE"
-    rm "$temp_rows"
-    
-    echo "" >> "$OUTFILE"
 }
 
-# Generate tables
-generate_skill_table "core" "Core Workflows"
-generate_skill_table "extended" "Extended Workflows"
-generate_skill_table "health" "Health & Monitoring"
-generate_skill_table "infra" "Infrastructure"
-generate_skill_table "railway" "Railway Deployment"
+# Generate Tables
+generate_table "Core Workflows" "core"
+echo "" >> "$OUTFILE"
+generate_table "Extended Workflows" "extended"
+echo "" >> "$OUTFILE"
+generate_table "Infrastructure & Health" "health" "infra" "railway" "dispatch"
 
 # Footer
-cat >> "$OUTFILE" <<'EOF'
+echo "" >> "$OUTFILE"
+echo "---" >> "$OUTFILE"
+echo "" >> "$OUTFILE"
+cat >> "$OUTFILE" <<EOF
 
----
+## Skill Discovery
+**Auto-loaded from:** \`~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md\`
+**Specification**: https://agentskills.io/specification
 
-**Discovery**: Skills auto-load from `~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md`  
-**Details**: Each skill's SKILL.md contains full documentation  
-**Specification**: https://agentskills.io/specification  
-**Source**: Generated from agent-skills commit shown in header
+**Regenerate this index:**
+\`\`\`bash
+make publish-baseline
+\`\`\`
+
+**Add new skill:**
+1. Create \`~/agent-skills/<category>/<skill-name>/SKILL.md\`
+2. Run \`make publish-baseline\`
 EOF
 
-# Publish tiny global constraints rail
-CONSTRAINTS_SRC="$REPO_ROOT/fragments/dx-global-constraints.md"
-CONSTRAINTS_DST="$REPO_ROOT/dist/dx-global-constraints.md"
-if [[ -f "$CONSTRAINTS_SRC" ]]; then
-    cp "$CONSTRAINTS_SRC" "$CONSTRAINTS_DST"
-    echo "✅ Published constraints: $CONSTRAINTS_DST"
-else
-    echo "⚠️  Warning: dx-global-constraints.md not found"
-fi
-
+# Validation
 LINES=$(wc -l < "$OUTFILE")
-echo "✅ Published baseline: $OUTFILE ($LINES lines, SHA: ${COMMIT_SHA:0:8})"
-
+echo "✅ Generated $OUTFILE ($LINES lines)"
 if [[ $LINES -gt 800 ]]; then
-    echo "⚠️  Warning: Baseline is $LINES lines (goal: <800, not blocking)"
+    echo "⚠️  WARNING: AGENTS.md exceeds 800 lines ($LINES)"
 fi
