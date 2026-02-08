@@ -236,10 +236,14 @@ Output: IMPLEMENTATION_COMPLETE when done."
 
     echo "$impl_output" >> "$LOG_DIR/test.log"
 
-    # Stage and commit changes
+    # Stage and commit changes with Feature-Key trailers
     cd "$WORK_DIR"
     git add -A 2>/dev/null || true
-    git commit -m "$TASK_ID: Cycle $TASK_NUM attempt $attempt [$TASK_ID]" -q 2>/dev/null || true
+    git commit -m "$TASK_ID: Cycle $TASK_NUM attempt $attempt
+
+Feature-Key: $TASK_ID
+Agent: ralph-implementer
+Role: backend-engineer" -q 2>/dev/null || true
 
     AFTER_COMMIT=$(cd "$WORK_DIR" && git rev-parse HEAD)
 
@@ -275,15 +279,18 @@ Output signal (one line only):
       ((COMPLETED++))
       approved=true
 
-      # Mark Beads task as complete
-      log "Closing Beads task: $TASK_ID"
-      bd --no-daemon --db "$BEADS_DIR/beads.db" close "$TASK_ID" --reason="Completed via Ralph Beads Integration: $rev_output" 2>/dev/null || true
+      # NOTE: Beads closing removed (dx-alpha: implementers are READ-ONLY)
+      # The orchestrator (beads-parallel.sh) handles closing via --close-mode
 
-      # Create final commit with Beads ID
+      # Create final commit with Beads ID and Feature-Key trailers
       git commit --amend -m "$TASK_ID: Complete [$TASK_ID]
 
 Approved via Ralph Beads Integration
-$rev_output" -q
+$rev_output
+
+Feature-Key: $TASK_ID
+Agent: ralph-implementer
+Role: backend-engineer" -q
 
     elif [ "$signal" = "REVISION_REQUIRED" ]; then
       log "Signal: $rev_output"
@@ -321,10 +328,8 @@ log ""
 # Check if epic is complete
 if [ $COMPLETED -eq $TOTAL_TASKS ]; then
   log "✅ ALL TASKS COMPLETED - EPIC READY FOR REVIEW"
-
-  # Mark epic as complete
-  log "Closing epic: $EPIC_ID"
-  bd --no-daemon --db "$BEADS_DIR/beads.db" close "$EPIC_ID" --reason="All subtasks completed via Ralph Beads Integration" 2>/dev/null || true
+  # NOTE: Epic closing removed (dx-alpha: implementers are READ-ONLY)
+  # The orchestrator (beads-parallel.sh) handles closing via --close-mode
 else
   log "⚠️  SOME TASKS FAILED - EPIC INCOMPLETE"
 fi

@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # Ralph Parallel Execution via Beads Dependencies
-# Usage: ./beads-parallel.sh <task-id-1> <task-id-2> ... [--max-parallel N] [--resume <checkpoint-file>]
+# Usage: ./beads-parallel.sh <task-id-1> <task-id-2> ... [--max-parallel N] [--resume <checkpoint-file>] [--close-mode orchestrator|none]
 # Bash 3.2 compatible (macOS default)
 #
+# dx-alpha Protocol:
+#   Implementers are READ-ONLY in Beads. The orchestrator (this script) handles closing.
+#   --close-mode orchestrator (default): Close Beads issues after task completion
+#   --close-mode none: Do not close (planner closes manually)
+#
 # Examples:
-#   ./beads-parallel.sh agent-abc agent-def agent-ghi
-#   ./beads-parallel.sh agent-* --max-parallel 4
-#   ./beads-parallel.sh agent-* --max-parallel 2 --resume .ralph-checkpoint-epic-123.txt
+#   ./beads-parallel.sh bd-abc bd-def bd-ghi
+#   ./beads-parallel.sh bd-* --max-parallel 4
+#   ./beads-parallel.sh bd-* --max-parallel 2 --resume .ralph-checkpoint-epic-123.txt
+#   ./beads-parallel.sh bd-* --close-mode none  # Planner closes manually
 #
 # Environment Variables:
 #   KEEP_WORKTREES=1    Keep worktrees after completion (for debugging)
@@ -64,6 +70,7 @@ mkdir -p "$LOG_DIR"
 # Parse arguments
 TASK_IDS=""
 RESUME_MODE=""
+CLOSE_MODE="orchestrator"  # dx-alpha default: orchestrator closes Beads issues
 while [[ $# -gt 0 ]]; do
   case $1 in
     --max-parallel)
@@ -74,7 +81,15 @@ while [[ $# -gt 0 ]]; do
       RESUME_MODE="$2"
       shift 2
       ;;
-    agent-*)
+    --close-mode)
+      CLOSE_MODE="$2"
+      if [[ "$CLOSE_MODE" != "orchestrator" && "$CLOSE_MODE" != "none" ]]; then
+        log_error "Invalid --close-mode: $CLOSE_MODE (must be 'orchestrator' or 'none')"
+        exit 1
+      fi
+      shift 2
+      ;;
+    agent-*|bd-*)
       TASK_IDS="$TASK_IDS $1"
       shift
       ;;
@@ -99,6 +114,7 @@ if [ -n "$RESUME_MODE" ]; then
 fi
 log "Tasks: $TASK_IDS"
 log "Max parallel workers: $MAX_PARALLEL"
+log "Close mode: $CLOSE_MODE (dx-alpha: implementers read-only)"
 log ""
 
 # =============================================================================
@@ -350,6 +366,14 @@ run_single_task() {
     log_success "  [$task_id] Worker $worker_num: ✓ COMPLETE"
     echo "complete" > "$GRAPH_DIR/${task_id}-status"
 
+    # dx-alpha: Orchestrator closes Beads issues (implementers are read-only)
+    if [ "$CLOSE_MODE" = "orchestrator" ]; then
+      log "  [$task_id] Closing Beads issue (close-mode: orchestrator)..."
+      BEADS_DIR="$BEADS_DIR" "$BD_BIN" --no-daemon close "$task_id" \
+        --reason="Completed via Ralph orchestrator" 2>/dev/null || \
+        log_warning "  [$task_id] Failed to close Beads issue (non-fatal)"
+    fi
+
     # INTEGRATION: Keep worktree for debugging if KEEP_WORKTREES=1
     if [ "${KEEP_WORKTREES:-0}" != "1" ]; then
       cd "$WORKSPACE" || true
@@ -375,7 +399,7 @@ run_single_task() {
 
 # Export functions and variables for subshells
 export -f log log_success log_error log_warning run_single_task
-export COMPLETED FAILED GRAPH_DIR LOG_DIR MAX_PARALLEL WORKSPACE BEADS_DIR
+export COMPLETED FAILED GRAPH_DIR LOG_DIR MAX_PARALLEL WORKSPACE BEADS_DIR CLOSE_MODE BD_BIN
 
 # Execute each layer
 for ((layer=0; layer<TOTAL_LAYERS; layer++)); do
