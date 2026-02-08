@@ -47,8 +47,4 @@ link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
 # Existing tool: run
 link "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"
 
-# Auto-checkpoint (work preservation)
-link "$AGENTS_ROOT/scripts/auto-checkpoint.sh" "$BIN_DIR/auto-checkpoint"
-link "$AGENTS_ROOT/scripts/auto-checkpoint-install.sh" "$BIN_DIR/auto-checkpoint-install"
-
 echo "✅ ensured ~/bin tools"
