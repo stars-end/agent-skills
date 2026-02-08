@@ -204,8 +204,8 @@ $TASK_DESC
 Complete this task according to the description above.
 EOF
 
-  git add "$WORK_DIR/RALPH_TASK.md"
-  git commit -m "Add task file for $TASK_ID" -q
+  git add -f "$WORK_DIR/RALPH_TASK.md"  # Force add (work dir may be gitignored)
+  git commit -m "Add task file for $TASK_ID" -q 2>/dev/null || true
 
   attempt=1
   approved=false
@@ -276,7 +276,7 @@ Output signal (one line only):
 
     if [ "$signal" = "APPROVED" ]; then
       log "Signal: $rev_output"
-      ((COMPLETED++))
+      ((COMPLETED++)) || true  # Avoid set -e failure when COMPLETED=0
       approved=true
 
       # NOTE: Beads closing removed (dx-alpha: implementers are READ-ONLY)
@@ -294,16 +294,16 @@ Role: backend-engineer" -q
 
     elif [ "$signal" = "REVISION_REQUIRED" ]; then
       log "Signal: $rev_output"
-      ((REVISIONS++))
-      ((attempt++))
+      ((REVISIONS++)) || true
+      ((attempt++)) || true
 
       if [ $attempt -gt "$MAX_ATTEMPTS" ]; then
-        ((FAILED++))
+        ((FAILED++)) || true
         log "❌ Task $TASK_ID FAILED after $MAX_ATTEMPTS attempts"
         approved=true
       fi
     else
-      ((FAILED++))
+      ((FAILED++)) || true
       log "❌ Task $TASK_ID FAILED - Unknown signal"
       approved=true
     fi
@@ -311,7 +311,7 @@ Role: backend-engineer" -q
     log ""
   done
 
-  ((TASK_NUM++))
+  ((TASK_NUM++)) || true
 done
 
 # Final statistics

@@ -248,7 +248,7 @@ while [ -n "$READY_TASKS" ]; do
   done
 
   READY_TASKS=$(echo "$NEW_READY" | sed 's/^ //')
-  ((LAYER_NUM++))
+  ((LAYER_NUM++)) || true  # Avoid set -e failure when LAYER_NUM=0
 done
 
 # Check for cycles
