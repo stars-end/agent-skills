@@ -3,9 +3,45 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 OUTFILE="$REPO_ROOT/AGENTS.md"
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S UTC')
+DIST_DIR="$REPO_ROOT/dist"
+BASELINE_FILE="$DIST_DIR/universal-baseline.md"
+CONSTRAINTS_FILE="$DIST_DIR/dx-global-constraints.md"
 
-# Header
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S UTC')
+mkdir -p "$DIST_DIR"
+
+# 1. Generate Global Constraints (Layer A subset)
+cat > "$CONSTRAINTS_FILE" <<EOF
+# DX Global Constraints (V8)
+<!-- AUTO-GENERATED - DO NOT EDIT -->
+
+## 1) Canonical Repository Rules
+**Canonical repositories** (read-mostly clones):
+- \`~/agent-skills\`
+- \`~/prime-radiant-ai\`
+- \`~/affordabot\`
+- \`~/llm-common\`
+
+### Enforcement
+**Primary**: Git pre-commit hook blocks commits when not in worktree
+**Safety net**: Daily sync to origin/master (non-destructive)
+
+### Workflow
+Always use worktrees for development:
+\`\`\`bash
+dx-worktree create bd-xxxx repo-name
+cd /tmp/agents/bd-xxxx/repo-name
+# Work here
+\`\`\`
+
+## 2) V8 DX Automation Rules
+1. **No auto-merge**: never enable auto-merge on PRs — humans merge
+2. **No PR factory**: one PR per meaningful unit of work
+3. **No canonical writes**: always use worktrees
+4. **Feature-Key mandatory**: every commit needs \`Feature-Key: bd-XXXX\`
+EOF
+
+# Header for AGENTS.md
 cat > "$OUTFILE" <<EOF
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
@@ -14,7 +50,31 @@ cat > "$OUTFILE" <<EOF
 
 EOF
 
-# Static V8 Content (formerly fragments)
+# 2. Start Generating Universal Baseline
+cat > "$BASELINE_FILE" <<EOF
+# Universal Baseline — Agent Skills
+<!-- AUTO-GENERATED -->
+<!-- Last updated: $TIMESTAMP -->
+<!-- Regenerate: make publish-baseline -->
+
+## Nakomi Agent Protocol
+### Role
+Support a startup founder balancing high-leverage technical work and family responsibilities.
+### Core Constraints
+- Do not make irreversible decisions without explicit instruction
+- Do not expand scope unless asked
+- Do not optimize for cleverness or novelty
+- Do not assume time availability
+
+EOF
+
+# Append constraints to baseline
+cat "$CONSTRAINTS_FILE" >> "$BASELINE_FILE"
+echo "" >> "$BASELINE_FILE"
+echo "---" >> "$BASELINE_FILE"
+echo "" >> "$BASELINE_FILE"
+
+# 3. Build AGENTS.md by combining parts
 cat >> "$OUTFILE" <<EOF
 ## Nakomi Agent Protocol
 ### Role
@@ -25,31 +85,10 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
 
-## Canonical Repository Rules
-**Canonical repositories** (read-mostly clones):
-- \`~/agent-skills\`
-- \`~/prime-radiant-ai\`
-- \`~/affordabot\`
-- \`~/llm-common\`
-### Enforcement
-**Primary**: Git pre-commit hook blocks commits when not in worktree
-**Safety net**: Daily sync to origin/master (non-destructive)
-### Workflow
-Always use worktrees for development:
-\`\`\`bash
-dx-worktree create bd-xxxx repo-name
-cd /tmp/agents/bd-xxxx/repo-name
-# Work here
-\`\`\`
-
-## V8 DX Automation Rules
-1. **No auto-merge**: never enable auto-merge on PRs — humans merge
-2. **No PR factory**: one PR per meaningful unit of work
-3. **No canonical writes**: always use worktrees
-4. **Feature-Key mandatory**: every commit needs \`Feature-Key: bd-XXXX\`
-
 EOF
 
+# Extract Rules from Constraints for AGENTS.md (Legacy structure)
+sed -n '/## 1) Canonical/,/Feature-Key/p' "$CONSTRAINTS_FILE" >> "$OUTFILE"
 echo "" >> "$OUTFILE"
 echo "---" >> "$OUTFILE"
 echo "" >> "$OUTFILE"
@@ -57,7 +96,7 @@ echo "" >> "$OUTFILE"
 # Skill Table Generation
 extract_skill() {
     local skill_file="$1"
-    local name=$(grep "^name:" "$skill_file" | head -1 | cut -d: -f2- | xargs || echo "")
+    local name=$(grep "^name:" "$skill_file" | head -1 | cut -d: -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
     
     # Description: try to extract quoted description first
     local desc=$(grep "^description:" "$skill_file" | head -1 | sed 's/^description: *//' | sed 's/^"//' | sed 's/"$//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
@@ -84,25 +123,26 @@ extract_skill() {
 generate_table() {
     local title="$1"
     shift
-    echo "## $title" >> "$OUTFILE"
-    echo "" >> "$OUTFILE"
-    echo "| Skill | Description | Example | Tags |" >> "$OUTFILE"
-    echo "|-------|-------------|---------|------|" >> "$OUTFILE"
+    local buffer=""
+    buffer="## $title\n\n| Skill | Description | Example | Tags |\n|-------|-------------|---------|------|\n"
 
     for category in "$@"; do
         if [[ -d "$REPO_ROOT/$category" ]]; then
-            find "$REPO_ROOT/$category" -maxdepth 2 -name "SKILL.md" | sort | while read -r skill; do
-                extract_skill "$skill" >> "$OUTFILE"
-            done
+            while read -r skill; do
+                buffer+="$(extract_skill "$skill")\n"
+            done < <(find "$REPO_ROOT/$category" -maxdepth 2 -name "SKILL.md" | sort)
         fi
     done
+    
+    echo -e "$buffer" >> "$OUTFILE"
+    echo -e "$buffer" >> "$BASELINE_FILE"
 }
 
-# Generate Tables
+# 4. Generate Tables (to both files)
 generate_table "Core Workflows" "core"
-echo "" >> "$OUTFILE"
+echo "" >> "$OUTFILE"; echo "" >> "$BASELINE_FILE"
 generate_table "Extended Workflows" "extended"
-echo "" >> "$OUTFILE"
+echo "" >> "$OUTFILE"; echo "" >> "$BASELINE_FILE"
 generate_table "Infrastructure & Health" "health" "infra" "railway" "dispatch"
 
 # Footer
@@ -125,9 +165,21 @@ make publish-baseline
 2. Run \`make publish-baseline\`
 EOF
 
+# Append footer to baseline too
+cat >> "$BASELINE_FILE" <<EOF
+
+---
+**Discovery**: Skills auto-load from \`~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md\`  
+**Details**: Each skill's SKILL.md contains full documentation  
+**Specification**: https://agentskills.io/specification  
+EOF
+
 # Validation
 LINES=$(wc -l < "$OUTFILE")
 echo "✅ Generated $OUTFILE ($LINES lines)"
+echo "✅ Generated $BASELINE_FILE"
+echo "✅ Generated $CONSTRAINTS_FILE"
+
 if [[ $LINES -gt 800 ]]; then
     echo "⚠️  WARNING: AGENTS.md exceeds 800 lines ($LINES)"
 fi
