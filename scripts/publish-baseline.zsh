@@ -60,18 +60,18 @@ extract_skill() {
     local name=$(grep "^name:" "$skill_file" | head -1 | cut -d: -f2- | xargs || echo "")
     
     # Description: try to extract quoted description first
-    local desc=$(grep "^description:" "$skill_file" | head -1 | sed 's/^description: *//' | sed 's/^"//' | sed 's/"$//' | xargs || echo "")
+    local desc=$(grep "^description:" "$skill_file" | head -1 | sed 's/^description: *//' | sed 's/^"//' | sed 's/"$//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
     if [[ -z "$desc" || "$desc" == "|" || "$desc" == ">" ]]; then
-         desc=$(awk '/^description:/{flag=1; next} /^[a-z]+:/{flag=0} /^---/{flag=0} flag' "$skill_file" | tr '\n' ' ' | sed 's/  */ /g' | xargs | cut -c1-100 || echo "")
+         desc=$(awk '/^description:/{flag=1; next} /^[a-z]+:/{flag=0} /^---/{flag=0} flag' "$skill_file" | tr '\n' ' ' | sed 's/  */ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | cut -c1-100 || echo "")
     fi
     if [[ -z "$desc" ]]; then
          desc=$(grep -v "^---" "$skill_file" | grep -v "^#" | grep -v "^$" | head -1 | cut -c1-100 || echo "")
     fi
 
-    local tags=$(grep "^tags:" "$skill_file" | head -1 | cut -d: -f2- | tr -d '[]' | xargs || echo "")
+    local tags=$(grep "^tags:" "$skill_file" | head -1 | cut -d: -f2- | tr -d '[]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
     
     # Example
-    local example=$(grep -E "^\s*(bd |dx-|/skill )" "$skill_file" | head -1 | xargs | cut -c1-60 || echo "")
+    local example=$(grep -E "^\s*(bd |dx-|/skill )" "$skill_file" | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | cut -c1-60 || echo "")
     if [[ -z "$example" ]]; then
         example="—"
     else
