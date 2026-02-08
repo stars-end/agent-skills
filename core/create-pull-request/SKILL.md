@@ -315,11 +315,17 @@ if ! git ls-remote --heads origin <branch>:
 
 ### 4. Create PR with gh CLI
 
+**Prepare trailers:**
+```bash
+# Get agent identity
+AGENT_ID="$(~/.agent/skills/scripts/get_agent_identity.sh)"
+```
+
 **Prepare doc link:**
 ```bash
 DOC_DIR="docs/${FEATURE_KEY}"
 if [ -d "$DOC_DIR" ]; then
-  DOC_LINK="📄 Design docs: [\`$DOC_DIR/\`]($DOC_DIR/)"
+  DOC_LINK="📄 Design docs: [`$DOC_DIR/`]($DOC_DIR/)"
 else
   DOC_LINK="📄 No docs/ directory (tracked in Beads only)"
 fi
@@ -327,9 +333,9 @@ fi
 
 **For Features:**
 ```bash
-gh pr create \
-  ${DRAFT_FLAG} \
-  --title "{FEATURE_KEY}: Feature implementation" \
+gh pr create 
+  ${DRAFT_FLAG} 
+  --title "{FEATURE_KEY}: Feature implementation" 
   --body "
 ## Feature
 
@@ -353,16 +359,23 @@ ${DOC_LINK}
 
 ---
 
+## Trailers
+
+Feature-Key: {FEATURE_KEY}
+Agent: ${AGENT_ID}
+
+---
+
 🤖 Generated with Claude Code
 Co-Authored-By: Claude <noreply@anthropic.com>
-  " \
+  " 
   --base master
 ```
 
 **For Epics (closes child tasks, not epic):**
 ```bash
-gh pr create \
-  --title "{FEATURE_KEY}: Epic implementation" \
+gh pr create 
+  --title "{FEATURE_KEY}: Epic implementation" 
   --body "
 ## Epic
 
@@ -392,9 +405,16 @@ ${DOC_LINK}
 
 ---
 
+## Trailers
+
+Feature-Key: {FEATURE_KEY}
+Agent: ${AGENT_ID}
+
+---
+
 🤖 Generated with Claude Code
 Co-Authored-By: Claude <noreply@anthropic.com>
-  " \
+  " 
   --base master
 ```
 

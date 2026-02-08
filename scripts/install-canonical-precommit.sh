@@ -85,15 +85,74 @@ exit 0
 HOOK
 
   chmod +x "$hooks_dir/pre-commit"
+
+  cat > "$hooks_dir/commit-msg" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Skip if it's a merge commit or automated squash
+if echo "$COMMIT_MSG" | grep -q "^Merge "; then
+  exit 0
+fi
+
+if echo "$COMMIT_MSG" | grep -q "^squash!" || echo "$COMMIT_MSG" | grep -q "^fixup!"; then
+  exit 0
+fi
+
+# Skip if it's an auto-checkpoint commit
+if echo "$COMMIT_MSG" | grep -q "^checkpoint:"; then
+  exit 0
+fi
+
+# Enforce Feature-Key
+if ! echo "$COMMIT_MSG" | grep -q "Feature-Key:"; then
+  cat >&2 <<EOF
+
+❌ COMMIT BLOCKED: Missing Feature-Key
+
+Every commit must include a Feature-Key trailer for traceability.
+Example:
+  feat: your summary
+
+  Feature-Key: bd-123
+  Agent: claude-code
+
+EOF
+  exit 1
+fi
+
+# Enforce Agent
+if ! echo "$COMMIT_MSG" | grep -q "Agent:"; then
+  cat >&2 <<EOF
+
+❌ COMMIT BLOCKED: Missing Agent trailer
+
+Every commit must include an Agent trailer for attribution.
+Example:
+  feat: your summary
+
+  Feature-Key: bd-123
+  Agent: claude-code
+
+EOF
+  exit 1
+fi
+
+exit 0
+HOOK
+
+  chmod +x "$hooks_dir/commit-msg"
 }
 
 for repo in "${CANONICAL_REPOS[@]}"; do
   repo_root="$HOME/$repo"
   if [ -d "$repo_root/.git" ]; then
-    echo "Installing canonical pre-commit hook in $repo_root"
+    echo "Installing canonical pre-commit and commit-msg hooks in $repo_root"
     install_for_repo "$repo_root"
   fi
 done
 
-echo "✅ Canonical pre-commit hooks installed"
-
+echo "✅ Canonical hooks installed"

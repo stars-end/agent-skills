@@ -78,12 +78,16 @@ bd sync --flush-only
 
 Commit with child Feature-Key:
 ```bash
+# Get agent identity
+AGENT_ID="$(~/.agent/skills/scripts/get_agent_identity.sh)"
+
 git add -A
 git commit -m "fix: <issue-description>
 
 Closes ${childIssue.id}
 
 Feature-Key: ${childIssue.id}
+Agent: $AGENT_ID
 Parent-Feature: ${currentIssue.id}
 Discovery-Type: bug"
 ```
