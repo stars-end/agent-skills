@@ -64,12 +64,18 @@ if [ "$is_canonical" = "1" ] && [ "$IS_WORKTREE" = "0" ]; then
 You are in the canonical clone:
   $REPO_ROOT
 
-All work must happen in a worktree:
-  dx-worktree create <beads-id> $REPO_NAME
-  cd /tmp/agents/<beads-id>/$REPO_NAME
+Your changes are NOT lost. They are in your working directory.
 
-If you already did work here and need to preserve it:
-  auto-checkpoint
+TO RECOVER (do NOT rewrite your work):
+  1. Stash your changes:
+       git stash
+  2. Create a worktree:
+       dx-worktree create <beads-id> $REPO_NAME
+  3. Move to the worktree and apply your changes:
+       cd /tmp/agents/<beads-id>/$REPO_NAME
+       git stash pop
+
+Then continue working in the worktree.
 
 EOF
   exit 1
