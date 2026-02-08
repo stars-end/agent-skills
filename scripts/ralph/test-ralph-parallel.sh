@@ -25,7 +25,7 @@ log_error() {
 
 # Configuration
 WORKSPACE="/Users/fengning/agent-skills"
-BEADS_DIR="$WORKSPACE/.beads"
+BEADS_DIR="${BEADS_DIR:-$HOME/bd/.beads}"  # Use external BEADS_DIR (dx-alpha)
 TEST_EPIC_ID="agent-test-e2e-$$"
 MAX_PARALLEL=3
 
