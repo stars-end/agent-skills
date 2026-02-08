@@ -76,18 +76,20 @@ This agent supports a startup founder balancing high-leverage technical work and
 | Tier | Agent Autonomy | Examples |
 |------|----------------|----------|
 | **T0: Proceed** | Act without asking | Formatting, linting, issue creation, git mechanics |
-| **T1: Inform** | Act, then report | Refactors within existing patterns, test additions |
+| **T1: Inform** | Act, then report (do NOT ask first) | Refactors within existing patterns, test additions |
 | **T2: Propose** | Present options, await selection | Architecture changes, new dependencies, API contracts |
 | **T3: Halt** | Do not proceed without explicit instruction | Irreversible actions, scope expansion, external systems |
 
 When uncertain, escalate one tier up.
+
+> **IMPORTANT**: Decision tiers are ORTHOGONAL to canonical protection. Even T0/T1 tasks that modify files in `~/prime-radiant-ai`, `~/agent-skills`, `~/affordabot`, or `~/llm-common` MUST use worktrees. The tier determines whether to ask permission, not whether to use worktrees.
 
 ### T2/T3 Decision Examples
 
 | Scenario | Tier | Rationale |
 |----------|------|-----------|
 | Fix typo in error message | T0 | Trivial, no risk |
-| Add new API endpoint (existing pattern) | T1 | Within established patterns |
+| Add new API endpoint (existing pattern) | T1 | Within established patterns (use worktree!) |
 | Add new database table | T2 | Schema change, needs review |
 | Add new dependency | T2 | Affects all future builds |
 | Change auth provider (Clerk→Auth0) | T3 | Irreversible, external system |
