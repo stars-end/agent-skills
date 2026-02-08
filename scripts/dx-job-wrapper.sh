@@ -79,19 +79,31 @@ fi
 
 # Slack alerting on state transitions
 SLACK_WEBHOOK_URL="${DX_SLACK_WEBHOOK:-}"
-if [[ -n "$SLACK_WEBHOOK_URL" ]]; then
-    if [[ "$PREV_STATE" != "$CURR_STATE" ]]; then
-        EMOJI="✅"
-        MSG="DX job '$JOB_NAME' recovered on $(hostname -s)"
-        if [[ "$CURR_STATE" == "fail" ]]; then
-            EMOJI="🚨"
-            MSG="DX job '$JOB_NAME' failed on $(hostname -s) (exit $EXIT_CODE)"
-        fi
+OPENCLAW="$HOME/.local/bin/mise x node@22.21.1 -- openclaw"
+ALERTS_CHANNEL="C0ADSSZV9M2"
 
+if [[ "$PREV_STATE" != "$CURR_STATE" ]]; then
+    EMOJI="✅"
+    MSG="DX job '$JOB_NAME' recovered on $(hostname -s)"
+    if [[ "$CURR_STATE" == "fail" ]]; then
+        EMOJI="🚨"
+        MSG="DX job '$JOB_NAME' failed on $(hostname -s) (exit $EXIT_CODE)"
+    fi
+
+    # Try integrated OpenClaw messenger first
+    SENT_INTEGRATED=0
+    if command -v "$HOME/.local/bin/mise" &> /dev/null; then
+        if $OPENCLAW message send --channel slack --target "$ALERTS_CHANNEL" --message "${EMOJI} ${MSG}" >/dev/null 2>&1; then
+            SENT_INTEGRATED=1
+        fi
+    fi
+
+    # Fallback to legacy webhook if necessary
+    if [[ "$SENT_INTEGRATED" -eq 0 && -n "$SLACK_WEBHOOK_URL" ]]; then
         curl -s -m 5 -X POST "$SLACK_WEBHOOK_URL" \
             -H 'Content-type: application/json' \
             -d "{\"text\": \"${EMOJI} ${MSG}\"}" \
-            >/dev/null 2>&1 || true  # Never fail the wrapper
+            >/dev/null 2>&1 || true
     fi
 fi
 
