@@ -103,10 +103,14 @@ DX_CONTROLLER=1
 0 */4 * * * /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh queue-enforcer -- \
   ~/agent-skills/scripts/queue-hygiene-enforcer.sh >> ~/logs/dx/queue-enforcer.log 2>&1
 
-# V8: weekly invariant audit (Sunday 7am, via system cron + openclaw CLI)
-# NOTE: OpenClaw native cron is broken (daemon sandbox issue), use system cron
-0 7 * * 0 /bin/bash -c 'source ~/.zshrc; MSG=$(~/agent-skills/scripts/dx-audit.sh --slack 2>/dev/null); \
-  openclaw message send --channel slack --target C09MQGMFKDE --message "$MSG"' >> ~/logs/dx/dx-audit.log 2>&1
+# System Cron Workaround (OpenClaw native cron broken)
+# These use ~/bd/scripts/*-cron.sh wrappers that call openclaw CLI directly
+
+# Founder briefing (M-F 6am PT)
+0 6 * * 1-5 ~/bd/scripts/founder-briefing-cron.sh
+
+# Weekly V8 invariant audit (Sunday 7am PT)
+0 7 * * 0 ~/bd/scripts/dx-audit-cron.sh
 ```
 
 ## Alerting
@@ -141,10 +145,11 @@ The following V5-V7 components are removed in V8:
    real-time. A stuck PR won't alert until the next enforcer run (up to 4h).
 3. **Single controller:** If macmini is down, no enforcer runs. This is
    acceptable for the current fleet size (<12 agents).
-4. **OpenClaw native cron broken:** The gateway daemon (ai.openclaw.gateway)
-   runs in a sandboxed environment that can't connect to LLM providers.
-   Workaround: use system cron to run scripts, then post via `openclaw
-   message send` CLI (which inherits user shell env and works fine).
+4. **OpenClaw native cron broken:** Two bugs prevent native OpenClaw cron:
+   - Isolated sessions can't reach LLM providers (launchd sandbox)
+   - Main sessions ignore job prompts, run heartbeat instead
+   **Workaround:** Use `~/bd/scripts/*-cron.sh` wrappers via system cron.
+   These call `openclaw message send` CLI which inherits full shell env.
 
 ## Implementation Record
 
