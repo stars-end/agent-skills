@@ -460,7 +460,6 @@ source ~/.bashrc  # or source ~/.zshrc
 - ✅ Antigravity (via session config)
 - ✅ Codex CLI (via session config)
 - ✅ Gemini CLI (via session config)
-- ✅ OpenCode (via systemd environment)
 
 **All `bd` commands automatically use `BEADS_DIR`:**
 ```bash
@@ -578,7 +577,6 @@ Skills are organized into categories for easy discovery:
 | Agent | Discovery Method |
 |-------|------------------|
 | Claude Code | Native `/skill <name>` command |
-| OpenCode | Native `skill <name>` tool |
 | Codex CLI | Native skill loading |
 | Antigravity | Native slash commands |
 | Gemini CLI | Native skill loading |
