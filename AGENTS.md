@@ -1,6 +1,6 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED from SKILL.md files -->
-<!-- Last updated: 2026-02-08 07:54:23 UTC -->
+<!-- Last updated: 2026-02-08 09:36:32 UTC -->
 <!-- DO NOT EDIT MANUALLY - Run: scripts/generate-agents-index.sh -->
 
 ## Nakomi Agent Protocol
@@ -62,7 +62,6 @@ cd /tmp/agents/bd-xxxx/repo-name
 | **plan-refine** | Iteratively refine implementation plans using the Convexity pattern. Simulates a multi-round archite | — | architecture, planning, review, refinement, apr |
 | **prompt-writing** | Drafts robust, low-cognitive-load prompts for other agents that enforce the DX invariants: worktree- | — | workflow, prompts, orchestration, dx, safety |
 | **skill-creator** | Create new Claude Code skills following V3 DX patterns with Beads/Serena integration. MUST BE USED w | — | meta, skill-creation, automation, v3 |
-| **skill-factory** | Meta-skill for creating new skills and ensuring AGENTS.md is regenerated. Use when adding new skills or recompiling the agent index. | — | meta, skill-creation, automation |
 | **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lig | — | slack, coordination, workflow, optional |
 | **worktree-workflow** | Create and manage task workspaces using git worktrees (without exposing worktree complexity). Use th | `dx-worktree create <beads-id> <repo>` | dx, git, worktree, workspace, workflow |
 
