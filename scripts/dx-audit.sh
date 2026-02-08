@@ -62,7 +62,11 @@ for repo in "${REPOS[@]}"; do
 
   # 1. Rescue branches (canonical violation evidence)
   rescue_branches=$(gh api "repos/$repo/branches" --paginate --jq '.[].name | select(startswith("rescue-"))' 2>/dev/null || echo "")
-  rescue_count=$(echo "$rescue_branches" | grep -c "rescue-" || echo "0")
+  if [[ -n "$rescue_branches" ]]; then
+    rescue_count=$(echo "$rescue_branches" | wc -l | tr -d ' ')
+  else
+    rescue_count=0
+  fi
   rescue_counts[$repo_name]=$rescue_count
   total_rescue=$((total_rescue + rescue_count))
 
