@@ -253,9 +253,9 @@ if [ -f "$HOME/agent-skills/health/mcp-doctor/check.sh" ]; then
     bash "$HOME/agent-skills/health/mcp-doctor/check.sh" || true
 fi
 
-# 8. V7.8 Lifecycle / GC Metrics
+# 8. V8 Lifecycle / GC Metrics
 echo ""
-echo "--- V7.8 Lifecycle & GC Metrics ---"
+echo "--- V8 Lifecycle & GC Metrics ---"
 WORKTREE_BASE="/tmp/agents"
 if [[ -d "$WORKTREE_BASE" ]]; then
     total_wt=$(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name ".git" 2>/dev/null | wc -l | tr -d ' ')
