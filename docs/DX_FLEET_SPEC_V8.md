@@ -54,6 +54,7 @@
 | worktree-gc-v8.sh | Prune merged worktrees | 3:30 AM | bd-7jpo |
 | queue-hygiene-enforcer.sh | PR queue hygiene (DX_CONTROLLER only) | */4h | bd-gdlr |
 | dx-job-wrapper.sh | Wrap all above with state + Slack alerts | N/A | bd-suaw |
+| dx-audit.sh | V8 invariant audit (rescue branches, trailers) | Weekly | bd-rrb9 |
 
 ## Controller Pattern
 
@@ -101,6 +102,15 @@ DX_CONTROLLER=1
 # V8: queue-hygiene-enforcer (controller only)
 0 */4 * * * /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh queue-enforcer -- \
   ~/agent-skills/scripts/queue-hygiene-enforcer.sh >> ~/logs/dx/queue-enforcer.log 2>&1
+
+# System Cron Workaround (OpenClaw native cron broken)
+# These use ~/bd/scripts/*-cron.sh wrappers that call openclaw CLI directly
+
+# Founder briefing (M-F 6am PT)
+0 6 * * 1-5 ~/bd/scripts/founder-briefing-cron.sh
+
+# Weekly V8 invariant audit (Sunday 7am PT)
+0 7 * * 0 ~/bd/scripts/dx-audit-cron.sh
 ```
 
 ## Alerting
@@ -135,6 +145,11 @@ The following V5-V7 components are removed in V8:
    real-time. A stuck PR won't alert until the next enforcer run (up to 4h).
 3. **Single controller:** If macmini is down, no enforcer runs. This is
    acceptable for the current fleet size (<12 agents).
+4. **OpenClaw native cron broken:** Two bugs prevent native OpenClaw cron:
+   - Isolated sessions can't reach LLM providers (launchd sandbox)
+   - Main sessions ignore job prompts, run heartbeat instead
+   **Workaround:** Use `~/bd/scripts/*-cron.sh` wrappers via system cron.
+   These call `openclaw message send` CLI which inherits full shell env.
 
 ## Implementation Record
 
