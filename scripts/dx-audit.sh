@@ -5,7 +5,7 @@
 # Checks V8 DX invariants across all repos and outputs structured data
 # for LLM analysis (openclawd, gemini, etc.)
 #
-# Usage: dx-audit.sh [--json] [--output FILE]
+# Usage: dx-audit.sh [--json] [--slack] [--output FILE]
 #
 # Invariants checked:
 #   1. Canonical repos read-only (rescue branch evidence)
@@ -13,6 +13,9 @@
 #   3. No auto-merge enabled on PRs
 #   4. Agent: trailer present on commits
 #   5. PR-to-beads linkage
+#
+# Schedule: Weekly via system cron (OpenClaw native cron is broken)
+# Cron: 0 7 * * 0 /bin/bash -c 'source ~/.bashrc; MSG=$(~/agent-skills/scripts/dx-audit.sh --slack); openclaw message send --channel slack --target C09MQGMFKDE --message "$MSG"'
 #
 set -euo pipefail
 
@@ -26,7 +29,9 @@ OUTPUT_FILE=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --json) OUTPUT_FORMAT="json"; shift ;;
+    --slack) OUTPUT_FORMAT="slack"; shift ;;
     --output) OUTPUT_FILE="$2"; shift 2 ;;
+    --help) echo "Usage: dx-audit.sh [--json] [--slack] [--output FILE]"; exit 0 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -195,6 +200,38 @@ done | sed '$ s/,$//')
 }
 EOF
 )
+
+elif [[ "$OUTPUT_FORMAT" == "slack" ]]; then
+  # Determine overall status
+  status_emoji="✅"
+  status_text="All green"
+
+  if [ "$total_rescue" -gt 0 ] || [ "$total_auto_merge" -gt 0 ]; then
+    status_emoji="🚨"
+    status_text="V8 violations detected"
+  elif [ "$total_stale" -gt 2 ]; then
+    status_emoji="⚠️"
+    status_text="PRs need attention"
+  fi
+
+  # Build main message (≤300 chars)
+  output="${status_emoji} *V8 Weekly Audit* (${LOOKBACK_DAYS}d):
+• Rescue branches: ${total_rescue} $([ $total_rescue -eq 0 ] && echo '✅' || echo '❌')
+• Auto-merge PRs: ${total_auto_merge} $([ $total_auto_merge -eq 0 ] && echo '✅' || echo '❌')
+• Stale PRs: ${total_stale} | Drafts: ${total_draft}"
+
+  # Add violation details if any
+  if [ "$total_rescue" -gt 0 ] && [[ -n "$rescue_events" ]]; then
+    output="${output}
+---THREAD---
+*Rescue Branch Events (Canonical Violations):*"
+    # Parse rescue_events and format
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      output="${output}
+${line}"
+    done <<< "$(echo -e "$rescue_events")"
+  fi
 fi
 
 # Output
