@@ -43,3 +43,28 @@ Actions taken: 0
 Status: UNKNOWN
 Last check: never
 Failed jobs: none
+
+### V8 Invariant Audit
+<!-- Updated by dx-audit.sh (runs daily or on-demand) -->
+<!-- This section contains structured data for LLM analysis -->
+Status: UNKNOWN
+Last run: never
+
+#### Summary
+| Metric | Count | Status |
+|--------|-------|--------|
+| Rescue branches (canonical violations) | 0 | ✅ OK |
+| Commits missing Feature-Key | 0 | ✅ OK |
+| PRs with auto-merge enabled | 0 | ✅ OK |
+| Stale PRs (>7d) | 0 | ✅ OK |
+
+#### Analysis Prompt for OpenClawd
+When reading this section, consider:
+1. Rescue branches indicate agents editing canonical repos directly (V8 violation)
+2. Missing Feature-Key means commits aren't linked to beads issues
+3. Auto-merge should NEVER be enabled (humans merge)
+4. Stale PRs may indicate blocked work or forgotten branches
+5. Look for TRENDS: is the situation improving or degrading?
+
+If violations detected, suggest which agent/VM may be responsible based on
+rescue branch naming pattern: `rescue-<hostname>-<repo>`
