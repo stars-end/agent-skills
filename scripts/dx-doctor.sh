@@ -133,6 +133,14 @@ diagnose_local() {
         fi
     fi
 
+    if [[ -z "${BEADS_IGNORE_REPO_MISMATCH:-}" ]]; then
+        echo -e "${RED}❌ BEADS_IGNORE_REPO_MISMATCH not set${RESET}"
+        echo -e "${YELLOW}   Repair: export BEADS_IGNORE_REPO_MISMATCH=1 (persist in shell profile)${RESET}"
+        ((ISSUES_FOUND++))
+    else
+        echo -e "${GREEN}✅ BEADS_IGNORE_REPO_MISMATCH set: $BEADS_IGNORE_REPO_MISMATCH${RESET}"
+    fi
+
     if [[ -d ".beads" ]]; then
         echo -e "${RED}❌ Local .beads/ directory exists (V5 violation)${RESET}"
         echo -e "${YELLOW}   Repair: rm -rf .beads${RESET}"

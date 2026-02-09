@@ -43,6 +43,7 @@ link "$AGENTS_ROOT/scripts/dx-worktree-gc.sh" "$BIN_DIR/dx-worktree-gc"
 # Beads helpers (used across repos)
 link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
 link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
+link "$AGENTS_ROOT/scripts/bd-sync-safe.sh" "$BIN_DIR/bd-sync-safe"
 
 # Existing tool: run
 link "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"

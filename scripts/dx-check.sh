@@ -28,14 +28,21 @@ if [[ -z "${BEADS_DIR:-}" ]]; then
         echo -e "${YELLOW}⚠️  BEADS_DIR not set; defaulting to ${DEFAULT_BEADS_DIR} for this run.${RESET}"
         echo "   Tip: persist with: export BEADS_DIR=\"$DEFAULT_BEADS_DIR\" (e.g. ~/.zshenv or ~/.bash_profile)"
         export BEADS_DIR="$DEFAULT_BEADS_DIR"
+        export BEADS_IGNORE_REPO_MISMATCH=1
     else
         echo -e "${RED}❌ FATAL: BEADS_DIR not set and default DB not found.${RESET}"
         echo "   Expected Beads DB at: $DEFAULT_BEADS_DIR"
         echo "   Action:"
         echo "     1) Create it by running: cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh"
         echo "     2) Persist: export BEADS_DIR=\"$DEFAULT_BEADS_DIR\""
+        echo "     3) Persist: export BEADS_IGNORE_REPO_MISMATCH=1"
         exit 1
     fi
+fi
+
+# Ensure mismatch bypass is set if using centralized DB
+if [[ "${BEADS_DIR}" == "${DEFAULT_BEADS_DIR}" ]]; then
+    export BEADS_IGNORE_REPO_MISMATCH=1
 fi
 
 if [[ -d ".beads" ]]; then

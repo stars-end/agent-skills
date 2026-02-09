@@ -475,24 +475,31 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 ❌ Closing without reason/context
 
 ## Troubleshooting
- 
+
 **Beads CLI not found:**
 - Check: `which bd`
 - Ensure `~/bin` or `scripts/` in PATH
- 
+
 **Database out of sync:**
 - Run: `bd sync`
 - Check: `git status .beads/issues.jsonl`
 - Verify git hooks installed
- 
+
 **Issue not found:**
 - List all: `bd list --status open`
 - Check ID format: `bd-abc123` (not just abc123)
 - Verify beads initialized: `ls .beads/`
 
+**Import hangs on large JSONL files (500+ issues):**
+- Symptom: `bd import -i issues.jsonl --no-daemon` hangs for 5+ minutes
+- Cause: SQLite transaction scaling during dependency graph construction
+- Fix: Use chunked import wrapper: `~/bd/bd-import-safe.sh issues.jsonl`
+- See: `~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md`
+- Upstream issue: https://github.com/steveyeggie/beads/issues/1629
+
 ---
 
-**Last Updated:** 2025-01-11
+**Last Updated:** 2025-02-09
 **Related Skills:** sync-feature-branch, create-pull-request
 **Helper Scripts:** bd-context, bd-link-pr
 **References:**

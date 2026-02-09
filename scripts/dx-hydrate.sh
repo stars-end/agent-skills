@@ -195,6 +195,7 @@ configure_shell() {
             echo "alias hydrate='$AGENTS_ROOT/scripts/dx-hydrate.sh'" >> "$RC_FILE"
             echo "alias dx-check='$AGENTS_ROOT/scripts/dx-check.sh'" >> "$RC_FILE"
             echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$RC_FILE"
+            echo "export BEADS_IGNORE_REPO_MISMATCH=1" >> "$RC_FILE"
             
             # Auto-check on login
             echo "if [ -f '$AGENTS_ROOT/scripts/dx-status.sh' ]; then" >> "$RC_FILE"

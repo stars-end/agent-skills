@@ -108,6 +108,26 @@ else
   echo "✅ Feature-Key trailer present or not required"
 fi
 
+# Check 5: Large JSONL files (import hang risk)
+echo ""
+echo "📋 Checking for large JSONL files..."
+if [[ -f .beads/issues.jsonl ]]; then
+  LINE_COUNT=$(wc -l < .beads/issues.jsonl 2>/dev/null || echo 0)
+  if [[ $LINE_COUNT -gt 500 ]]; then
+    echo "⚠️  Large JSONL file detected: $LINE_COUNT issues"
+    echo "   Risk: Import may hang due to SQLite transaction scaling"
+    echo "   Workaround: Use ~/bd/bd-import-safe.sh for large imports"
+    echo "   See: ~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md"
+    # Note: Not incrementing ISSUES_FOUND as this is informational
+  elif [[ $LINE_COUNT -gt 0 ]]; then
+    echo "✅ JSONL file size normal ($LINE_COUNT issues)"
+  else
+    echo "ℹ️  No JSONL file or empty"
+  fi
+else
+  echo "ℹ️  No .beads/issues.jsonl found"
+fi
+
 echo ""
 echo "═══════════════════════════════════════"
 if [[ $ISSUES_FOUND -eq 0 ]]; then
@@ -240,6 +260,13 @@ bd sync            # Should now succeed
 **Cause**: On feature-bd-xyz but issue bd-xyz doesn't exist
 **Fix**: Create issue or switch to correct branch
 **Prevention**: bd-doctor warns early
+
+### Issue 5: Large import hangs ("Quiet Zone")
+**Cause**: Importing 1000+ issues in single transaction causes SQLite timeout during dependency graph construction
+**Symptoms**: `bd import -i issues.jsonl --no-daemon` hangs for 5+ minutes, parses JSONL successfully but never completes
+**Fix**: Use chunked import wrapper: `~/bd/bd-import-safe.sh issues.jsonl`
+**Prevention**: bd-doctor warns on large JSONL files
+**See also**: `~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md`
 
 ## Integration with Other Skills
 

@@ -219,6 +219,14 @@ check_beads_dir() {
     else
         echo -e "${GREEN}✅ Database exists at $BEADS_DIR${RESET}"
     fi
+
+    # Check for repository mismatch bypass
+    if [ -z "${BEADS_IGNORE_REPO_MISMATCH:-}" ]; then
+        echo -e "${RED}❌ BEADS_IGNORE_REPO_MISMATCH not set${RESET}"
+        ERRORS=$((ERRORS+1))
+    else
+        echo -e "${GREEN}✅ BEADS_IGNORE_REPO_MISMATCH = $BEADS_IGNORE_REPO_MISMATCH${RESET}"
+    fi
 }
 check_beads_dir
 
