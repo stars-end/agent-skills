@@ -237,6 +237,22 @@ bd dep bd-discovered-bug bd-parent-feature --type discovered-from
 
 **When invoked:** "create PR", "merge into master"
 
+### DX Tooling (Centralized Database Pattern)
+
+**Automated Beads Operations:**
+- `dx-hydrate.sh` - Auto-persists centralized database safety settings
+- `dx-check.sh` - Auto-exports safety bypasses during bootstrap
+- `dx-doctor.sh` - Verifies centralized database health
+- `dx-status.sh` - Shows database and variable configuration
+
+**Manual Tools:**
+- `bd-sync-safe` - Deterministic sync script (symlinked to `~/bin/`)
+- `bd-import-safe` - Manual chunked import for large JSONL files
+
+**When invoked:** Large imports, database recovery, environment bootstrap
+
+**See also:** `~/agent-skills/docs/BEADS_DX_QUICK_REFERENCE.md`
+
 ## Beads MCP Tools Reference
 
 ### Core Operations
@@ -490,12 +506,15 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 - Check ID format: `bd-abc123` (not just abc123)
 - Verify beads initialized: `ls .beads/`
 
-**Import hangs on large JSONL files (500+ issues):**
-- Symptom: `bd import -i issues.jsonl --no-daemon` hangs for 5+ minutes
-- Cause: SQLite transaction scaling during dependency graph construction
-- Fix: Use chunked import wrapper: `~/bd/bd-import-safe.sh issues.jsonl`
-- See: `~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md`
-- Upstream issue: https://github.com/steveyeggie/beads/issues/1629
+**Import hangs on large JSONL files (500+ issues):** ⚠️ **RESOLVED**
+- **Status**: Resolved via [stars-end/agent-skills#147](https://github.com/stars-end/agent-skills/pull/147)
+- **Symptom**: `bd import -i issues.jsonl --no-daemon` hangs for 5+ minutes
+- **Cause**: SQLite transaction scaling during dependency graph construction
+- **Solutions**:
+  - **Automation**: Use DX tooling (`dx-hydrate.sh`, `dx-check.sh`)
+  - **Manual**: Use `bd-import-safe issues.jsonl` (symlinked to `~/bin/`)
+- **Documentation**: `~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md`
+- **Upstream**: https://github.com/steveyeggie/beads/issues/1629
 
 ---
 

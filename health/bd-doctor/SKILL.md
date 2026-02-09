@@ -115,8 +115,11 @@ if [[ -f .beads/issues.jsonl ]]; then
   LINE_COUNT=$(wc -l < .beads/issues.jsonl 2>/dev/null || echo 0)
   if [[ $LINE_COUNT -gt 500 ]]; then
     echo "⚠️  Large JSONL file detected: $LINE_COUNT issues"
-    echo "   Risk: Import may hang due to SQLite transaction scaling"
-    echo "   Workaround: Use ~/bd/bd-import-safe.sh for large imports"
+    echo "   Note: This issue was RESOLVED via PR #147 (DX tooling)"
+    echo "   Solutions: Use dx-hydrate.sh OR bd-import-safe wrapper"
+    echo "   Commands:"
+    echo "     dx-hydrate.sh              # DX automation (recommended)"
+    echo "     bd-import-safe issues.jsonl # Manual chunked import"
     echo "   See: ~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md"
     # Note: Not incrementing ISSUES_FOUND as this is informational
   elif [[ $LINE_COUNT -gt 0 ]]; then
@@ -126,6 +129,18 @@ if [[ -f .beads/issues.jsonl ]]; then
   fi
 else
   echo "ℹ️  No .beads/issues.jsonl found"
+fi
+
+# Check 6: DX tooling availability
+echo ""
+echo "📋 Checking DX tooling..."
+if command -v bd-sync-safe >/dev/null 2>&1; then
+  echo "✅ DX tools available (bd-sync-safe, bd-import-safe)"
+elif [[ -f ~/bd/bd-sync-safe.sh ]]; then
+  echo "⚠️  DX scripts found but not symlinked to ~/bin/"
+  echo "   Run: dx-ensure-bins.sh to fix"
+else
+  echo "ℹ️  DX tooling not found (optional)"
 fi
 
 echo ""
@@ -261,11 +276,14 @@ bd sync            # Should now succeed
 **Fix**: Create issue or switch to correct branch
 **Prevention**: bd-doctor warns early
 
-### Issue 5: Large import hangs ("Quiet Zone")
+### Issue 5: Large import hangs ("Quiet Zone") ⚠️ **RESOLVED**
+**Status**: Resolved via [stars-end/agent-skills#147](https://github.com/stars-end/agent-skills/pull/147) (2025-02-09)
 **Cause**: Importing 1000+ issues in single transaction causes SQLite timeout during dependency graph construction
 **Symptoms**: `bd import -i issues.jsonl --no-daemon` hangs for 5+ minutes, parses JSONL successfully but never completes
-**Fix**: Use chunked import wrapper: `~/bd/bd-import-safe.sh issues.jsonl`
-**Prevention**: bd-doctor warns on large JSONL files
+**Solutions**:
+  - **Automation**: Use DX tooling (dx-hydrate.sh, dx-check.sh) - handles automatically
+  - **Manual**: Use chunked import wrapper: `bd-import-safe issues.jsonl` (symlinked to ~/bin/)
+  - **Upstream**: Tracking via [steveyeggie/beads#1629](https://github.com/steveyeggie/beads/issues/1629)
 **See also**: `~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md`
 
 ## Integration with Other Skills
