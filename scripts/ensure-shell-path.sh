@@ -26,6 +26,7 @@ ensure_zshenv_path() {
     echo "$marker"
     echo "# NOTE: ~/.zshenv runs for non-interactive shells; do not put tokens here."
     echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"'
+    echo "export BEADS_IGNORE_REPO_MISMATCH=1"
   } >> "$zshenv"
 }
 
@@ -51,6 +52,7 @@ ensure_bash_profile_path() {
     echo "$marker"
     echo "# NOTE: Do not put tokens here."
     echo 'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"'
+    echo "export BEADS_IGNORE_REPO_MISMATCH=1"
   } >> "$profile"
 }
 
