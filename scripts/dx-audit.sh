@@ -47,12 +47,14 @@ declare -A missing_agent_trailer
 declare -A auto_merge_enabled
 declare -A stale_prs
 declare -A draft_prs
+declare -A skill_drift_count
 total_rescue=0
 total_missing_fk=0
 total_missing_agent=0
 total_auto_merge=0
 total_stale=0
 total_draft=0
+total_skill_drift=0
 rescue_events=""
 
 echo "# V8 Invariant Audit" >&2
@@ -118,6 +120,21 @@ for repo in "${REPOS[@]}"; do
     --jq '[.[] | select(.isDraft == true)] | length' 2>/dev/null || echo "0")
   draft_prs[$repo_name]=$drafts
   total_draft=$((total_draft + drafts))
+
+  # 7. Skill Drift (Local Check)
+  repo_path="$HOME/$repo_name"
+  drift_count=0
+  if [[ -d "$repo_path/.claude/skills" ]]; then
+    for skill_file in "$repo_path"/.claude/skills/*/SKILL.md; do
+      [[ -e "$skill_file" ]] || continue
+      missing=$(perl -lne 'print $1 while /`([^`]+\.(?:py|ts|tsx|sql|sh|yml|yaml))` /g' "$skill_file" | while read -r f; do
+        [[ -f "$repo_path/$f" ]] || echo "$f"
+      done | wc -l)
+      drift_count=$((drift_count + missing))
+    done
+  fi
+  skill_drift_count[$repo_name]=$drift_count
+  total_skill_drift=$((total_skill_drift + drift_count))
 done
 
 # Generate output
@@ -135,17 +152,19 @@ Lookback: ${LOOKBACK_DAYS} days
 | Commits missing Feature-Key | $total_missing_fk | $([ $total_missing_fk -lt 5 ] && echo '✅ OK' || echo '⚠️ CHECK') |
 | Commits missing Agent: trailer | $total_missing_agent | $([ $total_missing_agent -lt 5 ] && echo '✅ OK' || echo '⚠️ CHECK') |
 | PRs with auto-merge enabled | $total_auto_merge | $([ $total_auto_merge -eq 0 ] && echo '✅ OK' || echo '❌ VIOLATION') |
+| Skill Drift (missing files) | $total_skill_drift | $([ $total_skill_drift -eq 0 ] && echo '✅ OK' || echo '⚠️ DRIFT') |
 | Stale PRs (>${LOOKBACK_DAYS}d) | $total_stale | $([ $total_stale -lt 3 ] && echo '✅ OK' || echo '⚠️ ATTENTION') |
 | Draft PRs | $total_draft | ℹ️ INFO |
 
 ### Per-Repo Breakdown
-| Repo | Rescue | Missing FK | Missing Agent | Auto-Merge | Stale | Draft |
-|------|--------|------------|---------------|------------|-------|-------|"
+| Repo | Rescue | Missing FK | Missing Agent | Auto-Merge | Drift | Stale | Draft |
+|------|--------|------------|---------------|------------|-------|-------|-------|
+"
 
   for repo in "${REPOS[@]}"; do
     name=$(basename "$repo")
     output="${output}
-| $name | ${rescue_counts[$name]:-0} | ${missing_feature_key[$name]:-0} | ${missing_agent_trailer[$name]:-0} | ${auto_merge_enabled[$name]:-0} | ${stale_prs[$name]:-0} | ${draft_prs[$name]:-0} |"
+| $name | ${rescue_counts[$name]:-0} | ${missing_feature_key[$name]:-0} | ${missing_agent_trailer[$name]:-0} | ${auto_merge_enabled[$name]:-0} | ${skill_drift_count[$name]:-0} | ${stale_prs[$name]:-0} | ${draft_prs[$name]:-0} |"
   done
 
   if [[ -n "$rescue_events" ]]; then
@@ -209,15 +228,16 @@ elif [[ "$OUTPUT_FORMAT" == "slack" ]]; then
   if [ "$total_rescue" -gt 0 ] || [ "$total_auto_merge" -gt 0 ]; then
     status_emoji="🚨"
     status_text="V8 violations detected"
-  elif [ "$total_stale" -gt 2 ]; then
+  elif [ "$total_stale" -gt 2 ] || [ "$total_skill_drift" -gt 0 ]; then
     status_emoji="⚠️"
-    status_text="PRs need attention"
+    status_text="PR or Skill Drift detected"
   fi
 
   # Build main message (≤300 chars)
   output="${status_emoji} *V8 Weekly Audit* (${LOOKBACK_DAYS}d):
 • Rescue branches: ${total_rescue} $([ $total_rescue -eq 0 ] && echo '✅' || echo '❌')
 • Auto-merge PRs: ${total_auto_merge} $([ $total_auto_merge -eq 0 ] && echo '✅' || echo '❌')
+• Skill Drift: ${total_skill_drift} $([ $total_skill_drift -eq 0 ] && echo '✅' || echo '⚠️')
 • Stale PRs: ${total_stale} | Drafts: ${total_draft}"
 
   # Add violation details if any

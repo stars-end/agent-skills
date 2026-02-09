@@ -1,4 +1,4 @@
-# AGENTS.md — Agent Skills Index
+# Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
 <!-- Last updated: 2026-02-09 12:35:30 UTC -->
 <!-- Regenerate: make publish-baseline -->
@@ -11,6 +11,9 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not expand scope unless asked
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
+
+# DX Global Constraints (V8)
+<!-- AUTO-GENERATED - DO NOT EDIT -->
 
 ## 1) Canonical Repository Rules
 **Canonical repositories** (read-mostly clones):
@@ -109,17 +112,6 @@ cd /tmp/agents/bd-xxxx/repo-name
 
 
 ---
-
-
-## Skill Discovery
-**Auto-loaded from:** `~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md`
-**Specification**: https://agentskills.io/specification
-
-**Regenerate this index:**
-```bash
-make publish-baseline
-```
-
-**Add new skill:**
-1. Create `~/agent-skills/<category>/<skill-name>/SKILL.md`
-2. Run `make publish-baseline`
+**Discovery**: Skills auto-load from `~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md`  
+**Details**: Each skill's SKILL.md contains full documentation  
+**Specification**: https://agentskills.io/specification  

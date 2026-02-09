@@ -25,12 +25,14 @@ export CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
 
 export CANONICAL_VMS=(
   "feng@epyc6:linux:Primary Linux dev host (this machine)"
+  "feng@epyc12:linux:Secondary Linux dev host"
   "fengning@homedesktop-wsl:linux:WSL2 on Windows - Linux dev environment"
   "fengning@macmini:macos:macOS Dev machine"
 )
 
 # Shorthand access to primary targets
 export CANONICAL_VM_PRIMARY="feng@epyc6"
+export CANONICAL_VM_LINUX2="feng@epyc12"
 export CANONICAL_VM_WSL="fengning@homedesktop-wsl"
 export CANONICAL_VM_MACOS="fengning@macmini"
 
@@ -108,6 +110,10 @@ case "$CANONICAL_HOST_KEY" in
     export CANONICAL_REQUIRED_REPOS=( "agent-skills" )
     export CANONICAL_OPTIONAL_REPOS=( "prime-radiant-ai" "affordabot" "llm-common" )
     ;;
+  epyc12)
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" )
+    export CANONICAL_OPTIONAL_REPOS=( "prime-radiant-ai" "affordabot" "llm-common" )
+    ;;
   *)
     export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" "affordabot" "llm-common" )
     export CANONICAL_OPTIONAL_REPOS=()
@@ -128,6 +134,10 @@ case "$CANONICAL_HOST_KEY" in
     export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "railway" "ru" )
     export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" "op" )
     ;;
+  epyc12)
+    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "railway" "ru" )
+    export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" "op" )
+    ;;
   *)
     export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "railway" "ru" )
     export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" "op" )
@@ -140,6 +150,7 @@ esac
 # epyc6: No jq (no sudo access). Scripts should use grep-based JSON parsing.
 # epyc6: User is 'feng' not 'fengning'.
 # epyc6: May not be directly reachable - use homedesktop-wsl as jump host.
+# epyc12: User is 'fengning'. Direct SSH access available. dcg v0.2.15 installed.
 
 export CANONICAL_MISSING_TOOLS_EPYC6=( "jq" )
 
