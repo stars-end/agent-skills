@@ -1,6 +1,6 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Last updated: 2026-02-09 12:35:30 UTC -->
+<!-- Last updated: 2026-02-09 13:05:46 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
