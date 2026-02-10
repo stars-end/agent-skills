@@ -21,6 +21,7 @@ Usage:
 Notes:
   - This does NOT create worktrees. If missing, it prints the dx-worktree command to run.
   - This does NOT run git commit/push. The delegate must return a diff + validation commands.
+  - Auth is expected via environment (preferred): CC_GLM_AUTH_TOKEN, or ZAI_API_KEY (plain or op:// reference).
 EOF
 }
 
@@ -146,4 +147,3 @@ set -e
 
 cat "$OUT_FILE"
 exit $rc
-

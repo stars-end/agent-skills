@@ -42,6 +42,8 @@ To avoid relying on shell init files, prefer exporting `CC_GLM_AUTH_TOKEN` (and 
 
 When set, `cc-glm-headless.sh` will invoke `claude` directly with these env vars (no `zsh -ic` needed).
 
+If you use 1Password, you can also set `ZAI_API_KEY` as an `op://...` reference (or set `CC_GLM_OP_URI`) and `cc-glm-headless.sh` will resolve it via `op read` at runtime.
+
 ## Preferred Entry Point (Recommended)
 
 Use the DX wrapper so prompts are V8.1 compliant and logs are kept:
