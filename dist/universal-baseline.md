@@ -1,6 +1,6 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Last updated: 2026-02-10 13:23:49 UTC -->
+<!-- Last updated: 2026-02-10 14:21:20 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -53,6 +53,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **DX/dev workflow secrets** (agent keys, automation tokens): source from 1Password (`op://...`) and resolve at runtime via `op read` or `op run --`.
 - **Deploy/runtime secrets** (service config): live in Railway environment variables; for automated Railway CLI use, export `RAILWAY_TOKEN` from 1Password (see `Railway-Delivery`).
 - **Service account auth for op CLI**: use `~/agent-skills/scripts/create-op-credential.sh` (never commit tokens).
+- **Quick reference**: use the `op-secrets-quickref` skill for safe commands (listing items/fields, op auth, Railway token export).
 
 References:
 - `~/agent-skills/docs/ENV_SOURCES_CONTRACT.md`
@@ -76,6 +77,7 @@ Notes:
 | **fix-pr-feedback** | Address PR feedback with iterative refinement. MUST BE USED when fixing PR issues. Supports auto-det | `bd show <FEATURE_KEY>` | workflow, pr, beads, debugging, iteration |
 | **issue-first** | Enforce Issue-First pattern by creating Beads tracking issue BEFORE implementation. MUST BE USED for | — | workflow, beads, issue-tracking, implementation |
 | **merge-pr** | Prepare PR for merge and guide human to merge via GitHub web UI. MUST BE USED when user wants to mer | `bd sync` | workflow, pr, github, merge, deployment |
+| **op-secrets-quickref** | Quick reference for 1Password (op CLI) secret management used in DX/dev workflows and deployments. U | — | secrets, 1password, op-cli, dx, env, railway |
 | **session-end** | End Claude Code session with Beads sync and summary. MUST BE USED when user says they're done, endin | `bd sync, or export operations.` | workflow, beads, session, cleanup |
 | **sync-feature-branch** | Commit current work to feature branch with Beads metadata tracking and git integration. MUST BE USED | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, git, beads, commit |
 
