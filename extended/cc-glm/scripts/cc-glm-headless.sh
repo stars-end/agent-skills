@@ -69,6 +69,20 @@ cleanup() { rm -f "$tmp" 2>/dev/null || true; }
 trap cleanup EXIT
 printf "%s" "$PROMPT" > "$tmp"
 
+# Prefer direct env-based invocation (more deterministic; avoids shell init noise).
+# Set CC_GLM_AUTH_TOKEN (required) and optionally:
+#   CC_GLM_BASE_URL, CC_GLM_MODEL, CC_GLM_TIMEOUT_MS
+if [[ -n "${CC_GLM_AUTH_TOKEN:-}" ]] && command -v claude >/dev/null 2>&1; then
+  ANTHROPIC_AUTH_TOKEN="$CC_GLM_AUTH_TOKEN" \
+  ANTHROPIC_BASE_URL="${CC_GLM_BASE_URL:-https://api.z.ai/api/anthropic}" \
+  ANTHROPIC_DEFAULT_OPUS_MODEL="${CC_GLM_MODEL:-glm-4.7}" \
+  ANTHROPIC_DEFAULT_SONNET_MODEL="${CC_GLM_MODEL:-glm-4.7}" \
+  ANTHROPIC_DEFAULT_HAIKU_MODEL="${CC_GLM_MODEL:-glm-4.7}" \
+  API_TIMEOUT_MS="${CC_GLM_TIMEOUT_MS:-3000000}" \
+  claude --dangerously-skip-permissions --model "${CC_GLM_MODEL:-glm-4.7}" -p "$(cat "$tmp")" --output-format text
+  exit 0
+fi
+
 # Prefer cc-glm (zsh function). Use a temp file to avoid quoting issues.
 if zsh -ic "cc-glm -p \"\$(cat '$tmp')\" --output-format text"; then
   # cc-glm printed output already.

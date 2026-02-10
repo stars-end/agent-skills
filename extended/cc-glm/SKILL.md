@@ -36,6 +36,12 @@ The orchestrator (you) remains responsible for:
 - Do not print or dump dotfiles/configs (they often contain tokens).
 - The delegate must **not** run `git commit`, `git push`, or open PRs.
 
+## Recommended Setup (Deterministic)
+
+To avoid relying on shell init files, prefer exporting `CC_GLM_AUTH_TOKEN` (and optionally `CC_GLM_BASE_URL`, `CC_GLM_MODEL`).
+
+When set, `cc-glm-headless.sh` will invoke `claude` directly with these env vars (no `zsh -ic` needed).
+
 ## Preferred Entry Point (Recommended)
 
 Use the DX wrapper so prompts are V8.1 compliant and logs are kept:
