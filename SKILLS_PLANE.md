@@ -11,7 +11,7 @@ This document defines:
 
 ## The Canonical Invariant
 
-**All agent tools on a host MUST share the same skills repository through a canonical mount point.**
+**All agent tools on a host SHOULD share the same skills repository through a canonical mount point.**
 
 ```
 ~/.agent/skills -> ~/agent-skills (symlink or exact copy)
@@ -22,6 +22,18 @@ This invariant ensures:
 2. **Discoverability**: Direct filesystem access enables skill discovery
 3. **Single source of truth**: Skills are managed in one place (`~/agent-skills`)
 4. **Git integration**: Skills are version-controlled and can be updated via git
+
+## Important Note: Codex Skills Location
+
+Codex (CLI/Desktop) maintains its own skill install directory (default: `~/.codex/skills/`).
+
+That means the `~/.agent/skills -> ~/agent-skills` mount is necessary for shared scripts/docs, but **may not be sufficient** for Codex to discover skills.
+
+To make `~/agent-skills/*/*/SKILL.md` available to Codex, install (symlink) into Codex’s skills dir:
+
+```bash
+~/agent-skills/scripts/dx-codex-skills-install.sh --apply
+```
 
 ## Architecture
 

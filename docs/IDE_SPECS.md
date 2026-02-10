@@ -55,6 +55,12 @@ Installed targets:
 - **Slack MCP**: Supported via `~/agent-skills/scripts/setup-slack-mcp.sh codex-cli`
 - **Known Issues**: None (Slack MCP configuration now supported)
 
+**Skills install note**: Codex maintains its own skills directory (default: `~/.codex/skills/`).
+To expose `~/agent-skills/*/*/SKILL.md` to Codex, run:
+```bash
+~/agent-skills/scripts/dx-codex-skills-install.sh --apply
+```
+
 ### 4. opencode
 - **agentskills.io**: ✅ Native support
 - **Docs**: https://opencode.ai/docs/skills/
