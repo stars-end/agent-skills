@@ -34,6 +34,28 @@ mkdir -p "$WORKTREE_BASE/$BEADS_ID"
 # Navigate to main repo
 cd "$REPO_PATH"
 
+# V8.1: Ensure hooks are enforced via core.hooksPath for canonical repos.
+# This must run before creating the worktree so the common-dir hook state is correct.
+CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common)
+is_canonical_repo=0
+for r in "${CANONICAL_REPOS[@]}"; do
+    if [[ "$REPO_NAME" == "$r" ]]; then
+        is_canonical_repo=1
+        break
+    fi
+done
+
+if [[ "$is_canonical_repo" == "1" ]]; then
+    if [[ ! -d "$REPO_PATH/.githooks" ]]; then
+        echo "Error: $REPO_PATH is missing .githooks/ (required for DX V8.1 guardrails)" >&2
+        exit 1
+    fi
+    git config core.hooksPath .githooks 2>/dev/null || true
+    if [[ -x "$REPO_PATH/.githooks/_bootstrap.sh" ]]; then
+        "$REPO_PATH/.githooks/_bootstrap.sh" >/dev/null 2>&1 || true
+    fi
+fi
+
 # Determine origin default branch (origin/HEAD).
 # Fleet standard is "master", but some repos may use "main".
 DEFAULT_BRANCH="$(

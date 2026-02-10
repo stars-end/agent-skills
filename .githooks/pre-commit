@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Canonical guard: block commits in canonical clones (allow in worktrees).
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+REPO_NAME="$(basename -- "$REPO_ROOT")"
+
+CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common)
+
+GIT_DIR="$(git rev-parse --git-dir)"
+GIT_COMMON_DIR="$(git rev-parse --git-common-dir)"
+IS_WORKTREE=0
+if [[ "$GIT_DIR" != "$GIT_COMMON_DIR" ]]; then
+  IS_WORKTREE=1
+fi
+
+is_canonical=0
+for r in "${CANONICAL_REPOS[@]}"; do
+  if [[ "$REPO_NAME" == "$r" ]]; then
+    is_canonical=1
+    break
+  fi
+done
+
+if [[ "$is_canonical" == "1" && "$IS_WORKTREE" == "0" ]]; then
+  cat >&2 <<EOF
+
+❌ CANONICAL COMMIT BLOCKED: $REPO_NAME
+
+You are in the canonical clone:
+  $REPO_ROOT
+
+Create a worktree and commit there:
+  dx-worktree create <beads-id> $REPO_NAME
+  cd /tmp/agents/<beads-id>/$REPO_NAME
+
+EOF
+  exit 1
+fi
+
+# Chain any repo-specific pre-commit behavior (best-effort).
+if [[ -x "$REPO_ROOT/hooks/pre-commit" ]]; then
+  "$REPO_ROOT/hooks/pre-commit" "$@" || true
+fi
+
+exit 0
+

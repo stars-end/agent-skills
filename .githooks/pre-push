@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Chain any repo-specific pre-push behavior (best-effort).
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+if [[ -x "$REPO_ROOT/hooks/pre-push" ]]; then
+  exec "$REPO_ROOT/hooks/pre-push" "$@"
+fi
+
+exit 0
+

@@ -78,17 +78,11 @@ mkdir -p "$HOME/prime-radiant-worktrees"
 mkdir -p "$HOME/agent-skills-worktrees"
 mkdir -p "$HOME/.dx-archives"
 
-# 3.6 Install Canonical Guard Pre-commit Hooks
-echo -e "${GREEN} -> Installing canonical guard pre-commit hooks...${RESET}"
-for repo in agent-skills prime-radiant-ai affordabot llm-common; do
-    REPO_PATH="$HOME/$repo"
-    HOOK_SRC="$REPO_PATH/hooks/pre-commit"
-    HOOK_DST="$REPO_PATH/.git/hooks/pre-commit"
-    if [ -d "$REPO_PATH/.git" ] && [ -f "$HOOK_SRC" ]; then
-        ln -sf "../../hooks/pre-commit" "$HOOK_DST" 2>/dev/null || true
-        echo "   Installed pre-commit hook for $repo"
-    fi
-done
+# 3.6 Install/verify versioned git hooks (V8.1)
+echo -e "${GREEN} -> Bootstrapping versioned git hooks (.githooks + core.hooksPath)...${RESET}"
+if [[ -x "$AGENTS_ROOT/scripts/dx-git-hooks-bootstrap.sh" ]]; then
+    "$AGENTS_ROOT/scripts/dx-git-hooks-bootstrap.sh" 2>/dev/null || true
+fi
 
 # 3.7 Initialize HEARTBEAT.md (V8 status file for openclawd)
 echo -e "${GREEN} -> Initializing HEARTBEAT.md...${RESET}"

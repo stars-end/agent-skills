@@ -31,7 +31,7 @@ Distribute external beads database via `BEADS_DIR` environment variable across a
 | IDE | Primary VM | Config Location | Status |
 |-----|------------|-----------------|--------|
 | Claude Code | homedesktop-wsl | `cc-glm` alias | ✅ Active |
-| Antigravity | homedesktop-wsl | `.antigravity/config.yaml` | ✅ Active |
+| Antigravity | homedesktop-wsl | `~/.gemini/antigravity/mcp_config.json` (MCP) | ✅ Active |
 | Codex CLI | homedesktop-wsl | `~/.codex/config.toml` | ✅ Active |
 | Gemini CLI | homedesktop-wsl | `~/.gemini-cli/config.json` | ✅ Active |
 | OpenCode | epyc6 | systemd service | ✅ Active |
@@ -202,14 +202,12 @@ fi
 
 #### Antigravity
 
-**Update `~/.antigravity/config.yaml`:**
+Antigravity session-start hook configuration is not standardized here.
 
-```yaml
-session:
-  on_start:
-    - export BEADS_DIR="$HOME/bd/.beads"
-    - if ! command -v bd >/dev/null 2>&1; then echo "bd not found"; fi
-```
+Recommended workaround:
+
+- Set `BEADS_DIR` in your shell profile (`~/.zshrc`, `~/.bashrc`) so Antigravity inherits the environment.
+- If needed, run: `export BEADS_DIR="$HOME/bd/.beads"` in the terminal you launch Antigravity from.
 
 #### Codex CLI
 
