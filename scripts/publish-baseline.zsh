@@ -38,7 +38,20 @@ cd /tmp/agents/bd-xxxx/repo-name
 1. **No auto-merge**: never enable auto-merge on PRs — humans merge
 2. **No PR factory**: one PR per meaningful unit of work
 3. **No canonical writes**: always use worktrees
-4. **Feature-Key mandatory**: every commit needs \`Feature-Key: bd-XXXX\`
+4. **Feature-Key mandatory**: every commit needs \`Feature-Key: bd-<beads-id>\`
+
+## 3) PR Metadata Rules (Blocking In CI)
+- **PR title must include a Feature-Key**: include \`bd-<beads-id>\` somewhere in the title (e.g. \`bd-f6fh: ...\`)
+- **PR body must include Agent**: add a line like \`Agent: <agent-id>\`
+
+## 4) Delegation Rule (cc-glm)
+- **Default**: delegate mechanical tasks estimated \< 1 hour to \`cc-glm\` (via \`dx-delegate\`).
+- **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
+- **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
+
+Notes:
+- PR metadata enforcement exists to keep squash merges ergonomic (don’t rely on commit messages).
+- If you’re unsure what to use for Agent, use your platform id (see \`DX_AGENT_ID.md\`).
 EOF
 
 # Header for AGENTS.md
@@ -87,8 +100,8 @@ Support a startup founder balancing high-leverage technical work and family resp
 
 EOF
 
-# Extract Rules from Constraints for AGENTS.md (Legacy structure)
-sed -n '/## 1) Canonical/,/Feature-Key/p' "$CONSTRAINTS_FILE" >> "$OUTFILE"
+# Include the full constraints rail in AGENTS.md (agents were missing PR metadata rules).
+sed -n '/## 1)/,$p' "$CONSTRAINTS_FILE" >> "$OUTFILE"
 echo "" >> "$OUTFILE"
 echo "---" >> "$OUTFILE"
 echo "" >> "$OUTFILE"

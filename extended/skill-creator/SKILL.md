@@ -48,6 +48,19 @@ Automates skill creation following proven tech lead patterns:
 
 ## Workflow
 
+### 0. Activation + Reload Checklist (Cross-IDE)
+
+Creating a skill in `~/agent-skills/.../<skill>/SKILL.md` does not automatically make it available in every agent IDE.
+
+Do this after adding/updating a skill:
+
+1. Rebuild the baseline index:
+   - `cd ~/agent-skills && make publish-baseline`
+2. Install the skill into the IDE you are using (tool-specific):
+   - Codex: ensure the skill exists under `$HOME/.agents/skills/<skill-name>/` (user scope) or `$REPO_ROOT/.agents/skills/` (repo scope). Symlinks are OK.
+3. Reload:
+   - Most IDEs/agents snapshot the skill list at session start. Open a new session (or restart the app) after installing.
+
 ### 1. Classify Skill Type
 
 Ask user which type:

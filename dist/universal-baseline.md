@@ -1,6 +1,6 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Last updated: 2026-02-10 07:34:04 UTC -->
+<!-- Last updated: 2026-02-10 13:03:15 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -38,7 +38,20 @@ cd /tmp/agents/bd-xxxx/repo-name
 1. **No auto-merge**: never enable auto-merge on PRs — humans merge
 2. **No PR factory**: one PR per meaningful unit of work
 3. **No canonical writes**: always use worktrees
-4. **Feature-Key mandatory**: every commit needs `Feature-Key: bd-XXXX`
+4. **Feature-Key mandatory**: every commit needs `Feature-Key: bd-<beads-id>`
+
+## 3) PR Metadata Rules (Blocking In CI)
+- **PR title must include a Feature-Key**: include `bd-<beads-id>` somewhere in the title (e.g. `bd-f6fh: ...`)
+- **PR body must include Agent**: add a line like `Agent: <agent-id>`
+
+## 4) Delegation Rule (cc-glm)
+- **Default**: delegate mechanical tasks estimated \< 1 hour to `cc-glm` (via `dx-delegate`).
+- **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
+- **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
+
+Notes:
+- PR metadata enforcement exists to keep squash merges ergonomic (don’t rely on commit messages).
+- If you’re unsure what to use for Agent, use your platform id (see `DX_AGENT_ID.md`).
 
 ---
 
@@ -63,7 +76,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban vi | `bd show "$NEXT_TASK"` | workflow, beads, visualization, task-selection |
-| **cc-glm** | Use cc-glm (Claude Code wrapper using GLM-4.7) in headless mode to outsource repetitive work. Trigge | — | workflow, delegation, automation, claude-code, glm |
+| **cc-glm** | Use cc-glm (Claude Code wrapper using GLM-4.7) in headless mode to outsource repetitive work. Trigge | `dx-delegate --beads bd-xxxx --repo repo-name --prompt-file /` | workflow, delegation, automation, claude-code, glm |
 | **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
 | **coordinator-dx** | Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists. | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | `bd sync` |  |

@@ -31,21 +31,27 @@ link "$AGENTS_ROOT/scripts/dx-status.sh" "$BIN_DIR/dx-status"
 link "$AGENTS_ROOT/scripts/dx-check.sh" "$BIN_DIR/dx-check"
 link "$AGENTS_ROOT/scripts/dx-doctor.sh" "$BIN_DIR/dx-doctor"
 
-# Fleet visibility + toolchain consistency
-link "$AGENTS_ROOT/scripts/dx-fleet-status.sh" "$BIN_DIR/dx-fleet-status"
-link "$AGENTS_ROOT/scripts/dx-toolchain.sh" "$BIN_DIR/dx-toolchain"
-link "$AGENTS_ROOT/scripts/dx-triage.sh" "$BIN_DIR/dx-triage"
-link "$AGENTS_ROOT/scripts/dx-janitor.sh" "$BIN_DIR/dx-janitor"
-link "$AGENTS_ROOT/scripts/dx-sweeper.sh" "$BIN_DIR/dx-sweeper"
-link "$AGENTS_ROOT/scripts/dx-verify-clean.sh" "$BIN_DIR/dx-verify-clean"
-link "$AGENTS_ROOT/scripts/dx-worktree-gc.sh" "$BIN_DIR/dx-worktree-gc"
+	# Fleet visibility + toolchain consistency
+	link "$AGENTS_ROOT/scripts/dx-fleet-status.sh" "$BIN_DIR/dx-fleet-status"
+	link "$AGENTS_ROOT/scripts/dx-toolchain.sh" "$BIN_DIR/dx-toolchain"
+	link "$AGENTS_ROOT/scripts/dx-triage.sh" "$BIN_DIR/dx-triage"
+	link "$AGENTS_ROOT/scripts/dx-janitor.sh" "$BIN_DIR/dx-janitor"
+	link "$AGENTS_ROOT/scripts/dx-sweeper.sh" "$BIN_DIR/dx-sweeper"
+	link "$AGENTS_ROOT/scripts/dx-verify-clean.sh" "$BIN_DIR/dx-verify-clean"
+	link "$AGENTS_ROOT/scripts/dx-worktree-gc.sh" "$BIN_DIR/dx-worktree-gc"
+	link "$AGENTS_ROOT/scripts/dx-delegate.sh" "$BIN_DIR/dx-delegate"
 
-# Beads helpers (used across repos)
-link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
-link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
-link "$AGENTS_ROOT/scripts/bd-sync-safe.sh" "$BIN_DIR/bd-sync-safe"
+	# Beads helpers (used across repos)
+	link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
+	link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
+	link "$AGENTS_ROOT/scripts/bd-sync-safe.sh" "$BIN_DIR/bd-sync-safe"
 
-# Existing tool: run
-link "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"
+	# Skills plane helpers
+	link "$AGENTS_ROOT/scripts/dx-agents-skills-install.sh" "$BIN_DIR/dx-agents-skills-install"
+	link "$AGENTS_ROOT/scripts/dx-codex-skills-install.sh" "$BIN_DIR/dx-codex-skills-install"
+	link "$AGENTS_ROOT/extended/cc-glm/scripts/cc-glm-headless.sh" "$BIN_DIR/cc-glm-headless"
+
+	# Existing tool: run
+	link "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"
 
 echo "✅ ensured ~/bin tools"

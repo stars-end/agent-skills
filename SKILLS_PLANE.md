@@ -11,10 +11,10 @@ This document defines:
 
 ## The Canonical Invariant
 
-**All agent tools on a host MUST share the same skills repository through a canonical mount point.**
+**All agent tools on a host SHOULD share a single skills plane using the `.agents/skills` convention.**
 
 ```
-~/.agent/skills -> ~/agent-skills (symlink or exact copy)
+~/.agents/skills/<skill-name> -> ~/agent-skills/<category>/<skill-name> (symlinks)
 ```
 
 This invariant ensures:
@@ -22,6 +22,28 @@ This invariant ensures:
 2. **Discoverability**: Direct filesystem access enables skill discovery
 3. **Single source of truth**: Skills are managed in one place (`~/agent-skills`)
 4. **Git integration**: Skills are version-controlled and can be updated via git
+
+## Codex Skills Location (Official)
+
+Codex discovers skills from `.agents/skills` at repo + user scopes (and supports symlinked skill folders).
+
+To make `~/agent-skills/*/*/SKILL.md` available to Codex (user scope), install (symlink) into `~/.agents/skills/`:
+
+```bash
+~/agent-skills/scripts/dx-agents-skills-install.sh --apply
+```
+
+If Codex doesn’t pick up changes, restart Codex.
+
+## Legacy Mount (Compatibility)
+
+Some older helper scripts and docs still refer to:
+
+```
+~/.agent/skills -> ~/agent-skills
+```
+
+This is kept as a convenience mount, but it is not the canonical discovery plane for Codex.
 
 ## Architecture
 
@@ -39,24 +61,24 @@ Contains:
 - Shared documentation and helper scripts
 - Git-tracked for versioning and updates
 
-### 2. Mount Point: `~/.agent/skills`
+### 2. User Skills Plane: `~/.agents/skills`
 
-The canonical mount point where all agent tools look for skills:
+The canonical user-scope skills directory:
 
 ```bash
-ln -sfn ~/agent-skills ~/.agent/skills
+mkdir -p ~/.agents/skills
+~/agent-skills/scripts/dx-agents-skills-install.sh --apply
 ```
 
-This is a symlink (preferred) or exact copy (fallback) that points to `~/agent-skills`.
+This creates symlinks per-skill into `~/.agents/skills/`.
 
 ## Discovery Precedence
 
 When an agent tool looks for skills, the discovery order is:
 
-1. **Direct filesystem** (`~/.agent/skills/`)
-   - Primary method
-   - Manual skill invocation
-   - Used by helper scripts
+1. **Repo skills** (`$REPO_ROOT/.agents/skills`)
+2. **User skills** (`$HOME/.agents/skills`)
+3. **System/admin skills** (machine-managed)
 
 2. **Repo-specific skills** (`.claude/`, `.skills/`, etc.)
    - Lowest precedence
@@ -78,14 +100,10 @@ Or use the helper script:
 ~/agent-skills/scripts/ensure_agent_skills_mount.sh
 ```
 
-### Step 2: Create Mount Point
+### Step 2: Install User-Scope Skills
 
 ```bash
-# Create .agent directory if needed
-mkdir -p ~/.agent
-
-# Create symlink (recommended)
-ln -sfn ~/agent-skills ~/.agent/skills
+~/agent-skills/scripts/dx-agents-skills-install.sh --apply
 ```
 
 Or use the helper script (auto-creates symlink):
@@ -97,13 +115,12 @@ Or use the helper script (auto-creates symlink):
 ### Step 3: Verify Setup
 
 ```bash
-~/.agent/skills/mcp-doctor/check.sh
+ls -la ~/.agents/skills
 ```
 
 Expected output:
 ```
-✅ ~/.agent/skills -> ~/agent-skills (symlink: ...)
-✅ mcp-doctor: healthy
+✅ ~/.agents/skills/<skill-name> -> ~/agent-skills/<category>/<skill-name>
 ```
 
 ## Shared Profiles (bd-3871.5)
