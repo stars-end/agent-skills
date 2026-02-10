@@ -1,14 +1,30 @@
 # Session Start Hooks
 
-Platform-specific session start hooks for DX bootstrap integration.
+Cross-agent session start hooks for DX bootstrap integration.
 
-See **[DX Bootstrap Contract](../DX_BOOTSTRAP_CONTRACT.md)** for the canonical bootstrap sequence.
+Canonical entrypoint:
+
+- `~/agent-skills/session-start-hooks/dx-bootstrap.sh`
 
 ---
 
 ## Available Hooks
 
-### Claude Code: `claude-code-dx-bootstrap.sh`
+### Cross-Agent Entrypoint: `dx-bootstrap.sh`
+
+This is the canonical script that enforces "no canonical edits" (hard-stop) and then runs best-effort DX checks.
+
+Manual test:
+```bash
+bash ~/agent-skills/session-start-hooks/dx-bootstrap.sh
+```
+
+Escape hatch (only to create/switch to a worktree or to remediate):
+```bash
+DX_CANONICAL_ACK=1 bash ~/agent-skills/session-start-hooks/dx-bootstrap.sh
+```
+
+### Claude Code (Per-Repo): `claude-code-dx-bootstrap.sh`
 
 **Purpose**: Run dx-doctor check at session start to detect environment drift
 
@@ -23,11 +39,7 @@ chmod +x .claude/hooks/SessionStart/dx-bootstrap.sh
 ```
 
 **What it does**:
-1. Git sync with remote (optional, continues if fails)
-2. Runs dx-doctor check (Makefile target or direct script)
-3. Runs `dx-check` (baseline health)
-4. Optionally runs `dx-doctor` when coordinator services are enabled
-5. Reports any issues (soft warnings, not blocking)
+Delegates to the cross-agent entrypoint `dx-bootstrap.sh` when present.
 
 **Testing**:
 ```bash
@@ -53,15 +65,21 @@ on_start = "bash ~/.agent/skills/session-start-hooks/dx-bootstrap.sh"
 
 ### Antigravity
 
-**Config**: `~/.antigravity/config.yaml`
+Antigravity supports skills + MCP config (`~/.gemini/antigravity/mcp_config.json`), but session-start hook support is not currently standardized in this repo.
 
-```yaml
-session:
-  on_start:
-    - git pull origin master
-    - dx-check || true
-    - bash -lc '[[ "${DX_BOOTSTRAP_COORDINATOR:-0}" == "1" ]] && dx-doctor || true'
-```
+Recommended workaround:
+
+1. Ensure the DX global constraints rail is installed (see `docs/IDE_SPECS.md`).
+2. Run `bash ~/.agent/skills/session-start-hooks/dx-bootstrap.sh` manually before starting work.
+
+### OpenCode
+
+OpenCode is typically run as a service; it does not have a per-session "SessionStart" hook contract here.
+
+DX enforcement still applies via:
+
+- versioned git hooks (`.githooks/` + `core.hooksPath`)
+- CI PR metadata enforcement (Feature-Key + Agent)
 
 ### Gemini
 
@@ -91,6 +109,15 @@ ls -la .claude/hooks/SessionStart/
 ```
 
 **Fix**: Ensure hook is executable: `chmod +x .claude/hooks/SessionStart/*.sh`
+
+### Blocked in a canonical repo
+
+If you see an error about being in a canonical repo, create/switch to a worktree:
+
+```bash
+dx-worktree create <beads-id> <repo>
+cd /tmp/agents/<beads-id>/<repo>
+```
 
 ### dx-doctor not found
 

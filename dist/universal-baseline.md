@@ -1,6 +1,6 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Last updated: 2026-02-09 12:35:30 UTC -->
+<!-- Last updated: 2026-02-10 07:34:04 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -63,6 +63,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban vi | `bd show "$NEXT_TASK"` | workflow, beads, visualization, task-selection |
+| **cc-glm** | Use cc-glm (Claude Code wrapper using GLM-4.7) in headless mode to outsource repetitive work. Trigge | — | workflow, delegation, automation, claude-code, glm |
 | **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
 | **coordinator-dx** | Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists. | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | `bd sync` |  |
