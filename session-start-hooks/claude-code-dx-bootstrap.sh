@@ -12,7 +12,17 @@
 
 set -euo pipefail
 
-echo "🚀 DX Bootstrap starting..."
+AGENTS_ROOT="${AGENTS_ROOT:-$HOME/.agent/skills}"
+if [[ ! -d "$AGENTS_ROOT" ]]; then
+    AGENTS_ROOT="$HOME/agent-skills"
+fi
+
+# Prefer the canonical cross-agent entrypoint if present.
+if [[ -x "$AGENTS_ROOT/session-start-hooks/dx-bootstrap.sh" ]]; then
+    exec "$AGENTS_ROOT/session-start-hooks/dx-bootstrap.sh"
+fi
+
+echo "🚀 DX Bootstrap starting... (fallback)"
 
 # 1. Git sync (optional - may fail if no remote)
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -24,15 +34,15 @@ fi
 echo "🩺 Running dx-check..."
 if command -v dx-check >/dev/null 2>&1; then
     dx-check 2>&1 || true
-elif [[ -f "$HOME/agent-skills/scripts/dx-check.sh" ]]; then
-    "$HOME/agent-skills/scripts/dx-check.sh" 2>&1 || true
+elif [[ -f "$AGENTS_ROOT/scripts/dx-check.sh" ]]; then
+    "$AGENTS_ROOT/scripts/dx-check.sh" 2>&1 || true
 else
     echo "⚠️  dx-check not found (install agent-skills)"
 fi
 
 # 2.5 Stranded work reminder (auto-checkpoint/WIP visibility)
-if [[ -f "$HOME/agent-skills/scripts/auto-checkpoint-notify.sh" ]]; then
-    "$HOME/agent-skills/scripts/auto-checkpoint-notify.sh" 2>&1 || true
+if [[ -f "$AGENTS_ROOT/scripts/auto-checkpoint-notify.sh" ]]; then
+    "$AGENTS_ROOT/scripts/auto-checkpoint-notify.sh" 2>&1 || true
 fi
 
 # 2.6 Canonical warning (V7.6)
@@ -53,8 +63,8 @@ if [[ "${DX_BOOTSTRAP_COORDINATOR:-0}" == "1" ]]; then
     echo "🩺 Running dx-doctor (optional coordinator checks)..."
     if command -v dx-doctor >/dev/null 2>&1; then
         dx-doctor 2>&1 || true
-    elif [[ -f "$HOME/agent-skills/scripts/dx-doctor.sh" ]]; then
-        "$HOME/agent-skills/scripts/dx-doctor.sh" 2>&1 || true
+    elif [[ -f "$AGENTS_ROOT/scripts/dx-doctor.sh" ]]; then
+        "$AGENTS_ROOT/scripts/dx-doctor.sh" 2>&1 || true
     fi
 fi
 
