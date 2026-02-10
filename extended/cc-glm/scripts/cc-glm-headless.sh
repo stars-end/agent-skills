@@ -70,8 +70,8 @@ trap cleanup EXIT
 printf "%s" "$PROMPT" > "$tmp"
 
 # Prefer cc-glm (zsh function). Use a temp file to avoid quoting issues.
-if zsh -ic "cc-glm -p \"\$(cat '$tmp')\" --output-format text" 1>&2; then
-  # cc-glm already printed to stdout/stderr; nothing else to do.
+if zsh -ic "cc-glm -p \"\$(cat '$tmp')\" --output-format text"; then
+  # cc-glm printed output already.
   exit 0
 fi
 
@@ -83,4 +83,3 @@ fi
 
 echo "Error: neither cc-glm nor claude is available on PATH" >&2
 exit 1
-
