@@ -95,6 +95,23 @@ resolve_glm_auth_token() {
     if ! command -v op >/dev/null 2>&1; then
       return 1
     fi
+
+    # If op isn't already authenticated, allow the standard DX pattern:
+    # auto-load OP_SERVICE_ACCOUNT_TOKEN from the protected token file created by:
+    #   ~/agent-skills/scripts/create-op-credential.sh
+    if [[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
+      host="$(hostname)"
+      token_file="${OP_SERVICE_ACCOUNT_TOKEN_FILE:-$HOME/.config/systemd/user/op-${host}-token}"
+      legacy_file="$HOME/.config/systemd/user/op-macmini-token"
+      if [[ -f "$token_file" ]]; then
+        OP_SERVICE_ACCOUNT_TOKEN="$(cat "$token_file" 2>/dev/null || true)"
+        export OP_SERVICE_ACCOUNT_TOKEN
+      elif [[ -f "$legacy_file" ]]; then
+        OP_SERVICE_ACCOUNT_TOKEN="$(cat "$legacy_file" 2>/dev/null || true)"
+        export OP_SERVICE_ACCOUNT_TOKEN
+      fi
+    fi
+
     op read "$ref" 2>/dev/null
     return $?
   fi
