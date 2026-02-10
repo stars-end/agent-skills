@@ -31,14 +31,15 @@ link "$AGENTS_ROOT/scripts/dx-status.sh" "$BIN_DIR/dx-status"
 link "$AGENTS_ROOT/scripts/dx-check.sh" "$BIN_DIR/dx-check"
 link "$AGENTS_ROOT/scripts/dx-doctor.sh" "$BIN_DIR/dx-doctor"
 
-# Fleet visibility + toolchain consistency
-link "$AGENTS_ROOT/scripts/dx-fleet-status.sh" "$BIN_DIR/dx-fleet-status"
-link "$AGENTS_ROOT/scripts/dx-toolchain.sh" "$BIN_DIR/dx-toolchain"
-link "$AGENTS_ROOT/scripts/dx-triage.sh" "$BIN_DIR/dx-triage"
-link "$AGENTS_ROOT/scripts/dx-janitor.sh" "$BIN_DIR/dx-janitor"
-link "$AGENTS_ROOT/scripts/dx-sweeper.sh" "$BIN_DIR/dx-sweeper"
-link "$AGENTS_ROOT/scripts/dx-verify-clean.sh" "$BIN_DIR/dx-verify-clean"
-link "$AGENTS_ROOT/scripts/dx-worktree-gc.sh" "$BIN_DIR/dx-worktree-gc"
+	# Fleet visibility + toolchain consistency
+	link "$AGENTS_ROOT/scripts/dx-fleet-status.sh" "$BIN_DIR/dx-fleet-status"
+	link "$AGENTS_ROOT/scripts/dx-toolchain.sh" "$BIN_DIR/dx-toolchain"
+	link "$AGENTS_ROOT/scripts/dx-triage.sh" "$BIN_DIR/dx-triage"
+	link "$AGENTS_ROOT/scripts/dx-janitor.sh" "$BIN_DIR/dx-janitor"
+	link "$AGENTS_ROOT/scripts/dx-sweeper.sh" "$BIN_DIR/dx-sweeper"
+	link "$AGENTS_ROOT/scripts/dx-verify-clean.sh" "$BIN_DIR/dx-verify-clean"
+	link "$AGENTS_ROOT/scripts/dx-worktree-gc.sh" "$BIN_DIR/dx-worktree-gc"
+	link "$AGENTS_ROOT/scripts/dx-delegate.sh" "$BIN_DIR/dx-delegate"
 
 	# Beads helpers (used across repos)
 	link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
