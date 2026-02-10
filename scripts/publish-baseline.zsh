@@ -49,6 +49,15 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
 - **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
 
+## 5) Secrets + Env Sources (1Password vs Railway)
+- **DX/dev workflow secrets** (agent keys, automation tokens): source from 1Password (\`op://...\`) and resolve at runtime via \`op read\` or \`op run --\`.
+- **Deploy/runtime secrets** (service config): live in Railway environment variables; for automated Railway CLI use, export \`RAILWAY_TOKEN\` from 1Password (see \`Railway-Delivery\`).
+- **Service account auth for op CLI**: use \`~/agent-skills/scripts/create-op-credential.sh\` (never commit tokens).
+
+References:
+- \`~/agent-skills/docs/ENV_SOURCES_CONTRACT.md\`
+- \`~/agent-skills/docs/SECRET_MANAGEMENT.md\`
+
 Notes:
 - PR metadata enforcement exists to keep squash merges ergonomic (don’t rely on commit messages).
 - If you’re unsure what to use for Agent, use your platform id (see \`DX_AGENT_ID.md\`).
