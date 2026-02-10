@@ -40,12 +40,17 @@ link "$AGENTS_ROOT/scripts/dx-sweeper.sh" "$BIN_DIR/dx-sweeper"
 link "$AGENTS_ROOT/scripts/dx-verify-clean.sh" "$BIN_DIR/dx-verify-clean"
 link "$AGENTS_ROOT/scripts/dx-worktree-gc.sh" "$BIN_DIR/dx-worktree-gc"
 
-# Beads helpers (used across repos)
-link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
-link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
-link "$AGENTS_ROOT/scripts/bd-sync-safe.sh" "$BIN_DIR/bd-sync-safe"
+	# Beads helpers (used across repos)
+	link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
+	link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
+	link "$AGENTS_ROOT/scripts/bd-sync-safe.sh" "$BIN_DIR/bd-sync-safe"
 
-# Existing tool: run
-link "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"
+	# Skills plane helpers
+	link "$AGENTS_ROOT/scripts/dx-agents-skills-install.sh" "$BIN_DIR/dx-agents-skills-install"
+	link "$AGENTS_ROOT/scripts/dx-codex-skills-install.sh" "$BIN_DIR/dx-codex-skills-install"
+	link "$AGENTS_ROOT/extended/cc-glm/scripts/cc-glm-headless.sh" "$BIN_DIR/cc-glm-headless"
+
+	# Existing tool: run
+	link "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"
 
 echo "✅ ensured ~/bin tools"

@@ -27,18 +27,20 @@ ln -sf "$AGENTS_ROOT/configs/ntm/cockpit.yaml" "$HOME/.ntm.yaml"
 # mkdir -p "$HOME/.serena"
 # ln -sf "$AGENTS_ROOT/configs/serena/config.toml" "$HOME/.serena/config.toml"
 
-# 2. Setup ~/.agent/skills Invariant
-echo -e "${GREEN} -> Setting up skills mount (~/.agent/skills)...${RESET}"
+# 2. Setup skills plane (canonical: ~/.agents/skills)
+echo -e "${GREEN} -> Setting up skills plane (~/.agents/skills)...${RESET}"
+mkdir -p "$HOME/.agents/skills"
+if [[ -x "$AGENTS_ROOT/scripts/dx-agents-skills-install.sh" ]]; then
+  "$AGENTS_ROOT/scripts/dx-agents-skills-install.sh" --apply >/dev/null 2>&1 || true
+elif [[ -x "$AGENTS_ROOT/scripts/dx-codex-skills-install.sh" ]]; then
+  # Backwards-compatible fallback name.
+  "$AGENTS_ROOT/scripts/dx-codex-skills-install.sh" --apply >/dev/null 2>&1 || true
+fi
+
+# Legacy mount (kept for older tooling/scripts; not used by Codex skills discovery).
+echo -e "${GREEN} -> Setting up legacy skills mount (~/.agent/skills)...${RESET}"
 mkdir -p "$HOME/.agent"
 ln -sfn "$AGENTS_ROOT" "$HOME/.agent/skills"
-
-# 2.1 Codex skills install (optional)
-# Codex CLI/Desktop discovers skills from $CODEX_HOME/skills, not from ~/.agent/skills.
-if [[ -d "$HOME/.codex" || -f "$HOME/.codex/config.toml" ]]; then
-  if [[ -x "$AGENTS_ROOT/scripts/dx-codex-skills-install.sh" ]]; then
-    "$AGENTS_ROOT/scripts/dx-codex-skills-install.sh" --apply >/dev/null 2>&1 || true
-  fi
-fi
 
 # 3. Install canonical executables in ~/bin
 echo -e "${GREEN} -> Ensuring ~/bin tools...${RESET}"

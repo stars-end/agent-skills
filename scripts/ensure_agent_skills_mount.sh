@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # ensure_agent_skills_mount.sh
-# Ensures ~/agent-skills exists and ~/.agent/skills -> ~/agent-skills (symlink)
+# Ensures ~/agent-skills exists and:
+#   - legacy mount: ~/.agent/skills -> ~/agent-skills (symlink)
+#   - canonical skills plane: ~/.agents/skills populated with symlinks to individual skills
 # Prints only paths/status, never secrets
 
 # Colors for output
@@ -25,6 +27,7 @@ log_error() {
 
 AGENT_SKILLS_DIR="$HOME/agent-skills"
 SKILLS_MOUNT="$HOME/.agent/skills"
+AGENTS_SKILLS_DIR="$HOME/.agents/skills"
 
 echo "🔧 Ensuring agent-skills mount..."
 echo ""
@@ -118,6 +121,15 @@ else
   echo "  ~/.agent/skills: [missing]"
 fi
 
+# Ensure ~/.agents/skills exists + install links (best-effort; no secrets).
+echo "  ~/.agents/skills: $AGENTS_SKILLS_DIR"
+mkdir -p "$AGENTS_SKILLS_DIR"
+if [[ -x "$AGENT_SKILLS_DIR/scripts/dx-agents-skills-install.sh" ]]; then
+  "$AGENT_SKILLS_DIR/scripts/dx-agents-skills-install.sh" --apply >/dev/null 2>&1 || true
+elif [[ -x "$AGENT_SKILLS_DIR/scripts/dx-codex-skills-install.sh" ]]; then
+  "$AGENT_SKILLS_DIR/scripts/dx-codex-skills-install.sh" --apply >/dev/null 2>&1 || true
+fi
+
 # 5. Quick health check
 echo ""
 if [[ -d "$AGENT_SKILLS_DIR" ]] && [[ -e "$SKILLS_MOUNT" ]]; then
@@ -126,9 +138,9 @@ if [[ -d "$AGENT_SKILLS_DIR" ]] && [[ -e "$SKILLS_MOUNT" ]]; then
     log_info "Skills mount is healthy!"
     echo ""
     echo "Next steps:"
-    echo "  1. Verify MCP configuration: ~/.agent/skills/mcp-doctor/check.sh"
-    echo "  2. See: ~/.agent/skills/SKILLS_PLANE.md for full documentation"
-    echo "  3. See: ~/.agent/skills/mcp-doctor/SKILL.md for MCP server setup"
+    echo "  1. Verify MCP configuration: ~/agent-skills/health/mcp-doctor/check.sh"
+    echo "  2. See: ~/agent-skills/SKILLS_PLANE.md for full documentation"
+    echo "  3. For Codex skills: ls -la ~/.agents/skills"
     exit 0
   fi
 fi

@@ -3,23 +3,20 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-dx-codex-skills-install.sh
+dx-agents-skills-install.sh
 
 Populate $HOME/.agents/skills/ with symlinks to skills from ~/agent-skills so
-Codex CLI/Desktop can discover them.
-
-This script name is kept for backwards compatibility. Prefer:
-  dx-agents-skills-install.sh
+Codex (and any agent that follows the .agents/skills convention) can discover them.
 
 Usage:
-  dx-codex-skills-install.sh --check
-  dx-codex-skills-install.sh --apply
-  dx-codex-skills-install.sh --apply --force
+  dx-agents-skills-install.sh --check
+  dx-agents-skills-install.sh --apply
+  dx-agents-skills-install.sh --apply --force
 
 Notes:
-  - Codex skill discovery uses the .agents/skills convention (repo + user scopes).
-  - Source skills come from ~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md
-  - This script only links; it does not copy secrets or modify dotfiles.
+  - This script only links; it does not copy secrets or modify other dotfiles.
+  - Skills are sourced from: ~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md
+  - Symlinks are supported by Codex skill discovery.
 EOF
 }
 
@@ -45,17 +42,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 DEST_DIR="${DEST_DIR:-$HOME/.agents/skills}"
-
 declare -a CATEGORIES=( core extended health infra railway dispatch )
 
 extract_name() {
   local skill_md="$1"
   local name
   name="$(grep -E '^name:' "$skill_md" | head -n 1 | cut -d: -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  if [[ -z "$name" ]]; then
-    echo ""
-    return 0
-  fi
   echo "$name"
 }
 
@@ -109,7 +101,9 @@ link_one() {
   return 1
 }
 
-if [[ "$MODE" == "apply" ]]; then mkdir -p "$DEST_DIR"; fi
+if [[ "$MODE" == "apply" ]]; then
+  mkdir -p "$DEST_DIR"
+fi
 
 echo "Agents skills dir: $DEST_DIR"
 echo "Source repo: $REPO_ROOT"
@@ -141,3 +135,4 @@ if [[ $fail -eq 0 ]]; then
 fi
 echo "❌ FAILED ($MODE)"
 exit 1
+

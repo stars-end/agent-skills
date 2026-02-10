@@ -24,11 +24,11 @@ if ! echo "$COMMIT_MSG" | grep -q "Feature-Key:"; then
 ❌ COMMIT BLOCKED: Missing Feature-Key
 
 Every commit must include a Feature-Key trailer for traceability.
-Example:
-  feat: your summary
+  Example:
+    feat: your summary
 
-  Feature-Key: bd-123
-  Agent: codex
+    Feature-Key: bd-f6fh
+    Agent: codex
 
 EOF
   exit 1
@@ -41,15 +41,14 @@ if ! echo "$COMMIT_MSG" | grep -q "Agent:"; then
 ❌ COMMIT BLOCKED: Missing Agent trailer
 
 Every commit must include an Agent trailer for attribution.
-Example:
-  feat: your summary
+  Example:
+    feat: your summary
 
-  Feature-Key: bd-123
-  Agent: codex
+    Feature-Key: bd-f6fh
+    Agent: codex
 
 EOF
   exit 1
 fi
 
 exit 0
-
