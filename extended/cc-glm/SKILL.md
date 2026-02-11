@@ -1,9 +1,9 @@
 ---
 name: cc-glm
 description: |
-  Use cc-glm (Claude Code wrapper using GLM-4.7) in headless mode to outsource repetitive work.
+  Use cc-glm (Claude Code wrapper using GLM models such as glm-5) in headless mode to outsource repetitive work.
   Prefer detached background orchestration for multi-task backlogs, with mandatory monitoring.
-  Trigger when user mentions cc-glm, glm-4.7, "headless", or wants to delegate easy/medium tasks to a junior agent.
+  Trigger when user mentions cc-glm, glm-5/glm-4.7, "headless", or wants to delegate easy/medium tasks to a junior agent.
 tags: [workflow, delegation, automation, claude-code, glm, wave, parallel]
 allowed-tools:
   - Bash
@@ -215,11 +215,15 @@ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 retries=0
 EOF
 
-nohup ~/agent-skills/extended/cc-glm/scripts/cc-glm-headless.sh \
+nohup ~/agent-skills/extended/cc-glm/scripts/pty-run.sh \
+  --output /tmp/cc-glm-jobs/bd-xxxx.log \
+  -- ~/agent-skills/extended/cc-glm/scripts/cc-glm-headless.sh \
   --prompt-file /tmp/cc-glm-jobs/bd-xxxx.prompt.txt \
-  > /tmp/cc-glm-jobs/bd-xxxx.log 2>&1 & echo $! > /tmp/cc-glm-jobs/bd-xxxx.pid
+  >> /tmp/cc-glm-jobs/bd-xxxx.log 2>&1 & echo $! > /tmp/cc-glm-jobs/bd-xxxx.pid
 disown
 ```
+
+Note: prefer PTY-backed launch for detached jobs. Plain `nohup cc-glm-headless.sh` can produce zero-byte logs in some environments.
 
 Monitoring example:
 
@@ -240,7 +244,8 @@ Use the included helper script to standardize start/status/check:
   --beads bd-xxxx \
   --repo repo-name \
   --worktree /tmp/agents/bd-xxxx/repo-name \
-  --prompt-file /tmp/cc-glm-jobs/bd-xxxx.prompt.txt
+  --prompt-file /tmp/cc-glm-jobs/bd-xxxx.prompt.txt \
+  --pty
 
 # Status table for all jobs
 ~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh status
@@ -249,6 +254,11 @@ Use the included helper script to standardize start/status/check:
 ~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh check \
   --beads bd-xxxx \
   --stall-minutes 20
+
+# Optional watchdog loop (restarts once, then marks blocked)
+~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh watchdog \
+  --stall-minutes 20 \
+  --max-retries 1
 ```
 
 ### Status Output Format
