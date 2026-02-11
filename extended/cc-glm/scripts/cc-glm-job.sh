@@ -14,7 +14,7 @@ set -euo pipefail
 #   health   [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>]
 #   restart  --beads <id> [--log-dir <dir>] [--pty]
 #   stop     --beads <id> [--log-dir <dir>]
-#   watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>]
+#   watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>] [--once]
 #            [--pidfile <path>]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,7 +36,7 @@ Usage:
   cc-glm-job.sh health [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>]
   cc-glm-job.sh restart --beads <id> [--log-dir <dir>] [--pty]
   cc-glm-job.sh stop --beads <id> [--log-dir <dir>]
-  cc-glm-job.sh watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>] [--pidfile <path>]
+  cc-glm-job.sh watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>] [--once] [--pidfile <path>]
 
 Commands:
   start    Launch a cc-glm job in background with nohup (default) or PTY wrapper.
@@ -49,6 +49,7 @@ Commands:
 
 Options:
   --pty    Use PTY-backed execution for reliable output capture (recommended for detached jobs).
+  --once   Run exactly one watchdog iteration, then exit.
 
 Notes:
   - check exits 2 when a running job appears stalled (no log updates past threshold).
@@ -143,6 +144,7 @@ parse_common_args() {
   WATCHDOG_INTERVAL=60
   WATCHDOG_MAX_RETRIES=1
   WATCHDOG_PIDFILE=""
+  WATCHDOG_ONCE=false
   USE_PTY=false
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -175,8 +177,12 @@ parse_common_args() {
         shift 2
         ;;
       --max-retries)
-        WATCHDOG_MAX_RETRIES="${2:-2}"
+        WATCHDOG_MAX_RETRIES="${2:-1}"
         shift 2
+        ;;
+      --once)
+        WATCHDOG_ONCE=true
+        shift
         ;;
       --pidfile)
         WATCHDOG_PIDFILE="${2:-}"
@@ -226,6 +232,8 @@ started_at=$(now_utc)
 retries=0
 use_pty=$USE_PTY
 EOF
+  meta_set "$META_FILE" "launch_marker_at" "$(now_utc)"
+  meta_set "$META_FILE" "launch_state" "starting"
 
   # Detached run; stdout/stderr go to per-job log.
   if [[ "$USE_PTY" == "true" ]]; then
@@ -241,6 +249,7 @@ EOF
   local pid=$!
   echo "$pid" > "$PID_FILE"
   meta_set "$META_FILE" "pid" "$pid"
+  meta_set "$META_FILE" "launch_state" "running"
 
   echo "started beads=$BEADS pid=$pid log=$LOG_FILE pty=$USE_PTY"
 }
@@ -572,6 +581,8 @@ restart_cmd() {
   local new_retries=$((retries + 1))
   meta_set "$META_FILE" "retries" "$new_retries"
   meta_set "$META_FILE" "restarted_at" "$(now_utc)"
+  meta_set "$META_FILE" "launch_marker_at" "$(now_utc)"
+  meta_set "$META_FILE" "launch_state" "restarting"
 
   # Reset log file
   : > "$LOG_FILE"
@@ -591,6 +602,7 @@ restart_cmd() {
   local new_pid=$!
   echo "$new_pid" > "$PID_FILE"
   meta_set "$META_FILE" "pid" "$new_pid"
+  meta_set "$META_FILE" "launch_state" "running"
 
   echo "restarted beads=$BEADS pid=$new_pid retries=$new_retries log=$LOG_FILE pty=$effective_use_pty"
 }
@@ -606,7 +618,7 @@ watchdog_cmd() {
     echo "watchdog pid=$$ written to $WATCHDOG_PIDFILE"
   fi
 
-  echo "watchdog started: interval=${WATCHDOG_INTERVAL}s stall=${STALL_MINUTES}m max-retries=${WATCHDOG_MAX_RETRIES}"
+  echo "watchdog started: interval=${WATCHDOG_INTERVAL}s stall=${STALL_MINUTES}m max-retries=${WATCHDOG_MAX_RETRIES} once=${WATCHDOG_ONCE} beads=${BEADS:-all}"
   echo "press Ctrl+C to stop"
 
   local iteration=0
@@ -616,10 +628,17 @@ watchdog_cmd() {
 
     shopt -s nullglob
     local found=0
-    for pidf in "$LOG_DIR"/*.pid; do
+    local watch_targets=()
+    if [[ -n "$BEADS" ]]; then
+      watch_targets=("$BEADS")
+    else
+      local pidf
+      for pidf in "$LOG_DIR"/*.pid; do
+        watch_targets+=("$(basename "$pidf" .pid)")
+      done
+    fi
+    for beads in "${watch_targets[@]}"; do
       found=1
-      local beads
-      beads="$(basename "$pidf" .pid)"
       job_paths "$beads"
 
       # Skip if no meta file (incomplete job state)
@@ -651,7 +670,7 @@ watchdog_cmd() {
           else
             # Attempt restart
             echo "[$beads] restarting..."
-            if restart_cmd --beads "$beads" --log-dir "$LOG_DIR" 2>&1; then
+            if ( restart_cmd --beads "$beads" --log-dir "$LOG_DIR" 2>&1 ); then
               echo "[$beads] restart succeeded"
             else
               echo "[$beads] restart FAILED: $?" >&2
@@ -672,6 +691,11 @@ watchdog_cmd() {
 
     if [[ "$found" -eq 0 ]]; then
       echo "(no jobs found in $LOG_DIR)"
+    fi
+
+    if [[ "$WATCHDOG_ONCE" == "true" ]]; then
+      echo "watchdog completed single iteration (--once)"
+      break
     fi
 
     sleep "$WATCHDOG_INTERVAL"
