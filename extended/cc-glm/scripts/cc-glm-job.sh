@@ -8,10 +8,14 @@ set -euo pipefail
 #   <beads>.pid, <beads>.log, <beads>.meta
 #
 # Commands:
-#   start   --beads <id> --prompt-file <path> [--repo <name>] [--worktree <path>] [--log-dir <dir>]
-#   status  [--beads <id>] [--log-dir <dir>]
-#   check   --beads <id> [--log-dir <dir>] [--stall-minutes <n>]
-#   stop    --beads <id> [--log-dir <dir>]
+#   start    --beads <id> --prompt-file <path> [--repo <name>] [--worktree <path>] [--log-dir <dir>]
+#   status   [--beads <id>] [--log-dir <dir>]
+#   check    --beads <id> [--log-dir <dir>] [--stall-minutes <n>]
+#   health   [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>]
+#   restart  --beads <id> [--log-dir <dir>]
+#   stop     --beads <id> [--log-dir <dir>]
+#   watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>]
+#            [--pidfile <path>]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HEADLESS="${SCRIPT_DIR}/cc-glm-headless.sh"
@@ -28,11 +32,25 @@ Usage:
   cc-glm-job.sh start --beads <id> --prompt-file <path> [--repo <name>] [--worktree <path>] [--log-dir <dir>]
   cc-glm-job.sh status [--beads <id>] [--log-dir <dir>]
   cc-glm-job.sh check --beads <id> [--log-dir <dir>] [--stall-minutes <n>]
+  cc-glm-job.sh health [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>]
+  cc-glm-job.sh restart --beads <id> [--log-dir <dir>]
   cc-glm-job.sh stop --beads <id> [--log-dir <dir>]
+  cc-glm-job.sh watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>] [--pidfile <path>]
+
+Commands:
+  start    Launch a cc-glm job in background with nohup.
+  status   Show status table of jobs (all or specific).
+  check    Check single job health (exit 2 if stalled).
+  health   Show detailed health state (healthy/stalled/exited/blocked) for jobs.
+  restart  Restart a job (preserves metadata, increments retry count).
+  stop     Stop a running job.
+  watchdog Run watchdog loop: monitor jobs, restart stalled jobs once, mark blocked on second stall.
 
 Notes:
-  - start launches detached with nohup and writes pid/log/meta files.
   - check exits 2 when a running job appears stalled (no log updates past threshold).
+  - health classifies jobs: healthy, stalled (>N min no log growth), exited, blocked (retries exhausted).
+  - restart preserves existing metadata and increments retries count.
+  - watchdog runs in foreground; daemonize via nohup/launchd/systemd for persistent monitoring.
 EOF
 }
 
@@ -117,6 +135,9 @@ parse_common_args() {
   REPO=""
   WORKTREE=""
   STALL_MINUTES=20
+  WATCHDOG_INTERVAL=60
+  WATCHDOG_MAX_RETRIES=2
+  WATCHDOG_PIDFILE=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --beads)
@@ -141,6 +162,18 @@ parse_common_args() {
         ;;
       --stall-minutes)
         STALL_MINUTES="${2:-20}"
+        shift 2
+        ;;
+      --interval)
+        WATCHDOG_INTERVAL="${2:-60}"
+        shift 2
+        ;;
+      --max-retries)
+        WATCHDOG_MAX_RETRIES="${2:-2}"
+        shift 2
+        ;;
+      --pidfile)
+        WATCHDOG_PIDFILE="${2:-}"
         shift 2
         ;;
       -h|--help)
@@ -302,11 +335,255 @@ stop_cmd() {
   fi
 }
 
+# Health classification for a single job
+job_health() {
+  local beads="$1"
+  job_paths "$beads"
+  local stall_threshold="${2:-$((STALL_MINUTES * 60))}"
+
+  if [[ ! -f "$PID_FILE" ]]; then
+    printf "missing"
+    return 0
+  fi
+
+  local pid
+  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [[ -z "$pid" ]]; then
+    printf "missing"
+    return 0
+  fi
+
+  if ! ps -p "$pid" >/dev/null 2>&1; then
+    printf "exited"
+    return 0
+  fi
+
+  # Check for blocked state (retries exhausted)
+  if [[ -f "$META_FILE" ]]; then
+    local retries blocked
+    retries="$(meta_get "$META_FILE" "retries")"
+    retries="${retries:-0}"
+    blocked="$(meta_get "$META_FILE" "blocked")"
+    if [[ "$blocked" == "true" ]]; then
+      printf "blocked"
+      return 0
+    fi
+  fi
+
+  # Check log growth
+  if [[ ! -f "$LOG_FILE" ]]; then
+    printf "stalled"
+    return 0
+  fi
+
+  local now mtime age
+  now="$(date +%s)"
+  mtime="$(file_mtime_epoch "$LOG_FILE")"
+  age=$((now - mtime))
+
+  if [[ "$age" -gt "$stall_threshold" ]]; then
+    printf "stalled"
+    return 0
+  fi
+
+  printf "healthy"
+}
+
+health_cmd() {
+  parse_common_args "$@"
+  local stall_seconds=$((STALL_MINUTES * 60))
+  printf "%-14s %-8s %-10s %-16s %s\n" \
+    "bead" "pid" "health" "last_update" "retries"
+  if [[ -n "$BEADS" ]]; then
+    health_line "$BEADS" "$stall_seconds"
+    return 0
+  fi
+  shopt -s nullglob
+  local found=0
+  for pidf in "$LOG_DIR"/*.pid; do
+    found=1
+    local beads
+    beads="$(basename "$pidf" .pid)"
+    health_line "$beads" "$stall_seconds"
+  done
+  if [[ "$found" -eq 0 ]]; then
+    echo "(no jobs found in $LOG_DIR)"
+  fi
+}
+
+health_line() {
+  local beads="$1"
+  local stall_threshold="$2"
+  job_paths "$beads"
+  local pid="" health="missing" last_update="-" retries="0"
+
+  if [[ -f "$PID_FILE" ]]; then
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  fi
+  health="$(job_health "$beads" "$stall_threshold")"
+
+  if [[ -f "$LOG_FILE" ]]; then
+    local mtime
+    mtime="$(file_mtime_epoch "$LOG_FILE" 2>/dev/null || echo "")"
+    if [[ -n "$mtime" ]]; then
+      local now age
+      now="$(date +%s)"
+      age=$((now - mtime))
+      last_update="$(format_elapsed "$age") ago"
+    fi
+  fi
+
+  if [[ -f "$META_FILE" ]]; then
+    retries="$(meta_get "$META_FILE" "retries")"
+    [[ -n "$retries" ]] || retries="0"
+  fi
+
+  printf "%-14s %-8s %-10s %-16s %s\n" \
+    "$beads" "${pid:--}" "$health" "$last_update" "$retries"
+}
+
+restart_cmd() {
+  parse_common_args "$@"
+  [[ -n "$BEADS" ]] || { echo "restart requires --beads" >&2; exit 2; }
+  job_paths "$BEADS"
+
+  if [[ ! -f "$META_FILE" ]]; then
+    echo "no metadata file for $BEADS: $META_FILE" >&2
+    exit 1
+  fi
+
+  # Get current retries and prompt file
+  local retries prompt_file repo worktree
+  retries="$(meta_get "$META_FILE" "retries")"
+  retries="${retries:-0}"
+  prompt_file="$(meta_get "$META_FILE" "prompt_file")"
+  repo="$(meta_get "$META_FILE" "repo")"
+  worktree="$(meta_get "$META_FILE" "worktree")"
+
+  if [[ -z "$prompt_file" || ! -f "$prompt_file" ]]; then
+    echo "invalid or missing prompt_file in metadata: $prompt_file" >&2
+    exit 1
+  fi
+
+  # Stop existing job if running
+  local pid
+  if [[ -f "$PID_FILE" ]]; then
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && ps -p "$pid" >/dev/null 2>&1; then
+      kill "$pid" 2>/dev/null || true
+      sleep 1
+    fi
+  fi
+
+  # Increment retries
+  local new_retries=$((retries + 1))
+  meta_set "$META_FILE" "retries" "$new_retries"
+  meta_set "$META_FILE" "restarted_at" "$(now_utc)"
+
+  # Reset log file
+  : > "$LOG_FILE"
+
+  # Start new job
+  [[ -x "$HEADLESS" ]] || { echo "headless wrapper not executable: $HEADLESS" >&2; exit 1; }
+  nohup "$HEADLESS" --prompt-file "$prompt_file" >> "$LOG_FILE" 2>&1 &
+  local new_pid=$!
+  echo "$new_pid" > "$PID_FILE"
+  meta_set "$META_FILE" "pid" "$new_pid"
+
+  echo "restarted beads=$BEADS pid=$new_pid retries=$new_retries log=$LOG_FILE"
+}
+
+watchdog_cmd() {
+  parse_common_args "$@"
+  local stall_seconds=$((STALL_MINUTES * 60))
+
+  # Write watchdog pidfile if requested
+  if [[ -n "$WATCHDOG_PIDFILE" ]]; then
+    mkdir -p "$(dirname "$WATCHDOG_PIDFILE")"
+    echo $$ > "$WATCHDOG_PIDFILE"
+    echo "watchdog pid=$$ written to $WATCHDOG_PIDFILE"
+  fi
+
+  echo "watchdog started: interval=${WATCHDOG_INTERVAL}s stall=${STALL_MINUTES}m max-retries=${WATCHDOG_MAX_RETRIES}"
+  echo "press Ctrl+C to stop"
+
+  local iteration=0
+  while true; do
+    iteration=$((iteration + 1))
+    echo "=== watchdog iteration $iteration at $(now_utc) ==="
+
+    shopt -s nullglob
+    local found=0
+    for pidf in "$LOG_DIR"/*.pid; do
+      found=1
+      local beads
+      beads="$(basename "$pidf" .pid)"
+      job_paths "$beads"
+
+      # Skip if no meta file (incomplete job state)
+      if [[ ! -f "$META_FILE" ]]; then
+        echo "[$beads] SKIP: no metadata file"
+        continue
+      fi
+
+      local health
+      health="$(job_health "$beads" "$stall_seconds")"
+      echo "[$beads] health=$health"
+
+      case "$health" in
+        healthy)
+          # Nothing to do
+          ;;
+        stalled)
+          # Check retry count
+          local retries
+          retries="$(meta_get "$META_FILE" "retries")"
+          retries="${retries:-0}"
+          echo "[$beads] stalled, retries=$retries/$WATCHDOG_MAX_RETRIES"
+
+          if [[ "$retries" -ge "$WATCHDOG_MAX_RETRIES" ]]; then
+            # Mark as blocked
+            meta_set "$META_FILE" "blocked" "true"
+            meta_set "$META_FILE" "blocked_at" "$(now_utc)"
+            echo "[$beads] BLOCKED: max retries ($WATCHDOG_MAX_RETRIES) exhausted"
+          else
+            # Attempt restart
+            echo "[$beads] restarting..."
+            if restart_cmd --beads "$beads" --log-dir "$LOG_DIR" 2>&1; then
+              echo "[$beads] restart succeeded"
+            else
+              echo "[$beads] restart FAILED: $?" >&2
+            fi
+          fi
+          ;;
+        exited)
+          echo "[$beads] exited: job finished or crashed"
+          ;;
+        blocked)
+          echo "[$beads] BLOCKED: manual intervention required"
+          ;;
+        missing)
+          echo "[$beads] missing: incomplete job state"
+          ;;
+      esac
+    done
+
+    if [[ "$found" -eq 0 ]]; then
+      echo "(no jobs found in $LOG_DIR)"
+    fi
+
+    sleep "$WATCHDOG_INTERVAL"
+  done
+}
+
 case "$CMD" in
   start) start_cmd "$@" ;;
   status) status_cmd "$@" ;;
   check) check_cmd "$@" ;;
+  health) health_cmd "$@" ;;
+  restart) restart_cmd "$@" ;;
   stop) stop_cmd "$@" ;;
+  watchdog) watchdog_cmd "$@" ;;
   -h|--help|help|"")
     usage
     ;;
