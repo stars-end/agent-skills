@@ -16,19 +16,34 @@
 
 set -euo pipefail
 
-# Configuration
-CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
-
-# Default max age for stale worktrees (48 hours in seconds)
-DEFAULT_MAX_AGE=$((48 * 3600))
-MAX_AGE="${DX_GC_MAX_AGE:-$DEFAULT_MAX_AGE}"
-
-# Colors for output
+# Colors for output (defined early for validation functions)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Configuration
+CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
+
+# Default max age for stale worktrees (48 hours in seconds)
+DEFAULT_MAX_AGE=$((48 * 3600))
+
+# Validate MAX_AGE value (used for both env var and CLI)
+validate_max_age() {
+    local value="$1"
+    if [[ ! "$value" =~ ^[0-9]+$ ]] || [[ "$value" -le 0 ]]; then
+        echo -e "${RED}❌ Invalid MAX_AGE: '$value' (must be positive integer)${NC}" >&2
+        exit 1
+    fi
+    echo "$value"
+}
+
+# Set MAX_AGE from env or default (validate if env was set)
+MAX_AGE="${DX_GC_MAX_AGE:-$DEFAULT_MAX_AGE}"
+if [[ -n "${DX_GC_MAX_AGE:-}" ]]; then
+    MAX_AGE=$(validate_max_age "$DX_GC_MAX_AGE")
+fi
 
 # Parse arguments
 DRY_RUN=false
@@ -123,6 +138,18 @@ is_worktree_dirty() {
     [[ -n "$status" ]]
 }
 
+# Get file mtime in seconds (cross-platform: macOS and Linux)
+# macOS: stat -f %m (seconds since epoch)
+# Linux: stat -c %Y (seconds since epoch)
+get_file_mtime() {
+    local file="$1"
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        stat -f %m "$file" 2>/dev/null || echo "0"
+    else
+        stat -c %Y "$file" 2>/dev/null || echo "0"
+    fi
+}
+
 # Get worktree age in seconds (based on most recent file mtime, NOT commit time)
 # This is more accurate for detecting active WIP on old branches
 get_worktree_age_seconds() {
@@ -130,18 +157,27 @@ get_worktree_age_seconds() {
     local now_ts
     now_ts=$(date +%s)
 
-    # Use most recently modified file in worktree (not .git)
-    # This catches active editing on old branches
-    local newest_file_ts
-    newest_file_ts=$(find "$wt_path" -type f -not -path "*/.git/*" -printf "%T@\n" 2>/dev/null | sort -rn | head -1 || echo "0")
+    # For dirty worktrees, check git index modification time
+    # This is a fast proxy for "recently edited" that works cross-platform
+    local newest_file_ts=0
 
-    # Fallback to commit time if no files found
+    # Check .git/index (staged changes) - fast and accurate for dirty state
+    local git_index="$wt_path/.git/index"
+    if [[ -f "$git_index" ]]; then
+        newest_file_ts=$(get_file_mtime "$git_index")
+    fi
+
+    # Also check worktree directory mtime (updated when files inside change)
+    local wt_dir_mtime
+    wt_dir_mtime=$(get_file_mtime "$wt_path")
+    if [[ "$wt_dir_mtime" -gt "$newest_file_ts" ]]; then
+        newest_file_ts="$wt_dir_mtime"
+    fi
+
+    # Fallback to commit time if no valid mtime found
     if [[ -z "$newest_file_ts" || "$newest_file_ts" == "0" ]]; then
         newest_file_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
     fi
-
-    # Handle floating point from find -printf %T@
-    newest_file_ts=$(echo "$newest_file_ts" | cut -d. -f1)
 
     echo $((now_ts - newest_file_ts))
 }
