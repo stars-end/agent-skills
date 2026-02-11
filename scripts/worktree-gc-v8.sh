@@ -47,17 +47,27 @@ while [[ $# -gt 0 ]]; do
         --max-age)
             shift
             if [[ -n "${1:-}" ]]; then
+                PARSED_MAX_AGE=""
                 # Parse age (supports: 48h, 2d, 172800)
                 if [[ "$1" =~ ^([0-9]+)h$ ]]; then
-                    MAX_AGE=$((BASH_REMATCH[1] * 3600))
+                    PARSED_MAX_AGE=$((BASH_REMATCH[1] * 3600))
                 elif [[ "$1" =~ ^([0-9]+)d$ ]]; then
-                    MAX_AGE=$((BASH_REMATCH[1] * 86400))
+                    PARSED_MAX_AGE=$((BASH_REMATCH[1] * 86400))
+                elif [[ "$1" =~ ^[0-9]+$ ]]; then
+                    PARSED_MAX_AGE="$1"
                 else
-                    MAX_AGE="$1"
+                    echo -e "${RED}❌ Invalid --max-age value: '$1' (expected: 48h, 2d, or seconds)${NC}" >&2
+                    exit 1
                 fi
+                # Validate it's a positive number
+                if [[ ! "$PARSED_MAX_AGE" =~ ^[0-9]+$ ]] || [[ "$PARSED_MAX_AGE" -le 0 ]]; then
+                    echo -e "${RED}❌ Invalid --max-age value: '$1' (must be positive integer)${NC}" >&2
+                    exit 1
+                fi
+                MAX_AGE="$PARSED_MAX_AGE"
                 shift
             else
-                echo "Error: --max-age requires a value (e.g., 48h, 2d, or seconds)"
+                echo -e "${RED}❌ --max-age requires a value (e.g., 48h, 2d, or seconds)${NC}" >&2
                 exit 1
             fi
             ;;
@@ -113,14 +123,27 @@ is_worktree_dirty() {
     [[ -n "$status" ]]
 }
 
-# Get worktree age in seconds (based on last commit timestamp)
+# Get worktree age in seconds (based on most recent file mtime, NOT commit time)
+# This is more accurate for detecting active WIP on old branches
 get_worktree_age_seconds() {
     local wt_path="$1"
-    local last_commit_ts
-    last_commit_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
     local now_ts
     now_ts=$(date +%s)
-    echo $((now_ts - last_commit_ts))
+
+    # Use most recently modified file in worktree (not .git)
+    # This catches active editing on old branches
+    local newest_file_ts
+    newest_file_ts=$(find "$wt_path" -type f -not -path "*/.git/*" -printf "%T@\n" 2>/dev/null | sort -rn | head -1 || echo "0")
+
+    # Fallback to commit time if no files found
+    if [[ -z "$newest_file_ts" || "$newest_file_ts" == "0" ]]; then
+        newest_file_ts=$(git -C "$wt_path" log -1 --format=%ct 2>/dev/null || echo "0")
+    fi
+
+    # Handle floating point from find -printf %T@
+    newest_file_ts=$(echo "$newest_file_ts" | cut -d. -f1)
+
+    echo $((now_ts - newest_file_ts))
 }
 
 # Check if worktree is stale (older than MAX_AGE)
@@ -149,28 +172,40 @@ evacuate_dirty_worktree() {
     fi
 
     # Create rescue branch from current state
-    git -C "$wt_path" checkout -b "$rescue_branch" 2>/dev/null || {
-        # If checkout fails, try to create from HEAD
-        git -C "$repo_path" branch "$rescue_branch" "$(git -C "$wt_path" rev-parse HEAD)" 2>/dev/null || true
-    }
+    # Use --no-track to avoid setting upstream
+    if ! git -C "$wt_path" checkout -b "$rescue_branch" --no-track 2>/dev/null; then
+        # If checkout fails, we cannot safely evacuate - abort
+        error "  Failed to create rescue branch in worktree - aborting evacuation" >&2
+        return 1
+    fi
 
     # Stage all changes including untracked
     git -C "$wt_path" add -A 2>/dev/null || true
 
     # Commit if there are changes
+    # Use --no-verify to bypass commit hooks (rescue operation, not user commit)
     if git -C "$wt_path" diff --cached --quiet 2>/dev/null; then
         log "  No changes to commit in evacuation" >&2
     else
-        git -C "$wt_path" commit -m "evacuate: dirty worktree rescue $timestamp" 2>/dev/null || true
+        if ! git -C "$wt_path" commit --no-verify -m "evacuate: dirty worktree rescue $timestamp" 2>/dev/null; then
+            error "  Failed to commit evacuation changes - aborting" >&2
+            # Switch back to original branch to avoid leaving user on rescue branch
+            git -C "$wt_path" checkout "$wt_branch" 2>/dev/null || true
+            return 1
+        fi
     fi
 
-    # Push rescue branch
-    git -C "$repo_path" push origin "$rescue_branch" 2>/dev/null || {
+    # Push rescue branch from worktree's current state
+    if ! git -C "$wt_path" push origin "$rescue_branch" 2>/dev/null; then
         warn "  Failed to push rescue branch: $rescue_branch" >&2
+        # Switch back to original branch
+        git -C "$wt_path" checkout "$wt_branch" 2>/dev/null || true
         return 1
-    }
+    fi
 
     success "  Evacuated to: $rescue_branch" >&2
+    # Switch back to original branch before return
+    git -C "$wt_path" checkout "$wt_branch" 2>/dev/null || true
     return 0
 }
 
