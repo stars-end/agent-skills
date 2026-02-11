@@ -172,10 +172,10 @@ get_worktree_age_seconds() {
     fi
 
     # Method 2: Sample a few recently modified tracked files
-    # This catches active editing even if index hasn't been updated
+    # This catches active editing even if index hasn't been updated.
     local sample_count=0
     while IFS= read -r file; do
-        if [[ -f "$wt_path/$file" ]]; then
+        if [[ -e "$wt_path/$file" ]]; then
             local file_mtime
             file_mtime=$(get_file_mtime "$wt_path/$file")
             if [[ "$file_mtime" -gt "$newest_file_ts" ]]; then
@@ -186,6 +186,21 @@ get_worktree_age_seconds() {
             [[ $sample_count -ge 10 ]] && break
         fi
     done < <(git -C "$wt_path" diff --name-only HEAD 2>/dev/null | head -10)
+
+    # Method 3: Sample untracked files.
+    # This avoids misclassifying active untracked-only WIP as stale.
+    sample_count=0
+    while IFS= read -r file; do
+        if [[ -e "$wt_path/$file" ]]; then
+            local file_mtime
+            file_mtime=$(get_file_mtime "$wt_path/$file")
+            if [[ "$file_mtime" -gt "$newest_file_ts" ]]; then
+                newest_file_ts="$file_mtime"
+            fi
+            ((sample_count++))
+            [[ $sample_count -ge 10 ]] && break
+        fi
+    done < <(git -C "$wt_path" ls-files --others --exclude-standard 2>/dev/null | head -10)
 
     # Fallback to commit time if no valid mtime found
     if [[ -z "$newest_file_ts" || "$newest_file_ts" == "0" ]]; then
