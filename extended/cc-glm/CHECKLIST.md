@@ -123,6 +123,13 @@ Based on the four gates above:
 
 ## Parallel Batch Mode (2-4 Threads)
 
+Wave execution protocol:
+1. Parse tasks and dependency graph (`depends_on`).
+2. Launch only unblocked tasks (up to safe max parallelism, usually 2-4).
+3. Validate completed tasks against acceptance criteria before unlocking next wave.
+4. Record task logs, changed files, and blockers in handoff notes.
+5. Repeat until all tasks are complete or explicitly blocked.
+
 ### 1. Launch Jobs in Parallel
 
 ```bash
@@ -156,15 +163,25 @@ for beads in bd-001 bd-002 bd-003; do
     --beads $beads \
     --repo agent-skills \
     --worktree /tmp/agents/$beads/agent-skills \
-    --prompt-file /tmp/cc-glm-jobs/$beads.prompt.txt
+    --prompt-file /tmp/cc-glm-jobs/$beads.prompt.txt \
+    --pty
 done
 ```
+
+Note:
+- Use `--pty` for detached runs. This avoids the known `nohup` zero-byte output mode and keeps logs inspectable.
 
 ### 2. Monitor Periodically (Every 5 Min)
 
 ```bash
 # Status table for all jobs
 ~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh status
+
+# Health table (healthy/stalled/exited/blocked)
+~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh health
+
+# Check one job (exit 2 when stalled)
+~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh check --beads bd-001
 
 # Or use watch for continuous monitoring
 watch -n 300 '~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh status'
@@ -178,6 +195,13 @@ Status table columns:
 - `bytes`: Log file size
 - `last_update`: Time of last log write
 - `retries`: Restart count
+
+When a job stalls:
+- `watchdog` will restart once (default max retries = 1), then mark the job blocked.
+- Manual fallback command:
+```bash
+~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh restart --beads bd-001 --pty
+```
 
 ### 3. When Jobs Complete, Run Report
 
