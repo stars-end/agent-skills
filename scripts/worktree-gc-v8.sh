@@ -150,29 +150,42 @@ get_file_mtime() {
     fi
 }
 
-# Get worktree age in seconds (based on most recent file mtime, NOT commit time)
+# Get worktree age in seconds (based on most recent activity, NOT commit time)
 # This is more accurate for detecting active WIP on old branches
 get_worktree_age_seconds() {
     local wt_path="$1"
     local now_ts
     now_ts=$(date +%s)
 
-    # For dirty worktrees, check git index modification time
-    # This is a fast proxy for "recently edited" that works cross-platform
     local newest_file_ts=0
 
-    # Check .git/index (staged changes) - fast and accurate for dirty state
-    local git_index="$wt_path/.git/index"
-    if [[ -f "$git_index" ]]; then
-        newest_file_ts=$(get_file_mtime "$git_index")
+    # Method 1: Check git index mtime (works for both regular repos and worktrees)
+    # For worktrees, .git is a file pointer, so we use git rev-parse --git-dir
+    local git_dir
+    git_dir=$(git -C "$wt_path" rev-parse --git-dir 2>/dev/null)
+    if [[ -n "$git_dir" && -f "$git_dir/index" ]]; then
+        local index_mtime
+        index_mtime=$(get_file_mtime "$git_dir/index")
+        if [[ "$index_mtime" -gt "$newest_file_ts" ]]; then
+            newest_file_ts="$index_mtime"
+        fi
     fi
 
-    # Also check worktree directory mtime (updated when files inside change)
-    local wt_dir_mtime
-    wt_dir_mtime=$(get_file_mtime "$wt_path")
-    if [[ "$wt_dir_mtime" -gt "$newest_file_ts" ]]; then
-        newest_file_ts="$wt_dir_mtime"
-    fi
+    # Method 2: Sample a few recently modified tracked files
+    # This catches active editing even if index hasn't been updated
+    local sample_count=0
+    while IFS= read -r file; do
+        if [[ -f "$wt_path/$file" ]]; then
+            local file_mtime
+            file_mtime=$(get_file_mtime "$wt_path/$file")
+            if [[ "$file_mtime" -gt "$newest_file_ts" ]]; then
+                newest_file_ts="$file_mtime"
+            fi
+            ((sample_count++))
+            # Only check first 10 modified files for performance
+            [[ $sample_count -ge 10 ]] && break
+        fi
+    done < <(git -C "$wt_path" diff --name-only HEAD 2>/dev/null | head -10)
 
     # Fallback to commit time if no valid mtime found
     if [[ -z "$newest_file_ts" || "$newest_file_ts" == "0" ]]; then
