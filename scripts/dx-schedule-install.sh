@@ -2,6 +2,17 @@
 #
 # dx-schedule-install.sh
 #
+# ⚠️  DEPRECATED: This script is V7.8 only and references non-existent schedules/ directory.
+#
+# For V8+, cron schedules are installed via:
+#   - dx-hydrate.sh (calls install-v8-cron.sh)
+#   - Direct crontab management by dx-hydrate.sh
+#
+# This script is kept for historical reference but will not work without
+# the schedules/v7.8/ directory which was removed in V8.
+#
+# See: docs/DX_FLEET_SPEC_V8.md for current V8 cron approach.
+#
 # Idempotent installer for DX V7.8 schedules.
 #
 # Usage:
