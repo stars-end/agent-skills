@@ -1,6 +1,6 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Last updated: 2026-02-10 19:45:54 UTC -->
+<!-- Last updated: 2026-02-10 12:25:22 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -38,39 +38,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 1. **No auto-merge**: never enable auto-merge on PRs — humans merge
 2. **No PR factory**: one PR per meaningful unit of work
 3. **No canonical writes**: always use worktrees
-4. **Feature-Key mandatory**: every commit needs `Feature-Key: bd-<beads-id>`
-
-## 3) PR Metadata Rules (Blocking In CI)
-- **PR title must include a Feature-Key**: include `bd-<beads-id>` somewhere in the title (e.g. `bd-f6fh: ...`)
-- **PR body must include Agent**: add a line like `Agent: <agent-id>`
-
-## 4) Delegation Rule (cc-glm)
-- **Default**: delegate mechanical tasks estimated \< 2 hours to `cc-glm` headless mode.
-- **Background-first for backlogs**: when there are multiple independent tasks, run `cc-glm` in detached background workers.
-- **Concurrency target**: use the highest safe parallelism for the backlog (start at `2`, scale to `3-4` as soon as risk/monitoring allow).
-- **Mandatory monitoring**: every running worker must be checked on a fixed cadence (recommended: every 5 minutes) using PID state + log growth.
-- **Required tracking artifacts** (per delegated task):
-  - PID file: `/tmp/cc-glm-jobs/<beads-id>.pid`
-  - Log file: `/tmp/cc-glm-jobs/<beads-id>.log`
-  - Metadata file: `/tmp/cc-glm-jobs/<beads-id>.meta`
-- **Stall handling**: if a worker is alive but log output is stale for 20+ minutes, restart once and record retry count in metadata.
-- **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
-- **Orchestrator owns outcomes**: review diffs, run validation, request revisions, commit/push with required trailers.
-- **Never fire-and-forget**: starting background jobs without follow-up checks is a policy violation.
-
-## 5) Secrets + Env Sources (1Password vs Railway)
-- **DX/dev workflow secrets** (agent keys, automation tokens): source from 1Password (`op://...`) and resolve at runtime via `op read` or `op run --`.
-- **Deploy/runtime secrets** (service config): live in Railway environment variables; for automated Railway CLI use, export `RAILWAY_TOKEN` from 1Password (see `Railway-Delivery`).
-- **Service account auth for op CLI**: use `~/agent-skills/scripts/create-op-credential.sh` (never commit tokens).
-- **Quick reference**: use the `op-secrets-quickref` skill for safe commands (listing items/fields, op auth, Railway token export).
-
-References:
-- `~/agent-skills/docs/ENV_SOURCES_CONTRACT.md`
-- `~/agent-skills/docs/SECRET_MANAGEMENT.md`
-
-Notes:
-- PR metadata enforcement exists to keep squash merges ergonomic (don’t rely on commit messages).
-- If you’re unsure what to use for Agent, use your platform id (see `DX_AGENT_ID.md`).
+4. **Feature-Key mandatory**: every commit needs `Feature-Key: bd-XXXX`
 
 ---
 
@@ -86,7 +54,6 @@ Notes:
 | **fix-pr-feedback** | Address PR feedback with iterative refinement. MUST BE USED when fixing PR issues. Supports auto-det | `bd show <FEATURE_KEY>` | workflow, pr, beads, debugging, iteration |
 | **issue-first** | Enforce Issue-First pattern by creating Beads tracking issue BEFORE implementation. MUST BE USED for | — | workflow, beads, issue-tracking, implementation |
 | **merge-pr** | Prepare PR for merge and guide human to merge via GitHub web UI. MUST BE USED when user wants to mer | `bd sync` | workflow, pr, github, merge, deployment |
-| **op-secrets-quickref** | Quick reference for 1Password (op CLI) secret management used in DX/dev workflows and deployments. U | — | secrets, 1password, op-cli, dx, env, railway |
 | **session-end** | End Claude Code session with Beads sync and summary. MUST BE USED when user says they're done, endin | `bd sync, or export operations.` | workflow, beads, session, cleanup |
 | **sync-feature-branch** | Commit current work to feature branch with Beads metadata tracking and git integration. MUST BE USED | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, git, beads, commit |
 
@@ -96,7 +63,7 @@ Notes:
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban vi | `bd show "$NEXT_TASK"` | workflow, beads, visualization, task-selection |
-| **cc-glm** | Use cc-glm (Claude Code wrapper using GLM-4.7) in headless mode to outsource repetitive work. Prefer | `dx-delegate --beads bd-xxxx --repo repo-name --prompt-file /` | workflow, delegation, automation, claude-code, glm |
+| **cc-glm** | Use cc-glm (Claude Code wrapper using GLM-4.7) in headless mode to outsource repetitive work. Trigge | — | workflow, delegation, automation, claude-code, glm |
 | **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
 | **coordinator-dx** | Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists. | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | `bd sync` |  |
@@ -125,6 +92,7 @@ Notes:
 | **ssh-key-doctor** | Fast, deterministic SSH health check for canonical VMs (no hangs, no secrets). Warn-only by default; | — | dx, ssh, verification |
 | **toolchain-health** | Validate Python toolchain alignment between mise, Poetry, and pyproject. Use when changing Python ve | — | dx, tooling, python |
 | **verify-pipeline** | Run project verification checks using standard Makefile targets. Use when user says "verify pipeline | — | workflow, testing, verification, makefile, railway |
+| **1password-setup** | Setup 1Password Service Account credentials on a new machine. MUST BE USED when "op not authenticate | — | infrastructure, security, setup, 1password |
 | **canonical-targets** | Single source of truth for canonical VMs, canonical IDEs, and canonical trunk branch. Use this to ke | — | dx, ide, vm, canonical, targets |
 | **devops-dx** | GitHub/Railway housekeeping for CI env/secret management and DX maintenance. Use when setting or aud | — | devops, github, env, ci, railway |
 | **dx-alerts** | Lightweight “news wire” for DX changes and breakages, posted to Slack (no MCP required). | — |  |

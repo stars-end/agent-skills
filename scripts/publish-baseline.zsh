@@ -12,8 +12,20 @@ mkdir -p "$DIST_DIR"
 
 # 1. Generate Global Constraints (Layer A subset)
 cat > "$CONSTRAINTS_FILE" <<EOF
-# DX Global Constraints (V8)
+# DX Global Constraints (V8.1)
 <!-- AUTO-GENERATED - DO NOT EDIT -->
+
+## 0) Delegation Boundary (V8.1)
+**Delegate**: Mechanical tasks estimated < 1 hour with clear acceptance criteria.
+**Use**: \`dx-delegate.sh\` or cc-glm headless mode for repetitive work (search, refactors, doc edits, tests).
+
+**Never delegate**:
+- Security-related changes (auth, secrets, permissions)
+- Architecture decisions (schema changes, API design)
+- High-risk operations (database migrations, deployment configs)
+- Multi-repo coordination (use \`jules-dispatch\` or \`parallelize-cloud-work\` instead)
+
+**DX-compliant delegation**: \`~/agent-skills/scripts/dx-delegate.sh --beads-id bd-XXXX --repo repo-name --prompt "..." \`
 
 ## 1) Canonical Repository Rules
 **Canonical repositories** (read-mostly clones):
@@ -38,39 +50,8 @@ cd /tmp/agents/bd-xxxx/repo-name
 1. **No auto-merge**: never enable auto-merge on PRs — humans merge
 2. **No PR factory**: one PR per meaningful unit of work
 3. **No canonical writes**: always use worktrees
-4. **Feature-Key mandatory**: every commit needs \`Feature-Key: bd-<beads-id>\`
-
-## 3) PR Metadata Rules (Blocking In CI)
-- **PR title must include a Feature-Key**: include \`bd-<beads-id>\` somewhere in the title (e.g. \`bd-f6fh: ...\`)
-- **PR body must include Agent**: add a line like \`Agent: <agent-id>\`
-
-## 4) Delegation Rule (cc-glm)
-- **Default**: delegate mechanical tasks estimated \< 2 hours to \`cc-glm\` headless mode.
-- **Background-first for backlogs**: when there are multiple independent tasks, run \`cc-glm\` in detached background workers.
-- **Concurrency target**: use the highest safe parallelism for the backlog (start at \`2\`, scale to \`3-4\` as soon as risk/monitoring allow).
-- **Mandatory monitoring**: every running worker must be checked on a fixed cadence (recommended: every 5 minutes) using PID state + log growth.
-- **Required tracking artifacts** (per delegated task):
-  - PID file: \`/tmp/cc-glm-jobs/<beads-id>.pid\`
-  - Log file: \`/tmp/cc-glm-jobs/<beads-id>.log\`
-  - Metadata file: \`/tmp/cc-glm-jobs/<beads-id>.meta\`
-- **Stall handling**: if a worker is alive but log output is stale for 20+ minutes, restart once and record retry count in metadata.
-- **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
-- **Orchestrator owns outcomes**: review diffs, run validation, request revisions, commit/push with required trailers.
-- **Never fire-and-forget**: starting background jobs without follow-up checks is a policy violation.
-
-## 5) Secrets + Env Sources (1Password vs Railway)
-- **DX/dev workflow secrets** (agent keys, automation tokens): source from 1Password (\`op://...\`) and resolve at runtime via \`op read\` or \`op run --\`.
-- **Deploy/runtime secrets** (service config): live in Railway environment variables; for automated Railway CLI use, export \`RAILWAY_TOKEN\` from 1Password (see \`Railway-Delivery\`).
-- **Service account auth for op CLI**: use \`~/agent-skills/scripts/create-op-credential.sh\` (never commit tokens).
-- **Quick reference**: use the \`op-secrets-quickref\` skill for safe commands (listing items/fields, op auth, Railway token export).
-
-References:
-- \`~/agent-skills/docs/ENV_SOURCES_CONTRACT.md\`
-- \`~/agent-skills/docs/SECRET_MANAGEMENT.md\`
-
-Notes:
-- PR metadata enforcement exists to keep squash merges ergonomic (don’t rely on commit messages).
-- If you’re unsure what to use for Agent, use your platform id (see \`DX_AGENT_ID.md\`).
+4. **Feature-Key mandatory**: every commit needs \`Feature-Key: bd-XXXX\`
+5. **Delegation guardrails**: use \`dx-delegate.sh\` with canonical CWD hard-stop (V8.1)
 EOF
 
 # Header for AGENTS.md
@@ -119,8 +100,8 @@ Support a startup founder balancing high-leverage technical work and family resp
 
 EOF
 
-# Include the full constraints rail in AGENTS.md (agents were missing PR metadata rules).
-sed -n '/## 1)/,$p' "$CONSTRAINTS_FILE" >> "$OUTFILE"
+# Extract Rules from Constraints for AGENTS.md (Legacy structure)
+sed -n '/## 1) Canonical/,/Feature-Key/p' "$CONSTRAINTS_FILE" >> "$OUTFILE"
 echo "" >> "$OUTFILE"
 echo "---" >> "$OUTFILE"
 echo "" >> "$OUTFILE"
