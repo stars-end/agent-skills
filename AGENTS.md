@@ -1,6 +1,6 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Last updated: 2026-02-10 14:21:20 UTC -->
+<!-- Last updated: 2026-02-10 19:45:54 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -42,9 +42,18 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **PR body must include Agent**: add a line like `Agent: <agent-id>`
 
 ## 4) Delegation Rule (cc-glm)
-- **Default**: delegate mechanical tasks estimated \< 1 hour to `cc-glm` (via `dx-delegate`).
+- **Default**: delegate mechanical tasks estimated \< 2 hours to `cc-glm` headless mode.
+- **Background-first for backlogs**: when there are multiple independent tasks, run `cc-glm` in detached background workers.
+- **Concurrency target**: use the highest safe parallelism for the backlog (start at `2`, scale to `3-4` as soon as risk/monitoring allow).
+- **Mandatory monitoring**: every running worker must be checked on a fixed cadence (recommended: every 5 minutes) using PID state + log growth.
+- **Required tracking artifacts** (per delegated task):
+  - PID file: `/tmp/cc-glm-jobs/<beads-id>.pid`
+  - Log file: `/tmp/cc-glm-jobs/<beads-id>.log`
+  - Metadata file: `/tmp/cc-glm-jobs/<beads-id>.meta`
+- **Stall handling**: if a worker is alive but log output is stale for 20+ minutes, restart once and record retry count in metadata.
 - **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
-- **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
+- **Orchestrator owns outcomes**: review diffs, run validation, request revisions, commit/push with required trailers.
+- **Never fire-and-forget**: starting background jobs without follow-up checks is a policy violation.
 
 ## 5) Secrets + Env Sources (1Password vs Railway)
 - **DX/dev workflow secrets** (agent keys, automation tokens): source from 1Password (`op://...`) and resolve at runtime via `op read` or `op run --`.
@@ -84,7 +93,7 @@ Notes:
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban vi | `bd show "$NEXT_TASK"` | workflow, beads, visualization, task-selection |
-| **cc-glm** | Use cc-glm (Claude Code wrapper using GLM-4.7) in headless mode to outsource repetitive work. Trigge | `dx-delegate --beads bd-xxxx --repo repo-name --prompt-file /` | workflow, delegation, automation, claude-code, glm |
+| **cc-glm** | Use cc-glm (Claude Code wrapper using GLM-4.7) in headless mode to outsource repetitive work. Prefer | `dx-delegate --beads bd-xxxx --repo repo-name --prompt-file /` | workflow, delegation, automation, claude-code, glm |
 | **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
 | **coordinator-dx** | Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists. | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | `bd sync` |  |
