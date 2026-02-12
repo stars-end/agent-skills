@@ -1,6 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Last updated: 2026-02-11 17:06:15 UTC -->
+<!-- Source SHA: 5cbc00c6902ce4d44ad3a80dc0aee36e1488481e -->
+<!-- Last updated: 2026-02-12 07:12:36 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -138,58 +139,71 @@ Notes:
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-| **beads-workflow** | Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Be | `bd create --title "Impl: OAuth" --type feature --dep "bd-res` | workflow, beads, issue-tracking, git |
-| **create-pull-request** | Create GitHub pull request with atomic Beads issue closure. MUST BE USED for opening PRs. Asks if wo | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, github, pr, beads, review |
+| **beads-workflow** | Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations. Handles full epic→branch→work lifecycle, dependencies, and ready task queries. Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies, or when user mentions "create issue", "track work", "bd create", "find ready tasks", issue management, dependencies, work tracking, or Beads workflow operations. | `bd create --title "Impl: OAuth" --type feature --dep "bd-res` | workflow, beads, issue-tracking, git |
+| **create-pull-request** | Create GitHub pull request with atomic Beads issue closure. MUST BE USED for opening PRs. Asks if work is complete - if YES, closes Beads issue BEFORE creating PR (JSONL merges atomically with code). If NO, creates draft PR with issue still open. Automatically links Beads tracking and includes Feature-Key. Use when user wants to open a PR, submit work for review, merge into master, or prepare for deployment, or when user mentions "ready for review", "create PR", "open PR", "merge conflicts", "CI checks needed", "branch ahead of master", PR creation, opening pull requests, deployment preparation, or submitting for team review. | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, github, pr, beads, review |
 | **database-quickref** | Quick reference for Railway Postgres operations. Use when user asks to check database, run queries, verify data, inspect tables, or mentions psql, postgres, database, "check the db", "validate data". | — | database, postgres, railway, psql |
-| **feature-lifecycle** | A suite of skills to manage the full development lifecycle from start to finish. - `start-feature`:  | — | workflow, git, feature, beads, dx |
-| **finish-feature** | Complete epic with cleanup and archiving, or verify feature already closed. MUST BE USED when finish | `bd close bd-abc.2 --reason 'Completed'` | workflow, beads, cleanup, archiving |
-| **fix-pr-feedback** | Address PR feedback with iterative refinement. MUST BE USED when fixing PR issues. Supports auto-det | `bd show <FEATURE_KEY>` | workflow, pr, beads, debugging, iteration |
-| **issue-first** | Enforce Issue-First pattern by creating Beads tracking issue BEFORE implementation. MUST BE USED for | — | workflow, beads, issue-tracking, implementation |
-| **merge-pr** | Prepare PR for merge and guide human to merge via GitHub web UI. MUST BE USED when user wants to mer | `bd sync` | workflow, pr, github, merge, deployment |
-| **op-secrets-quickref** | Quick reference for 1Password (op CLI) secret management used in DX/dev workflows and deployments. U | — | secrets, 1password, op-cli, dx, env, railway |
-| **session-end** | End Claude Code session with Beads sync and summary. MUST BE USED when user says they're done, endin | `bd sync, or export operations.` | workflow, beads, session, cleanup |
-| **sync-feature-branch** | Commit current work to feature branch with Beads metadata tracking and git integration. MUST BE USED | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, git, beads, commit |
+| **feature-lifecycle** | A suite of skills to manage the full development lifecycle from start to finish. - `start-feature`: Initializes a new feature branch, docs, and story. - `sync-feature`: Saves work with CI checks. - `finish-feature`: Verifies and creates a pull request. | — | workflow, git, feature, beads, dx |
+| **finish-feature** | Complete epic with cleanup and archiving, or verify feature already closed. MUST BE USED when finishing epics/features. For epics: Verifies children closed, archives docs, closes epic. For features/tasks/bugs: Verifies already closed (from PR creation), archives docs. Non-epic issues must be closed at PR creation time (atomic merge pattern). Use when user says "I'm done with this epic", "finish the feature", "finish this epic", "archive this epic", or when user mentions epic completion, cleanup, archiving, feature finalization, or closing work. | `bd close bd-abc.2 --reason 'Completed'` | workflow, beads, cleanup, archiving |
+| **fix-pr-feedback** | Address PR feedback with iterative refinement. MUST BE USED when fixing PR issues. Supports auto-detection (CI failures, code review) and manual triage (user reports bugs). Creates Beads issues for all problems, fixes systematically. Use when user says "fix the PR", "i noticed bugs", "ci failures", or "codex review found issues", or when user mentions CI failures, review comments, failing tests, PR iterations, bug fixes, feedback loops, or systematic issue resolution. | `bd show <FEATURE_KEY>` | workflow, pr, beads, debugging, iteration |
+| **issue-first** | Enforce Issue-First pattern by creating Beads tracking issue BEFORE implementation. MUST BE USED for all implementation work. Classifies work type (epic/feature/task/bug/chore), determines priority (0-4), finds parent in hierarchy, creates issue, then passes control to implementation. Use when starting implementation work, or when user mentions "no tracking issue", "missing Feature-Key", work classification, creating features, building new systems, beginning development, or implementing new functionality. | — | workflow, beads, issue-tracking, implementation |
+| **merge-pr** | Prepare PR for merge and guide human to merge via GitHub web UI. MUST BE USED when user wants to merge a PR. Verifies CI passing, verifies Beads issue already closed (from PR creation), and provides merge instructions. Issue closure happens at PR creation time (create-pull-request skill), NOT at merge time. Use when user says "merge the PR", "merge it", "merge this", "ready to merge", "merge to master", or when user mentions CI passing, approved reviews, ready-to-merge state, ready to ship, merge, deployment, PR completion, or shipping code. | `bd sync` | workflow, pr, github, merge, deployment |
+| **op-secrets-quickref** | Quick reference for 1Password (op CLI) secret management used in DX/dev workflows and deployments. Use when the user asks about ZAI_API_KEY, Agent-Secrets-Production, OP_SERVICE_ACCOUNT_TOKEN, 1Password service accounts, op:// references, Railway tokens, GitHub tokens, or "where do secrets live". | — | secrets, 1password, op-cli, dx, env, railway |
+| **session-end** | End Claude Code session with Beads sync and summary. MUST BE USED when user says they're done, ending session, or logging off. Guarantees Beads export to git, shows session stats, and suggests next ready work. Handles cleanup and context saving. Use when user says "goodbye", "bye", "done for now", "logging off", or when user mentions end-of-session, session termination, cleanup, context saving, bd sync, or export operations. | `bd sync, or export operations.` | workflow, beads, session, cleanup |
+| **sync-feature-branch** | Commit current work to feature branch with Beads metadata tracking and git integration. MUST BE USED for all commit operations. Handles Feature-Key trailers, Beads status updates, and optional quick linting before commit. Use when user wants to save progress, commit changes, prepare work for review, sync local changes, or finalize current work, or when user mentions "uncommitted changes", "git status shows changes", "Feature-Key missing", commit operations, saving work, git workflows, or syncing changes. | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, git, beads, commit |
 
 
 ## Extended Workflows
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-| **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban vi | `bd show "$NEXT_TASK"` | workflow, beads, visualization, task-selection |
-| **cc-glm** | Use cc-glm (Claude Code wrapper using GLM models such as glm-5) in headless mode to outsource repeti | `dx-delegate --beads bd-xxxx --repo repo-name --prompt-file /` | workflow, delegation, automation, claude-code, glm, wave, parallel |
+| **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban views, dependency graphs, and the robot-plan API for auto-selecting next tasks. Keywords: beads, viewer, kanban, dependency graph, robot-plan, task selection, bottleneck | `bd show "$NEXT_TASK"` | workflow, beads, visualization, task-selection |
+| **cc-glm** | Use cc-glm for batched delegation with plan-first execution. Batch by outcome (not file), use Task tool for dispatch, simplified monitoring. Trigger when user mentions cc-glm, delegation, parallel agents, or batch execution. | — | workflow, delegation, automation, claude-code, glm, parallel |
 | **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
 | **coordinator-dx** | Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists. | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | `bd sync` |  |
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |
-| **jules-dispatch** | Dispatches work to Jules agents via the CLI. Automatically generates context-rich prompts from Beads | — | workflow, jules, cloud, automation, dx |
-| **lint-check** | Run quick linting checks on changed files. MUST BE USED when user wants to check code quality. Fast  | — | workflow, quality, linting, validation |
-| **parallelize-cloud-work** | Delegate independent work to Claude Code Web cloud sessions for parallel execution. Generates compre | `bd show <issue-id>` | workflow, cloud, parallelization, dx |
-| **plan-refine** | Iteratively refine implementation plans using the "Convexity" pattern. Simulates a multi-round archi | — | architecture, planning, review, refinement, apr |
-| **prompt-writing** | Drafts robust, low-cognitive-load prompts for other agents that enforce the DX invariants: worktree- | — | workflow, prompts, orchestration, dx, safety |
-| **skill-creator** | Create new Claude Code skills following V3 DX patterns with Beads/Serena integration. MUST BE USED w | — | meta, skill-creation, automation, v3 |
-| **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lig | — | slack, coordination, workflow, optional |
+| **jules-dispatch** | Dispatches work to Jules agents via the CLI. Automatically generates context-rich prompts from Beads issues and spawns async sessions. Use when user says "send to jules", "assign to jules", "dispatch task", or "run in cloud". | — | workflow, jules, cloud, automation, dx |
+| **lint-check** | Run quick linting checks on changed files. MUST BE USED when user wants to check code quality. Fast validation (<5s) following V3 trust-environments philosophy. Use when user says "lint my code", "check formatting", or "run linters", or when user mentions uncommitted changes, pre-commit state, formatting issues, code quality, style checks, validation, prettier, eslint, pylint, or ruff. | — | workflow, quality, linting, validation |
+| **parallelize-cloud-work** | Delegate independent work to Claude Code Web cloud sessions for parallel execution. Generates comprehensive session prompts with context exploration guidance, verifies Beads state, provides tracking commands. Use when user says "parallelize work to cloud", "start cloud sessions", or needs to execute multiple independent tasks simultaneously, or when user mentions cloud sessions, cloud prompts, delegate to cloud, Claude Code Web, generate session prompts, parallel execution, or asks "how do I use cloud sessions". | `bd show <issue-id>` | workflow, cloud, parallelization, dx |
+| **plan-refine** | Iteratively refine implementation plans using the "Convexity" pattern. Simulates a multi-round architectural critique to converge on a secure, robust specification. Use when you have a draft plan that needs deep architectural review or "APR" style optimization. | — | architecture, planning, review, refinement, apr |
+| **prompt-writing** | Drafts robust, low-cognitive-load prompts for other agents that enforce the DX invariants: worktree-first, no canonical writes, and a "done gate" (dx-verify-cle | — |  |
+| **skill-creator** | Create new Claude Code skills following V3 DX patterns with Beads/Serena integration. MUST BE USED when creating skills. Follows tech lead proven patterns from 300k LOC case study. Use when user wants to create a new skill, implement workflow automation, or enhance the skill system, or when user mentions "need a skill for X", "automate this workflow", "create new capability", repetitive manual processes, skill creation, meta-skill, or V3 patterns. | — | meta, skill-creation, automation, v3 |
+| **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lightweight locking). Uses direct Slack Web API calls and/or the slack-coordinator systemd service. Does not require MCP. | — | slack, coordination, workflow, optional |
 | **wooyun-legacy** | WooYun漏洞分析专家系统。提供基于88,636个真实漏洞案例提炼的元思考方法论、测试流程和绕过技巧。适用于漏洞挖掘、渗透测试、安全审计及代码审计。支持SQL注入、XSS、命令执行、逻辑漏洞、文件上传、未授权访问等多种漏洞类型。 | — |  |
-| **worktree-workflow** | Create and manage task workspaces using git worktrees (without exposing worktree complexity). Use th | `dx-worktree create <beads-id> <repo>` | dx, git, worktree, workspace, workflow |
+| **worktree-workflow** | Create and manage task workspaces using git worktrees (without exposing worktree complexity). Use this when starting work on a Beads ID, when an agent needs a clean workspace, or when a repo is dirty and blocks sync. Provides a single command (`dx-worktree`) for create/cleanup/prune and a recovery path via dirty-repo-bootstrap. | `dx-worktree create <beads-id> <repo>` | dx, git, worktree, workspace, workflow |
 
 
-## Infrastructure & Health
+## Health & Monitoring
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
 | **bd-doctor** | Check and fix common Beads workflow issues across all repos. | `bd export --force` |  |
-| **dx-cron** | Monitor and manage dx-* system cron jobs and their logs. MUST BE USED when user asks "is the cron ru | — | health, audit, cron, monitoring |
+| **dx-cron** | Monitor and manage dx-* system cron jobs and their logs.  MUST BE USED when user asks "is the cron running", "show me cron logs", or "status of dx jobs". | — | health, audit, cron, monitoring |
 | **lockfile-doctor** | Check and fix lockfile drift across Poetry (Python) and pnpm (Node.js) projects. | — |  |
-| **mcp-doctor** | Warn-only health check for canonical MCP configuration and related DX tooling. Strict mode is opt-in | — | dx, mcp, health, verification |
-| **railway-doctor** | Pre-flight checks for Railway deployments to catch failures BEFORE deploying. Use when about to depl | — | railway, deployment, validation, pre-flight |
+| **mcp-doctor** | Warn-only health check for canonical MCP configuration and related DX tooling. Strict mode is opt-in via MCP_DOCTOR_STRICT=1. | — | dx, mcp, health, verification |
+| **railway-doctor** | Pre-flight checks for Railway deployments to catch failures BEFORE deploying. Use when about to deploy, running verify-* commands, or debugging Railway issues. | — | railway, deployment, validation, pre-flight |
 | **skills-doctor** | Validate that the current VM has the right `agent-skills` installed for the repo you’re working in. | — |  |
-| **ssh-key-doctor** | Fast, deterministic SSH health check for canonical VMs (no hangs, no secrets). Warn-only by default; | — | dx, ssh, verification |
-| **toolchain-health** | Validate Python toolchain alignment between mise, Poetry, and pyproject. Use when changing Python ve | — | dx, tooling, python |
-| **verify-pipeline** | Run project verification checks using standard Makefile targets. Use when user says "verify pipeline | — | workflow, testing, verification, makefile, railway |
-| **canonical-targets** | Single source of truth for canonical VMs, canonical IDEs, and canonical trunk branch. Use this to ke | — | dx, ide, vm, canonical, targets |
-| **devops-dx** | GitHub/Railway housekeeping for CI env/secret management and DX maintenance. Use when setting or aud | — | devops, github, env, ci, railway |
+| **ssh-key-doctor** | Fast, deterministic SSH health check for canonical VMs (no hangs, no secrets). Warn-only by default; strict mode is opt-in. | — | dx, ssh, verification |
+| **toolchain-health** | Validate Python toolchain alignment between mise, Poetry, and pyproject. Use when changing Python versions, editing pyproject.toml, or seeing Poetry/mise version solver errors. Invokes /toolchain-health to check: - .mise.toml python tool version - pyproject.toml python constraint - Poetry env python interpreter Keywords: python version, mise, poetry, toolchain, env use, lock, install | — | dx, tooling, python |
+| **verify-pipeline** | Run project verification checks using standard Makefile targets. Use when user says "verify pipeline", "check my work", "run tests", or "validate changes". Wraps `make verify-pipeline` (E2E), `make verify-analysis` (Logic), or `make verify-all`. Ensures environment constraints (e.g. Railway Shell) are met. | — | workflow, testing, verification, makefile, railway |
+
+
+## Infrastructure
+
+| Skill | Description | Example | Tags |
+|-------|-------------|---------|------|
+| **canonical-targets** | Single source of truth for canonical VMs, canonical IDEs, and canonical trunk branch. Use this to keep dx-status, mcp-doctor, and setup scripts aligned across machines. | — | dx, ide, vm, canonical, targets |
+| **devops-dx** | GitHub/Railway housekeeping for CI env/secret management and DX maintenance. Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, or fixing CI failures due to missing env. | — | devops, github, env, ci, railway |
 | **dx-alerts** | Lightweight “news wire” for DX changes and breakages, posted to Slack (no MCP required). | — |  |
-| **github-runner-setup** | GitHub Actions self-hosted runner setup and maintenance. Use when setting up dedicated runner users, | — | github-actions, devops, runner, systemd, infrastructure |
-| **vm-bootstrap** | Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment | — | dx, tooling, setup, linux |
+| **github-runner-setup** | GitHub Actions self-hosted runner setup and maintenance. Use when setting up dedicated runner users, migrating runners from personal accounts, troubleshooting runner issues, or implementing runner isolation. Covers systemd services, environment isolation, and skills plane integration. | — | github-actions, devops, runner, systemd, infrastructure |
+| **vm-bootstrap** | Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment. Supports modes: check (warn-only), install (operator-confirmed), strict (CI-ready). Enforces Linux-only  mise as canonical; honors preference brew→npm (with apt fallback). Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, op, bd, dcg, ru, tmux, rg. Handles optional tools as warnings: tailscale, playwright, docker, bv. Never prints/seeds secrets; never stores tokens in repo/YAML; Railway vars only for app runtime env. Safe on dirty repos (refuses and points to dirty-repo-bootstrap skill, or snapshots WIP branch). Keywords: vm, bootstrap, setup, mise, toolchain, linux, environment, provision, verify, new vm | — | dx, tooling, setup, linux |
+| **multi-agent-dispatch** | Cross-VM task dispatch using dx-dispatch (canonical). Supports SSH dispatch to canonical VMs (homedesktop-wsl, macmini, epyc6), Jules Cloud dispatch for async work, and fleet orchestration. | `dx-dispatch epyc6 "Run make test in ~/affordabot"` |  |
+
+
+## Railway Deployment
+
+| Skill | Description | Example | Tags |
+|-------|-------------|---------|------|
 | **database** | This skill should be used when the user wants to add a database (Postgres, Redis, MySQL, MongoDB), says "add postgres", "add redis", "add database", "connect to database", or "wire up the database". For other templates (Ghost, Strapi, n8n, etc.), use the templates skill. | — |  |
 | **deploy** | This skill should be used when the user wants to push code to Railway, says "railway up", "deploy", "deploy to railway", "ship", or "push". For initial setup or creating services, use new skill. For Docker images, use environment skill. | — |  |
 | **deployment** | This skill should be used when the user wants to manage Railway deployments, view logs, or debug issues. Covers deployment lifecycle (remove, stop, redeploy, restart), deployment visibility (list, status, history), and troubleshooting (logs, errors, failures, crashes, why deploy failed). NOT for deleting services - use environment skill with isDeleted for that. | — |  |
@@ -202,14 +216,13 @@ Notes:
 | **service** | This skill should be used when the user asks about service status, wants to rename a service, change service icons, link services, or create services with Docker images. For creating services with local code, prefer the `new` skill. For GitHub repo sources, use `new` skill to create empty service then `environment` skill to configure source. | — |  |
 | **status** | This skill should be used when the user asks "railway status", "is it running", "what's deployed", "deployment status", or about uptime. NOT for variables ("what variables", "env vars", "add variable") or configuration queries - use environment skill for those. | — |  |
 | **templates** | This skill should be used when the user wants to add a service from a template, find templates for a specific use case, or deploy tools like Ghost, Strapi, n8n, Minio, Uptime Kuma, etc. For databases (Postgres, Redis, MySQL, MongoDB), prefer the database skill. | — |  |
-| **multi-agent-dispatch** | Cross-VM task dispatch using dx-dispatch (canonical). Supports SSH dispatch to canonical VMs (homedesktop-wsl, macmini, epyc6), Jules Cloud dispatch for async work, and fleet orchestration. | `dx-dispatch epyc6 "Run make test in ~/affordabot"` |  |
 
 
 ---
 
 
 ## Skill Discovery
-**Auto-loaded from:** `~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md`
+**Auto-loaded from:** `~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md`
 **Specification**: https://agentskills.io/specification
 
 **Regenerate this index:**
