@@ -42,7 +42,7 @@ railway status 2>/dev/null || {
 ```bash
 railway login
 # Or for CI/automation, set RAILWAY_TOKEN from 1Password:
-export RAILWAY_TOKEN=$(op read "op://dx-secrets/railway-token/token" --account dx.1password.com)
+export RAILWAY_TOKEN=$(op read "op://dev/Railway-Delivery/token")
 ```
 
 ### 2. URL Variables Check
@@ -101,11 +101,11 @@ fi
 
 **Quick Fix:**
 ```bash
-# Set from 1Password
-export TEST_AUTH_BYPASS_SECRET=$(op read "op://dx-secrets/test-auth-bypass/secret" --account dx.1password.com)
+# TEST_AUTH_BYPASS_SECRET is a Railway env var - use railway shell
+railway shell
 
-# Or set in Railway
-railway variables set TEST_AUTH_BYPASS_SECRET="$(op read 'op://dx-secrets/test-auth-bypass/secret')"
+# Or verify it's set in Railway (if not, check Railway dashboard)
+railway variables | grep TEST_AUTH_BYPASS_SECRET
 ```
 
 ## Quick Fix Reference

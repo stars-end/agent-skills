@@ -62,7 +62,7 @@ fi
 railway shell
 
 # Option 2: Set token from 1Password (for CI/automation)
-export RAILWAY_TOKEN=$(op read "op://Railway-Delivery/RAILWAY_TOKEN")
+export RAILWAY_TOKEN=$(op read "op://dev/Railway-Delivery/token")
 ```
 
 ### 2. Dev Server Check
