@@ -44,33 +44,96 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **PR title must include a Feature-Key**: include \`bd-<beads-id>\` somewhere in the title (e.g. \`bd-f6fh: ...\`)
 - **PR body must include Agent**: add a line like \`Agent: <agent-id>\`
 
-## 4) Delegation Rule (cc-glm)
-- **Default**: delegate mechanical tasks estimated \< 2 hours to \`cc-glm\` headless mode.
-- **Background-first for backlogs**: when there are multiple independent tasks, run \`cc-glm\` in detached background workers.
-- **Concurrency target**: use the highest safe parallelism for the backlog (start at \`2\`, scale to \`3-4\` as soon as risk/monitoring allow).
-- **Mandatory monitoring**: every running worker must be checked on a fixed cadence (recommended: every 5 minutes) using PID state + log growth.
-- **Required tracking artifacts** (per delegated task):
-  - PID file: \`/tmp/cc-glm-jobs/<beads-id>.pid\`
-  - Log file: \`/tmp/cc-glm-jobs/<beads-id>.log\`
-  - Metadata file: \`/tmp/cc-glm-jobs/<beads-id>.meta\`
-- **Stall handling**: if a worker is alive but log output is stale for 20+ minutes, restart once and record retry count in metadata.
+## 4) Delegation Rule (V8.3 - Batch by Outcome)
+- **Primary rule**: batch by outcome, not by file. One agent per coherent change set.
+- **Default parallelism**: 2 agents, scale to 3-4 only when independent and stable.
 - **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
-- **Orchestrator owns outcomes**: review diffs, run validation, request revisions, commit/push with required trailers.
-- **Never fire-and-forget**: starting background jobs without follow-up checks is a policy violation.
+- **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
+- **See Section 6** for detailed parallel orchestration patterns.
 
-## 5) Secrets + Env Sources (1Password vs Railway)
-- **DX/dev workflow secrets** (agent keys, automation tokens): source from 1Password (\`op://...\`) and resolve at runtime via \`op read\` or \`op run --\`.
-- **Deploy/runtime secrets** (service config): live in Railway environment variables; for automated Railway CLI use, export \`RAILWAY_TOKEN\` from 1Password (see \`Railway-Delivery\`).
-- **Service account auth for op CLI**: use \`~/agent-skills/scripts/create-op-credential.sh\` (never commit tokens).
-- **Quick reference**: use the \`op-secrets-quickref\` skill for safe commands (listing items/fields, op auth, Railway token export).
+## 5) Secrets + Env Sources (V8.3 - Railway Context Mandatory)
+- **Railway shell is MANDATORY for dev work**: provides \`RAILWAY_SERVICE_FRONTEND_URL\`, \`RAILWAY_SERVICE_BACKEND_URL\`, and all env vars.
+- **API keys**: \`op://dev/Agent-Secrets-Production/<FIELD>\` (transitional, see SECRETS_INDEX.md).
+- **Railway CLI token**: \`op://dev/Railway-Delivery/token\` for CI/automation.
+- **Quick reference**: use the \`op-secrets-quickref\` skill.
+
+## 6) Parallel Agent Orchestration (V8.3)
+
+### Pattern: Plan-First, Batch-Second, Commit-Only
+
+1. **Create plan** (file for large/cross-repo, Beads notes for small)
+2. **Batch by outcome** (1 agent per repo or coherent change set)
+3. **Execute in waves** (parallel where dependencies allow)
+4. **Commit-only** (agents commit, orchestrator pushes once per batch)
+
+### Task Batching Rules
+
+| Files | Approach | Plan Required |
+|-------|----------|---------------|
+| 1-2, same purpose | Single agent | Mini-plan in Beads |
+| 3-5, coherent change | Single agent | Plan file recommended |
+| 6+ OR cross-repo | Batched agents | Full plan file required |
+
+### Dispatch Method
+
+Use Task tool with \`run_in_background: true\`:
+
+\`\`\`yaml
+Task:
+  description: "T1: [batch name]"
+  prompt: |
+    You are implementing task T1 from plan.md.
+    ## Context
+    - Dependencies: [T1 has none / T2, T3 complete]
+    ## Your Task
+    - repo: [repo-name]
+    - location: [file1, file2, ...]
+    ## Instructions
+    1. Read all files first
+    2. Implement changes
+    3. Commit (don't push)
+    4. Return summary
+  run_in_background: true
+\`\`\`
+
+### Monitoring (Simplified)
+
+- **Check interval**: 5 minutes
+- **Signals**: 1) Process alive, 2) Log advancing
+- **Restart policy**: 1 restart max, then escalate
+- **Check**: \`ps -p [PID]\` and \`tail -20 [log]\`
+
+### Anti-Patterns
+
+- One agent per file (overhead explosion)
+- No plan file for cross-repo work (coordination chaos)
+- Push before review (PR explosion)
+- Multiple restarts (brittle)
+
+### Fast Path for Small Work
+
+For 1-2 file changes, use Beads notes instead of plan file:
+
+\`\`\`markdown
+## bd-xxx: Task Name
+### Approach
+- File: path/to/file
+- Change: [what]
+- Validation: [how]
+### Acceptance
+- [ ] File modified
+- [ ] Validation passed
+- [ ] PR merged
+\`\`\`
 
 References:
 - \`~/agent-skills/docs/ENV_SOURCES_CONTRACT.md\`
 - \`~/agent-skills/docs/SECRET_MANAGEMENT.md\`
+- \`~/agent-skills/extended/cc-glm/SKILL.md\`
 
 Notes:
-- PR metadata enforcement exists to keep squash merges ergonomic (don’t rely on commit messages).
-- If you’re unsure what to use for Agent, use your platform id (see \`DX_AGENT_ID.md\`).
+- PR metadata enforcement exists to keep squash merges ergonomic.
+- If unsure what to use for Agent, use platform id (see \`DX_AGENT_ID.md\`).
 EOF
 
 # Header for AGENTS.md
