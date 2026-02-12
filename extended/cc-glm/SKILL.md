@@ -1,378 +1,275 @@
 ---
 name: cc-glm
 description: |
-  Use cc-glm (Claude Code wrapper using GLM models such as glm-5) in headless mode to outsource repetitive work.
-  Prefer detached background orchestration for multi-task backlogs, with mandatory monitoring.
-  Trigger when user mentions cc-glm, glm-5/glm-4.7, "headless", or wants to delegate easy/medium tasks to a junior agent.
-tags: [workflow, delegation, automation, claude-code, glm, wave, parallel]
+  Use cc-glm for batched delegation with plan-first execution.
+  Batch by outcome (not file), use Task tool for dispatch, simplified monitoring.
+  Trigger when user mentions cc-glm, delegation, parallel agents, or batch execution.
+tags: [workflow, delegation, automation, claude-code, glm, parallel]
 allowed-tools:
   - Bash
+  - Task
 ---
 
-# cc-glm (Headless)
+# cc-glm: Plan-First Batched Dispatch (V8.3)
+
+## Core Principle
+
+**Batch by outcome, not by file.** One agent per coherent change set.
 
 ## When To Use
 
-- Default delegation mechanism for **mechanical work estimated < 1 hour**:
-  - search/triage, small refactors, doc edits, script wiring, low-risk CI fixes, adding tests
-- You want a headless sub-agent loop without opening an interactive TUI.
-- You have a backlog with multiple independent tasks and need parallel background workers.
+- Multi-file changes that form a coherent unit
+- Backlog of independent tasks across repos
+- Documentation + code changes that reference each other
 
-## Background-First Orchestration (Required For Backlogs)
+## When NOT To Use
 
-When there are multiple independent delegated tasks, use detached background workers by default.
+- Security-sensitive changes (auth, crypto, secrets)
+- Architectural decisions
+- High blast-radius refactors
+- Single-file typo fixes (do it yourself)
 
-- Target the highest safe parallelism for the backlog.
-- Start with `2` workers, then scale to `3-4` as soon as tasks are low-risk and monitoring remains reliable.
-- Do not launch more workers than you can actively monitor.
-- Never run fire-and-forget delegation.
+---
 
-### Dependency-Aware Wave Planning
+## Pattern: Plan → Batch → Execute → Push
 
-For backlogs with dependencies, use wave planning to orchestrate execution:
+### Step 1: Plan (Required for Large/Cross-Repo)
 
-- **Task Schema**: Each task has `id`, `repo`, `worktree`, `prompt_file`, and optional `depends_on` (list of task IDs).
-- **Wave Dispatch**: Tasks are partitioned into waves where each wave contains tasks whose dependencies are satisfied by previous waves.
-- **Max Parallelism**: Each wave runs up to `max_workers` (default: 4) tasks in parallel.
-- **Deterministic**: Uses topological sort with cycle detection.
+**Threshold for plan file:**
+- 6+ files, OR
+- Cross-repo changes, OR
+- High-risk changes
 
-Use the wave planner helper:
+**Plan file template** (`<topic>-plan.md`):
 
-Required files per task:
+```markdown
+# Plan: [Task Name]
 
-- PID: `/tmp/cc-glm-jobs/<beads-id>.pid`
-- Log: `/tmp/cc-glm-jobs/<beads-id>.log`
-- Meta: `/tmp/cc-glm-jobs/<beads-id>.meta`
+## Overview
+[What we're doing]
 
-### Task Manifest (TOML)
+## Tasks
 
-Define tasks in a TOML manifest:
+### T1: [Batch Name]
+- **depends_on**: []
+- **repo**: [repo-name]
+- **location**:
+  - path/to/file1
+  - path/to/file2
+- **description**: [what to do]
+- **validation**: [how to verify]
+- **status**: Not Started
+- **log**: [empty - agent fills]
+- **files edited**: [empty - agent fills]
 
-```toml
-# /tmp/cc-glm-jobs/backlog.toml
-
-[[tasks]]
-id = "bd-001"
-repo = "agent-skills"
-worktree = "/tmp/agents/bd-001/agent-skills"
-prompt_file = "/tmp/cc-glm-jobs/bd-001.prompt.txt"
-depends_on = []  # no dependencies
-
-[[tasks]]
-id = "bd-002"
-repo = "agent-skills"
-worktree = "/tmp/agents/bd-002/agent-skills"
-prompt_file = "/tmp/cc-glm-jobs/bd-002.prompt.txt"
-depends_on = ["bd-001"]  # waits for bd-001
-
-[[tasks]]
-id = "bd-003"
-repo = "agent-skills"
-worktree = "/tmp/agents/bd-003/agent-skills"
-prompt_file = "/tmp/cc-glm-jobs/bd-003.prompt.txt"
-depends_on = ["bd-001"]  # parallel with bd-002
-
-[[tasks]]
-id = "bd-004"
-repo = "prime-radiant-ai"
-worktree = "/tmp/agents/bd-004/prime-radiant-ai"
-prompt_file = "/tmp/cc-glm-jobs/bd-004.prompt.txt"
-depends_on = ["bd-002", "bd-003"]  # waits for both
+### T2: [Another Batch]
+- **depends_on**: [T1]
+...
 ```
 
-### Wave Dispatch Commands
+**Fast path for small work** (1-2 files, single purpose):
 
-```bash
-# 1. Generate wave plan from manifest
-~/agent-skills/extended/cc-glm/scripts/cc-glm-wave.sh plan \
-  --manifest /tmp/cc-glm-jobs/backlog.toml \
-  --max-workers 4
+Put mini-plan in Beads notes instead of file:
 
-# 2. Show wave status (poll every 5 minutes)
-~/agent-skills/extended/cc-glm/scripts/cc-glm-wave.sh status \
-  --manifest /tmp/cc-glm-jobs/backlog.toml
-
-# 3. Run all waves sequentially (auto-stops on failures)
-~/agent-skills/extended/cc-glm/scripts/cc-glm-wave.sh run \
-  --manifest /tmp/cc-glm-jobs/backlog.toml
-
-# 4. Run a specific wave only
-~/agent-skills/extended/cc-glm/scripts/cc-glm-wave.sh run \
-  --manifest /tmp/cc-glm-jobs/backlog.toml \
-  --wave 0
+```markdown
+## bd-xxx: Task Name
+### Approach
+- File: path/to/file
+- Change: [what]
+### Acceptance
+- [ ] File modified
+- [ ] Validation passed
 ```
 
-### Wave Dispatch Algorithm
+### Step 2: Batch by Outcome
 
-1. **Topological Sort**: Tasks are sorted by `depends_on` edges; cycles cause errors.
-2. **Wave Partitioning**: Tasks are grouped into waves where each wave contains tasks whose dependencies are all in previous waves.
-3. **Per-Wave Parallelism**: Within each wave, up to `max_workers` tasks run in parallel.
-4. **Wave Completion**: A wave is complete when all its tasks exit (success or failure).
-5. **Sequential Waves**: Next wave starts only after all tasks in current wave complete.
-6. **Stop on Failure**: Execution stops if any wave has failed tasks (prevents cascading errors).
+| Files | Approach | Agents |
+|-------|----------|--------|
+| 1-2, single purpose | Single agent | 1 |
+| 3-5, coherent change | Single agent per repo | 1-2 |
+| 6+ OR cross-repo | Batched by outcome | 2-3 |
 
-### Partial Rerun Semantics
+**Rule**: 1 agent per repo or coherent change set, NOT 1 agent per file.
 
-When a task fails:
+### Step 3: Execute with Task Tool
 
-```bash
-# Re-run just the failed task (clears failed state)
-~/agent-skills/extended/cc-glm/scripts/cc-glm-wave.sh rerun \
-  --manifest /tmp/cc-glm-jobs/backlog.toml \
-  --task bd-002
+**Primary dispatch method** (dx-delegate is currently broken):
 
-# Continue with remaining waves after fixing failures
-~/agent-skills/extended/cc-glm/scripts/cc-glm-wave.sh run \
-  --manifest /tmp/cc-glm-jobs/backlog.toml
-```
-
-- Failed tasks are marked with `state=failed` in wave metadata.
-- `rerun` clears the failed state and re-executes just that task.
-- Dependent waves are not re-run unless their specific dependencies failed.
-
-### Monitoring Loop (For Waves)
-
-Required monitoring loop (poll every 5 minutes):
-
-- Verify wave states: `cc-glm-wave.sh status --manifest <path>`
-- Verify process liveness: `ps -p <pid>` for each running task.
-- Verify log growth (bytes or last modified time).
-- Capture a status table for each poll: `wave | state | running | completed | failed`.
-- If alive but no log growth for 20+ minutes, restart once via `rerun`.
-- If still stalled after one restart, escalate as blocked with concise evidence.
-
-## Prompt Contract (For Junior/Mid Delegates)
-
-Use a strict prompt contract so delegated output is reviewable and low-variance:
-
-- `Beads`, `Repo`, `Worktree`, `Agent` header fields.
-- Hard constraints:
-  - Work only in the worktree.
-  - Never commit/push/open PR.
-  - Never print secrets/dotfiles.
-- Explicit scope:
-  - in-scope file paths and clear non-goals.
-  - acceptance criteria in measurable terms.
-- Required output format:
-  - files changed
-  - unified diff
-  - validation commands run + pass/fail
-  - risk notes and known gaps
-
-This keeps tasks clear enough for junior/mid execution while preserving orchestrator control.
-
-## Delegation Boundary (DX V8.1)
-
-**Delegate (default) if < 1 hour and mechanical.**
-
-Do **not** delegate (or delegate only after you tighten scope) when:
-- security-sensitive changes (auth, crypto, secrets, permissions)
-- architectural decisions / broad refactors
-- ambiguous requirements or high blast-radius changes
-
-The orchestrator (you) remains responsible for:
-- reviewing diffs
-- running/confirming validation
-- committing/pushing with required trailers
-
-## Important Constraints
-
-- Work in worktrees, not canonical clones (`~/agent-skills`, `~/prime-radiant-ai`, `~/affordabot`, `~/llm-common`).
-- Do not print or dump dotfiles/configs (they often contain tokens).
-- The delegate must **not** run `git commit`, `git push`, or open PRs.
-
-## Recommended Setup (Deterministic)
-
-To avoid relying on shell init files, prefer exporting `CC_GLM_AUTH_TOKEN` (and optionally `CC_GLM_BASE_URL`, `CC_GLM_MODEL`).
-
-When set, `cc-glm-headless.sh` will invoke `claude` directly with these env vars (no `zsh -ic` needed).
-
-If you use 1Password, you can also set `ZAI_API_KEY` as an `op://...` reference (or set `CC_GLM_OP_URI`) and `cc-glm-headless.sh` will resolve it via `op read` at runtime.
-
-**Max Workers**: Set `CC_GLM_MAX_WORKERS` to override the default max parallelism (default: 4). This applies to both wave planning and manual worker management.
-
-## Preferred Entry Point (Recommended)
-
-Use the DX wrapper so prompts are V8.1 compliant and logs are kept:
-
-```bash
-dx-delegate --beads bd-xxxx --repo repo-name --prompt-file /path/to/task.txt
-```
-
-Logs are written under: `/tmp/dx-delegate/<beads-id>/...`
-
-## Detached Background Pattern (Without dx-delegate)
-
-Use this when `dx-delegate` is unavailable:
-
-```bash
-mkdir -p /tmp/cc-glm-jobs
-cat > /tmp/cc-glm-jobs/bd-xxxx.meta <<'EOF'
-beads=bd-xxxx
-repo=repo-name
-worktree=/tmp/agents/bd-xxxx/repo-name
-started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-retries=0
-EOF
-
-nohup ~/agent-skills/extended/cc-glm/scripts/pty-run.sh \
-  --output /tmp/cc-glm-jobs/bd-xxxx.log \
-  -- ~/agent-skills/extended/cc-glm/scripts/cc-glm-headless.sh \
-  --prompt-file /tmp/cc-glm-jobs/bd-xxxx.prompt.txt \
-  >> /tmp/cc-glm-jobs/bd-xxxx.log 2>&1 & echo $! > /tmp/cc-glm-jobs/bd-xxxx.pid
-disown
-```
-
-Note: prefer PTY-backed launch for detached jobs. Plain `nohup cc-glm-headless.sh` can produce zero-byte logs in some environments.
-
-Monitoring example:
-
-```bash
-pid="$(cat /tmp/cc-glm-jobs/bd-xxxx.pid)"
-ps -p "$pid" -o pid,ppid,stat,etime,command
-wc -c /tmp/cc-glm-jobs/bd-xxxx.log
-tail -n 20 /tmp/cc-glm-jobs/bd-xxxx.log
-```
-
-### Managed Job Helper (Simple Backlogs Without Dependencies)
-
-Use the included helper script to standardize start/status/check:
-
-```bash
-# Start detached worker
-~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh start \
-  --beads bd-xxxx \
-  --repo repo-name \
-  --worktree /tmp/agents/bd-xxxx/repo-name \
-  --prompt-file /tmp/cc-glm-jobs/bd-xxxx.prompt.txt \
-  --pty
-
-# Status table for all jobs
-~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh status
-
-# Health check for one job (exit 2 if stalled)
-~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh check \
-  --beads bd-xxxx \
-  --stall-minutes 20
-
-# Optional watchdog loop (restarts once, then marks blocked)
-~/agent-skills/extended/cc-glm/scripts/cc-glm-job.sh watchdog \
-  --stall-minutes 20 \
-  --max-retries 1
-```
-
-### Status Output Format
-
-The wave status table format:
-
-```
-wave       state          started      pending  running  completed  failed   elapsed
---------------------------------------------------------------------------------------------------------
-pending    0              -            3        0        0          0        -
-running    1              14:23:15     1        3        2          0        5m32s
-completed  2              14:28:47     0        0        4          0        12m15s
-```
-
-- `wave`: Wave number
-- `state`: pending | running | completed | failed
-- `started`: Start time (HH:MM:SS)
-- `pending/running/completed/failed`: Task counts
-- `elapsed`: Time since started
-
-Individual task status also shown via the job helper.
-
-### Quick Examples
-
-```bash
-# Plan and run a backlog with dependencies
-cat > /tmp/cc-glm-jobs/backlog.toml <<'EOF'
-[[tasks]]
-id = "bd-001"
-repo = "agent-skills"
-worktree = "/tmp/agents/bd-001/agent-skills"
-prompt_file = "/tmp/cc-glm-jobs/bd-001.prompt.txt"
-depends_on = []
-
-[[tasks]]
-id = "bd-002"
-repo = "agent-skills"
-worktree = "/tmp/agents/bd-002/agent-skills"
-prompt_file = "/tmp/cc-glm-jobs/bd-002.prompt.txt"
-depends_on = ["bd-001"]
-EOF
-
-# Generate plan
-~/agent-skills/extended/cc-glm/scripts/cc-glm-wave.sh plan \
-  --manifest /tmp/cc-glm-jobs/backlog.toml
-
-# Run waves (monitor every 5 minutes)
-~/agent-skills/extended/cc-glm/scripts/cc-glm-wave.sh run \
-  --manifest /tmp/cc-glm-jobs/backlog.toml &
-WATCH_PID=$!
-
-while sleep 300; do
-  ~/agent-skills/extended/cc-glm/scripts/cc-glm-wave.sh status \
-    --manifest /tmp/cc-glm-jobs/backlog.toml
-  ! ps -p $WATCH_PID >/dev/null 2>&1 && break
-done
-```
-
-### Without Wave Planner
-
-For simple backlogs without dependencies, use the job helper directly:
-
-## Quick Start
-
-`cc-glm` is typically a **zsh function**, not a binary. In headless/non-interactive contexts, invoke via:
-
-```bash
-zsh -ic 'cc-glm -p "YOUR PROMPT" --output-format text'
-```
-
-If you need reliable quoting (recommended), use the wrapper script:
-
-```bash
-~/agent-skills/extended/cc-glm/scripts/cc-glm-headless.sh --prompt-file /path/to/prompt.txt
-```
-
-## DX-Compliant Prompt Template
-
-Use this template for delegated work (copy/paste):
-
-```text
-Beads: bd-xxxx
-Repo: repo-name
-Worktree: /tmp/agents/bd-xxxx/repo-name
-Agent: cc-glm
-
-Hard constraints:
-- Work ONLY in the worktree path above (never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common}).
-- Do NOT run git commit/push. Do NOT open PRs.
-- Output a unified diff patch, plus validation commands, plus brief risk notes.
-
+```yaml
 Task:
-- (1-5 bullets of the exact change)
+  description: "T1: [batch name]"
+  prompt: |
+    You are implementing task T1 from plan.md
 
-Expected outputs:
-- Patch diff (unified)
-- Commands to validate (lint/tests)
-- Notes: any edge cases or follow-ups
+    ## Context
+    - Plan: /path/to/plan.md
+    - Dependencies: None (T1 has no depends_on)
+
+    ## Your Task
+    - **repo**: [repo-name]
+    - **location**:
+      - file1
+      - file2
+    - **description**: [what to do]
+    - **validation**: [how to verify]
+
+    ## Instructions
+    1. cd to worktree: cd /tmp/agents/[beads-id]/[repo]
+    2. Read ALL files in location first
+    3. Implement changes for all acceptance criteria
+    4. Keep work atomic and committable
+    5. Update plan file:
+       - status: Not Started → Completed
+       - log: [your work summary]
+       - files edited: [list of files you changed]
+    6. Commit your work:
+       - git add [specific files only]
+       - git commit -m "..." (include Feature-Key and Agent trailers)
+    7. DO NOT PUSH - orchestrator will push
+    8. Return summary
+
+  run_in_background: true
+  subagent_type: general-purpose
 ```
+
+### Step 4: Monitor (Simplified)
+
+**Check every 5 minutes. Only 2 signals:**
+
+1. **Process alive?** `ps -p [PID]`
+2. **Log advancing?** `tail -20 [log]`
+
+**Restart policy**: 1 restart max, then escalate.
+
+```bash
+# Quick status check
+ps -p $(cat /tmp/cc-glm-jobs/bd-xxx.pid 2>/dev/null) >/dev/null 2>&1 && echo "Running" || echo "Done"
+
+# Log check
+tail -20 /tmp/cc-glm-jobs/bd-xxx.log
+```
+
+### Step 5: Review, Push, PR
+
+After all agents complete:
+
+1. Review commits in each worktree: `git log --oneline -5`
+2. Push each batch: `git push -u origin feature-bd-xxx`
+3. Create 1 PR per batch: `gh pr create --title "bd-xxx: [description]"`
+
+---
+
+## Wave Execution
+
+For tasks with dependencies:
+
+| Wave | Tasks | When to Start |
+|------|-------|---------------|
+| 1 | All tasks with `depends_on: []` | Immediately |
+| 2 | Tasks depending on Wave 1 | After Wave 1 commits |
+| 3 | Tasks depending on Wave 2 | After Wave 2 commits |
+
+**Launch all Wave 1 tasks in parallel**, wait for completion, then Wave 2.
+
+---
+
+## Agent Prompt Template
+
+Use this for Task tool dispatch:
+
+```markdown
+You are implementing a batched task from a development plan.
+
+## Context
+- Plan: [plan-file.md]
+- Your Task: T[N]: [Name]
+- Dependencies: [list or "None - this task has no dependencies"]
+
+## Your Task
+- **repo**: [repo-name]
+- **location**:
+  - path/to/file1
+  - path/to/file2
+- **description**: [full description]
+- **validation**: [how to verify]
+
+## Instructions
+1. cd to repo: cd /tmp/agents/[beads-id]/[repo]
+2. Read ALL files in location list first
+3. Implement changes for all acceptance criteria
+4. Keep work atomic and committable
+5. Update plan file:
+   - status: In Progress → Completed
+   - log: [your work summary]
+   - files edited: [list of files you changed]
+6. Commit your work:
+   - git add [specific files only]
+   - git commit with Feature-Key and Agent trailers
+7. DO NOT PUSH - orchestrator will push
+8. Return summary of:
+   - Files modified/created
+   - Changes made
+   - How criteria are satisfied
+   - Validation performed or deferred
+
+## Important
+- Work only on files in your location list
+- Other agents may be working in parallel
+- Update plan file before yielding
+- Commit, don't push
+```
+
+---
+
+## Known Issues
+
+### dx-delegate Broken
+- **Symptom**: "Error: missing wrapper: /Users/fengning/extended/cc-glm/scripts/cc-glm-headless.sh"
+- **Workaround**: Use Task tool directly (primary method above)
+- **Status**: Deprecation pending
+
+### Feature-Key Format
+- **Issue**: `bd-epic.subtask` format rejected for large changes (190+ LOC)
+- **Workaround**: Pre-create Beads ID with `bd create`
+- **Hook expects**: `bd-xyz` format
+
+---
+
+## Anti-Patterns
+
+| Anti-Pattern | Why Bad | Instead |
+|--------------|---------|---------|
+| 1 agent per file | Overhead explosion (11 PRs → 3 PRs) | Batch by repo/outcome |
+| No plan file for cross-repo | Coordination chaos | Always plan first |
+| Push per agent | PR explosion | Push once per batch |
+| Multiple restarts | Brittle execution | 1 restart max |
+| Complex state tracking | Cognitive overload | 2 signals only |
+
+---
+
+## Success Metrics
+
+After 2 weeks, measure:
+- Median PRs per epic: target 1-2
+- Median worktrees per epic: target 1
+- Blocked delegation rate: target <10%
+- Founder intervention count: target 0
+
+---
 
 ## Fallback
 
-If `cc-glm` is not available on the host, fall back to standard Claude Code headless mode:
+If Task tool unavailable, use direct cc-glm:
 
 ```bash
 claude -p "YOUR PROMPT" --output-format text
 ```
 
-## Patterns That Work Well
+Or with log capture:
 
 ```bash
-# 1) Run a tight task in a worktree
-zsh -ic 'cc-glm -p "cd /tmp/agents/bd-1234/agent-skills && rg -n \"TODO\" -S . | head" --output-format text'
-
-# 2) Generate a patch plan (no edits)
-zsh -ic 'cc-glm -p "Read docs/CANONICAL_TARGETS.md and propose a 5-step verification plan." --output-format text'
+nohup claude -p "$(cat /tmp/prompts/task.prompt)" \
+  --output-format text \
+  > /tmp/cc-glm-jobs/bd-xxx.log 2>&1 &
+echo $! > /tmp/cc-glm-jobs/bd-xxx.pid
 ```
