@@ -55,15 +55,48 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **Orchestrator owns outcomes**: review diffs, run validation, request revisions, commit/push with required trailers.
 - **Never fire-and-forget**: starting background jobs without follow-up checks is a policy violation.
 
-## 5) Secrets + Env Sources (1Password vs Railway)
-- **DX/dev workflow secrets** (agent keys, automation tokens): source from 1Password (`op://...`) and resolve at runtime via `op read` or `op run --`.
-- **Deploy/runtime secrets** (service config): live in Railway environment variables; for automated Railway CLI use, export `RAILWAY_TOKEN` from 1Password (see `Railway-Delivery`).
-- **Service account auth for op CLI**: use `~/agent-skills/scripts/create-op-credential.sh` (never commit tokens).
-- **Quick reference**: use the `op-secrets-quickref` skill for safe commands (listing items/fields, op auth, Railway token export).
+## 5) Secrets + Env Sources (V8.3 - Railway Context Mandatory)
 
-References:
-- `~/agent-skills/docs/ENV_SOURCES_CONTRACT.md`
-- `~/agent-skills/docs/SECRET_MANAGEMENT.md`
+### Railway Context is MANDATORY for Dev Work
+
+ALL development work must run inside `railway shell`. This provides:
+- `RAILWAY_SERVICE_FRONTEND_URL` - Frontend URL (no URL hunting)
+- `RAILWAY_SERVICE_BACKEND_URL` - Backend URL (no URL hunting)
+- All Railway env vars (TEST_AUTH_BYPASS_SECRET, DATABASE_URL, etc.)
+
+```bash
+railway shell                    # START HERE for all dev work
+make verify-gate                 # Now works with correct URLs and secrets
+```
+
+### What Lives Where
+
+| Type | Source | Access |
+|------|--------|--------|
+| **Env vars, URLs** | Railway | `railway shell` (automatic) |
+| **API keys** | 1Password | `Agent-Secrets-Production` in dev vault |
+| **Railway CLI token** | 1Password | `Railway-Delivery` in dev vault |
+
+### Service Account Auth (Agents)
+
+Agents MUST use service account auth, never interactive biometric:
+
+```bash
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-$(hostname)-token)"
+op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+```
+
+### Quick Reference
+
+- **Dev env vars**: `railway shell` → automatic
+- **API keys**: `op://dev/Agent-Secrets-Production/<FIELD>`
+- **Railway token**: `op://dev/Railway-Delivery/token`
+
+### References
+
+- `~/agent-skills/docs/ENV_SOURCES_CONTRACT.md` - Full contract (V5.0)
+- `~/agent-skills/docs/SECRETS_INDEX.md` - Complete secrets mapping
+- `~/agent-skills/core/op-secrets-quickref/SKILL.md` - op CLI quick ref
 
 Notes:
 - PR metadata enforcement exists to keep squash merges ergonomic (don’t rely on commit messages).
