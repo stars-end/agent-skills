@@ -6,6 +6,7 @@ OUTFILE="$REPO_ROOT/AGENTS.md"
 DIST_DIR="$REPO_ROOT/dist"
 BASELINE_FILE="$DIST_DIR/universal-baseline.md"
 CONSTRAINTS_FILE="$DIST_DIR/dx-global-constraints.md"
+SOURCE_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S UTC')
 mkdir -p "$DIST_DIR"
@@ -140,6 +141,7 @@ EOF
 cat > "$OUTFILE" <<EOF
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
+<!-- Source SHA: $SOURCE_SHA -->
 <!-- Last updated: $TIMESTAMP -->
 <!-- Regenerate: make publish-baseline -->
 
@@ -149,6 +151,7 @@ EOF
 cat > "$BASELINE_FILE" <<EOF
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
+<!-- Source SHA: $SOURCE_SHA -->
 <!-- Last updated: $TIMESTAMP -->
 <!-- Regenerate: make publish-baseline -->
 
@@ -191,18 +194,66 @@ echo "" >> "$OUTFILE"
 # Skill Table Generation
 extract_skill() {
     local skill_file="$1"
-    local name=$(grep "^name:" "$skill_file" | head -1 | cut -d: -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+    local skill_dir_name
+    skill_dir_name="$(basename "$(dirname "$skill_file")")"
+    local frontmatter
+    frontmatter="$(awk 'NR==1 && $0=="---"{inside=1; next} inside && $0=="---"{exit} inside{print}' "$skill_file")"
+    local name
+    name="$(printf '%s\n' "$frontmatter" | awk '
+        /^name:[[:space:]]*/{
+            line=$0
+            sub(/^name:[[:space:]]*/, "", line)
+            gsub(/^["'"'"']|["'"'"']$/, "", line)
+            print line
+            exit
+        }
+    ')"
+    if [[ -z "$name" ]]; then
+        name="$skill_dir_name"
+    fi
     
     # Description: try to extract quoted description first
-    local desc=$(grep "^description:" "$skill_file" | head -1 | sed 's/^description: *//' | sed 's/^"//' | sed 's/"$//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+    local desc
+    desc="$(printf '%s\n' "$frontmatter" | awk '
+        BEGIN {capturing=0}
+        /^description:[[:space:]]*/ {
+            line=$0
+            sub(/^description:[[:space:]]*/, "", line)
+            if (line ~ /^(\||>)/) {
+                capturing=1
+                next
+            }
+            gsub(/^["'"'"']|["'"'"']$/, "", line)
+            print line
+            exit
+        }
+        capturing {
+            if ($0 ~ /^[A-Za-z0-9_-]+:[[:space:]]*/) exit
+            line=$0
+            sub(/^[[:space:]]+/, "", line)
+            if (length(line) > 0) printf "%s ", line
+        }
+        END {
+            if (capturing) print ""
+        }
+    ' | sed 's/[[:space:]]\+/ /g; s/^[[:space:]]*//; s/[[:space:]]*$//')"
     if [[ -z "$desc" || "$desc" == "|" || "$desc" == ">" ]]; then
-         desc=$(awk '/^description:/{flag=1; next} /^[a-z]+:/{flag=0} /^---/{flag=0} flag' "$skill_file" | tr '\n' ' ' | sed 's/  */ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | cut -c1-100 || echo "")
+         desc=$(awk '/^description:/{flag=1; next} /^[a-zA-Z0-9_-]+:/{flag=0} /^---/{flag=0} flag' "$skill_file" | tr '\n' ' ' | sed 's/  */ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | cut -c1-160 || echo "")
     fi
     if [[ -z "$desc" ]]; then
-         desc=$(grep -v "^---" "$skill_file" | grep -v "^#" | grep -v "^$" | head -1 | cut -c1-100 || echo "")
+         desc=$(grep -v "^---" "$skill_file" | grep -v "^#" | grep -v "^$" | head -1 | cut -c1-160 || echo "")
     fi
 
-    local tags=$(grep "^tags:" "$skill_file" | head -1 | cut -d: -f2- | tr -d '[]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+    local tags
+    tags="$(printf '%s\n' "$frontmatter" | awk '
+        /^tags:[[:space:]]*/{
+            line=$0
+            sub(/^tags:[[:space:]]*/, "", line)
+            gsub(/^\[|\]$/, "", line)
+            print line
+            exit
+        }
+    ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     
     # Example
     local example=$(grep -E "^\s*(bd |dx-|/skill )" "$skill_file" | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | cut -c1-60 || echo "")
@@ -238,7 +289,11 @@ generate_table "Core Workflows" "core"
 echo "" >> "$OUTFILE"; echo "" >> "$BASELINE_FILE"
 generate_table "Extended Workflows" "extended"
 echo "" >> "$OUTFILE"; echo "" >> "$BASELINE_FILE"
-generate_table "Infrastructure & Health" "health" "infra" "railway" "dispatch"
+generate_table "Health & Monitoring" "health"
+echo "" >> "$OUTFILE"; echo "" >> "$BASELINE_FILE"
+generate_table "Infrastructure" "infra" "dispatch"
+echo "" >> "$OUTFILE"; echo "" >> "$BASELINE_FILE"
+generate_table "Railway Deployment" "railway"
 
 # Footer
 echo "" >> "$OUTFILE"
@@ -247,7 +302,7 @@ echo "" >> "$OUTFILE"
 cat >> "$OUTFILE" <<EOF
 
 ## Skill Discovery
-**Auto-loaded from:** \`~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md\`
+**Auto-loaded from:** \`~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md\`
 **Specification**: https://agentskills.io/specification
 
 **Regenerate this index:**
@@ -264,9 +319,10 @@ EOF
 cat >> "$BASELINE_FILE" <<EOF
 
 ---
-**Discovery**: Skills auto-load from \`~/agent-skills/{core,extended,health,infra,railway}/*/SKILL.md\`  
+**Discovery**: Skills auto-load from \`~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md\`  
 **Details**: Each skill's SKILL.md contains full documentation  
 **Specification**: https://agentskills.io/specification  
+**Source**: Generated from agent-skills commit shown in header
 EOF
 
 # Validation
