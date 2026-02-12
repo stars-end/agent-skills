@@ -1,0 +1,13 @@
+# Codex CLI Configuration for DX V8.3
+# Place at ~/.codex/config.toml
+
+[session]
+# Run dx-bootstrap on session start to warn about canonical repos
+on_start = "~/agent-skills/session-start-hooks/dx-bootstrap.sh"
+
+[defaults]
+# Default worktree path for new sessions
+worktree_base = "/tmp/agents"
+
+# Always use worktrees, never canonical
+prefer_worktree = true

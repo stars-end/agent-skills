@@ -1,235 +1,233 @@
-# Repository Sync Strategy
+# Repository Sync Strategy (V8.3.1)
 
 ## Overview
 
-Automated synchronization keeps repos fresh across canonical VMs while respecting active agent work.
+Automated synchronization keeps repos fresh across canonical VMs while respecting active agent work. V8.3.1 introduces a **fetch-only daytime model** that never blocks on dirty repos.
 
 ## Implementation Status
 
-✅ **Implemented**: 2026-01-23
+✅ **Implemented**: 2026-02-12 (V8.3.1)
 
-- Cron-based scheduled sync on all VMs
-- Event-driven sync via dx-dispatch and start-feature
-- Log rotation configured
+- Fetch-only daytime sync (never blocks on dirty)
+- Reconcile-if-clean every 2h
+- 48h stale auto-evacuation
+- Dirty incident tracking
+- Cross-agent guardrails
 
-## Scheduled Sync (cron)
+## Sync Model (V8.3.1)
 
-| Schedule | Scope | Purpose |
-|----------|-------|---------|
-| Daily 12:00 UTC | All repos | Baseline freshness |
-| Every 4 hours | agent-skills only | High-churn tooling |
+### Daytime: Fetch-Only
 
-### Stagger Times
-
-To prevent thundering herd on GitHub API:
-
-| VM | agent-skills sync time | All-repos sync time |
-|----|------------------------|---------------------|
-| homedesktop-wsl | :00 (every 4h) | 12:00 UTC daily |
-| macmini | :05 (every 4h) | 12:00 UTC daily |
-| epyc6 | :10 (every 4h) | 12:00 UTC daily |
-
-## Event-Driven Sync
-
-### dx-dispatch
-
-When dispatching work to remote VMs:
-- Syncs agent-skills first (highest churn)
-- If `--repo` specified, syncs that repo too
-- Non-blocking: warnings if sync fails (dirty tree is expected)
+Fetch-only sync updates remote refs without touching working tree:
 
 ```bash
-dx-dispatch epyc6 "Fix the bug" --repo prime-radiant-ai
-# Internally runs:
-#   ru sync agent-skills --non-interactive --quiet
-#   ru sync prime-radiant-ai --non-interactive --quiet
+# Never fails on dirty repos
+git fetch origin master --quiet
 ```
 
-### start-feature
+| Repo | Cadence | Method |
+|------|---------|--------|
+| `~/bd` | 20 min | fetch-only |
+| Code canonicals | 30 min staggered | fetch-only |
 
-When starting a new feature:
-- Syncs current repo before creating feature branch
-- Ensures agents start with latest code
+### Reconcile: Pull-If-Clean
+
+Every 2h, reconcile attempts to pull clean repos:
 
 ```bash
-feature-lifecycle/start.sh bd-123
-# Internally runs:
-#   ru sync <current-repo> --non-interactive --quiet
+# Only pulls if working tree is clean
+git pull --ff-only origin master
 ```
+
+If dirty: skip and update dirty incident tracker.
+
+### Nightly: Hygiene
+
+- 48h stale dirty auto-evacuation
+- Rescue branch creation
+- Recovery command logging
+
+## Dirty Incident Tracking
+
+All dirty canonicals are tracked in `~/.dx-state/dirty-incidents.json`:
+
+```json
+{
+  "prime-radiant-ai": {
+    "first_seen": "2026-02-12T08:00:00Z",
+    "last_seen": "2026-02-12T10:00:00Z",
+    "age_hours": 2,
+    "diffstat": "2 files changed, 10 insertions(+)"
+  }
+}
+```
+
+At 48h stale, auto-evacuation creates rescue branch and resets canonical.
+
+## Scripts
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `canonical-fetch.sh` | Fetch-only sync | `canonical-fetch.sh [repo\|all]` |
+| `canonical-dirty-tracker.sh` | Track dirty incidents | `canonical-dirty-tracker.sh check` |
+| `canonical-reconcile.sh` | Pull-if-clean | `canonical-reconcile.sh` |
+| `dx-alerts-digest.sh` | Hourly digest | `dx-alerts-digest.sh` |
+| `heartbeat-parser.sh` | Parse HEARTBEAT.md | `heartbeat-parser.sh check` |
 
 ## Safety
 
-### Dirty Tree Detection
-
-ru automatically skips repos with uncommitted changes:
-- Checks `git status --porcelain` before pulling
-- Logs warning but continues with other repos
+### Previous Policy (V8.0)
 - **Never** uses `--autostash` (risk of losing uncommitted work)
+- Daily rescue via canonical-sync-v8.sh
 
-### Atomic Locking
+### Current Policy (V8.3.1)
+- **Fetch-only** during daytime (never conflicts)
+- **Reconcile** every 2h if clean (skip if dirty)
+- **Auto-track** dirty incidents with age
+- **48h stale** auto-evacuate with recovery command
+- **No manual triage** required by default
 
-ru uses portable locking to prevent concurrent operations:
-- `mkdir`-based atomic locks (works on all POSIX systems)
-- Prevents multiple ru operations on same repo
-- Lock files automatically cleaned up on exit
+## Cross-Agent Guardrails
+
+### Installed Hooks
+
+| Tool | Hook | Status |
+|------|------|--------|
+| Claude Code | SessionStart | ✅ `~/.claude/hooks/SessionStart/dx-bootstrap.sh` |
+| Codex CLI | config.toml | ✅ `[session].on_start` |
+| Antigravity | N/A | ⚠️ TODO - manual step |
+| OpenCode | N/A | ⚠️ TODO - manual step |
+
+### Verification
+
+```bash
+~/agent-skills/scripts/cross-agent-verify.sh
+```
 
 ## Logs
 
 ### Location
 
-- Linux/WSL: `~/logs/ru-sync.log`
-- macOS: `~/logs/ru-sync.log`
+- Fetch log: `~/logs/dx/fetch.log`
+- Reconcile log: `~/logs/dx/reconcile.log`
+- Digest log: `~/logs/dx/digest-history.log`
+- Recovery log: `~/.dx-state/recovery-commands.log`
 
 ### Check Sync Status
 
 ```bash
-# View recent log entries
-tail -50 ~/logs/ru-sync.log
+# Recent fetch activity
+tail -20 ~/logs/dx/fetch.log
 
-# Check if cron ran today
-grep "$(date +%Y-%m-%d)" ~/logs/ru-sync.log
+# Recent reconcile activity
+tail -20 ~/logs/dx/reconcile.log
 
-# Count skips (dirty trees)
-grep -i "skip\|dirty" ~/logs/ru-sync.log | wc -l
+# Dirty incidents
+cat ~/.dx-state/dirty-incidents.json
+
+# Recovery commands
+cat ~/.dx-state/recovery-commands.log
 ```
 
 ## Troubleshooting
 
-### Sync Never Runs
+### Repo Behind Origin
+
+Fetch updates refs but not working tree. To update working tree:
 
 ```bash
-# Check cron entries exist
-crontab -l | grep -E "ru sync"
-
-# Linux/WSL: Verify cron is running
-sudo service cron status  # or: systemctl status cron
-
-# WSL: Start cron if not running
-sudo service cron start
-
-# Verify ru in PATH
-which ru
-```
-
-### Repo Always Skipped
-
-```bash
-# Check for uncommitted changes
-cd ~/repo-name
+# Check if behind
 git status
 
-# If dirty, commit or stash changes
-git add -A && git commit -m "WIP"
+# Pull if clean
+git pull --ff-only origin master
 
-# Or verify it's safe to skip
-# (repo may be intentionally dirty during active work)
+# Or wait for reconcile job (every 2h)
+```
+
+### 48h Stale Auto-Evacuation
+
+If a repo has been dirty for 48+ hours:
+
+1. Rescue branch created: `rescue-<host>-<repo>-<timestamp>`
+2. Canonical reset to clean master
+3. Recovery command logged
+
+To recover:
+
+```bash
+# Check recovery log
+cat ~/.dx-state/recovery-commands.log
+
+# Clone rescue branch
+gh repo clone stars-end/<repo> -- --branch rescue-<ref>
 ```
 
 ### Manual Sync
 
 ```bash
-# Sync all repos
-ru sync
+# Fetch-only (never fails)
+~/agent-skills/scripts/canonical-fetch.sh all
 
-# Sync single repo
-ru sync agent-skills
+# Reconcile (skips dirty)
+~/agent-skills/scripts/canonical-reconcile.sh
 
-# Check what's behind (no changes)
-ru status
-
-# Verbose output
-ru sync --verbose
+# Check dirty status
+~/agent-skills/scripts/canonical-dirty-tracker.sh report
 ```
 
-### Permissions Issues
+## Cron Configuration
 
-If cron can't write to log file:
-
-```bash
-# Ensure logs directory exists and is writable
-mkdir -p ~/logs
-chmod 755 ~/logs
-touch ~/logs/ru-sync.log
-chmod 644 ~/logs/ru-sync.log
-```
-
-## Configuration
-
-### View Current Cron Entries
+All sync jobs use `dx-job-wrapper.sh` for consistent logging:
 
 ```bash
-# epyc6
-crontab -l | grep -E "ru sync"
+# ~/bd - fetch every 20 min
+*/20 * * * * dx-job-wrapper.sh fetch-bd -- canonical-fetch.sh bd
 
-# homedesktop-wsl
-ssh fengning@homedesktop-wsl "crontab -l | grep -E 'ru sync'"
+# Code canonicals - fetch every 30 min staggered
+5,35 * * * * dx-job-wrapper.sh fetch-agent-skills -- canonical-fetch.sh agent-skills
+10,40 * * * * dx-job-wrapper.sh fetch-prime -- canonical-fetch.sh prime-radiant-ai
 
-# macmini
-ssh fengning@macmini "crontab -l | grep -E 'ru sync'"
-```
+# Reconcile every 2h
+0 */2 * * * dx-job-wrapper.sh reconcile -- canonical-reconcile.sh
 
-### Modify Schedule
+# Digest hourly
+0 * * * * dx-job-wrapper.sh digest -- dx-alerts-digest.sh
 
-To change sync frequency, edit crontab:
-
-```bash
-crontab -e
-
-# Example: Change to every 2 hours instead of 4
-# Old: 10 */4 * * * ...
-# New: 10 */2 * * * ...
+# Nightly hygiene (existing)
+5 3 * * * dx-job-wrapper.sh canonical-sync -- canonical-sync-v8.sh
 ```
 
 ## Verification
 
-After implementation, verify on all VMs:
+After implementation, verify:
 
 ```bash
-# 1. Cron entries exist
-crontab -l | grep -E "ru sync"
+# 1. Scripts exist
+ls ~/agent-skills/scripts/canonical-*.sh
 
-# 2. Logs directory exists
-ls -la ~/logs/ru-sync.log
+# 2. Fetch works
+~/agent-skills/scripts/canonical-fetch.sh all
 
-# 3. ru binary accessible
-which ru && ru --version
+# 3. Reconcile works
+~/agent-skills/scripts/canonical-reconcile.sh
 
-# 4. Manual sync test
-ru sync --non-interactive --quiet && echo "PASS" || echo "SKIP (dirty tree expected)"
+# 4. Dirty tracking works
+~/agent-skills/scripts/canonical-dirty-tracker.sh report
 
-# 5. Dirty tree detection
-cd ~/agent-skills && echo "# test" >> README.md
-ru sync agent-skills --non-interactive 2>&1 | grep -i "skip\|dirty"
-git checkout README.md  # Clean up
+# 5. Cross-agent guardrails
+~/agent-skills/scripts/cross-agent-verify.sh
 ```
 
 ## Related Documentation
 
-- [Canonical Targets Registry](CANONICAL_TARGETS.md) - VM and repo configuration
-- [ru Documentation](https://github.com/Dicklesworthstone/repo_updater) - Full ru reference
-- [multi-agent-dispatch](../multi-agent-dispatch/SKILL.md) - Dispatch sync integration
-- [feature-lifecycle](../feature-lifecycle/SKILL.md) - Start feature sync integration
-
-## Maintenance
-
-### Monitoring
-
-Check logs weekly:
-```bash
-grep -c "SKIP" ~/logs/ru-sync.log  # Count skips
-grep -c "✓" ~/logs/ru-sync.log     # Count successes
-```
-
-### Updates
-
-When adding new VMs:
-1. Update [CANONICAL_TARGETS.md](CANONICAL_TARGETS.md)
-2. Run cron setup on new VM
-3. Configure log rotation
-4. Verify with checklist above
+- [ENV_SOURCES_CONTRACT.md](ENV_SOURCES_CONTRACT.md) - Environment sources
+- [AGENTS.md](../AGENTS.md) - Agent workflow rules
+- [canonical-sync-v8.sh](../scripts/canonical-sync-v8.sh) - Nightly hygiene
 
 ---
 
-**Last Updated:** 2026-01-23
-**Epic:** agent-skills-0pf
-# POC test Fri Jan 23 08:47:28 PM CET 2026
+**Last Updated:** 2026-02-12
+**Version:** V8.3.1
+**Epic:** bd-og6s
+EOF
