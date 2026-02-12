@@ -12,7 +12,7 @@ mkdir -p "$DIST_DIR"
 
 # 1. Generate Global Constraints (Layer A subset)
 cat > "$CONSTRAINTS_FILE" <<EOF
-# DX Global Constraints (V8)
+# DX Global Constraints (V8.3)
 <!-- AUTO-GENERATED - DO NOT EDIT -->
 
 ## 1) Canonical Repository Rules
