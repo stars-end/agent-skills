@@ -4,38 +4,50 @@ This document defines the single source of truth for canonical VMs, IDEs, and co
 
 ## Canonical VM Hosts
 
-| Host | OS | Description | SSH Target |
-|------|-----|-------------|------------|
-| homedesktop-wsl | Linux (WSL2) | Primary Linux dev environment | `fengning@homedesktop-wsl` |
-| macmini | macOS | macOS Dev machine | `fengning@macmini` |
-| epyc6 | Linux | Primary Linux dev host | `feng@epyc6` |
+| Host | OS | Description | Tailscale Address | SSH User |
+|------|-----|-------------|-------------------|----------|
+| homedesktop-wsl | Linux (WSL2) | Primary Linux dev environment | `100.109.231.123` | `fengning@` |
+| macmini | macOS | macOS Dev machine | `100.117.177.18` | `fengning@` |
+| epyc6 | Linux | Primary Linux dev host | `100.101.113.91` | `feng@` |
 
-**IMPORTANT: SSH Username Variations**
-- SSH targets use **username@host** format because usernames vary across machines
+**Tailscale SSH Standard (DX V8.3+)**
+All SSH access between canonical VMs MUST use Tailscale SSH. Legacy SSH keys are deprecated.
+
+```bash
+# Enable Tailscale SSH (one-time setup, requires sudo)
+sudo tailscale up --ssh
+sudo tailscale set --operator=$USER
+
+# Connect via Tailscale SSH
+tailscale ssh fengning@macmini "command"
+ssh fengning@100.117.177.18 "command"  # Direct IP also works
+```
+
+**SSH Username Variations**
 - epyc6 uses `feng@` while WSL/macOS use `fengning@`
 - **Always use full `username@host` syntax** when SSH'ing between VMs
-- Bare hostnames (e.g., `ssh homedesktop-wsl`) rely on SSH config which may not be configured on all machines
-- Example: `ssh fengning@homedesktop-wsl "ru --version"` (CORRECT)
-- Example: `ssh homedesktop-wsl "ru --version"` (MAY FAIL if SSH config missing)
+- Example: `tailscale ssh fengning@homedesktop-wsl "ru --version"` (CORRECT)
 
 ### SSH Connectivity Matrix
 
-Not all VMs can directly reach each other. Use this matrix for cross-VM operations:
+All canonical VMs are connected via Tailscale mesh network. Direct Tailscale SSH works between any pair.
 
 | From → To | homedesktop-wsl | macmini | epyc6 |
 |-----------|-----------------|---------|-------|
-| **homedesktop-wsl** | - | ✅ Direct | ✅ Direct (`feng@epyc6`) |
-| **macmini** | ✅ Direct | - | ❌ Use jump |
-| **epyc6** | ✅ Direct | ✅ Direct | - |
-| **VPS/cloud** | ✅ Direct | ✅ Direct | ❌ Use jump |
+| **homedesktop-wsl** | - | ✅ Tailscale | ✅ Tailscale (`feng@epyc6`) |
+| **macmini** | ✅ Tailscale | - | ✅ Tailscale |
+| **epyc6** | ✅ Tailscale | ✅ Tailscale | - |
+| **VPS/cloud** | ✅ Tailscale | ✅ Tailscale | ✅ Tailscale |
 
-**Jump Host Pattern** (when direct SSH fails):
+**Tailscale SSH Commands**:
 ```bash
-# From VPS/cloud to epyc6, jump through homedesktop-wsl:
-ssh fengning@homedesktop-wsl 'ssh feng@epyc6 "command here"'
+# Direct Tailscale SSH
+tailscale ssh fengning@macmini "command"
+tailscale ssh feng@epyc6 "command"
 
-# Or use ProxyJump:
-ssh -J fengning@homedesktop-wsl feng@epyc6
+# Via SSH with Tailscale IP
+ssh fengning@100.117.177.18 "command"  # macmini
+ssh feng@100.101.113.91 "command"      # epyc6
 ```
 
 ### Per-VM Tool Availability
