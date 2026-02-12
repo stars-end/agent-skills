@@ -1,8 +1,18 @@
-# Environment Sources Contract (V4.2.1)
+# Environment Sources Contract (V5.0)
+
+## Core Principle: Environment Context Required for Dev Work
+
+**All development work requires environment context.** This means:
+
+1. **DX/dev workflow secrets** (agent keys, automation tokens) are sourced from 1Password (`op://` references)
+2. **Project-specific runtime context** varies by project - some use Railway, others use different platforms
+3. **Verification tasks** require the appropriate environment context for the target platform
+
+**Key Insight:** "op-only" means 1Password is the source of truth for secrets, NOT that Railway context is irrelevant. Verification tasks that check deployed services require Railway (or other platform) context in addition to secrets.
 
 ## Purpose
 
-This contract defines the three sources of environment configuration and explicitly maps task types to required sources. It enforces **Railway hard-fail semantics only when shell context is expected**, preventing false positives in local development.
+This contract defines the sources of environment configuration and explicitly maps task types to required sources. It enforces **platform hard-fail semantics only when platform context is expected**, preventing false positives in local development.
 
 ## Three Sources of Truth
 
@@ -56,18 +66,38 @@ railway up  # Uses exported token, not interactive session
 - ⚠️ Hard-fail ENABLED: Script must fail if RAILWAY_TOKEN not set when required
 - ✅ Usage: CI/CD, automated workflows, any non-interactive Railway operation
 
+## Project-Specific Environment Sources
+
+Different projects use different runtime platforms. This contract defines the general patterns; project-specific docs provide implementation details.
+
+| Project | Primary Platform | Secrets Source | Runtime Context Source |
+|---------|-----------------|----------------|----------------------|
+| `agent-skills` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_TOKEN` |
+| `prime-radiant-ai` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_TOKEN` |
+| `affordabot` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_TOKEN` |
+| `llm-common` | (library, no deploy) | 1Password (`op://`) | N/A |
+
+**Important:** When running `verify-*` tasks for Railway-deployed projects, you need BOTH:
+1. 1Password access (for secrets like `ANTHROPIC_AUTH_TOKEN`)
+2. Railway context (for querying deployed services)
+
+See project-specific docs for detailed configuration.
+
 ## Task-to-Source Mapping
 
 | Task Type | Required Source(s) | Railway Hard-Fail? |
 |-----------|-------------------|-------------------|
-| **Local Development** | | |
-| Running tests locally | op-only | ❌ No |
+| **Local Development (No Platform Access Needed)** | | |
+| Running unit tests locally | op-only | ❌ No |
 | Local MCP server startup | op-only | ❌ No |
 | IDE-based agent workflows | op-only | ❌ No |
+| Local script development | op-only | ❌ No |
+| **Platform Verification (Requires Platform Context)** | | |
+| `verify-pipeline` for Railway projects | op-only + Railway context | ⚠️ Warn (needs Railway for full check) |
+| Checking deployment status | Railway CLI login | ❌ No (optional) |
+| Viewing deployment logs | Railway CLI login | ❌ No (optional) |
 | **Manual Deployments** | | |
 | `railway up` (interactive) | Railway CLI login | ❌ No |
-| Checking deployment status | Railway CLI login | ❌ No |
-| Viewing logs | Railway CLI login | ❌ No |
 | **Automated Workflows** | | |
 | CI/CD deployment | Railway shell context | ✅ Yes (must have RAILWAY_TOKEN) |
 | `scripts/deploy.sh` | Railway shell context | ✅ Yes (must have RAILWAY_TOKEN) |
@@ -75,6 +105,12 @@ railway up  # Uses exported token, not interactive session
 | **Systemd Services** | | |
 | opencode.service | op-only (LoadCredentialEncrypted) | N/A |
 | slack-coordinator.service | op-only (LoadCredentialEncrypted) | N/A |
+
+### Clarification: op-only vs Platform Context
+
+- **op-only**: Task only needs secrets from 1Password (e.g., local unit tests that mock external services)
+- **op-only + Platform context**: Task needs both secrets AND platform access (e.g., verify-pipeline checks deployed service health)
+- **"op-only" does NOT mean "platform is irrelevant"** - it means 1Password is the secrets source, but the task may still need platform-specific context
 
 ## Implementation Rules
 
@@ -143,19 +179,27 @@ grep -r "RAILWAY_TOKEN" scripts/ | grep -v "op://"
 
 ## Migration Notes
 
+### V4.2.1 → V5.0 Changes
+- **Added**: Core principle section clarifying "environment context required for dev work"
+- **Added**: Project-specific table showing different projects use different platforms
+- **Clarified**: Distinction between "op-only" (secrets source) and platform context (runtime access)
+- **Fixed**: Task mapping now correctly shows verify-* tasks need platform context
+- **Generalized**: Language now applies to any platform, not just Railway-specific
+
 ### V4.1 → V4.2.1 Changes
 - **Before**: Railway checks always hard-failed (false positives in local dev)
 - **After**: Railway checks respect env-sources contract (hard-fail only in shell context mode)
 
 ### Breaking Changes
-None. This is a **contract addition**, not a breaking change. Existing scripts continue to work but should be updated to declare their ENV_SOURCES.
+None. This is a **contract clarification**, not a breaking change. Existing scripts continue to work but should be updated to declare their ENV_SOURCES.
 
 ## References
 
 - **Related Docs**:
-  - `/home/feng/agent-skills/docs/SECRET_MANAGEMENT.md` - 1Password secret management
-  - `/home/feng/agent-skills/docs/SERVICE_ACCOUNTS.md` - Service account architecture
+  - `~/agent-skills/docs/SECRET_MANAGEMENT.md` - 1Password secret management patterns
+  - `~/agent-skills/docs/SERVICE_ACCOUNTS.md` - Service account architecture
+  - `~/agent-skills/docs/1PASSWORD_MULTI_ITEM_ARCHITECTURE.md` - Per-service item design
 - **Guardrails**:
-  - `/home/feng/agent-skills/scripts/guardrails/secret-scan.sh` - Secret scanning
-  - `/home/feng/agent-skills/scripts/guardrails/op-guardrail.sh` (TODO) - OP_RUN_NO_MASKING detection
-- **Beads Issue**: `agent-skills-3k0` - Env sources contract
+  - `~/agent-skills/scripts/guardrails/secret-scan.sh` - Secret scanning
+  - `~/agent-skills/scripts/guardrails/op-guardrail.sh` (TODO) - OP_RUN_NO_MASKING detection
+- **Beads Issue**: `bd-dx83.8` - Env sources contract V5.0 update
