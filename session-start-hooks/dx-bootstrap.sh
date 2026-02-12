@@ -1,63 +1,38 @@
 #!/usr/bin/env bash
-#
-# Cross-agent SessionStart Hook: DX Bootstrap
-#
-# Canonical entrypoint for session-start bootstrap across IDEs.
-# Keeps logic cross-agent: no agent-specific assumptions; adapters call this.
-#
-set -euo pipefail
+# dx-bootstrap.sh - Session start bootstrap for canonical repo detection
+# This script should be sourced from Claude Code SessionStart hooks
 
-AGENTS_ROOT="${AGENTS_ROOT:-$HOME/.agent/skills}"
-if [[ ! -d "$AGENTS_ROOT" ]]; then
-  AGENTS_ROOT="$HOME/agent-skills"
-fi
+CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
 
-# 0) Canonical hard-stop (prevents wasted work that may be reverted by automation).
-# Escape hatch: DX_CANONICAL_ACK=1 (use only to run dx-worktree/exit cleanly).
-if [[ -f "$AGENTS_ROOT/scripts/lib/canonical-detect.sh" ]]; then
-  # shellcheck disable=SC1090
-  source "$AGENTS_ROOT/scripts/lib/canonical-detect.sh"
-  if _dx_is_canonical_cwd_fast; then
-    if [[ "${DX_CANONICAL_ACK:-0}" != "1" ]]; then
-      echo ""
-      echo "❌ CANNOT PROCEED: You are in a CANONICAL repository"
-      echo ""
-      echo "   Path: $(pwd -P)"
-      echo ""
-      echo "   Canonical clones are automation-owned and MUST stay clean."
-      echo "   Create a worktree before doing anything:"
-      echo "     dx-worktree create <beads-id> <repo>"
-      echo "     cd /tmp/agents/<beads-id>/<repo>"
-      echo ""
-      echo "   (Escape hatch: set DX_CANONICAL_ACK=1 for this session start)"
-      echo ""
-      exit 1
+# Detect if we're in a canonical repo
+IS_CANONICAL=false
+CURRENT_DIR="${PWD}"
+
+for repo in "${CANONICAL_REPOS[@]}"; do
+    if [[ "$CURRENT_DIR" =~ /$repo(/|$) ]] && [[ ! "$CURRENT_DIR" =~ /tmp/agents/ ]]; then
+        IS_CANONICAL=true
+        CANONICAL_REPO="$repo"
+        break
     fi
+done
+
+if [[ "$IS_CANONICAL" == "true" ]]; then
     echo ""
-    echo "⚠️  WARNING (DX_CANONICAL_ACK=1): continuing in canonical repo: $(pwd -P)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "⚠️  CANONICAL REPOSITORY DETECTED"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-  fi
+    echo "  You are in: $CANONICAL_REPO (canonical clone)"
+    echo "  This repo auto-resets when dirty > 48h."
+    echo ""
+    echo "  ✅ Use worktrees for development:"
+    echo "     dx-worktree create <beads-id> $CANONICAL_REPO"
+    echo "     cd /tmp/agents/<beads-id>/$CANONICAL_REPO"
+    echo ""
+    echo "  ❌ Do NOT commit directly here (pre-commit hook will block)"
+    echo ""
+    echo "  📖 See: ~/agent-skills/AGENTS.md for full workflow"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
 fi
-
-# 1) Best-effort baseline check.
-if command -v dx-check >/dev/null 2>&1; then
-  dx-check 2>&1 || true
-elif [[ -f "$AGENTS_ROOT/scripts/dx-check.sh" ]]; then
-  "$AGENTS_ROOT/scripts/dx-check.sh" 2>&1 || true
-fi
-
-# 2) Optional stranded work reminder.
-if [[ -f "$AGENTS_ROOT/scripts/auto-checkpoint-notify.sh" ]]; then
-  "$AGENTS_ROOT/scripts/auto-checkpoint-notify.sh" 2>&1 || true
-fi
-
-# 3) Optional coordinator checks.
-if [[ "${DX_BOOTSTRAP_COORDINATOR:-0}" == "1" ]]; then
-  if command -v dx-doctor >/dev/null 2>&1; then
-    dx-doctor 2>&1 || true
-  elif [[ -f "$AGENTS_ROOT/scripts/dx-doctor.sh" ]]; then
-    "$AGENTS_ROOT/scripts/dx-doctor.sh" 2>&1 || true
-  fi
-fi
-
-exit 0
