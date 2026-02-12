@@ -38,6 +38,29 @@ ssh fengning@homedesktop-wsl 'ssh feng@epyc6 "command here"'
 ssh -J fengning@homedesktop-wsl feng@epyc6
 ```
 
+### Tailscale SSH (Standard for Canonical VMs)
+
+**All SSH access between canonical VMs uses Tailscale SSH.** Legacy SSH keys are deprecated.
+
+```bash
+# Standard usage
+tailscale ssh fengning@macmini "command"
+
+# Direct IP also works
+ssh fengning@100.117.177.18 "command"
+```
+
+**Enable Tailscale SSH** (one-time per VM):
+```bash
+sudo tailscale up --ssh
+```
+
+| Host | Tailscale Address | SSH User |
+|------|-------------------|----------|
+| homedesktop-wsl | `100.109.231.123` | `fengning@` |
+| macmini | `100.117.177.18` | `fengning@` |
+| epyc6 | `100.101.113.91` | `feng@` |
+
 ### Per-VM Tool Availability
 
 | Tool | homedesktop-wsl | macmini | epyc6 |
