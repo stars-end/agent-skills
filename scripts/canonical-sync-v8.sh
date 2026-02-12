@@ -232,7 +232,12 @@ Agent: canonical-sync-v8" --quiet; then
         # 4. Push rescue branch
         if git push -u origin "$rescue_branch" --quiet; then
             success "Pushed rescue branch $rescue_branch"
-            
+
+            # Log recovery command for digest/alerting
+            RECOVERY_LOG="$HOME/.dx-state/recovery-commands.log"
+            mkdir -p "$(dirname "$RECOVERY_LOG")"
+            echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") | $repo | $rescue_branch" >> "$RECOVERY_LOG"
+
             # NOW safe to reset canonical
             cd "$repo_path"
             git checkout master -q
