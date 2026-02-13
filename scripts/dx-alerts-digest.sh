@@ -108,33 +108,41 @@ post_digest() {
 }
 
 # Main: Build and post digest
+# Returns: 0 = post digest, 1 = skip (green)
 build_digest() {
     local timestamp
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    
+
     local lines=()
+    local has_incidents=false
+
     lines+=("📊 DX Hourly Digest - $timestamp")
     lines+=("")
-    
+
     # Dirty incidents
     local dirty_summary
     dirty_summary=$(get_dirty_summary)
+    if [[ "$dirty_summary" != "No dirty incidents" ]]; then
+        has_incidents=true
+    fi
     lines+=("$dirty_summary")
     lines+=("")
-    
+
     # Stale warnings
     local stale
     stale=$(get_stale_repos)
     if [[ -n "$stale" ]]; then
+        has_incidents=true
         lines+=("$(format_alert "high" "fleet" "Stale repos >=48h:")")
         while IFS= read -r line; do
             lines+=("  - $line")
         done <<< "$stale"
         lines+=("")
     fi
-    
+
     # Recovery commands (last 5) - fixed subshell issue
     if [[ -f "$RECOVERY_LOG" ]]; then
+        has_incidents=true
         lines+=("📋 Recent Recovery Commands:")
         local recovery_lines
         mapfile -t recovery_lines < <(tail -5 "$RECOVERY_LOG" 2>/dev/null)
@@ -143,9 +151,15 @@ build_digest() {
         done
         lines+=("")
     fi
-    
+
+    # Skip if no incidents (everything green)
+    if [[ "$has_incidents" == "false" ]]; then
+        return 1
+    fi
+
     # Join with newlines
     printf '%s\n' "${lines[@]}"
+    return 0
 }
 
 # Main
@@ -153,9 +167,14 @@ main() {
     if [[ "${1:-}" == "--dry-run" ]]; then
         DRY_RUN=true
     fi
-    
+
     local digest
-    digest=$(build_digest)
+    if ! digest=$(build_digest); then
+        # build_digest returned 1 = skip (everything green)
+        echo "✅ No incidents to report - skipping Slack post"
+        exit 0
+    fi
+
     echo "$digest"
     post_digest "$digest"
 }
