@@ -9,13 +9,13 @@ FAIL=0
 
 check_pass() {
     echo "✅ PASS: $1"
-    ((PASS++))
+    PASS=$((PASS + 1))
 }
 
 check_fail() {
     echo "❌ FAIL: $1"
     echo "   Fix: $2"
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
 }
 
 echo "=== Cross-Agent Guardrail Verification ==="
