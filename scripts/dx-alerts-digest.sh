@@ -140,15 +140,13 @@ build_digest() {
         lines+=("")
     fi
 
-    # Recovery commands (last 5) - fixed subshell issue
-    if [[ -f "$RECOVERY_LOG" ]]; then
-        has_incidents=true
+    # Recovery commands (last 5) - bash 3.2 compatible (no mapfile)
+    # Only show if there are actual incidents (not a trigger for has_incidents)
+    if [[ -f "$RECOVERY_LOG" && "$has_incidents" == "true" ]]; then
         lines+=("📋 Recent Recovery Commands:")
-        local recovery_lines
-        mapfile -t recovery_lines < <(tail -5 "$RECOVERY_LOG" 2>/dev/null)
-        for line in "${recovery_lines[@]}"; do
+        while IFS= read -r line; do
             lines+=("  $line")
-        done
+        done < <(tail -5 "$RECOVERY_LOG" 2>/dev/null)
         lines+=("")
     fi
 
