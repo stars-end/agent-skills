@@ -17,10 +17,21 @@ if [[ ! -f "$STATE_FILE" ]]; then
 fi
 
 # Atomic write helper
-write_state() {
-    local tmp_file=$(mktemp)
-    cat > "$tmp_file"
+atomic_write() {
+    local content="$1"
+    local tmp_file
+    tmp_file=$(mktemp "$STATE_FILE.XXXXXX")
+    echo "$content" > "$tmp_file"
     mv "$tmp_file" "$STATE_FILE"
+}
+
+# Simple JSON escape
+json_escape() {
+    local str="$1"
+    str="${str//\\/\\\\}"
+    str="${str//\"/\\\"}"
+    str="${str//$'\n'/\\n}"
+    echo "$str"
 }
 
 # Check if repo is dirty
@@ -30,53 +41,75 @@ is_dirty() {
     [[ -n $(git status --porcelain 2>/dev/null) ]]
 }
 
-# Get diffstat
+# Get diffstat (escaped for JSON)
 get_diffstat() {
     local repo_path="$1"
     cd "$repo_path"
-    git diff --stat 2>/dev/null | tail -1 || echo "0 files changed"
+    local stat
+    stat=$(git diff --stat 2>/dev/null | tail -1 || echo "0 files")
+    json_escape "$stat"
 }
 
 # Check all repos and update state
 check_repos() {
-    local now=$(date -u +%s)
-    local state=$(cat "$STATE_FILE")
-
+    local now
+    now=$(date +%s)
+    local state
+    state=$(cat "$STATE_FILE")
+    
     for repo in "${CANONICAL_REPOS[@]}"; do
         local repo_path="$HOME/$repo"
-
+        
         if [[ ! -d "$repo_path/.git" ]]; then
             continue
         fi
-
+        
         if is_dirty "$repo_path"; then
-            local diffstat=$(get_diffstat "$repo_path")
-            local existing=$(echo "$state" | grep -o "\"$repo\":[^}]*}" 2>/dev/null || echo "")
-
-            if [[ -n "$existing" ]]; then
-                # Update last_seen and age
-                local first_seen=$(echo "$existing" | grep -o '"first_seen":"[^"]*"' | cut -d'"' -f4)
-                local first_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$first_seen" +%s 2>/dev/null || echo "$now")
-                local age_hours=$(( (now - first_ts) / 3600 ))
-
-                # Update JSON entry
-                state=$(echo "$state" | sed "s/\"$repo\":[^}]*}/\"$repo\":{\"first_seen\":\"$first_seen\",\"last_seen\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"age_hours\":$age_hours,\"diffstat\":\"$diffstat\"}/")
-            else
-                # New incident
-                local entry="\"$repo\":{\"first_seen\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"last_seen\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"age_hours\":0,\"diffstat\":\"$diffstat\"}"
-                if [[ "$state" == "{}" ]]; then
-                    state="{$entry}"
+            local diffstat
+            diffstat=$(get_diffstat "$repo_path")
+            
+            # Check if already tracked
+            local existing_start existing_end
+            existing_start=$(echo "$state" | grep -o "\"$repo\":{" || true)
+            
+            if [[ -n "$existing_start" ]]; then
+                # Update existing entry - extract and update
+                local first_seen first_ts age_hours
+                # Extract first_seen using simple pattern matching
+                first_seen=$(echo "$state" | grep -o "\"$repo\":{[^}]*}" | grep -o '"first_seen":"[^"]*"' | cut -d'"' -f4 || true)
+                
+                if [[ -n "$first_seen" ]]; then
+                    # Parse ISO timestamp to epoch (macOS compatible)
+                    first_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$first_seen" +%s 2>/dev/null || echo "$now")
+                    age_hours=$(( (now - first_ts) / 3600 ))
                 else
-                    state=$(echo "$state" | sed "s/}$/,$entry}/")
+                    first_seen=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                    age_hours=0
+                fi
+                
+                # Update the entry by replacing it
+                local new_entry="\"$repo\":{\"first_seen\":\"$first_seen\",\"last_seen\":\"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",\"age_hours\":$age_hours,\"diffstat\":\"$diffstat\"}"
+                
+                # Replace old entry with new
+                state=$(echo "$state" | sed "s/\"$repo\":{[^}]*}/$new_entry/")
+            else
+                # New entry
+                local new_entry="\"$repo\":{\"first_seen\":\"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",\"last_seen\":\"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",\"age_hours\":0,\"diffstat\":\"$diffstat\"}"
+                
+                if [[ "$state" == "{}" ]]; then
+                    state="{$new_entry}"
+                else
+                    # Insert before closing brace
+                    state="${state%*}}${new_entry}}"
                 fi
             fi
         else
-            # Repo is clean - remove from tracking if exists
-            state=$(echo "$state" | sed "s/\"$repo\":[^,}]*,//;s/\"$repo\":[^}]*}//")
+            # Repo is clean - remove from tracking
+            state=$(echo "$state" | sed "s/\"$repo\":{[^,}]*}[,$]*//" | sed 's/,,/,/g' | sed 's/{,/{/g')
         fi
     done
-
-    echo "$state" | write_state
+    
+    atomic_write "$state"
 }
 
 # Report current state
@@ -86,20 +119,23 @@ report() {
 
 # Check for stale repos (>=48h)
 check_stale() {
-    local state=$(cat "$STATE_FILE")
-    local now=$(date -u +%s)
+    local state
+    state=$(cat "$STATE_FILE")
     local stale_repos=()
-
+    
+    # Extract each repo and check age
     for repo in "${CANONICAL_REPOS[@]}"; do
-        local entry=$(echo "$state" | grep -o "\"$repo\":[^}]*}" 2>/dev/null || echo "")
+        local entry age
+        entry=$(echo "$state" | grep -o "\"$repo\":{[^}]*}" || true)
+        
         if [[ -n "$entry" ]]; then
-            local age=$(echo "$entry" | grep -o '"age_hours":[0-9]*' | cut -d: -f2)
+            age=$(echo "$entry" | grep -o '"age_hours":[0-9]*' | cut -d: -f2 || echo "0")
             if [[ -n "$age" && "$age" -ge "$STALE_THRESHOLD_HOURS" ]]; then
-                stale_repos+=("$repo")
+                stale_repos+=("$repo:$age")
             fi
         fi
     done
-
+    
     if [[ ${#stale_repos[@]} -gt 0 ]]; then
         echo "STALE_REPOS=${stale_repos[*]}"
         return 1
