@@ -99,8 +99,8 @@ check_repos() {
                 if [[ "$state" == "{}" ]]; then
                     state="{$new_entry}"
                 else
-                    # Insert before closing brace
-                    state="${state%*}}${new_entry}}"
+                    # Insert before closing brace with comma separator
+                    state="${state%*}},${new_entry}}"
                 fi
             fi
         else
