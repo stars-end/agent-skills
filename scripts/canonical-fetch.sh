@@ -33,11 +33,12 @@ fetch_repo() {
     fi
 
     # Fetch only - never conflicts with dirty working tree
-    if git fetch origin master --quiet 2>/dev/null; then
+    local fetch_output
+    if fetch_output=$(git fetch origin master 2>&1); then
         log "OK: $repo fetched"
         return 0
     else
-        log "FAIL: $repo fetch failed"
+        log "FAIL: $repo fetch failed - $fetch_output"
         return 1
     fi
 }
