@@ -492,9 +492,20 @@ main() {
     
     local grand_total=0
     local grand_pruned=0
-    
+
     for repo in "${CANONICAL_REPOS[@]}"; do
-        read -r t p < <(process_repo "$repo")
+        # Initialize with defaults to handle evacuation failures gracefully
+        local t=0
+        local p=0
+        local output
+        if output=$(process_repo "$repo" 2>/dev/null); then
+            read -r t p <<< "$output" || true
+            # Ensure values are numeric, default to 0 if empty or invalid
+            t="${t:-0}"
+            p="${p:-0}"
+            [[ "$t" =~ ^[0-9]+$ ]] || t=0
+            [[ "$p" =~ ^[0-9]+$ ]] || p=0
+        fi
         grand_total=$((grand_total + t))
         grand_pruned=$((grand_pruned + p))
     done
