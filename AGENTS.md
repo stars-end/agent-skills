@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 5cbc00c6902ce4d44ad3a80dc0aee36e1488481e -->
-<!-- Last updated: 2026-02-12 07:12:36 UTC -->
+<!-- Source SHA: 0c58dcd80b7126e5eaa0a29f1873267bebfe9712 -->
+<!-- Last updated: 2026-02-14 12:00:00 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -183,7 +183,7 @@ Notes:
 | **mcp-doctor** | Warn-only health check for canonical MCP configuration and related DX tooling. Strict mode is opt-in via MCP_DOCTOR_STRICT=1. | — | dx, mcp, health, verification |
 | **railway-doctor** | Pre-flight checks for Railway deployments to catch failures BEFORE deploying. Use when about to deploy, running verify-* commands, or debugging Railway issues. | — | railway, deployment, validation, pre-flight |
 | **skills-doctor** | Validate that the current VM has the right `agent-skills` installed for the repo you’re working in. | — |  |
-| **ssh-key-doctor** | Fast, deterministic SSH health check for canonical VMs (no hangs, no secrets). Warn-only by default; strict mode is opt-in. | — | dx, ssh, verification |
+| **ssh-key-doctor** | Fast, deterministic SSH health check for canonical VMs (no hangs, no secrets). Warn-only by default; strict mode is opt-in. **DEPRECATED for canonical VM access**: Use Tailscale SSH instead. This skill remains useful for non-Tailscale SSH (external servers, GitHub, etc.). | — | dx, ssh, verification, deprecated |
 | **toolchain-health** | Validate Python toolchain alignment between mise, Poetry, and pyproject. Use when changing Python versions, editing pyproject.toml, or seeing Poetry/mise version solver errors. Invokes /toolchain-health to check: - .mise.toml python tool version - pyproject.toml python constraint - Poetry env python interpreter Keywords: python version, mise, poetry, toolchain, env use, lock, install | — | dx, tooling, python |
 | **verify-pipeline** | Run project verification checks using standard Makefile targets. Use when user says "verify pipeline", "check my work", "run tests", or "validate changes". Wraps `make verify-pipeline` (E2E), `make verify-analysis` (Logic), or `make verify-all`. Ensures environment constraints (e.g. Railway Shell) are met. | — | workflow, testing, verification, makefile, railway |
 
