@@ -49,16 +49,17 @@ Ensures tech lead can review your work without needing access to your local envi
 Before any git operations, verify worktree context:
 
 ```bash
-# Check if in canonical repo
-if pwd | grep -qE "(prime-radiant-ai|agent-skills|affordabot|llm-common)$"; then
-    echo "ERROR: Cannot run handoff in canonical repo"
+# Must be in worktree under /tmp/agents/ (check this FIRST)
+if ! pwd | grep -q "/tmp/agents"; then
+    echo "ERROR: Must be in worktree under /tmp/agents/"
+    echo "Current: $(pwd)"
     echo "Create worktree first: dx-worktree create <beads-id> <repo>"
     exit 1
 fi
 
-# Must be in /tmp/agents/...
-if ! pwd | grep -q "/tmp/agents"; then
-    echo "ERROR: Must be in worktree under /tmp/agents/"
+# Verify not somehow in canonical path (belt-and-suspenders)
+if pwd | grep -qE "^$HOME/(prime-radiant-ai|agent-skills|affordabot|llm-common)$"; then
+    echo "ERROR: Cannot run handoff in canonical repo"
     exit 1
 fi
 ```
