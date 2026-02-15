@@ -39,14 +39,18 @@ reconcile_repo() {
     fi
 
     # Clean - pull if behind
-    git fetch origin master --quiet 2>/dev/null
+    local fetch_output
+    fetch_output=$(git fetch origin master 2>&1) || {
+        log "WARN: $repo fetch failed: $fetch_output"
+    }
     local behind=$(git rev-list --count HEAD..origin/master 2>/dev/null || echo "0")
 
     if [[ "$behind" -gt 0 ]]; then
-        if git pull --ff-only origin master --quiet 2>/dev/null; then
+        local pull_output
+        if pull_output=$(git pull --ff-only origin master 2>&1); then
             log "OK: $repo pulled $behind commits"
         else
-            log "FAIL: $repo pull failed"
+            log "FAIL: $repo pull failed: $pull_output"
             return 1
         fi
     else

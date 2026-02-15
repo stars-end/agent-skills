@@ -45,7 +45,7 @@ touch "$RECOVERY_LOG"
 touch "$FETCH_ERR_LOG"
 
 log() {
-  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] $*" | tee -a "$LOG_FILE"
+  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] $*"
 }
 
 now_epoch() {

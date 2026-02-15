@@ -3,7 +3,7 @@ name: fleet-deploy
 description: |
   Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12).
   MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs.
-  Uses configs/fleet_hosts.yaml as authoritative source for SSH targets and users.
+  Uses configs/fleet_hosts.yaml as authoritative source for SSH targets.
 tags: [fleet, deploy, vm, canonical, dx-dispatch, ssh, infrastructure]
 allowed-tools:
   - Read
@@ -19,7 +19,7 @@ Deploy changes across all canonical VMs from a single source of truth.
 ## Purpose
 
 Standardize fleet-wide deployment using `configs/fleet_hosts.yaml` as the authoritative
-registry. Eliminates hardcoded SSH targets and user confusion (e.g., `feng@epyc6` vs `fengning@macmini`).
+registry. Eliminates hardcoded SSH targets and user confusion (e.g., `feng@epyc6` vs `fengning@Fengs-Mac-mini-3.local`).
 
 ## When to Use This Skill
 
@@ -41,26 +41,37 @@ registry. Eliminates hardcoded SSH targets and user confusion (e.g., `feng@epyc6
 
 **Source of truth:** `~/agent-skills/configs/fleet_hosts.yaml`
 
-| VM | User | SSH | OS | Use Case |
-|----|------|-----|-----|----------|
-| macmini | fengning | fengning@macmini | macos | Captain, macOS builds |
-| homedesktop-wsl | fengning | fengning@homedesktop-wsl | linux | Primary dev, DCG |
-| epyc6 | feng | feng@epyc6 | linux | GPU, ML training |
-| epyc12 | fengning | fengning@epyc12 | linux | Secondary Linux |
+| VM | SSH Target | OS | Use Case |
+|----|------------|-----|----------|
+| macmini | fengning@Fengs-Mac-mini-3.local | macos | Captain, macOS builds |
+| homedesktop-wsl | fengning@homedesktop-wsl | linux | Primary dev, DCG |
+| epyc6 | feng@epyc6 | linux | GPU, ML training |
+| epyc12 | fengning@epyc12 | linux | Secondary Linux |
 
-**Note:** epyc6 uses `feng@` while others use `fengning@` - always check the YAML.
+**Note:** Always use `hosts[vm].ssh` from YAML - never reconstruct `user@vm`.
 
 ## Workflow
 
-### 1. Discover Fleet
+### 1. Discover Fleet (No PyYAML Dependency)
 
+**Method A: Using canonical-targets.sh (recommended)**
 ```bash
-# List all canonical VMs with users
-python3 - "$HOME/agent-skills/configs/fleet_hosts.yaml" <<'PY'
-import yaml, sys
-hosts = yaml.safe_load(open(sys.argv[1]))['hosts']
+source ~/agent-skills/scripts/canonical-targets.sh
+for entry in "${CANONICAL_VMS[@]}"; do
+  ssh_target="${entry%%:*}"  # Extract user@host
+  echo "=== $ssh_target ==="
+  ssh "$ssh_target" 'hostname'
+done
+```
+
+**Method B: Using fleet_hosts.yaml with Python**
+```bash
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, sys, os
+yaml_path = os.path.expanduser(sys.argv[1]) if sys.argv[1].startswith('~') else sys.argv[1]
+hosts = yaml.safe_load(open(yaml_path))['hosts']
 for name, h in sorted(hosts.items()):
-    print(f"{name}: {h['user']}@{name} ({h['os']})")
+    print(f"{name}: {h['ssh']} ({h['os']})")
 PY
 ```
 
@@ -68,11 +79,16 @@ PY
 
 **Option A: Git pull (preferred for agent-skills changes)**
 ```bash
-for vm in macmini homedesktop-wsl epyc6; do
-  user=$(python3 - - <<< "import yaml; h=yaml.safe_load(open('$HOME/agent-skills/configs/fleet_hosts.yaml'))['hosts']; print(h['$vm']['user'])")
-  echo "=== $vm ($user) ==="
-  ssh "$user@$vm" 'cd ~/agent-skills && git pull'
-done
+# Using YAML for SSH targets
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, subprocess, sys, os
+yaml_path = os.path.expanduser(sys.argv[1]) if sys.argv[1].startswith('~') else sys.argv[1]
+hosts = yaml.safe_load(open(yaml_path))['hosts']
+for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+    h = hosts[name]
+    print(f"=== {name} ({h['ssh']}) ===")
+    subprocess.run(['ssh', h['ssh'], 'cd ~/agent-skills && git pull'])
+PY
 ```
 
 **Option B: dx-dispatch (for complex operations)**
@@ -84,19 +100,26 @@ dx-dispatch macmini "cd ~/agent-skills && git pull"
 
 **Option C: scp (for one-off files)**
 ```bash
-# Get user from YAML
-user=$(grep -A5 "epyc6:" ~/agent-skills/configs/fleet_hosts.yaml | grep "user:" | awk '{print $2}')
-scp ~/agent-skills/scripts/new-script.sh "$user@epyc6:~/agent-skills/scripts/"
+# Get SSH target from YAML
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, subprocess, sys, os
+yaml_path = os.path.expanduser(sys.argv[1])
+h = yaml.safe_load(open(yaml_path))['hosts']['epyc6']
+subprocess.run(['scp', '~/agent-skills/scripts/new-script.sh', f"{h['ssh']}:~/agent-skills/scripts/"])
+PY
 ```
 
 ### 3. Add Crontab Entry
 
 ```bash
-# Template for adding cron to all VMs
-for vm in macmini homedesktop-wsl epyc6; do
-  user=$(python3 - - <<< "import yaml; h=yaml.safe_load(open('$HOME/agent-skills/configs/fleet_hosts.yaml'))['hosts']; print(h['$vm']['user'])")
-
-  ssh "$user@$vm" 'bash -s' << 'SCRIPT'
+# Template for adding cron to all VMs using YAML
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, subprocess, sys, os
+yaml_path = os.path.expanduser(sys.argv[1])
+hosts = yaml.safe_load(open(yaml_path))['hosts']
+for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+    ssh_target = hosts[name]['ssh']
+    subprocess.run(['ssh', ssh_target, 'bash -s'], input='''
 if ! crontab -l 2>/dev/null | grep -q "my-new-cron-job"; then
   (crontab -l 2>/dev/null; echo '
 # My new cron job
@@ -105,46 +128,51 @@ if ! crontab -l 2>/dev/null | grep -q "my-new-cron-job"; then
 else
   echo "Cron already exists on $(hostname)"
 fi
-SCRIPT
-done
+''', text=True)
+PY
 ```
 
 ### 4. Verify Deployment
 
 ```bash
 # Check script exists on all VMs
-for vm in macmini homedesktop-wsl epyc6; do
-  user=$(python3 - - <<< "import yaml; h=yaml.safe_load(open('$HOME/agent-skills/configs/fleet_hosts.yaml'))['hosts']; print(h['$vm']['user'])")
-  echo -n "$vm: "
-  ssh "$user@$vm" 'ls -la ~/agent-skills/scripts/my-script.sh 2>/dev/null && echo "OK" || echo "MISSING"'
-done
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, subprocess, sys, os
+yaml_path = os.path.expanduser(sys.argv[1])
+hosts = yaml.safe_load(open(yaml_path))['hosts']
+for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+    ssh_target = hosts[name]['ssh']
+    result = subprocess.run(['ssh', ssh_target, 'ls ~/agent-skills/scripts/my-script.sh 2>/dev/null && echo OK || echo MISSING'],
+                          capture_output=True, text=True)
+    print(f"{name}: {result.stdout.strip()}")
+PY
 ```
 
 ## Quick Reference Commands
 
-### Get SSH target for a VM
+### Get SSH target for a single VM
 ```bash
-# One-liner to get user@host
-python3 - - <<< "import yaml; h=yaml.safe_load(open('$HOME/agent-skills/configs/fleet_hosts.yaml'))['hosts']; v=h['epyc6']; print(f\"{v['user']}@{v['ssh'].split('@')[1]}\")"
-# Output: feng@epyc6
+# Using canonical-targets.sh (no PyYAML)
+source ~/agent-skills/scripts/canonical-targets.sh
+echo "${CANONICAL_VM_PRIMARY}"   # feng@epyc6
+echo "${CANONICAL_VM_MACOS}"     # fengning@macmini
 ```
 
 ### Run command on all VMs
 ```bash
-# Using fleet_hosts.yaml
-python3 - "$HOME/agent-skills/configs/fleet_hosts.yaml" <<'PY'
-import yaml, subprocess, sys
-hosts = yaml.safe_load(open(sys.argv[1]))['hosts']
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, subprocess, sys, os
+yaml_path = os.path.expanduser(sys.argv[1])
+hosts = yaml.safe_load(open(yaml_path))['hosts']
 for name, h in sorted(hosts.items()):
-    target = h['ssh']
-    print(f"=== {name} ({target}) ===")
-    subprocess.run(['ssh', target, 'hostname && date'])
+    ssh_target = h['ssh']
+    print(f"=== {name} ({ssh_target}) ===")
+    subprocess.run(['ssh', ssh_target, 'hostname && date'])
 PY
 ```
 
 ### Parallel deploy with dx-dispatch
 ```bash
-# Dispatch to multiple VMs in parallel
 dx-dispatch epyc6 "cd ~/agent-skills && git pull" &
 dx-dispatch homedesktop-wsl "cd ~/agent-skills && git pull" &
 dx-dispatch macmini "cd ~/agent-skills && git pull" &
@@ -154,11 +182,17 @@ echo "All VMs updated"
 
 ## Integration Points
 
-### With canonical-targets.sh
+### With canonical-targets.sh (No PyYAML Required)
 ```bash
 source ~/agent-skills/scripts/canonical-targets.sh
 echo "${CANONICAL_VMS[@]}"
 # Output: feng@epyc6:linux:... fengning@macmini:macos:...
+
+# Deploy to all VMs
+for entry in "${CANONICAL_VMS[@]}"; do
+  ssh_target="${entry%%:*}"
+  ssh "$ssh_target" 'cd ~/agent-skills && git pull'
+done
 ```
 
 ### With dx-dispatch
@@ -167,38 +201,20 @@ dx-dispatch --list  # Shows available VMs
 dx-dispatch epyc6 "command"  # Dispatch to specific VM
 ```
 
-### With multi-agent-dispatch skill
-See `~/agent-skills/dispatch/multi-agent-dispatch/SKILL.md` for full dx-dispatch capabilities.
-
 ## Best Practices
 
 ### Do
-- Always use `configs/fleet_hosts.yaml` for user/host lookups
+- Always use `hosts[vm].ssh` from YAML - never reconstruct `user@vm`
+- Use `os.path.expanduser()` when YAML path starts with `~`
+- Pass YAML path via `sys.argv[1]` to Python, not embedded strings
 - Test on one VM before fleet-wide rollout
-- Use git pull for agent-skills changes (ensures version control)
-- Verify deployment with ls/cat commands
 - Include CRON_TZ for time-sensitive crons
 
 ### Don't
-- Hardcode SSH targets (usernames differ across VMs)
-- Skip epyc6 (it uses `feng@` not `fengning@`)
-- Deploy without verification
-- Forget to commit changes first
-
-## What This Skill Does
-
-- Provides single source of truth for VM SSH targets
-- Standardizes deployment workflow across fleet
-- Handles user differences (feng vs fengning)
-- Supports git, scp, and dx-dispatch patterns
-- Includes verification commands
-
-## What This Skill DOESN'T Do
-
-- Auto-deploy without user confirmation
-- Handle non-canonical VMs
-- Manage secrets or credentials
-- Replace CI/CD for production deployments
+- Reconstruct SSH targets as `"$user@$vm"` - use `h['ssh']` from YAML
+- Embed `$HOME` inside Python heredocs (won't expand)
+- Use grep|awk to parse YAML (brittle)
+- Skip the `0 17 * * *` final pass for canonical-evacuate
 
 ## Examples
 
@@ -210,39 +226,58 @@ git add scripts/canonical-evacuate-active.sh
 git commit -m "feat: add canonical enforcer script"
 git push
 
-# 2. Deploy to all VMs
-for vm in macmini homedesktop-wsl epyc6; do
-  user=$(python3 - - <<< "import yaml; h=yaml.safe_load(open('configs/fleet_hosts.yaml'))['hosts']; print(h['$vm']['user'])")
-  ssh "$user@$vm" 'cd ~/agent-skills && git pull && chmod +x scripts/canonical-evacuate-active.sh'
-done
+# 2. Deploy to all VMs using YAML
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, subprocess, sys, os
+yaml_path = os.path.expanduser(sys.argv[1])
+hosts = yaml.safe_load(open(yaml_path))['hosts']
+for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+    ssh_target = hosts[name]['ssh']
+    print(f"Deploying to {name}...")
+    subprocess.run(['ssh', ssh_target, 'cd ~/agent-skills && git pull && chmod +x scripts/canonical-evacuate-active.sh'])
+PY
 
 # 3. Verify
-for vm in macmini homedesktop-wsl epyc6; do
-  user=$(python3 - - <<< "import yaml; h=yaml.safe_load(open('configs/fleet_hosts.yaml'))['hosts']; print(h['$vm']['user'])")
-  ssh "$user@$vm" 'ls -la ~/agent-skills/scripts/canonical-evacuate-active.sh'
-done
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, subprocess, sys, os
+yaml_path = os.path.expanduser(sys.argv[1])
+hosts = yaml.safe_load(open(yaml_path))['hosts']
+for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+    result = subprocess.run(['ssh', hosts[name]['ssh'], 'ls -la ~/agent-skills/scripts/canonical-evacuate-active.sh'],
+                          capture_output=True, text=True)
+    print(f"{name}: {'OK' if result.returncode == 0 else 'MISSING'}")
+PY
 ```
 
-### Example 2: Add cron to all VMs with CRON_TZ
+### Example 2: Add canonical-evacuate cron to all VMs (COMPLETE)
 ```bash
-for vm in macmini homedesktop-wsl epyc6; do
-  user=$(python3 - - <<< "import yaml; h=yaml.safe_load(open('configs/fleet_hosts.yaml'))['hosts']; print(h['$vm']['user'])")
-
-  ssh "$user@$vm" 'bash -s' << 'SCRIPT'
-if ! crontab -l 2>/dev/null | grep -q "canonical-evacuate"; then
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, subprocess, sys, os
+yaml_path = os.path.expanduser(sys.argv[1])
+hosts = yaml.safe_load(open(yaml_path))['hosts']
+for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+    ssh_target = hosts[name]['ssh']
+    subprocess.run(['ssh', ssh_target, 'bash -s'], input='''
+if ! crontab -l 2>/dev/null | grep -q "canonical-evacuate-active"; then
   (crontab -l 2>/dev/null; echo '
+# CRON_TZ for canonical-evacuate (ensures 5am-5pm PT regardless of system TZ)
 CRON_TZ=America/Los_Angeles
-*/15 5-16 * * * ~/agent-skills/scripts/dx-job-wrapper.sh canonical-evacuate -- ~/agent-skills/scripts/canonical-evacuate-active.sh >> ~/logs/dx/canonical-evacuate.log 2>&1') | crontab -
+# V8.3.x: Canonical Enforcer - Active Hours (5am-5pm PT)
+*/15 5-16 * * * ~/agent-skills/scripts/dx-job-wrapper.sh canonical-evacuate -- ~/agent-skills/scripts/canonical-evacuate-active.sh >> ~/logs/dx/canonical-evacuate.log 2>&1
+# Final pass at 5pm PT
+0 17 * * * ~/agent-skills/scripts/dx-job-wrapper.sh canonical-evacuate -- ~/agent-skills/scripts/canonical-evacuate-active.sh >> ~/logs/dx/canonical-evacuate.log 2>&1') | crontab -
+  echo "Cron added to $(hostname)"
 fi
-SCRIPT
-done
+''', text=True)
+PY
 ```
 
 ### Example 3: Quick VM status check
 ```bash
-python3 - "$HOME/agent-skills/configs/fleet_hosts.yaml" <<'PY'
-import yaml, subprocess, sys
-hosts = yaml.safe_load(open(sys.argv[1]))['hosts']
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, subprocess, sys, os
+yaml_path = os.path.expanduser(sys.argv[1])
+hosts = yaml.safe_load(open(yaml_path))['hosts']
 for name, h in sorted(hosts.items()):
     result = subprocess.run(['ssh', '-o', 'ConnectTimeout=5', h['ssh'], 'hostname; uptime'],
                           capture_output=True, text=True, timeout=10)
@@ -254,13 +289,13 @@ PY
 ## Related Skills
 
 - **multi-agent-dispatch**: Full dx-dispatch capabilities for async/parallel dispatch
-- **canonical-targets**: Shell exports for CANONICAL_VMS array
+- **canonical-targets**: Shell exports for CANONICAL_VMS array (no PyYAML dependency)
 - **vm-bootstrap**: Setting up new VMs with required tooling
 
 ## Resources
 
 - `~/agent-skills/configs/fleet_hosts.yaml` - Authoritative fleet registry
-- `~/agent-skills/scripts/canonical-targets.sh` - Shell exports
+- `~/agent-skills/scripts/canonical-targets.sh` - Shell exports (no PyYAML needed)
 - `~/agent-skills/docs/CANONICAL_TARGETS.md` - Human-readable docs
 
 ---
