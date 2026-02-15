@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 0c58dcd80b7126e5eaa0a29f1873267bebfe9712 -->
-<!-- Last updated: 2026-02-14 15:25:19 UTC -->
+<!-- Source SHA: cf1249ff887d9ff8b95299b85e385cb0cc4f6cde -->
+<!-- Last updated: 2026-02-15 12:00:00 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -150,6 +150,7 @@ Notes:
 | **op-secrets-quickref** | Quick reference for 1Password (op CLI) secret management used in DX/dev workflows and deployments. Use when the user asks about ZAI_API_KEY, Agent-Secrets-Production, OP_SERVICE_ACCOUNT_TOKEN, 1Password service accounts, op:// references, Railway tokens, GitHub tokens, or "where do secrets live". | — | secrets, 1password, op-cli, dx, env, railway |
 | **session-end** | End Claude Code session with Beads sync and summary. MUST BE USED when user says they're done, ending session, or logging off. Guarantees Beads export to git, shows session stats, and suggests next ready work. Handles cleanup and context saving. Use when user says "goodbye", "bye", "done for now", "logging off", or when user mentions end-of-session, session termination, cleanup, context saving, bd sync, or export operations. | `bd sync, or export operations.` | workflow, beads, session, cleanup |
 | **sync-feature-branch** | Commit current work to feature branch with Beads metadata tracking and git integration. MUST BE USED for all commit operations. Handles Feature-Key trailers, Beads status updates, and optional quick linting before commit. Use when user wants to save progress, commit changes, prepare work for review, sync local changes, or finalize current work, or when user mentions "uncommitted changes", "git status shows changes", "Feature-Key missing", commit operations, saving work, git workflows, or syncing changes. | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, git, beads, commit |
+| **tech-lead-handoff** | Create comprehensive handoff for tech lead review with Beads epic sync, committed docs, and self-contained prompt. MUST BE USED when completing investigation, incident analysis, or feature planning that needs tech lead approval. Use when user says "handoff", "tech lead review", "review this", "create handoff", or after completing significant work. | `bd show <epic-id>` | workflow, handoff, review, beads, documentation |
 
 
 ## Extended Workflows
@@ -195,7 +196,7 @@ Notes:
 | **canonical-targets** | Single source of truth for canonical VMs, canonical IDEs, and canonical trunk branch. Use this to keep dx-status, mcp-doctor, and setup scripts aligned across machines. | — | dx, ide, vm, canonical, targets |
 | **devops-dx** | GitHub/Railway housekeeping for CI env/secret management and DX maintenance. Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, or fixing CI failures due to missing env. | — | devops, github, env, ci, railway |
 | **dx-alerts** | Lightweight “news wire” for DX changes and breakages, posted to Slack (no MCP required). | — |  |
-| **fleet-deploy** | Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12). MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs. Uses configs/fleet_hosts.yaml as authoritative source for SSH targets and users. | `dx-dispatch epyc6 "cd ~/agent-skills && git pull && make ins` | fleet, deploy, vm, canonical, dx-dispatch, ssh, infrastructure |
+| **fleet-deploy** | Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12). MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs. Uses configs/fleet_hosts.yaml as authoritative source for SSH targets. | `dx-dispatch epyc6 "cd ~/agent-skills && git pull && make ins` | fleet, deploy, vm, canonical, dx-dispatch, ssh, infrastructure |
 | **github-runner-setup** | GitHub Actions self-hosted runner setup and maintenance. Use when setting up dedicated runner users, migrating runners from personal accounts, troubleshooting runner issues, or implementing runner isolation. Covers systemd services, environment isolation, and skills plane integration. | — | github-actions, devops, runner, systemd, infrastructure |
 | **vm-bootstrap** | Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment. Supports modes: check (warn-only), install (operator-confirmed), strict (CI-ready). Enforces Linux-only  mise as canonical; honors preference brew→npm (with apt fallback). Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, op, bd, dcg, ru, tmux, rg. Handles optional tools as warnings: tailscale, playwright, docker, bv. Never prints/seeds secrets; never stores tokens in repo/YAML; Railway vars only for app runtime env. Safe on dirty repos (refuses and points to dirty-repo-bootstrap skill, or snapshots WIP branch). Keywords: vm, bootstrap, setup, mise, toolchain, linux, environment, provision, verify, new vm | — | dx, tooling, setup, linux |
 | **multi-agent-dispatch** | Cross-VM task dispatch using dx-dispatch (canonical). Supports SSH dispatch to canonical VMs (homedesktop-wsl, macmini, epyc6), Jules Cloud dispatch for async work, and fleet orchestration. | `dx-dispatch epyc6 "Run make test in ~/affordabot"` |  |
