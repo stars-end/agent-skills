@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# dx-alerts-digest.sh - Hourly digest for DX alerts
+# dx-alerts-digest.sh - Daily digest for DX alerts
 # Usage: dx-alerts-digest.sh [--dry-run]
 #
 # Posts to #dx-alerts using OpenClaw (same as dx-job-wrapper)
-# Format: [DX-ALERT][severity][scope] message
+# Summarizes evacuation events from recovery-commands.log
+#
+# Note: Dirty incident tracking is now handled by canonical-evacuate-active.sh
+# which provides real-time alerts with 15/45m thresholds. This digest
+# provides a daily summary of any evacuations that occurred.
 
 set -euo pipefail
 
@@ -11,7 +15,6 @@ STATE_DIR="$HOME/.dx-state"
 LOG_DIR="$HOME/logs/dx"
 DIGEST_LOG="$LOG_DIR/digest-history.log"
 RECOVERY_LOG="$STATE_DIR/recovery-commands.log"
-DIRTY_STATE="$STATE_DIR/dirty-incidents.json"
 
 DRY_RUN="${DRY_RUN:-false}"
 
@@ -25,47 +28,49 @@ format_alert() {
     echo "[DX-ALERT][$severity][$scope] $message"
 }
 
-# Get dirty incidents summary
-get_dirty_summary() {
-    if [[ ! -f "$DIRTY_STATE" ]]; then
-        echo "No dirty incidents"
+# Get evacuations from the last 24 hours
+get_evacuation_summary() {
+    if [[ ! -f "$RECOVERY_LOG" ]]; then
+        echo "No evacuations"
         return
     fi
-    
-    local state
-    state=$(cat "$DIRTY_STATE")
-    if [[ "$state" == "{}" ]]; then
-        echo "No dirty incidents"
+
+    # Get entries from last 24h
+    local yesterday
+    yesterday=$(date -u -v-1d +"%Y-%m-%d" 2>/dev/null || date -u -d "1 day ago" +"%Y-%m-%d" 2>/dev/null)
+
+    local recent
+    recent=$(awk -v cutoff="$yesterday" '$1 >= cutoff' "$RECOVERY_LOG" 2>/dev/null | tail -20)
+
+    if [[ -z "$recent" ]]; then
+        echo "No evacuations in last 24h"
         return
     fi
-    
-    echo "Dirty canonicals:"
-    # Simple parsing - extract repo names and ages
-    echo "$state" | grep -oE '"[a-zA-Z0-9_-]+":\{' | tr -d '":{' | while read -r repo; do
-        local age
-        age=$(echo "$state" | grep -o "\"$repo\":[^}]*age_hours\":[0-9]*" | grep -oE '[0-9]+$' || echo "0")
-        echo "  - $repo: ${age}h old"
+
+    echo "Recent evacuations (last 24h):"
+    echo "$recent" | while IFS= read -r line; do
+        echo "  $line"
     done
 }
 
-# Get stale repos (>=48h)
-get_stale_repos() {
-    if [[ ! -f "$DIRTY_STATE" ]]; then
+# Get count of evacuations by repo
+get_evacuation_counts() {
+    if [[ ! -f "$RECOVERY_LOG" ]]; then
         return
     fi
-    
-    local state
-    state=$(cat "$DIRTY_STATE")
-    
-    # Extract repos with age >= 48
-    echo "$state" | grep -oE '"[a-zA-Z0-9_-]+":\{[^}]*"age_hours":[0-9]+' | while read -r match; do
-        local repo age
-        repo=$(echo "$match" | grep -oE '^[^:]+')
-        age=$(echo "$match" | grep -oE '[0-9]+$')
-        if [[ -n "$age" && "$age" -ge 48 ]]; then
-            echo "$repo:$age"
-        fi
-    done
+
+    local yesterday
+    yesterday=$(date -u -v-1d +"%Y-%m-%d" 2>/dev/null || date -u -d "1 day ago" +"%Y-%m-%d" 2>/dev/null)
+
+    local counts
+    counts=$(awk -v cutoff="$yesterday" '$1 >= cutoff {print $3}' "$RECOVERY_LOG" 2>/dev/null | sort | uniq -c | sort -rn)
+
+    if [[ -n "$counts" ]]; then
+        echo "Evacuations by repo:"
+        echo "$counts" | while read -r count repo; do
+            echo "  - $repo: $count"
+        done
+    fi
 }
 
 # Post to Slack (with local fallback)
@@ -116,37 +121,23 @@ build_digest() {
     local lines=()
     local has_incidents=false
 
-    lines+=("📊 DX Hourly Digest - $timestamp")
+    lines+=("📊 DX Daily Digest - $timestamp")
     lines+=("")
 
-    # Dirty incidents
-    local dirty_summary
-    dirty_summary=$(get_dirty_summary)
-    if [[ "$dirty_summary" != "No dirty incidents" ]]; then
+    # Evacuation summary
+    local evac_summary
+    evac_summary=$(get_evacuation_summary)
+    if [[ "$evac_summary" != "No evacuations in last 24h" && "$evac_summary" != "No evacuations" ]]; then
         has_incidents=true
-    fi
-    lines+=("$dirty_summary")
-    lines+=("")
-
-    # Stale warnings
-    local stale
-    stale=$(get_stale_repos)
-    if [[ -n "$stale" ]]; then
-        has_incidents=true
-        lines+=("$(format_alert "high" "fleet" "Stale repos >=48h:")")
-        while IFS= read -r line; do
-            lines+=("  - $line")
-        done <<< "$stale"
+        lines+=("$evac_summary")
         lines+=("")
     fi
 
-    # Recovery commands (last 5) - bash 3.2 compatible (no mapfile)
-    # Only show if there are actual incidents (not a trigger for has_incidents)
-    if [[ -f "$RECOVERY_LOG" && "$has_incidents" == "true" ]]; then
-        lines+=("📋 Recent Recovery Commands:")
-        while IFS= read -r line; do
-            lines+=("  $line")
-        done < <(tail -5 "$RECOVERY_LOG" 2>/dev/null)
+    # Evacuation counts
+    local evac_counts
+    evac_counts=$(get_evacuation_counts)
+    if [[ -n "$evac_counts" ]]; then
+        lines+=("$evac_counts")
         lines+=("")
     fi
 
@@ -169,7 +160,7 @@ main() {
     local digest
     if ! digest=$(build_digest); then
         # build_digest returned 1 = skip (everything green)
-        echo "✅ No incidents to report - skipping Slack post"
+        echo "✅ No evacuations to report - skipping Slack post"
         exit 0
     fi
 
