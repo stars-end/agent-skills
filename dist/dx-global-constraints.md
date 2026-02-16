@@ -62,7 +62,21 @@ cd /tmp/agents/bd-xxxx/repo-name
 
 ### Dispatch Method
 
-Use Task tool with `run_in_background: true`:
+**Primary: Local headless with cc-glm-job.sh**
+
+```bash
+# Start a background job
+cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
+
+# Monitor jobs
+cc-glm-job.sh status
+cc-glm-job.sh check --beads bd-xxx
+
+# Model selection (glm-5 for complex tasks)
+CC_GLM_MODEL=glm-5 cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
+```
+
+**Optional: Task tool (Codex runtime only)**
 
 ```yaml
 Task:
@@ -81,6 +95,8 @@ Task:
     4. Return summary
   run_in_background: true
 ```
+
+**Cross-VM: dx-dispatch** (for remote execution only)
 
 ### Monitoring (Simplified)
 
