@@ -30,3 +30,11 @@ node_modules/
 
 # DX Session locks (V7.6)
 .dx-session-lock
+
+# Temp/debug files (bd-5wys.4 - reduce rescue noise)
+tmp_*.py
+tmp_*.sh
+tmp_*.cjs
+tmp_*.js
+*.iv
+*.v

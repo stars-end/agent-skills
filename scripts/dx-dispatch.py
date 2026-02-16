@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 """
 dx-dispatch - Dispatch tasks to remote OpenCode agents
 
@@ -36,17 +38,27 @@ import shutil
 import subprocess
 from pathlib import Path
 from datetime import datetime
+from typing import TYPE_CHECKING, Optional, Any
 
 # Add lib to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Type-only imports (not evaluated at runtime due to __future__ annotations)
+if TYPE_CHECKING:
+    from lib.fleet import FleetDispatcher, DispatchResult
+    from lib.fleet.backends.base import HealthStatus
+
+# Runtime imports with fallback
 try:
     from lib.fleet import FleetDispatcher, DispatchResult
     from lib.fleet.backends.base import HealthStatus
     FLEET_AVAILABLE = True
 except ImportError:
     FLEET_AVAILABLE = False
-    print("Warning: lib/fleet not available, using legacy mode")
+    FleetDispatcher = None  # type: ignore[misc,assignment]
+    DispatchResult = None   # type: ignore[misc,assignment]
+    HealthStatus = None     # type: ignore[misc,assignment]
+    print("Warning: lib/fleet not available, using legacy mode", file=sys.stderr)
 
 try:
     from slack_sdk import WebClient

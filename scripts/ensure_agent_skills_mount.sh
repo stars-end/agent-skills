@@ -124,10 +124,11 @@ fi
 # Ensure ~/.agents/skills exists + install links (best-effort; no secrets).
 echo "  ~/.agents/skills: $AGENTS_SKILLS_DIR"
 mkdir -p "$AGENTS_SKILLS_DIR"
+# Always use canonical installer from ~/agent-skills (not potentially ephemeral worktree)
 if [[ -x "$AGENT_SKILLS_DIR/scripts/dx-agents-skills-install.sh" ]]; then
-  "$AGENT_SKILLS_DIR/scripts/dx-agents-skills-install.sh" --apply >/dev/null 2>&1 || true
+  "$AGENT_SKILLS_DIR/scripts/dx-agents-skills-install.sh" --apply --force >/dev/null 2>&1 || true
 elif [[ -x "$AGENT_SKILLS_DIR/scripts/dx-codex-skills-install.sh" ]]; then
-  "$AGENT_SKILLS_DIR/scripts/dx-codex-skills-install.sh" --apply >/dev/null 2>&1 || true
+  "$AGENT_SKILLS_DIR/scripts/dx-codex-skills-install.sh" --apply --force >/dev/null 2>&1 || true
 fi
 
 # 5. Quick health check
