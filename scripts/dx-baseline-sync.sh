@@ -15,17 +15,72 @@
 
 set -euo pipefail
 
-# Deterministic PATH for cron execution
-export PATH="/usr/local/bin:/opt/homebrew/bin:/Users/fengning/bin:/usr/bin:/bin:$PATH"
+# Deterministic PATH for cron execution (use $HOME, not hardcoded user)
+export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/bin:/usr/bin:/bin:$PATH"
 
 # Config - ALWAYS use canonical ~/agent-skills
 CANONICAL_REPO="$HOME/agent-skills"
 SIBLING_REPOS=("prime-radiant-ai" "affordabot" "llm-common")
-DX_WORKTREE="/Users/fengning/bin/dx-worktree"
+
+# Resolve dx-worktree via command -v (works with $HOME/bin in PATH)
+DX_WORKTREE=""
+resolve_dx_worktree() {
+  if [[ -x "$HOME/bin/dx-worktree" ]]; then
+    DX_WORKTREE="$HOME/bin/dx-worktree"
+  elif command -v dx-worktree >/dev/null 2>&1; then
+    DX_WORKTREE="$(command -v dx-worktree)"
+  fi
+}
 
 log() { echo -e "\033[0;34m[baseline-sync]\033[0m $*"; }
 error() { echo -e "\033[0;31m[error]\033[0m $*" >&2; }
 success() { echo -e "\033[0;32m[success]\033[0m $*"; }
+
+# Track the stash ref we create (for precise restoration)
+STASH_REF=""
+CLEANUP_DONE=false
+
+# Idempotent cleanup function - only pops the stash WE created
+cleanup_canonical() {
+  # Prevent double-cleanup
+  if [[ "$CLEANUP_DONE" == "true" ]]; then
+    return 0
+  fi
+  CLEANUP_DONE=true
+
+  log "Cleaning up canonical repo..."
+  cd "$CANONICAL_REPO" || return 1
+
+  # Reset the generated files to clean state
+  log "Resetting generated files in canonical..."
+  git checkout HEAD -- AGENTS.md dist/universal-baseline.md dist/dx-global-constraints.md 2>/dev/null || true
+
+  # Pop ONLY the stash we created (by exact ref)
+  if [[ -n "$STASH_REF" ]]; then
+    if git stash list | grep -q "^${STASH_REF}:"; then
+      log "Restoring stashed changes from $STASH_REF..."
+      if git stash pop "$STASH_REF" >/dev/null 2>&1; then
+        log "Stash restored successfully"
+      else
+        error "WARNING: Failed to pop stash $STASH_REF (may have conflicts)"
+        # Drop the stash to avoid accumulation
+        git stash drop "$STASH_REF" >/dev/null 2>&1 || true
+      fi
+    else
+      log "Stash $STASH_REF no longer exists (already applied or dropped)"
+    fi
+  fi
+
+  # Verify clean state
+  if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+    error "WARNING: Canonical still has dirty files after cleanup"
+    git status --porcelain
+    return 1
+  fi
+
+  log "Canonical is clean"
+  return 0
+}
 
 # Pre-flight checks
 preflight() {
@@ -35,13 +90,11 @@ preflight() {
     exit 2
   fi
 
-  # Verify dx-worktree is available
-  if [[ ! -x "$DX_WORKTREE" ]]; then
-    if ! command -v dx-worktree >/dev/null 2>&1; then
-      error "dx-worktree not found. Please install to ~/bin/dx-worktree"
-      exit 2
-    fi
-    DX_WORKTREE="$(command -v dx-worktree)"
+  # Resolve dx-worktree
+  resolve_dx_worktree
+  if [[ -z "$DX_WORKTREE" ]]; then
+    error "dx-worktree not found. Please install to ~/bin/dx-worktree"
+    exit 2
   fi
 
   # Verify make is available
@@ -61,9 +114,20 @@ regenerate_baseline() {
   cd "$CANONICAL_REPO"
 
   # Stash any existing changes to avoid conflicts
-  if [[ -n "$(git status --porcelain)" ]]; then
+  # Capture the exact stash ref for precise restoration
+  if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
     log "Stashing existing changes in canonical..."
-    git stash push -m "baseline-sync-pre-regen-$(date +%Y%m%d-%H%M%S)" >/dev/null 2>&1 || true
+    local stash_msg="baseline-sync-pre-regen-$(date +%Y%m%d-%H%M%S)"
+    git stash push -m "$stash_msg" >/dev/null 2>&1 || true
+
+    # Get the exact stash ref we just created (top of stack)
+    STASH_REF="$(git stash list | head -n1 | cut -d: -f1)"
+
+    if [[ -n "$STASH_REF" ]]; then
+      log "Created stash: $STASH_REF"
+      # Set up trap to ensure cleanup runs even on failure
+      trap cleanup_canonical EXIT
+    fi
   fi
 
   # Run baseline generation
@@ -164,33 +228,6 @@ sync_sibling() {
   fi
 }
 
-# 3. Clean up canonical after sync
-cleanup_canonical() {
-  cd "$CANONICAL_REPO"
-
-  # Reset the generated files to clean state
-  log "Resetting generated files in canonical..."
-
-  # Check out the generated files from HEAD to clean them
-  git checkout HEAD -- AGENTS.md dist/universal-baseline.md dist/dx-global-constraints.md 2>/dev/null || true
-
-  # If there's a stash from pre-regen, pop it
-  if git stash list | grep -q "baseline-sync-pre-regen"; then
-    log "Restoring stashed changes..."
-    git stash pop >/dev/null 2>&1 || true
-  fi
-
-  # Verify clean state
-  if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
-    error "WARNING: Canonical still has dirty files after cleanup"
-    git status --porcelain
-    return 1
-  fi
-
-  log "Canonical is clean"
-  return 0
-}
-
 # Main
 main() {
   echo "=== DX Baseline Sync ==="
@@ -199,9 +236,10 @@ main() {
 
   preflight
 
-  # Regenerate baseline
+  # Regenerate baseline (trap is set inside if stashing occurs)
   if ! regenerate_baseline; then
     error "Failed to regenerate baseline - aborting"
+    # trap will run cleanup_canonical on exit
     exit 1
   fi
 
@@ -210,7 +248,7 @@ main() {
     sync_sibling "$repo" || true  # Don't exit on failure, track it
   done
 
-  # Clean up canonical
+  # Clean up canonical (trap will also call this, but explicit call for normal flow)
   cleanup_canonical
 
   # Summary
