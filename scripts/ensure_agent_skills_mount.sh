@@ -124,10 +124,22 @@ fi
 # Ensure ~/.agents/skills exists + install links (best-effort; no secrets).
 echo "  ~/.agents/skills: $AGENTS_SKILLS_DIR"
 mkdir -p "$AGENTS_SKILLS_DIR"
-if [[ -x "$AGENT_SKILLS_DIR/scripts/dx-agents-skills-install.sh" ]]; then
-  "$AGENT_SKILLS_DIR/scripts/dx-agents-skills-install.sh" --apply >/dev/null 2>&1 || true
-elif [[ -x "$AGENT_SKILLS_DIR/scripts/dx-codex-skills-install.sh" ]]; then
-  "$AGENT_SKILLS_DIR/scripts/dx-codex-skills-install.sh" --apply >/dev/null 2>&1 || true
+
+# Check for issues first, only repair if needed (safer than blind --force)
+INSTALLER="$AGENT_SKILLS_DIR/scripts/dx-agents-skills-install.sh"
+if [[ ! -x "$INSTALLER" ]]; then
+  INSTALLER="$AGENT_SKILLS_DIR/scripts/dx-codex-skills-install.sh"
+fi
+
+if [[ -x "$INSTALLER" ]]; then
+  # Run --doctor to check for broken/ephemeral links
+  if ! "$INSTALLER" --doctor >/dev/null 2>&1; then
+    # Issues found, run --repair to fix
+    log_warn "Skills plane has issues, running repair..."
+    "$INSTALLER" --repair >/dev/null 2>&1 || true
+  else
+    log_info "Skills plane is healthy"
+  fi
 fi
 
 # 5. Quick health check

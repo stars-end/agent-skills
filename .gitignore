@@ -30,3 +30,14 @@ node_modules/
 
 # DX Session locks (V7.6)
 .dx-session-lock
+
+# Temp/debug files (bd-5wys.4 - reduce rescue noise)
+# Patterns based on observed rescue events in agent-skills repo
+tmp_*.py
+tmp_*.sh
+tmp_*.cjs
+tmp_*.js
+# Note: *.v and *.iv excluded as too broad - could conflict with Verilog/Vim files
+# Only ignore specific temp patterns observed:
+1iv
+1v
