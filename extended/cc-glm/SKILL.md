@@ -298,28 +298,39 @@ You are implementing a batched task from a development plan.
 
 ## Fallback (No cc-glm-job.sh Available)
 
-If `cc-glm-job.sh` is unavailable, use raw headless:
+If `cc-glm-job.sh` is unavailable, use `cc-glm-headless.sh` first (handles Z.ai auth/routing):
 
 ```bash
-# Direct claude invocation
-claude -p "YOUR PROMPT" --output-format text
+# Prefer: cc-glm-headless.sh (handles Z.ai base URL + token)
+~/agent-skills/extended/cc-glm/scripts/cc-glm-headless.sh --prompt-file /tmp/prompts/task.prompt
 
-# Or with explicit model
-CC_GLM_MODEL=glm-5 claude -p "YOUR PROMPT" --output-format text
+# With model selection via env
+CC_GLM_MODEL=glm-5 ~/agent-skills/extended/cc-glm/scripts/cc-glm-headless.sh --prompt-file /tmp/p.prompt
+```
+
+If `cc-glm-headless.sh` is also unavailable, raw `claude` requires explicit Z.ai configuration:
+
+```bash
+# Raw claude requires explicit env vars for Z.ai routing
+ANTHROPIC_AUTH_TOKEN="$ZAI_API_KEY" \
+ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic" \
+claude --model glm-5 -p "YOUR PROMPT" --output-format text
 
 # Manual background with log capture
-nohup claude -p "$(cat /tmp/prompts/task.prompt)" \
+nohup claude --model glm-5 -p "$(cat /tmp/prompts/task.prompt)" \
   --output-format text \
   > /tmp/cc-glm-jobs/bd-xxx.log 2>&1 &
 echo $! > /tmp/cc-glm-jobs/bd-xxx.pid
 ```
+
+**Note**: Raw `claude` does NOT read `CC_GLM_MODEL`. Use `--model glm-5` flag explicitly.
 
 ---
 
 ## Known Issues
 
 ### dx-delegate Broken
-- **Symptom**: "Error: missing wrapper: /Users/fengning/extended/cc-glm/scripts/cc-glm-headless.sh"
+- **Symptom**: "Error: missing wrapper: ~/agent-skills/extended/cc-glm/scripts/cc-glm-headless.sh"
 - **Workaround**: Use `cc-glm-job.sh` directly (primary method above)
 - **Status**: Deprecation pending
 
