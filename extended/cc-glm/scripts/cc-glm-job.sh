@@ -313,6 +313,19 @@ status_cmd() {
   done
   if [[ "$found" -eq 0 ]]; then
     echo "(no jobs found in $LOG_DIR)"
+    if [[ "$LOG_DIR" == "/tmp/cc-glm-jobs" ]]; then
+      shopt -s nullglob
+      local alt_dirs=()
+      for d in /tmp/cc-glm-jobs-*; do
+        [[ -d "$d" ]] || continue
+        alt_dirs+=("$d")
+      done
+      if [[ "${#alt_dirs[@]}" -gt 0 ]]; then
+        echo "hint: found alternate log dirs:"
+        printf '  %s\n' "${alt_dirs[@]}"
+        echo "hint: rerun with --log-dir <one-of-the-above>"
+      fi
+    fi
   fi
 }
 
