@@ -327,6 +327,111 @@ echo $! > /tmp/cc-glm-jobs/bd-xxx.pid
 
 ---
 
+## Remote Host Environment Setup (V2.0)
+
+For deterministic headless execution on remote hosts (CI, epyc servers, etc.), ensure auth is properly configured. **Parallel jobs require deterministic auth - the legacy zsh/cc-glm fallback path is disabled by default.**
+
+### Auth Resolution Order (First Match Wins)
+
+| Priority | Environment Variable | Description |
+|----------|---------------------|-------------|
+| 1 | `CC_GLM_AUTH_TOKEN` | Direct token (recommended for CI) |
+| 2 | `ZAI_API_KEY` | Plain token OR `op://` reference |
+| 3 | `CC_GLM_OP_URI` | Explicit `op://` reference |
+| 4 | Default | `op://dev/Agent-Secrets-Production/ZAI_API_KEY` |
+
+### Recommended Setup for Remote Hosts
+
+**Option A: 1Password Service Account (Recommended)**
+
+```bash
+# One-time setup on each host
+~/agent-skills/scripts/create-op-credential.sh
+
+# Verify
+op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+```
+
+The script auto-discovers `OP_SERVICE_ACCOUNT_TOKEN` from:
+- `$HOME/.config/systemd/user/op-$(hostname)-token`
+- Legacy: `$HOME/.config/systemd/user/op-macmini-token`
+
+**Option B: Direct Token (CI/Secrets Manager)**
+
+```bash
+# Set directly in CI or secrets manager
+export CC_GLM_AUTH_TOKEN="your-api-token"
+
+# Or via ZAI_API_KEY (supports both plain and op://)
+export ZAI_API_KEY="your-api-token"
+```
+
+**Option C: Explicit op:// Reference**
+
+```bash
+# Custom vault/item path
+export CC_GLM_OP_URI="op://my-vault/my-item/my-field"
+```
+
+### Parallel Job Safety
+
+The headless script fails fast (exit code 10) when auth cannot be resolved, preventing silent failures in parallel dispatch:
+
+```bash
+# This will fail with actionable error if auth not configured
+cc-glm-headless.sh --prompt "task"
+
+# Error output includes remediation steps
+# Exit code 10 = auth resolution failure
+```
+
+### Environment Variables Reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CC_GLM_AUTH_TOKEN` | - | Direct auth token (highest priority) |
+| `ZAI_API_KEY` | - | Token or op:// reference |
+| `CC_GLM_OP_URI` | - | Explicit op:// reference |
+| `CC_GLM_OP_VAULT` | `dev` | 1Password vault name |
+| `CC_GLM_BASE_URL` | `https://api.z.ai/api/anthropic` | API endpoint |
+| `CC_GLM_MODEL` | `glm-4.7` | Model name |
+| `CC_GLM_TIMEOUT_MS` | `3000000` | API timeout (50 min) |
+| `CC_GLM_ALLOW_FALLBACK` | `0` | Set to `1` for legacy zsh fallback |
+| `CC_GLM_STRICT_AUTH` | `1` | Set to `0` to suppress strict errors |
+| `CC_GLM_DEBUG` | `0` | Set to `1` for debug logging |
+
+### Troubleshooting Auth Failures
+
+**Symptom**: Exit code 10 with "AUTH TOKEN RESOLUTION FAILED"
+
+```bash
+# Check if OP token file exists
+ls -la ~/.config/systemd/user/op-$(hostname)-token
+
+# Test op CLI directly
+op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+
+# Enable debug logging
+CC_GLM_DEBUG=1 cc-glm-headless.sh --prompt "test"
+```
+
+**Symptom**: "op CLI not found"
+
+```bash
+# Install 1Password CLI
+# macOS: brew install 1password-cli
+# Linux: https://developer.1password.com/docs/cli/get-started/
+```
+
+**Emergency Bypass** (not recommended for parallel jobs):
+
+```bash
+# Allow legacy zsh/cc-glm fallback
+CC_GLM_ALLOW_FALLBACK=1 cc-glm-headless.sh --prompt "task"
+```
+
+---
+
 ## Known Issues
 
 ### dx-delegate Broken
