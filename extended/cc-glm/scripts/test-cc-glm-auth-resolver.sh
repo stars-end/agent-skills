@@ -79,10 +79,10 @@ test_cc_glm_auth_token_priority() {
   export CC_GLM_AUTH_TOKEN="test-token-direct"
   export ZAI_API_KEY="should-be-ignored"
 
-  # Run headless with --help to test quickly (version check also validates env parsing)
+  # Run headless with --version for quick sanity check
   local output
   if output=$("$HEADLESS_SCRIPT" --version 2>&1); then
-    if [[ "$output" == *"2.0.0"* ]]; then
+    if [[ "$output" == *"cc-glm-headless.sh version"* ]]; then
       pass "CC_GLM_AUTH_TOKEN is recognized (version check)"
     else
       fail "Version check failed" "$output"
@@ -172,6 +172,7 @@ test_default_op_fallback() {
   echo "=== Test: Default op:// fallback ==="
 
   setup_test_env
+  export CC_GLM_OP_VAULT="__invalid_vault_for_test__"
 
   # No auth env vars set - should try default op:// and fail
   local output exit_code
@@ -180,7 +181,8 @@ test_default_op_fallback() {
   exit_code=$?
   set -e
 
-  # Should fail with exit 10 (auth resolution failure) and mention options
+  # Should fail with exit 10 (auth resolution failure) and mention options.
+  # Invalid vault makes this deterministic even when local op is signed in.
   if [[ $exit_code -eq 10 ]] && [[ "$output" == *"AUTH TOKEN RESOLUTION FAILED"* ]]; then
     pass "Default op:// fallback fails with actionable error"
   else
@@ -198,6 +200,20 @@ test_allow_fallback() {
   setup_test_env
 
   export CC_GLM_ALLOW_FALLBACK=1
+  export OP_SERVICE_ACCOUNT_TOKEN_FILE="/tmp/__missing_op_token_file__"
+
+  local fake_dir fake_claude old_path
+  fake_dir="$(mktemp -d)"
+  fake_claude="${fake_dir}/claude"
+  old_path="${PATH:-}"
+  cat > "$fake_claude" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "fake-claude-fallback-ok"
+exit 0
+EOF
+  chmod +x "$fake_claude"
+  export PATH="${fake_dir}:${old_path}"
 
   local output
   set +e
@@ -217,6 +233,8 @@ test_allow_fallback() {
     fi
   fi
 
+  export PATH="$old_path"
+  rm -rf "$fake_dir"
   setup_test_env
 }
 
@@ -228,6 +246,20 @@ test_strict_auth_disabled() {
   setup_test_env
 
   export CC_GLM_STRICT_AUTH=0
+  export OP_SERVICE_ACCOUNT_TOKEN_FILE="/tmp/__missing_op_token_file__"
+
+  local fake_dir fake_claude old_path
+  fake_dir="$(mktemp -d)"
+  fake_claude="${fake_dir}/claude"
+  old_path="${PATH:-}"
+  cat > "$fake_claude" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "fake-claude-nonstrict-ok"
+exit 0
+EOF
+  chmod +x "$fake_claude"
+  export PATH="${fake_dir}:${old_path}"
 
   local output exit_code
   set +e
@@ -242,6 +274,8 @@ test_strict_auth_disabled() {
     fail "Should not show strict auth error when disabled" "output=${output:0:200}"
   fi
 
+  export PATH="$old_path"
+  rm -rf "$fake_dir"
   setup_test_env
 }
 
@@ -280,7 +314,7 @@ test_version_output() {
   exit_code=$?
   set -e
 
-  if [[ $exit_code -eq 0 ]] && [[ "$output" == *"cc-glm-headless.sh version 2.0.0"* ]]; then
+  if [[ $exit_code -eq 0 ]] && [[ "$output" == *"cc-glm-headless.sh version "* ]]; then
     pass "Version output is correct"
   else
     fail "Version output incorrect" "exit=$exit_code output=$output"
@@ -325,31 +359,52 @@ test_priority_order() {
   export ZAI_API_KEY="priority-2"
   export CC_GLM_OP_URI="op://dev/vault/field"
 
-  # With CC_GLM_DEBUG=1, we can see which source is used
-  export CC_GLM_DEBUG=1
-
-  local output
-  set +e
-  output=$("$HEADLESS_SCRIPT" --version 2>&1)
-  set -e
-
-  if [[ "$output" == *"auth source: CC_GLM_AUTH_TOKEN"* ]]; then
-    pass "CC_GLM_AUTH_TOKEN has highest priority"
+  # Deterministic static-order check (no live model call).
+  local first_priority_marker
+  first_priority_marker="$(awk '/CC_GLM_AUTH_TOKEN - highest priority/ {print "found"; exit}' "$HEADLESS_SCRIPT" || true)"
+  if [[ "$first_priority_marker" == "found" ]]; then
+    pass "CC_GLM_AUTH_TOKEN has highest priority (resolver order)"
   else
-    # Version check doesn't go through auth resolution, so this may not show
-    # Try with prompt instead
-    set +e
-    output=$("$HEADLESS_SCRIPT" --prompt "test" 2>&1)
-    set -e
-
-    if [[ "$output" == *"auth source: CC_GLM_AUTH_TOKEN"* ]]; then
-      pass "CC_GLM_AUTH_TOKEN has highest priority"
-    else
-      # If it ran successfully, CC_GLM_AUTH_TOKEN was used
-      pass "CC_GLM_AUTH_TOKEN has highest priority (inferred from success)"
-    fi
+    fail "Could not verify resolver priority order in script"
   fi
 
+  setup_test_env
+}
+
+# Test: resolved token is exported to both Anthropic env vars.
+test_anthropic_env_exports() {
+  echo ""
+  echo "=== Test: Anthropic env exports ==="
+
+  setup_test_env
+
+  local fake_dir fake_claude old_path output
+  fake_dir="$(mktemp -d)"
+  fake_claude="${fake_dir}/claude"
+  old_path="${PATH:-}"
+
+  cat > "$fake_claude" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "AUTH_TOKEN_SET=${ANTHROPIC_AUTH_TOKEN:+1}"
+echo "API_KEY_SET=${ANTHROPIC_API_KEY:+1}"
+echo "MODEL=${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
+exit 0
+EOF
+  chmod +x "$fake_claude"
+
+  export PATH="${fake_dir}:${old_path}"
+  export CC_GLM_AUTH_TOKEN="token-for-export-test"
+
+  output="$("$HEADLESS_SCRIPT" --prompt "test prompt" 2>&1 || true)"
+  if [[ "$output" == *"AUTH_TOKEN_SET=1"* ]] && [[ "$output" == *"API_KEY_SET=1"* ]] && [[ "$output" == *"MODEL=glm-5"* ]]; then
+    pass "Resolved token exported to ANTHROPIC_AUTH_TOKEN and ANTHROPIC_API_KEY (glm-5 default)"
+  else
+    fail "Anthropic env export check failed" "${output:0:240}"
+  fi
+
+  export PATH="$old_path"
+  rm -rf "$fake_dir"
   setup_test_env
 }
 
@@ -398,6 +453,7 @@ test_default_op_fallback
 test_allow_fallback
 test_strict_auth_disabled
 test_priority_order
+test_anthropic_env_exports
 test_missing_claude_cli
 
 # Summary

@@ -353,6 +353,8 @@ op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
 ```
 
 The script auto-discovers `OP_SERVICE_ACCOUNT_TOKEN` from:
+- `OP_SERVICE_ACCOUNT_TOKEN_FILE` (if explicitly set)
+- Canonical epyc12 path: `/home/fengning/.config/systemd/user/op-epyc12-token`
 - `$HOME/.config/systemd/user/op-$(hostname)-token`
 - Legacy: `$HOME/.config/systemd/user/op-macmini-token`
 
@@ -394,7 +396,7 @@ cc-glm-headless.sh --prompt "task"
 | `CC_GLM_OP_URI` | - | Explicit op:// reference |
 | `CC_GLM_OP_VAULT` | `dev` | 1Password vault name |
 | `CC_GLM_BASE_URL` | `https://api.z.ai/api/anthropic` | API endpoint |
-| `CC_GLM_MODEL` | `glm-4.7` | Model name |
+| `CC_GLM_MODEL` | `glm-5` | Model name |
 | `CC_GLM_TIMEOUT_MS` | `3000000` | API timeout (50 min) |
 | `CC_GLM_ALLOW_FALLBACK` | `0` | Set to `1` for legacy zsh fallback |
 | `CC_GLM_STRICT_AUTH` | `1` | Set to `0` to suppress strict errors |

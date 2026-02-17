@@ -20,12 +20,12 @@ set -euo pipefail
 #   CC_GLM_OP_URI            - op:// reference for token
 #   CC_GLM_OP_VAULT          - 1Password vault name (default: dev)
 #   CC_GLM_BASE_URL          - API base URL (default: https://api.z.ai/api/anthropic)
-#   CC_GLM_MODEL             - Model name (default: glm-4.7)
+#   CC_GLM_MODEL             - Model name (default: glm-5)
 #   CC_GLM_TIMEOUT_MS        - API timeout in ms (default: 3000000)
 #   CC_GLM_STRICT_AUTH=0     - Set to 0 to suppress strict auth errors (not recommended)
 
 # Version for debugging/logging
-CC_GLM_HEADLESS_VERSION="2.0.0"
+CC_GLM_HEADLESS_VERSION="2.1.0"
 
 usage() {
   cat >&2 <<'EOF'
@@ -217,14 +217,24 @@ _resolve_op_reference() {
   # Auto-discover OP_SERVICE_ACCOUNT_TOKEN if not set
   # Uses hostname-based token file convention from create-op-credential.sh
   if [[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
-    local host token_file legacy_file
+    local host token_file epyc12_file legacy_file
 
     host="$(hostname)"
     token_file="${OP_SERVICE_ACCOUNT_TOKEN_FILE:-$HOME/.config/systemd/user/op-${host}-token}"
+    epyc12_file="/home/fengning/.config/systemd/user/op-epyc12-token"
     legacy_file="$HOME/.config/systemd/user/op-macmini-token"
 
-    if [[ -f "$token_file" ]]; then
+    if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN_FILE:-}" && -f "$token_file" ]]; then
       log_debug "loading OP_SERVICE_ACCOUNT_TOKEN from: $token_file"
+      OP_SERVICE_ACCOUNT_TOKEN="$(cat "$token_file" 2>/dev/null || true)"
+      export OP_SERVICE_ACCOUNT_TOKEN
+    elif [[ -f "$epyc12_file" ]]; then
+      # Explicit, stable fallback for the canonical epyc12 runtime.
+      log_debug "loading OP_SERVICE_ACCOUNT_TOKEN from epyc12 path: $epyc12_file"
+      OP_SERVICE_ACCOUNT_TOKEN="$(cat "$epyc12_file" 2>/dev/null || true)"
+      export OP_SERVICE_ACCOUNT_TOKEN
+    elif [[ -f "$token_file" ]]; then
+      log_debug "loading OP_SERVICE_ACCOUNT_TOKEN from host path: $token_file"
       OP_SERVICE_ACCOUNT_TOKEN="$(cat "$token_file" 2>/dev/null || true)"
       export OP_SERVICE_ACCOUNT_TOKEN
     elif [[ -f "$legacy_file" ]]; then
@@ -381,10 +391,11 @@ log_debug "auth resolved successfully from: $token_source"
 
 # Run claude with resolved auth
 ANTHROPIC_AUTH_TOKEN="$token" \
+ANTHROPIC_API_KEY="$token" \
 ANTHROPIC_BASE_URL="${CC_GLM_BASE_URL:-https://api.z.ai/api/anthropic}" \
-ANTHROPIC_DEFAULT_OPUS_MODEL="${CC_GLM_MODEL:-glm-4.7}" \
-ANTHROPIC_DEFAULT_SONNET_MODEL="${CC_GLM_MODEL:-glm-4.7}" \
-ANTHROPIC_DEFAULT_HAIKU_MODEL="${CC_GLM_MODEL:-glm-4.7}" \
+ANTHROPIC_DEFAULT_OPUS_MODEL="${CC_GLM_MODEL:-glm-5}" \
+ANTHROPIC_DEFAULT_SONNET_MODEL="${CC_GLM_MODEL:-glm-5}" \
+ANTHROPIC_DEFAULT_HAIKU_MODEL="${CC_GLM_MODEL:-glm-5}" \
 API_TIMEOUT_MS="${CC_GLM_TIMEOUT_MS:-3000000}" \
-claude --dangerously-skip-permissions --model "${CC_GLM_MODEL:-glm-4.7}" -p "$(cat "$tmp")" --output-format text
+claude --dangerously-skip-permissions --model "${CC_GLM_MODEL:-glm-5}" -p "$(cat "$tmp")" --output-format text
 exit $?
