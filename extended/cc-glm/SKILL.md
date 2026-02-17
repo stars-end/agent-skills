@@ -143,6 +143,13 @@ cc-glm-job.sh ssh-restart --hosts epyc6,epyc12 --beads bd-xxx --log-dir /tmp/cc-
 cc-glm-job.sh ssh-stop --hosts epyc6,epyc12 --beads bd-xxx --log-dir /tmp/cc-glm-jobs
 ```
 
+**Current default target policy (temporary):**
+
+- If `--hosts` is omitted, `ssh-*` commands default to `epyc12`.
+- Override defaults via `CC_GLM_DEFAULT_HOSTS` (comma-separated).
+- `epyc6` is temporarily opt-in only due to terminal/session runtime instability observed during smoke tests.
+- TODO: restore `epyc6` to default fanout after host-specific runtime hardening and acceptance checks.
+
 **Job artifacts location:**
 ```bash
 /tmp/cc-glm-jobs/

@@ -172,6 +172,10 @@ parse_common_args() {
   REMOTE_USER=""
   SSH_CMD="tailscale"
   SSH_PARALLEL=4
+  # TODO(epyc6): keep epyc6 out of default fanout until its terminal/session runtime
+  # behavior is stabilized and validated in ssh-start smoke tests.
+  # Override with CC_GLM_DEFAULT_HOSTS or explicit --hosts for multi-host fanout.
+  DEFAULT_REMOTE_HOSTS="${CC_GLM_DEFAULT_HOSTS:-epyc12}"
   REMOTE_SCRIPT="$SCRIPT_DIR/cc-glm-job.sh"
   REMOTE_PROMPT_PATH=""
   COPY_PROMPT=true
@@ -298,10 +302,10 @@ ensure_remote_requirements() {
 
 parse_remote_hosts() {
   REMOTE_HOST_LIST=()
-  [[ -n "$REMOTE_HOSTS" ]] || {
-    echo "remote command requires --hosts or --host" >&2
-    exit 2
-  }
+  if [[ -z "$REMOTE_HOSTS" ]]; then
+    REMOTE_HOSTS="$DEFAULT_REMOTE_HOSTS"
+    echo "no hosts specified; using default remote host(s): $REMOTE_HOSTS" >&2
+  fi
 
   local tokens host
   tokens="${REMOTE_HOSTS//,/ }"
