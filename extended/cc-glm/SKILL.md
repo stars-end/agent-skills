@@ -2,7 +2,7 @@
 name: cc-glm
 description: |
   Use cc-glm for batched delegation with plan-first execution.
-  Batch by outcome (not file). Primary: local headless (cc-glm-job.sh). Optional: Task tool or cross-VM (dx-dispatch).
+  Batch by outcome (not file). Primary: local/remote headless (cc-glm-job.sh, including ssh fanout). Optional: Task tool or cross-VM (dx-dispatch).
   Trigger when user mentions cc-glm, delegation, parallel agents, or batch execution.
 tags: [workflow, delegation, automation, claude-code, glm, parallel]
 allowed-tools:
@@ -123,6 +123,26 @@ cc-glm-job.sh stop --beads bd-xxx
 cc-glm-job.sh watchdog --beads bd-xxx --once
 ```
 
+**Remote fanout execution (epyc6/epyc12/etc.) is built-in:**
+
+```bash
+# Start same job on multiple hosts in parallel (prompt auto-uploaded to each host)
+cc-glm-job.sh ssh-start \
+  --hosts epyc6,epyc12 \
+  --beads bd-xxx \
+  --prompt-file /tmp/prompts/task.prompt \
+  --log-dir /tmp/cc-glm-jobs \
+  --pty
+
+# Host-prefixed status/health
+cc-glm-job.sh ssh-status --hosts epyc6,epyc12 --log-dir /tmp/cc-glm-jobs
+cc-glm-job.sh ssh-health --hosts epyc6,epyc12 --beads bd-xxx --log-dir /tmp/cc-glm-jobs
+
+# Restart or stop across hosts
+cc-glm-job.sh ssh-restart --hosts epyc6,epyc12 --beads bd-xxx --log-dir /tmp/cc-glm-jobs --pty
+cc-glm-job.sh ssh-stop --hosts epyc6,epyc12 --beads bd-xxx --log-dir /tmp/cc-glm-jobs
+```
+
 **Job artifacts location:**
 ```bash
 /tmp/cc-glm-jobs/
@@ -227,10 +247,11 @@ tailscale ssh fengning@macmini "command"
 - Build requires macOS-specific tools (macmini)
 - Heavy compute workloads (epyc6)
 - Remote environment has required secrets/tools
+- Need centralized fleet/session lifecycle integration
 
 **When NOT to use dx-dispatch:**
 - Local execution works (default to cc-glm-job.sh)
-- No cross-VM requirement specified
+- You only need direct SSH fanout (use `cc-glm-job.sh ssh-*`)
 
 ---
 

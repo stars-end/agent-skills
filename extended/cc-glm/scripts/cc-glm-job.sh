@@ -16,6 +16,9 @@ set -euo pipefail
 #   stop     --beads <id> [--log-dir <dir>]
 #   watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>] [--once]
 #            [--pidfile <path>]
+#   ssh-start/ssh-status/ssh-check/ssh-health/ssh-restart/ssh-stop/ssh-watchdog
+#            [--hosts <h1,h2>] [--host <h>] [--remote-user <u>] [--ssh-cmd tailscale|ssh] [--parallel <n>]
+#            [other subcommand args...]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HEADLESS="${SCRIPT_DIR}/cc-glm-headless.sh"
@@ -37,6 +40,13 @@ Usage:
   cc-glm-job.sh restart --beads <id> [--log-dir <dir>] [--pty]
   cc-glm-job.sh stop --beads <id> [--log-dir <dir>]
   cc-glm-job.sh watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>] [--once] [--pidfile <path>]
+  cc-glm-job.sh ssh-start --hosts <h1,h2> --beads <id> --prompt-file <path> [--log-dir <dir>] [--pty]
+  cc-glm-job.sh ssh-status [--hosts <h1,h2>] [--beads <id>] [--log-dir <dir>]
+  cc-glm-job.sh ssh-check --hosts <h1,h2> --beads <id> [--log-dir <dir>] [--stall-minutes <n>]
+  cc-glm-job.sh ssh-health [--hosts <h1,h2>] [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>]
+  cc-glm-job.sh ssh-restart --hosts <h1,h2> --beads <id> [--log-dir <dir>] [--pty]
+  cc-glm-job.sh ssh-stop --hosts <h1,h2> --beads <id> [--log-dir <dir>]
+  cc-glm-job.sh ssh-watchdog --hosts <h1,h2> [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>] [--once]
 
 Commands:
   start    Launch a cc-glm job in background with nohup (default) or PTY wrapper.
@@ -46,10 +56,20 @@ Commands:
   restart  Restart a job (preserves metadata, increments retry count).
   stop     Stop a running job.
   watchdog Run watchdog loop: monitor jobs, restart stalled jobs once, mark blocked on second stall.
+  ssh-*    Run the same operations on one or more remote hosts over SSH, in parallel.
 
 Options:
   --pty    Use PTY-backed execution for reliable output capture (recommended for detached jobs).
   --once   Run exactly one watchdog iteration, then exit.
+  --hosts  Comma-separated host list (e.g. epyc6,epyc12).
+  --host   Add one host (repeatable).
+  --remote-user Username for hosts that omit user (host -> user@host).
+  --ssh-cmd SSH transport: tailscale (default) or ssh.
+  --parallel Max concurrent remote hosts for ssh-* commands (default: 4).
+  --remote-script Remote path to cc-glm-job.sh (default: current script path).
+  --remote-prompt-path Remote prompt path template, supports %HOST% and %BEADS%.
+  --no-copy-prompt Disable automatic prompt upload for ssh-start.
+  --host-suffix-beads Append host name to remote bead id for ssh-start.
 
 Notes:
   - check exits 2 when a running job appears stalled (no log updates past threshold).
@@ -57,6 +77,8 @@ Notes:
   - restart preserves existing metadata and increments retries count.
   - watchdog runs in foreground; daemonize via nohup/launchd/systemd for persistent monitoring.
   - PTY mode uses pty-run.sh wrapper for reliable output capture when nohup produces 0-byte logs.
+  - ssh-start uploads the local prompt file to each host via SSH stdin by default.
+  - For remote fanout, output lines are prefixed with [host].
 EOF
 }
 
@@ -146,6 +168,14 @@ parse_common_args() {
   WATCHDOG_PIDFILE=""
   WATCHDOG_ONCE=false
   USE_PTY=false
+  REMOTE_HOSTS=""
+  REMOTE_USER=""
+  SSH_CMD="tailscale"
+  SSH_PARALLEL=4
+  REMOTE_SCRIPT="$SCRIPT_DIR/cc-glm-job.sh"
+  REMOTE_PROMPT_PATH=""
+  COPY_PROMPT=true
+  HOST_SUFFIX_BEADS=false
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --beads)
@@ -192,6 +222,48 @@ parse_common_args() {
         USE_PTY=true
         shift
         ;;
+      --hosts)
+        REMOTE_HOSTS="${2:-}"
+        shift 2
+        ;;
+      --host)
+        if [[ -n "${2:-}" ]]; then
+          if [[ -z "$REMOTE_HOSTS" ]]; then
+            REMOTE_HOSTS="${2}"
+          else
+            REMOTE_HOSTS="${REMOTE_HOSTS},${2}"
+          fi
+        fi
+        shift 2
+        ;;
+      --remote-user)
+        REMOTE_USER="${2:-}"
+        shift 2
+        ;;
+      --ssh-cmd)
+        SSH_CMD="${2:-tailscale}"
+        shift 2
+        ;;
+      --parallel)
+        SSH_PARALLEL="${2:-4}"
+        shift 2
+        ;;
+      --remote-script)
+        REMOTE_SCRIPT="${2:-$REMOTE_SCRIPT}"
+        shift 2
+        ;;
+      --remote-prompt-path)
+        REMOTE_PROMPT_PATH="${2:-}"
+        shift 2
+        ;;
+      --no-copy-prompt)
+        COPY_PROMPT=false
+        shift
+        ;;
+      --host-suffix-beads)
+        HOST_SUFFIX_BEADS=true
+        shift
+        ;;
       -h|--help)
         usage
         exit 0
@@ -203,6 +275,190 @@ parse_common_args() {
         ;;
     esac
   done
+}
+
+ensure_remote_requirements() {
+  if [[ "$SSH_CMD" == "tailscale" ]]; then
+    command -v tailscale >/dev/null 2>&1 || {
+      echo "tailscale not found; install it or pass --ssh-cmd ssh" >&2
+      exit 1
+    }
+    return 0
+  fi
+  if [[ "$SSH_CMD" == "ssh" ]]; then
+    command -v ssh >/dev/null 2>&1 || {
+      echo "ssh not found in PATH" >&2
+      exit 1
+    }
+    return 0
+  fi
+  echo "unsupported --ssh-cmd '$SSH_CMD' (expected tailscale or ssh)" >&2
+  exit 2
+}
+
+parse_remote_hosts() {
+  REMOTE_HOST_LIST=()
+  [[ -n "$REMOTE_HOSTS" ]] || {
+    echo "remote command requires --hosts or --host" >&2
+    exit 2
+  }
+
+  local tokens host
+  tokens="${REMOTE_HOSTS//,/ }"
+  for host in $tokens; do
+    [[ -n "$host" ]] && REMOTE_HOST_LIST+=("$host")
+  done
+  if [[ "${#REMOTE_HOST_LIST[@]}" -eq 0 ]]; then
+    echo "no valid remote hosts provided" >&2
+    exit 2
+  fi
+
+  if ! [[ "$SSH_PARALLEL" =~ ^[0-9]+$ ]] || [[ "$SSH_PARALLEL" -lt 1 ]]; then
+    echo "--parallel must be a positive integer" >&2
+    exit 2
+  fi
+}
+
+remote_target_for_host() {
+  local host="$1"
+  if [[ "$host" == *@* || -z "$REMOTE_USER" ]]; then
+    printf "%s" "$host"
+  else
+    printf "%s@%s" "$REMOTE_USER" "$host"
+  fi
+}
+
+host_slug() {
+  local host="$1"
+  local slug
+  slug="$(printf "%s" "$host" | tr '@:/ ' '_' | tr -cd '[:alnum:]_.-')"
+  printf "%s" "$slug"
+}
+
+render_template() {
+  local template="$1"
+  local host="$2"
+  local beads="$3"
+  local out
+  out="${template//%HOST%/$host}"
+  out="${out//%BEADS%/$beads}"
+  printf "%s" "$out"
+}
+
+join_quoted() {
+  local out="" arg
+  for arg in "$@"; do
+    out+=" $(printf '%q' "$arg")"
+  done
+  printf "%s" "${out# }"
+}
+
+ssh_exec_cmd() {
+  local host="$1"
+  local remote_cmd="$2"
+  local target
+  target="$(remote_target_for_host "$host")"
+  case "$SSH_CMD" in
+    tailscale)
+      tailscale ssh "$target" "$remote_cmd"
+      ;;
+    ssh)
+      ssh "$target" "$remote_cmd"
+      ;;
+    *)
+      echo "unsupported ssh transport: $SSH_CMD" >&2
+      return 2
+      ;;
+  esac
+}
+
+ssh_exec_cmd_with_stdin() {
+  local host="$1"
+  local remote_cmd="$2"
+  local stdin_file="$3"
+  local target
+  target="$(remote_target_for_host "$host")"
+  case "$SSH_CMD" in
+    tailscale)
+      tailscale ssh "$target" "$remote_cmd" < "$stdin_file"
+      ;;
+    ssh)
+      ssh "$target" "$remote_cmd" < "$stdin_file"
+      ;;
+    *)
+      echo "unsupported ssh transport: $SSH_CMD" >&2
+      return 2
+      ;;
+  esac
+}
+
+remote_exec_cc_glm_job() {
+  local host="$1"
+  shift
+  local cmd_str
+  cmd_str="$(join_quoted "$REMOTE_SCRIPT" "$@")"
+  ssh_exec_cmd "$host" "$cmd_str"
+}
+
+upload_prompt_to_host() {
+  local host="$1"
+  local local_prompt="$2"
+  local remote_prompt="$3"
+  local remote_dir q_dir q_prompt
+  remote_dir="$(dirname "$remote_prompt")"
+  q_dir="$(printf '%q' "$remote_dir")"
+  q_prompt="$(printf '%q' "$remote_prompt")"
+  ssh_exec_cmd "$host" "mkdir -p $q_dir"
+  ssh_exec_cmd_with_stdin "$host" "cat > $q_prompt" "$local_prompt"
+}
+
+run_remote_hosts_parallel() {
+  local handler="$1"
+  shift
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  local i=0
+  local host
+  local pids=()
+  local hosts=()
+  local failures=0
+
+  for host in "${REMOTE_HOST_LIST[@]}"; do
+    while [[ "$(jobs -pr | wc -l | tr -d ' ')" -ge "$SSH_PARALLEL" ]]; do
+      sleep 0.2
+    done
+
+    (
+      "$handler" "$host" "$@"
+    ) > "${tmp_dir}/${i}.out" 2> "${tmp_dir}/${i}.err" &
+    pids+=("$!")
+    hosts+=("$host")
+    i=$((i + 1))
+  done
+
+  local idx pid rc
+  for idx in "${!pids[@]}"; do
+    pid="${pids[$idx]}"
+    rc=0
+    if ! wait "$pid"; then
+      rc=$?
+      failures=1
+    fi
+    host="${hosts[$idx]}"
+
+    if [[ -s "${tmp_dir}/${idx}.out" ]]; then
+      sed "s/^/[${host}] /" "${tmp_dir}/${idx}.out"
+    fi
+    if [[ -s "${tmp_dir}/${idx}.err" ]]; then
+      sed "s/^/[${host}] /" "${tmp_dir}/${idx}.err" >&2
+    fi
+    if [[ "$rc" -ne 0 ]]; then
+      echo "[${host}] rc=${rc}" >&2
+    fi
+  done
+
+  rm -rf "$tmp_dir"
+  return "$failures"
 }
 
 start_cmd() {
@@ -702,6 +958,140 @@ watchdog_cmd() {
   done
 }
 
+remote_start_host() {
+  local host="$1"
+  local remote_beads="$BEADS"
+  local slug remote_prompt template
+
+  slug="$(host_slug "$host")"
+  if [[ "$HOST_SUFFIX_BEADS" == "true" ]]; then
+    remote_beads="${BEADS}-${slug}"
+  fi
+
+  if [[ -n "$REMOTE_PROMPT_PATH" ]]; then
+    template="$REMOTE_PROMPT_PATH"
+  else
+    template="/tmp/cc-glm-prompts/%BEADS%.prompt.txt"
+  fi
+  remote_prompt="$(render_template "$template" "$slug" "$remote_beads")"
+
+  if [[ "$COPY_PROMPT" == "true" ]]; then
+    upload_prompt_to_host "$host" "$PROMPT_FILE" "$remote_prompt"
+  fi
+
+  local args=(start --beads "$remote_beads" --prompt-file "$remote_prompt" --log-dir "$LOG_DIR")
+  [[ -n "$REPO" ]] && args+=(--repo "$REPO")
+  [[ -n "$WORKTREE" ]] && args+=(--worktree "$WORKTREE")
+  [[ "$USE_PTY" == "true" ]] && args+=(--pty)
+
+  remote_exec_cc_glm_job "$host" "${args[@]}"
+}
+
+remote_status_host() {
+  local host="$1"
+  local args=(status --log-dir "$LOG_DIR")
+  [[ -n "$BEADS" ]] && args+=(--beads "$BEADS")
+  remote_exec_cc_glm_job "$host" "${args[@]}"
+}
+
+remote_check_host() {
+  local host="$1"
+  local args=(check --beads "$BEADS" --log-dir "$LOG_DIR" --stall-minutes "$STALL_MINUTES")
+  remote_exec_cc_glm_job "$host" "${args[@]}"
+}
+
+remote_health_host() {
+  local host="$1"
+  local args=(health --log-dir "$LOG_DIR" --stall-minutes "$STALL_MINUTES")
+  [[ -n "$BEADS" ]] && args+=(--beads "$BEADS")
+  remote_exec_cc_glm_job "$host" "${args[@]}"
+}
+
+remote_restart_host() {
+  local host="$1"
+  local args=(restart --beads "$BEADS" --log-dir "$LOG_DIR")
+  [[ "$USE_PTY" == "true" ]] && args+=(--pty)
+  remote_exec_cc_glm_job "$host" "${args[@]}"
+}
+
+remote_stop_host() {
+  local host="$1"
+  local args=(stop --beads "$BEADS" --log-dir "$LOG_DIR")
+  remote_exec_cc_glm_job "$host" "${args[@]}"
+}
+
+remote_watchdog_host() {
+  local host="$1"
+  local args=(
+    watchdog
+    --log-dir "$LOG_DIR"
+    --interval "$WATCHDOG_INTERVAL"
+    --stall-minutes "$STALL_MINUTES"
+    --max-retries "$WATCHDOG_MAX_RETRIES"
+  )
+  [[ -n "$BEADS" ]] && args+=(--beads "$BEADS")
+  [[ "$WATCHDOG_ONCE" == "true" ]] && args+=(--once)
+  [[ -n "$WATCHDOG_PIDFILE" ]] && args+=(--pidfile "$WATCHDOG_PIDFILE")
+  remote_exec_cc_glm_job "$host" "${args[@]}"
+}
+
+ssh_start_cmd() {
+  parse_common_args "$@"
+  [[ -n "$BEADS" ]] || { echo "ssh-start requires --beads" >&2; exit 2; }
+  [[ -n "$PROMPT_FILE" ]] || { echo "ssh-start requires --prompt-file" >&2; exit 2; }
+  [[ -f "$PROMPT_FILE" ]] || { echo "prompt file not found: $PROMPT_FILE" >&2; exit 1; }
+  ensure_remote_requirements
+  parse_remote_hosts
+
+  echo "ssh-start hosts=${REMOTE_HOSTS} beads=${BEADS} pty=${USE_PTY} parallel=${SSH_PARALLEL} copy_prompt=${COPY_PROMPT}"
+  run_remote_hosts_parallel remote_start_host
+}
+
+ssh_status_cmd() {
+  parse_common_args "$@"
+  ensure_remote_requirements
+  parse_remote_hosts
+  run_remote_hosts_parallel remote_status_host
+}
+
+ssh_check_cmd() {
+  parse_common_args "$@"
+  [[ -n "$BEADS" ]] || { echo "ssh-check requires --beads" >&2; exit 2; }
+  ensure_remote_requirements
+  parse_remote_hosts
+  run_remote_hosts_parallel remote_check_host
+}
+
+ssh_health_cmd() {
+  parse_common_args "$@"
+  ensure_remote_requirements
+  parse_remote_hosts
+  run_remote_hosts_parallel remote_health_host
+}
+
+ssh_restart_cmd() {
+  parse_common_args "$@"
+  [[ -n "$BEADS" ]] || { echo "ssh-restart requires --beads" >&2; exit 2; }
+  ensure_remote_requirements
+  parse_remote_hosts
+  run_remote_hosts_parallel remote_restart_host
+}
+
+ssh_stop_cmd() {
+  parse_common_args "$@"
+  [[ -n "$BEADS" ]] || { echo "ssh-stop requires --beads" >&2; exit 2; }
+  ensure_remote_requirements
+  parse_remote_hosts
+  run_remote_hosts_parallel remote_stop_host
+}
+
+ssh_watchdog_cmd() {
+  parse_common_args "$@"
+  ensure_remote_requirements
+  parse_remote_hosts
+  run_remote_hosts_parallel remote_watchdog_host
+}
+
 case "$CMD" in
   start) start_cmd "$@" ;;
   status) status_cmd "$@" ;;
@@ -710,6 +1100,13 @@ case "$CMD" in
   restart) restart_cmd "$@" ;;
   stop) stop_cmd "$@" ;;
   watchdog) watchdog_cmd "$@" ;;
+  ssh-start) ssh_start_cmd "$@" ;;
+  ssh-status) ssh_status_cmd "$@" ;;
+  ssh-check) ssh_check_cmd "$@" ;;
+  ssh-health) ssh_health_cmd "$@" ;;
+  ssh-restart) ssh_restart_cmd "$@" ;;
+  ssh-stop) ssh_stop_cmd "$@" ;;
+  ssh-watchdog) ssh_watchdog_cmd "$@" ;;
   -h|--help|help|"")
     usage
     ;;
