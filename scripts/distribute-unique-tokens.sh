@@ -25,12 +25,13 @@ unset OP_SERVICE_ACCOUNT_TOKEN
 # Target VMs with their token names
 declare -A TARGETS
 TARGETS["feng@epyc6"]="op-epyc6-token"
+TARGETS["fengning@epyc12"]="op-epyc12-token"
 TARGETS["fengning@homedesktop-wsl"]="op-homedesktop-wsl-token"
 TARGETS["fengning@macmini"]="op-macmini-token"
 
 echo "=== Distributing Unique 1Password Tokens to All VMs ==="
 echo ""
-echo "This script will prompt for 3 UNIQUE service account tokens."
+echo "This script will prompt for 4 UNIQUE service account tokens."
 echo "Each VM gets its own token."
 echo ""
 

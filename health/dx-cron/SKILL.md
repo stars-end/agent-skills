@@ -3,7 +3,7 @@ name: dx-cron
 description: |
   Monitor and manage dx-* system cron jobs and their logs. 
   MUST BE USED when user asks "is the cron running", "show me cron logs", or "status of dx jobs".
-tags: [health, audit, cron, monitoring]
+tags: [health, auth, audit, cron, monitoring]
 allowed-tools:
   - Bash(crontab:*)
   - Bash(tail:*)
@@ -40,6 +40,15 @@ for f in ~/bd/scripts/*.sh; do [ -x "$f" ] && echo "✅ $f" || echo "❌ $f (che
 
 # Check last run times of logs
 ls -lhrt ~/logs/*.log ~/logs/dx/*.log | tail -5
+
+# Verify V4.2 service account token (required for cron auth)
+TOKEN_FILE=~/.config/systemd/user/op-$(hostname)-token
+if [[ -f "$TOKEN_FILE" ]]; then
+  export OP_SERVICE_ACCOUNT_TOKEN=$(cat "$TOKEN_FILE")
+  op whoami >/dev/null 2>&1 && echo "✅ V4.2 token valid" || echo "❌ V4.2 token invalid"
+else
+  echo "❌ V4.2 token missing at $TOKEN_FILE"
+fi
 ```
 
 ### 3. Debugging: `dx-cron tail <job>`
@@ -67,6 +76,6 @@ Tails the last 20 lines of a specific log.
 - `tail -f ~/logs/founder-briefing.log`
 
 ---
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-17
 **Skill Type:** Health/Audit
 **Typical Duration:** <2s

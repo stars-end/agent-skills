@@ -1,9 +1,10 @@
 ---
 name: op-secrets-quickref
 description: |
-  Quick reference for 1Password (op CLI) secret management used in DX/dev workflows and deployments.
-  Use when the user asks about ZAI_API_KEY, Agent-Secrets-Production, OP_SERVICE_ACCOUNT_TOKEN, 1Password service accounts, op:// references, Railway tokens, GitHub tokens, or "where do secrets live".
-tags: [secrets, 1password, op-cli, dx, env, railway]
+  Quick reference for 1Password service account auth and secret management.
+  Use for: API keys, tokens, service accounts, op:// references, or auth failures in non-interactive contexts (cron, systemd, CI).
+  Triggers: ZAI_API_KEY, OP_SERVICE_ACCOUNT_TOKEN, 1Password, "where do secrets live", auth failure, 401, permission denied.
+tags: [secrets, auth, token, 1password, op-cli, dx, env, railway]
 allowed-tools:
   - Bash
 ---

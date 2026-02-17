@@ -8,6 +8,7 @@ hosts:
     shell: "zsh"
     os: "macos"
     user: "fengning"
+    hostname: "Fengs-Mac-mini-3.local"
     canonical_repos:
       - "$HOME/agent-skills"
       - "$HOME/prime-radiant-ai"
@@ -21,6 +22,7 @@ hosts:
     shell: "zsh"
     os: "linux"
     user: "fengning"
+    hostname: "WINDOWS-R2QK3B1"
     canonical_repos:
       - "$HOME/agent-skills"
       - "$HOME/prime-radiant-ai"
@@ -34,6 +36,7 @@ hosts:
     shell: "zsh"
     os: "linux"
     user: "feng"
+    hostname: "v2202509262171386004"
     canonical_repos:
       - "$HOME/agent-skills"
       - "$HOME/prime-radiant-ai"
@@ -47,6 +50,7 @@ hosts:
     shell: "zsh"
     os: "linux"
     user: "fengning"
+    hostname: "v2202601262171429561"
     canonical_repos:
       - "$HOME/agent-skills"
       - "$HOME/prime-radiant-ai"

@@ -3,7 +3,7 @@ name: devops-dx
 description: |
   GitHub/Railway housekeeping for CI env/secret management and DX maintenance.
   Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, or fixing CI failures due to missing env.
-tags: [devops, github, env, ci, railway]
+tags: [devops, github, auth, env, secrets, ci, railway]
 allowed-tools:
   - Bash(gh:*)
   - Bash(railway:*)
