@@ -1,0 +1,340 @@
+#!/usr/bin/env python
+"""
+dx-opencode-run - Reliable OpenCode dispatch harness.
+
+Integrates:
+- Capability preflight with fallback chain (bd-cbsb.15)
+- Permission policy enforcement (bd-cbsb.16)
+- No-op execution gate (bd-cbsb.17)
+
+Usage:
+    dx-opencode-run --beads bd-xxx --worktree /path/to/worktree --prompt "..."
+    dx-opencode-run --preflight-only  # Just run preflight check
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from lib.fleet import (
+    run_opencode_preflight,
+    OpenCodePreflightStatus,
+    write_permission_config,
+    NoOpExecutionGate,
+    ExecutionStatus,
+)
+
+
+@dataclass
+class DispatchResult:
+    success: bool
+    session_id: str = ""
+    model_used: str = ""
+    fallback_reason: str | None = None
+    permission_config_path: str | None = None
+    elapsed_seconds: float = 0
+    no_op_detected: bool = False
+    no_op_reason: str | None = None
+    error: str | None = None
+    failure_code: str | None = None
+    commit_hash: str | None = None
+
+
+def log(msg: str, level: str = "INFO"):
+    ts = datetime.now().strftime("%H:%M:%S")
+    stream = sys.stderr if level == "ERROR" else sys.stdout
+    print(f"[{ts}] [{level}] {msg}", file=stream)
+
+
+def get_git_hash(worktree: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=worktree,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()[:12]
+    except Exception:
+        pass
+    return None
+
+
+def run_dispatch(
+    beads_id: str,
+    worktree: str,
+    prompt: str,
+    preferred_model: str | None = None,
+    no_op_threshold: int = 300,
+    permission_deny_canonical: bool = True,
+    dry_run: bool = False,
+) -> DispatchResult:
+    """
+    Run OpenCode dispatch with full hardening.
+    """
+    start_time = time.time()
+    worktree_path = Path(worktree)
+    
+    if not worktree_path.exists():
+        return DispatchResult(
+            success=False,
+            error=f"Worktree not found: {worktree}",
+            failure_code="WORKTREE_NOT_FOUND",
+        )
+    
+    log(f"Dispatch harness for {beads_id}")
+    log(f"Worktree: {worktree}")
+    
+    # Step 1: Preflight capability check
+    log("Running preflight capability check...")
+    preflight = run_opencode_preflight(preferred_model)
+    
+    if preflight.status != OpenCodePreflightStatus.OK:
+        log(f"Preflight FAILED: {preflight.status.value}", "ERROR")
+        log(f"Detail: {preflight.error_detail}", "ERROR")
+        return DispatchResult(
+            success=False,
+            model_used=preflight.selected_model,
+            fallback_reason=preflight.fallback_reason,
+            error=f"Preflight failed: {preflight.status.value}",
+            failure_code=f"PREFLIGHT_{preflight.status.value.upper()}",
+        )
+    
+    log(f"Preflight OK: using model {preflight.selected_model}")
+    if preflight.fallback_reason:
+        log(f"Fallback reason: {preflight.fallback_reason}")
+    
+    model = preflight.selected_model
+    
+    # Step 2: Write permission config for worktree-only policy
+    log("Writing permission config...")
+    try:
+        perm_path = write_permission_config(worktree)
+        log(f"Permission config: {perm_path}")
+    except Exception as e:
+        log(f"Warning: Failed to write permission config: {e}")
+        perm_path = None
+    
+    # Step 3: Build and execute opencode command
+    cmd = [
+        "opencode",
+        "--print-logs",
+        "--log-level", "INFO",
+        "run",
+        "--model", model,
+        "--format", "default",
+        prompt,
+    ]
+    
+    if dry_run:
+        log("DRY RUN - would execute:")
+        print(" ".join(cmd))
+        return DispatchResult(
+            success=True,
+            model_used=model,
+            permission_config_path=str(perm_path) if perm_path else None,
+        )
+    
+    log(f"Starting OpenCode: {' '.join(cmd[:6])}...")
+    
+    # Step 4: Execute with no-op gate monitoring
+    gate = NoOpExecutionGate(worktree, no_op_threshold_seconds=no_op_threshold)
+    gate.start()
+    
+    process = None
+    try:
+        process = subprocess.Popen(
+            cmd,
+            cwd=worktree,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        
+        log_file = worktree_path / f"opencode-run-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+        log(f"Logging to: {log_file}")
+        
+        with open(log_file, "w") as log_f:
+            poll_count = 0
+            while process.poll() is None:
+                line = process.stdout.readline()
+                if line:
+                    log_f.write(line)
+                    log_f.flush()
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                
+                poll_count += 1
+                if poll_count % 30 == 0:
+                    should_abort, reason = gate.should_abort()
+                    if should_abort:
+                        log(f"No-op detected: {reason}", "ERROR")
+                        log("Aborting process...")
+                        process.terminate()
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                        
+                        return DispatchResult(
+                            success=False,
+                            model_used=model,
+                            permission_config_path=str(perm_path) if perm_path else None,
+                            elapsed_seconds=time.time() - start_time,
+                            no_op_detected=True,
+                            no_op_reason=reason,
+                            error="No-op execution detected",
+                            failure_code="NO_OP_DETECTED",
+                        )
+        
+        log_f.write(process.stdout.read() or "")
+        
+    except KeyboardInterrupt:
+        log("Interrupted by user", "ERROR")
+        if process:
+            process.terminate()
+        return DispatchResult(
+            success=False,
+            model_used=model,
+            elapsed_seconds=time.time() - start_time,
+            error="Interrupted by user",
+            failure_code="INTERRUPTED",
+        )
+    except Exception as e:
+        log(f"Execution error: {e}", "ERROR")
+        return DispatchResult(
+            success=False,
+            model_used=model,
+            elapsed_seconds=time.time() - start_time,
+            error=str(e),
+            failure_code="EXECUTION_ERROR",
+        )
+    
+    elapsed = time.time() - start_time
+    exit_code = process.returncode if process else -1
+    
+    commit_hash = get_git_hash(worktree_path)
+    
+    if exit_code == 0:
+        log(f"Dispatch completed successfully in {elapsed:.1f}s")
+        log(f"Commit: {commit_hash}")
+        return DispatchResult(
+            success=True,
+            model_used=model,
+            permission_config_path=str(perm_path) if perm_path else None,
+            elapsed_seconds=elapsed,
+            commit_hash=commit_hash,
+        )
+    else:
+        log(f"Dispatch failed with exit code {exit_code}", "ERROR")
+        return DispatchResult(
+            success=False,
+            model_used=model,
+            permission_config_path=str(perm_path) if perm_path else None,
+            elapsed_seconds=elapsed,
+            commit_hash=commit_hash,
+            error=f"OpenCode exited with code {exit_code}",
+            failure_code="EXIT_CODE_NONZERO",
+        )
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Reliable OpenCode dispatch harness",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    
+    parser.add_argument("--beads", required=False, help="Beads issue ID")
+    parser.add_argument("--worktree", required=False, help="Worktree path")
+    parser.add_argument("--prompt", required=False, help="Task prompt")
+    parser.add_argument("--prompt-file", help="Read prompt from file")
+    parser.add_argument("--model", help="Preferred model (e.g., opencode/glm-5-free)")
+    parser.add_argument("--no-op-threshold", type=int, default=300, help="No-op threshold in seconds")
+    parser.add_argument("--preflight-only", action="store_true", help="Only run preflight check")
+    parser.add_argument("--dry-run", action="store_true", help="Show command without executing")
+    parser.add_argument("--json", action="store_true", help="Output as JSON")
+    
+    args = parser.parse_args()
+    
+    if args.preflight_only:
+        result = run_opencode_preflight(args.model)
+        if args.json:
+            print(json.dumps({
+                "status": result.status.value,
+                "preferred_model": result.preferred_model,
+                "selected_model": result.selected_model,
+                "fallback_reason": result.fallback_reason,
+                "elapsed_ms": result.elapsed_ms,
+                "error_detail": result.error_detail,
+            }, indent=2))
+        else:
+            print(f"Status: {result.status.value}")
+            print(f"Selected: {result.selected_model}")
+            if result.fallback_reason:
+                print(f"Fallback: {result.fallback_reason}")
+        sys.exit(0 if result.status == OpenCodePreflightStatus.OK else 1)
+    
+    if not args.worktree:
+        log("--worktree required for dispatch", "ERROR")
+        sys.exit(2)
+    
+    prompt = args.prompt
+    if args.prompt_file:
+        if args.prompt_file == "-":
+            prompt = sys.stdin.read()
+        else:
+            prompt = Path(args.prompt_file).read_text()
+    
+    if not prompt:
+        log("--prompt or --prompt-file required", "ERROR")
+        sys.exit(2)
+    
+    result = run_dispatch(
+        beads_id=args.beads or "dispatch",
+        worktree=args.worktree,
+        prompt=prompt,
+        preferred_model=args.model,
+        no_op_threshold=args.no_op_threshold,
+        dry_run=args.dry_run,
+    )
+    
+    if args.json:
+        print(json.dumps({
+            "success": result.success,
+            "model_used": result.model_used,
+            "fallback_reason": result.fallback_reason,
+            "elapsed_seconds": result.elapsed_seconds,
+            "no_op_detected": result.no_op_detected,
+            "error": result.error,
+            "failure_code": result.failure_code,
+            "commit_hash": result.commit_hash,
+        }, indent=2))
+    else:
+        if result.success:
+            print(f"✅ Success in {result.elapsed_seconds:.1f}s")
+            print(f"   Model: {result.model_used}")
+            if result.commit_hash:
+                print(f"   Commit: {result.commit_hash}")
+        else:
+            print(f"❌ Failed: {result.error}")
+            print(f"   Code: {result.failure_code}")
+    
+    sys.exit(0 if result.success else 1)
+
+
+if __name__ == "__main__":
+    main()

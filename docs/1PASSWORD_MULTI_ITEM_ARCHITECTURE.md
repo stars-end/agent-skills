@@ -54,16 +54,7 @@
 
 **Access**: CI/CD scripts, deployment workflows
 
-### Item 3: `GitHub-Delivery`
-**Type**: Password
-**Purpose**: GitHub automation tokens
-**Fields**:
-- `gh_token` (password) - GitHub token for gh CLI
-- `webhook_secret` (password) - optional, for webhook validation
-
-**Access**: GitHub Actions, automation scripts
-
-### Item 4: `OpenCode-Config`
+### Item 5: `OpenCode-Config`
 **Type**: Secure Note (or custom fields in Password item)
 **Purpose**: OpenCode IDE-specific configuration
 **Fields**:
@@ -74,7 +65,7 @@
 
 **Access**: opencode.service only
 
-### Item 5: `Antigravity-Config`
+### Item 6: `Antigravity-Config`
 **Type**: Secure Note
 **Purpose**: Antigravity IDE configuration (future)
 **Fields**:
@@ -84,7 +75,7 @@
 
 **Access**: antigravity.service (when implemented)
 
-### Item 6: `Codex-CLI-Config`
+### Item 7: `Codex-CLI-Config`
 **Type**: Secure Note
 **Purpose**: Codex CLI configuration (future)
 **Fields**:
@@ -92,7 +83,7 @@
 
 **Access**: codex-cli wrapper scripts
 
-### Item 7: `Supermemory-Config` (Future)
+### Item 8: `Supermemory-Config` (Future)
 **Type**: Password
 **Purpose**: Supermemory API integration
 **Fields**:
@@ -121,7 +112,7 @@
 ### Service Account: `cicd-deployment` (New, Optional)
 **Access**:
 - ✅ Read: `Railway-Delivery`
-- ✅ Read: `GitHub-Delivery`
+- ✅ Read: `Agent-Secrets-Production` (for GITHUB_TOKEN)
 - ❌ All other items: No access
 
 **Rationale**: Isolate CI/CD secrets from systemd service secrets.

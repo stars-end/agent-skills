@@ -40,8 +40,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional, Any
 
-# Add lib to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add lib to path for imports (use resolve() to follow symlinks)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Type-only imports (not evaluated at runtime due to __future__ annotations)
 if TYPE_CHECKING:
@@ -52,12 +52,13 @@ if TYPE_CHECKING:
 try:
     from lib.fleet import FleetDispatcher, DispatchResult
     from lib.fleet.backends.base import HealthStatus
+
     FLEET_AVAILABLE = True
 except ImportError:
     FLEET_AVAILABLE = False
     FleetDispatcher = None  # type: ignore[misc,assignment]
-    DispatchResult = None   # type: ignore[misc,assignment]
-    HealthStatus = None     # type: ignore[misc,assignment]
+    DispatchResult = None  # type: ignore[misc,assignment]
+    HealthStatus = None  # type: ignore[misc,assignment]
     print("Warning: lib/fleet not available, using legacy mode", file=sys.stderr)
 
 try:
@@ -70,6 +71,7 @@ def log(msg: str, level: str = "INFO"):
     """Log with timestamp."""
     ts = datetime.now().strftime("%H:%M:%S")
     print(f"[{ts}] [{level}] {msg}")
+
 
 def run_auto_checkpoint(repo_path: Path) -> None:
     """Best-effort: run auto-checkpoint for a repo path to avoid losing work.
@@ -118,7 +120,7 @@ def run_sync_before_dispatch(repo: str = None) -> bool:
             cmd,
             capture_output=True,
             text=True,
-            timeout=120  # 2 minute timeout
+            timeout=120,  # 2 minute timeout
         )
 
         # Exit 0 = success, 1 = partial (some repos failed), 5 = interrupted
@@ -148,19 +150,19 @@ def post_to_slack(config: dict, message: str) -> bool:
     """Post message to Slack audit channel."""
     if WebClient is None:
         return False
-    
+
     token_env = config.get("slack_bot_token_env", "SLACK_BOT_TOKEN")
     token = os.environ.get(token_env) or os.environ.get("SLACK_MCP_XOXP_TOKEN")
-    
+
     if not token:
         log(f"Slack token not found in ${token_env}", "WARN")
         return False
-    
+
     channel = config.get("slack_audit_channel")
     if not channel:
         log("No slack_audit_channel configured", "WARN")
         return False
-    
+
     try:
         client = WebClient(token=token, timeout=5)
         client.chat_postMessage(channel=channel, text=message)
@@ -175,7 +177,7 @@ def load_legacy_config() -> dict:
     config_path = Path.home() / ".agent-skills" / "vm-endpoints.json"
     if not config_path.exists():
         return {"vms": {}}
-    
+
     with open(config_path) as f:
         return json.load(f)
 
@@ -183,7 +185,7 @@ def load_legacy_config() -> dict:
 def list_vms(dispatcher: FleetDispatcher):
     """List available VMs with status."""
     print("\n📡 Available VMs:\n")
-    
+
     for backend in dispatcher._backends.values():
         if backend.backend_type == "opencode":
             health = backend.check_health()
@@ -191,14 +193,14 @@ def list_vms(dispatcher: FleetDispatcher):
             print(f"  {status} {backend.name}")
             if health != HealthStatus.HEALTHY:
                 print(f"      └── Status: {health.value}")
-    
+
     # Show Jules
     jules = dispatcher._backends.get("jules-cloud")
     if jules:
         health = jules.check_health()
         status = "🟢" if health == HealthStatus.HEALTHY else "⚪"
         print(f"  {status} jules-cloud (cloud)")
-    
+
     print()
 
 
@@ -218,52 +220,50 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
     run_sync_before_dispatch("agent-skills")
 
     # If --repo specified, sync that too
-    if hasattr(args, 'repo') and args.repo:
+    if hasattr(args, "repo") and args.repo:
         run_sync_before_dispatch(args.repo)
-    
+
     # Handle session resume
     if args.session:
         session_id = args.session
         # If vm argument looks like tasks (not a known VM), treat it as task part?
         # But simpler: check if we have a task. If task is None, maybe vm is task?
         if not task and vm_name and not dispatcher.get_backend(vm_name):
-             task = vm_name
-             vm_name = None # Derived from session
-        
+            task = vm_name
+            vm_name = None  # Derived from session
+
         # If still no task, default to "Continue"
         if not task:
             task = "Continue"
 
         log(f"Resuming session: {session_id}")
         log(f"Prompt: {task}")
-        
+
         if dispatcher.continue_session(session_id, task):
-             log("✅ Prompt sent to session")
-             
-             # Wait if requested
-             if args.wait:
-                 log(f"Waiting for completion (timeout: {args.timeout}s)...")
-                 status = dispatcher.wait_for_completion(
-                     session_id,
-                     poll_interval_sec=10,
-                     max_polls=args.timeout // 10
-                 )
-                 if status.get("status") == "completed":
-                     log("✅ Task completed successfully")
-                     if status.get("pr_url"):
-                         print(f"PR: {status['pr_url']}")
-                 else:
-                     log(f"Task ended with status: {status.get('status')}", "WARN")
-             
-             return session_id
+            log("✅ Prompt sent to session")
+
+            # Wait if requested
+            if args.wait:
+                log(f"Waiting for completion (timeout: {args.timeout}s)...")
+                status = dispatcher.wait_for_completion(
+                    session_id, poll_interval_sec=10, max_polls=args.timeout // 10
+                )
+                if status.get("status") == "completed":
+                    log("✅ Task completed successfully")
+                    if status.get("pr_url"):
+                        print(f"PR: {status['pr_url']}")
+                else:
+                    log(f"Task ended with status: {status.get('status')}", "WARN")
+
+            return session_id
         else:
-             log("Failed to resume session (not found or backend unavailable)", "ERROR")
-             sys.exit(1)
+            log("Failed to resume session (not found or backend unavailable)", "ERROR")
+            sys.exit(1)
 
     # Standard dispatch
     if not vm_name:
-         log("Target VM required for new dispatch", "ERROR")
-         sys.exit(1)
+        log("Target VM required for new dispatch", "ERROR")
+        sys.exit(1)
 
     # Audit to Slack (if enabled)
     hostname = os.uname().nodename
@@ -271,13 +271,13 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
         audit_msg = f"[{hostname}] 📤 Dispatching to {vm_name}:\n```\n{task[:200]}{'...' if len(task) > 200 else ''}\n```"
         if post_to_slack(config, audit_msg):
             log("Posted audit to Slack")
-    
+
     # Determine mode
     mode = "smoke" if getattr(args, "smoke_pr", False) else "real"
-    
+
     # Dispatch via FleetDispatcher
     log(f"Dispatching to {vm_name}...")
-    
+
     # For smoke PR, suppress prompt to avoid race with finalize_pr
     prompt_to_send = task
     if getattr(args, "smoke_pr", False):
@@ -290,7 +290,7 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
         mode=mode,
         preferred_backend=vm_name,
     )
-    
+
     if not result.success:
         log(f"Dispatch failed: {result.error}", "ERROR")
         if result.failure_code:
@@ -298,23 +298,19 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
         if not args.no_slack:
             post_to_slack(config, f"[{vm_name}] ❌ Dispatch failed: {result.error}")
         sys.exit(1)
-    
+
     if result.was_duplicate:
         log(f"Found existing session: {result.session_id}", "INFO")
     else:
         log(f"✅ Task dispatched successfully")
-    
+
     log(f"Session ID: {result.session_id}")
     log(f"Backend: {result.backend_name} ({result.backend_type})")
-    
+
     # Handle smoke PR
     if getattr(args, "smoke_pr", False):
         log("Creating smoke PR...")
-        pr_url = dispatcher.finalize_pr(
-            result.session_id, 
-            args.beads, 
-            smoke_mode=True
-        )
+        pr_url = dispatcher.finalize_pr(result.session_id, args.beads, smoke_mode=True)
         if pr_url:
             log(f"✅ Smoke PR created: {pr_url}")
             print(pr_url)
@@ -322,16 +318,14 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
             log("Failed to create smoke PR", "ERROR")
             sys.exit(1)
         return result.session_id
-    
+
     # Wait for completion if requested
     if args.wait:
         log(f"Waiting for completion (timeout: {args.timeout}s)...")
         status = dispatcher.wait_for_completion(
-            result.session_id,
-            poll_interval_sec=10,
-            max_polls=args.timeout // 10
+            result.session_id, poll_interval_sec=10, max_polls=args.timeout // 10
         )
-        
+
         if status.get("status") == "completed":
             log("✅ Task completed successfully")
             if status.get("pr_url"):
@@ -340,18 +334,22 @@ def dispatch_with_fleet(args, config: dict, dispatcher: FleetDispatcher) -> str:
             log(f"Task ended with status: {status.get('status')}", "WARN")
             if status.get("failure_code"):
                 log(f"Failure: {status.get('failure_code')}", "ERROR")
-    
+
     # Audit completion
     if not args.no_slack:
-        post_to_slack(config, f"[{vm_name}] ✅ Session {result.session_id} - task dispatched")
-    
+        post_to_slack(
+            config, f"[{vm_name}] ✅ Session {result.session_id} - task dispatched"
+        )
+
     # Print session info for follow-up
     print(f"\n📋 Session Info:")
     print(f"   VM: {result.backend_name}")
     print(f"   Session: {result.session_id}")
     print(f"   Status: dx-dispatch --status {result.backend_name}")
-    print(f"   Resume: dx-dispatch {result.backend_name} \"continue\" --session {result.session_id}")
-    
+    print(
+        f'   Resume: dx-dispatch {result.backend_name} "continue" --session {result.session_id}'
+    )
+
     return result.session_id
 
 
@@ -378,7 +376,7 @@ def get_beads_issue(issue_id: str) -> dict:
             ["bd", "show", issue_id, "--json"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
         return json.loads(result.stdout)
     except subprocess.CalledProcessError as e:
@@ -398,12 +396,38 @@ def identify_context_skills(issue: dict) -> list[str]:
     skills = []
 
     mapping = {
-        "context-database-schema": ["database", "schema", "migration", "sql", "table", "supabase"],
+        "context-database-schema": [
+            "database",
+            "schema",
+            "migration",
+            "sql",
+            "table",
+            "supabase",
+        ],
         "context-api-contracts": ["api", "endpoint", "rest", "route", "controller"],
-        "context-ui-design": ["ui", "frontend", "css", "component", "react", "tailwind"],
-        "context-infrastructure": ["ci", "railway", "deploy", "docker", "github actions"],
+        "context-ui-design": [
+            "ui",
+            "frontend",
+            "css",
+            "component",
+            "react",
+            "tailwind",
+        ],
+        "context-infrastructure": [
+            "ci",
+            "railway",
+            "deploy",
+            "docker",
+            "github actions",
+        ],
         "context-analytics": ["analytics", "tracking", "metrics"],
-        "context-security-resolver": ["security", "resolver", "cusip", "isin", "symbol"],
+        "context-security-resolver": [
+            "security",
+            "resolver",
+            "cusip",
+            "isin",
+            "symbol",
+        ],
     }
 
     for skill, keywords in mapping.items():
@@ -467,11 +491,7 @@ def dispatch_jules(issue_id: str, dry_run: bool = False) -> int:
     skills = identify_context_skills(issue)
     prompt = generate_jules_prompt(issue, skills)
 
-    cmd = [
-        "jules", "remote", "new",
-        "--repo", ".",
-        "--session", prompt
-    ]
+    cmd = ["jules", "remote", "new", "--repo", ".", "--session", prompt]
 
     if dry_run:
         log(f"--- Dry Run {issue_id} ---")
@@ -536,7 +556,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Dispatch tasks to remote OpenCode agents",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__
+        epilog=__doc__,
     )
 
     parser.add_argument("vm", nargs="?", help="Target VM (e.g. epyc6, macmini)")
@@ -544,7 +564,9 @@ def main():
     parser.add_argument("--list", action="store_true", help="List available VMs")
     parser.add_argument("--status", metavar="VM", help="Check VM status")
     parser.add_argument("--session", help="Resume existing session")
-    parser.add_argument("--slack", action="store_true", help="Post to Slack (default: enabled)")
+    parser.add_argument(
+        "--slack", action="store_true", help="Post to Slack (default: enabled)"
+    )
     parser.add_argument("--no-slack", action="store_true", help="Skip Slack audit")
     parser.add_argument("--repo", help="Target repository")
     parser.add_argument("--beads", help="Beads ID for tracking")
@@ -553,11 +575,27 @@ def main():
     parser.add_argument("--smoke-pr", action="store_true", help="Create smoke PR")
     parser.add_argument("--all", action="store_true", help="Dispatch to all VMs")
     parser.add_argument("--shell", action="store_true", help="Use shell mode (legacy)")
-    parser.add_argument("--attach", action="store_true", help="Use attach mode (legacy)")
-    parser.add_argument("--jules", action="store_true", help="Dispatch to Jules Cloud (requires --issue)")
-    parser.add_argument("--issue", "-i", help="Beads issue ID to dispatch (required for --jules)")
-    parser.add_argument("--dry-run", action="store_true", help="Print command without executing (Jules mode)")
-    parser.add_argument("--finalize-pr", metavar="SESSION", help="Finalize PR for an OpenCode session (requires --beads)")
+    parser.add_argument(
+        "--attach", action="store_true", help="Use attach mode (legacy)"
+    )
+    parser.add_argument(
+        "--jules",
+        action="store_true",
+        help="Dispatch to Jules Cloud (requires --issue)",
+    )
+    parser.add_argument(
+        "--issue", "-i", help="Beads issue ID to dispatch (required for --jules)"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print command without executing (Jules mode)",
+    )
+    parser.add_argument(
+        "--finalize-pr",
+        metavar="SESSION",
+        help="Finalize PR for an OpenCode session (requires --beads)",
+    )
     parser.add_argument("--abort", metavar="SESSION", help="Abort a running session")
 
     args = parser.parse_args()

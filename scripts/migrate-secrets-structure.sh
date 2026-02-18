@@ -49,13 +49,7 @@ Fields:
   • token (password) - your Railway token
   • project_id (text) - your default project ID
 
---- Item 5: GitHub-Delivery ---
-Type: Password
-Fields:
-  • gh_token (password) - GitHub token for gh CLI
-  • webhook_secret (password) - optional
-
---- Item 6: OpenCode-Config ---
+--- Item 5: OpenCode-Config ---
 Type: Secure Note
 Fields:
   • model (text) - zai-coding-plan
@@ -76,8 +70,8 @@ You should see:
   - Slack-Coordinator-Secrets
   - Slack-MCP-Secrets
   - Railway-Delivery
-  - GitHub-Delivery
   - OpenCode-Config
+  - Agent-Secrets-Production (contains GITHUB_TOKEN)
 
 ================================================================================
 STEP 3: Generate Per-Service Env Files

@@ -17,9 +17,19 @@ Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and 
 
 ## What Lives Where
 
-- **DX/dev workflow secrets** (agent keys, automation tokens): 1Password (`op://...`), resolved at runtime.
+- **DX/dev workflow secrets** (agent keys, GitHub tokens, Slack tokens): 1Password (`op://...`), resolved at runtime.
 - **Deploy/runtime config**: Railway **environment variables** in the Railway project.
 - **Railway CLI automation token**: `RAILWAY_TOKEN` exported from 1Password (`Railway-Delivery`).
+
+## 1Password Item Reference
+
+| Item | Fields | Purpose |
+|------|--------|---------|
+| `Agent-Secrets-Production` | `ZAI_API_KEY`, `GITHUB_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `ANTHROPIC_AUTH_TOKEN` | DX/dev workflow secrets (default source) |
+| `Railway-Delivery` | `token`, `project_id` | Railway CLI automation |
+| `Anthropic-Config` | `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` | Anthropic API (scoped access) |
+| `Slack-Coordinator-Secrets` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | Slack coordinator service |
+| `Slack-MCP-Secrets` | `SLACK_APP_TOKEN`, `SLACK_BOT_TOKEN` | IDE Slack integration |
 
 ## Service-Account-First Auth (Default)
 
@@ -86,7 +96,26 @@ op item get --vault dev Agent-Secrets-Production --fields label
 ### Read a Single Secret
 
 ```bash
+# Agent API key
 op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+
+# GitHub token (for gh CLI in cron/CI)
+op read "op://dev/Agent-Secrets-Production/GITHUB_TOKEN"
+
+# Railway CLI token
+op read "op://dev/Railway-Delivery/token"
+```
+
+### Export for CLI Usage (cron/CI)
+
+```bash
+# GitHub CLI auth in non-interactive contexts
+export GH_TOKEN=$(op read "op://dev/Agent-Secrets-Production/GITHUB_TOKEN")
+gh auth status  # Should show: ✓ Logged in to github.com (GH_TOKEN)
+
+# Railway CLI auth
+export RAILWAY_TOKEN=$(op read "op://dev/Railway-Delivery/token")
+railway status
 ```
 
 ### Read Multiple Fields at Once
@@ -100,7 +129,7 @@ op item get --vault dev Railway-Delivery --fields token,project_id
 ### Railway CLI Token (Non-Interactive)
 
 ```bash
-export RAILWAY_TOKEN="$(op read 'op://dev/Railway-Delivery/token')"
+export RAILWAY_TOKEN=$(op read "op://dev/Railway-Delivery/token")
 ```
 
 ### Railway Service URL Variables
