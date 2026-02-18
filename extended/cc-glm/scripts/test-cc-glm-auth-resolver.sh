@@ -583,7 +583,7 @@ test_job_version() {
   set -e
 
   # V3.0 or V3.1 are both valid (backward compatible)
-  if [[ "$output" == *"V3.0"* ]] || [[ "$output" == *"V3.1"* ]]; then
+  if [[ "" == *"V3."* ]]; then
     pass "Job script reports V3.x ($output)"
   else
     fail "Job script should report V3.x" "output=$output"
