@@ -562,6 +562,73 @@ This allows monitors to distinguish:
 2. Blocked auth/model init → No LAUNCH_OK
 3. True dead process → No LAUNCH_OK, no output
 
+## V3.4 Deterministic Gates and JSON Automation
+
+### Deterministic Substates (No Ambiguous Running+Empty)
+
+When logs are empty, health/check now report explicit substates:
+
+```bash
+cc-glm-job.sh check --beads bd-xxx
+# launching|waiting_first_output|silent_mutation|stalled (plus reason code)
+```
+
+`silent_mutation` means the worktree changed even though no output was written to log.
+
+### Machine-Readable Status/Health/Check
+
+Use `--json` for automation loops:
+
+```bash
+cc-glm-job.sh status --json
+cc-glm-job.sh health --json
+cc-glm-job.sh check --beads bd-xxx --json
+```
+
+JSON includes stable fields:
+- `state`/`health`
+- `reason_code`
+- `mutation_count`
+- `log_bytes`
+- `cpu_time_seconds`
+- `pid_age_seconds`
+
+### Pre-Dispatch Baseline Gate
+
+Fail fast if runtime commit is behind required baseline:
+
+```bash
+cc-glm-job.sh baseline-gate --worktree /tmp/agents/bd-xxx/repo --required-baseline 40ffdc4
+cc-glm-job.sh baseline-gate --beads bd-xxx --required-baseline 40ffdc4 --json
+```
+
+You can enforce this automatically on start:
+
+```bash
+CC_GLM_REQUIRED_BASELINE=40ffdc4 cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt
+```
+
+### Post-Wave Integrity Gate
+
+Verify reported commit exists and is ancestor of branch head:
+
+```bash
+cc-glm-job.sh integrity-gate --worktree /tmp/agents/bd-xxx/repo --reported-commit <sha> --branch feature-bd-xxx
+cc-glm-job.sh integrity-gate --beads bd-xxx --reported-commit <sha> --json
+```
+
+### Feature-Key Governance Gate
+
+Validate task-specific `Feature-Key` trailers before PR creation:
+
+```bash
+cc-glm-job.sh feature-key-gate \
+  --worktree /tmp/agents/bd-xxx/repo \
+  --feature-key bd-xxx \
+  --branch feature-bd-xxx \
+  --base-branch master
+```
+
 ---
 
 ## Detection & Recovery Runbook

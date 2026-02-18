@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# cc-glm-job.sh (V3.3 - Mutation Detection + Preflight)
+# cc-glm-job.sh (V3.4 - Deterministic Substates + Integrity Gates)
 #
 # Lightweight background job manager for cc-glm headless runs.
 # Keeps consistent artifacts under /tmp/cc-glm-jobs:
@@ -12,17 +12,28 @@ set -euo pipefail
 #
 # Commands:
 #   start        --beads <id> --prompt-file <path> [--repo <name>] [--worktree <path>] [--log-dir <dir>] [--pty]
-#   status       [--beads <id>] [--log-dir <dir>] [--no-ansi] [--mutations]
-#   check        --beads <id> [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
-#   health       [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
+#   status       [--beads <id>] [--log-dir <dir>] [--no-ansi] [--mutations] [--json]
+#   check        --beads <id> [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi] [--json]
+#   health       [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi] [--json]
 #   restart      --beads <id> [--log-dir <dir>] [--pty] [--preserve-contract]
 #   stop         --beads <id> [--log-dir <dir>]
 #   tail         --beads <id> [--log-dir <dir>] [--lines <n>] [--no-ansi]
 #   set-override --beads <id> [--no-auto-restart <true|false>] [--log-dir <dir>]
 #   preflight    [--beads <id>] [--log-dir <dir>]  (V3.3)
 #   mutations    --beads <id> [--log-dir <dir>]    (V3.3)
+#   baseline-gate [--beads <id> | --worktree <path>] --required-baseline <sha> [--json]
+#   integrity-gate [--beads <id> | --worktree <path>] --reported-commit <sha> [--branch <name>] [--json]
+#   feature-key-gate [--beads <id> | --worktree <path>] --feature-key <bd-id> [--branch <name>] [--base-branch <name>] [--json]
 #   watchdog     [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>]
 #                [--once] [--observe-only] [--no-auto-restart] [--pidfile <path>]
+#
+# V3.4 Changes:
+#   - Deterministic substates: launching, waiting_first_output, silent_mutation, stalled
+#   - Machine-readable JSON output for status/check/health/preflight/gates (--json)
+#   - Pre-dispatch runtime baseline gate command (baseline-gate)
+#   - Post-wave report integrity gate command (integrity-gate)
+#   - Feature-Key governance gate command (feature-key-gate)
+#   - Start-time baseline enforcement via CC_GLM_REQUIRED_BASELINE
 #
 # V3.3 Changes:
 #   - Mutation detection: tracks worktree file changes even when log is empty
@@ -51,7 +62,7 @@ HEADLESS="${SCRIPT_DIR}/cc-glm-headless.sh"
 PTY_RUN="${SCRIPT_DIR}/pty-run.sh"
 
 # Version for debugging
-CC_GLM_JOB_VERSION="3.3.0"
+CC_GLM_JOB_VERSION="3.4.0"
 
 LOG_DIR="/tmp/cc-glm-jobs"
 CMD="${1:-}"
@@ -59,19 +70,22 @@ shift || true
 
 usage() {
   cat <<'EOF'
-cc-glm-job.sh (V3.3 - Mutation Detection + Preflight)
+cc-glm-job.sh (V3.4 - Deterministic Substates + Integrity Gates)
 
 Usage:
   cc-glm-job.sh start --beads <id> --prompt-file <path> [options]
-  cc-glm-job.sh status [--beads <id>] [--log-dir <dir>] [--no-ansi] [--mutations]
-  cc-glm-job.sh check --beads <id> [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
-  cc-glm-job.sh health [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
+  cc-glm-job.sh status [--beads <id>] [--log-dir <dir>] [--no-ansi] [--mutations] [--json]
+  cc-glm-job.sh check --beads <id> [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi] [--json]
+  cc-glm-job.sh health [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi] [--json]
   cc-glm-job.sh restart --beads <id> [--log-dir <dir>] [--pty] [--preserve-contract]
   cc-glm-job.sh stop --beads <id> [--log-dir <dir>]
   cc-glm-job.sh tail --beads <id> [--log-dir <dir>] [--lines <n>] [--no-ansi]
   cc-glm-job.sh set-override --beads <id> [--no-auto-restart <true|false>]
   cc-glm-job.sh preflight [--beads <id>] [--log-dir <dir>]
   cc-glm-job.sh mutations --beads <id> [--log-dir <dir>]
+  cc-glm-job.sh baseline-gate [--beads <id> | --worktree <path>] --required-baseline <sha> [--json]
+  cc-glm-job.sh integrity-gate [--beads <id> | --worktree <path>] --reported-commit <sha> [--branch <name>] [--json]
+  cc-glm-job.sh feature-key-gate [--beads <id> | --worktree <path>] --feature-key <bd-id> [--branch <name>] [--base-branch <name>] [--json]
   cc-glm-job.sh watchdog [--beads <id>] [options]
 
 Commands:
@@ -85,17 +99,32 @@ Commands:
   set-override Set per-bead override flags for watchdog behavior.
   preflight    Verify job prerequisites (auth, model, backend) before start (V3.3).
   mutations    Show worktree file changes for a job (V3.3).
+  baseline-gate Verify runtime commit meets minimum required baseline.
+  integrity-gate Verify reported commit exists and is ancestor of branch head.
+  feature-key-gate Verify commits include task-specific Feature-Key trailer.
   watchdog     Run watchdog loop: monitor jobs, restart stalled jobs.
 
 Options:
   --pty               Use PTY-backed execution for reliable output capture.
   --no-ansi           Strip ANSI codes from output.
   --mutations         Show mutation count in status output (V3.3).
+  --json              Emit machine-readable JSON output.
   --observe-only      Watchdog monitors but never restarts (observe-only mode).
   --no-auto-restart   Disable auto-restart for specific beads in watchdog.
   --preserve-contract On restart, abort if env contract cannot be preserved.
+  --required-baseline Required commit SHA for baseline gate.
+  --reported-commit   Commit reported by wave/agent for integrity check.
+  --feature-key       Expected Feature-Key trailer value (e.g., bd-xga8.2.2).
+  --branch            Branch name for integrity check (defaults to HEAD branch).
+  --base-branch       Base branch for Feature-Key commit range (default: master).
   --once              Run exactly one watchdog iteration, then exit.
   --lines N           Number of lines for tail command (default: 20).
+
+V3.4 Features:
+  - Deterministic launch substates (no ambiguous running/empty state)
+  - JSON output mode for automation loops
+  - Baseline and integrity gate commands
+  - Start command can enforce baseline via CC_GLM_REQUIRED_BASELINE
 
 V3.3 Features:
   - Mutation detection: tracks worktree file changes even when log is empty
@@ -115,7 +144,10 @@ Per-Bead Overrides (V3.2):
   When no-auto-restart is true, watchdog will mark job as blocked instead of
   restarting. This is useful when an operator wants to manually supervise.
 
-Health States (V3.2):
+Health States (V3.4):
+  launching    - Process started, awaiting first output, within startup window
+  waiting_first_output - No output yet, but process/mutation evidence indicates progress
+  silent_mutation - Worktree changed despite empty log output
   healthy      - Process running with recent activity
   starting     - Process running but within grace window
   stalled      - Process alive but no progress for N minutes
@@ -192,6 +224,33 @@ format_elapsed() {
   printf "%sh%sm" "$hr" "$min_rem"
 }
 
+# Basic JSON escaper for machine-readable output.
+json_escape() {
+  local s="${1:-}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+join_by() {
+  local delim="$1"
+  shift || true
+  local out="" first=true
+  local item
+  for item in "$@"; do
+    if [[ "$first" == "true" ]]; then
+      out="$item"
+      first=false
+    else
+      out="${out}${delim}${item}"
+    fi
+  done
+  printf '%s' "$out"
+}
+
 # Strip ANSI escape sequences
 strip_ansi() {
   sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' 2>/dev/null || cat
@@ -224,6 +283,20 @@ job_paths() {
   OUTCOME_FILE="${LOG_DIR}/${beads}.outcome"
   CONTRACT_FILE="${LOG_DIR}/${beads}.contract"
   MUTATION_FILE="${LOG_DIR}/${beads}.mutation"
+}
+
+resolve_worktree() {
+  local beads="$1"
+  local from_flag="${2:-}"
+  local resolved="$from_flag"
+  if [[ -z "$resolved" && -n "$beads" ]]; then
+    job_paths "$beads"
+    resolved="$(meta_get "$META_FILE" "worktree" 2>/dev/null || true)"
+  fi
+  if [[ -z "$resolved" ]]; then
+    resolved="$(pwd)"
+  fi
+  printf '%s' "$resolved"
 }
 
 # V3.3: Mutation detection
@@ -406,6 +479,154 @@ preflight_check() {
     echo "=== Preflight FAILED ($errors error(s)) ==="
     return 1
   fi
+}
+
+baseline_gate_eval() {
+  local worktree="$1"
+  local required="$2"
+
+  local runtime_commit=""
+  local passed=false
+  local reason_code="unknown"
+  local details=""
+
+  if [[ -z "$required" ]]; then
+    reason_code="required_baseline_missing"
+    details="required baseline is empty"
+  elif [[ ! -d "$worktree" ]]; then
+    reason_code="worktree_missing"
+    details="worktree not found: $worktree"
+  elif ! git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
+    reason_code="not_a_git_repo"
+    details="not a git worktree: $worktree"
+  else
+    runtime_commit="$(git -C "$worktree" rev-parse HEAD 2>/dev/null || true)"
+    if [[ -z "$runtime_commit" ]]; then
+      reason_code="runtime_commit_missing"
+      details="failed to resolve runtime HEAD commit"
+    elif ! git -C "$worktree" cat-file -e "${required}^{commit}" >/dev/null 2>&1; then
+      reason_code="required_commit_missing"
+      details="required commit not found in repo"
+    elif git -C "$worktree" merge-base --is-ancestor "$required" "$runtime_commit" >/dev/null 2>&1; then
+      passed=true
+      reason_code="baseline_ok"
+      details="runtime commit meets required baseline"
+    else
+      reason_code="baseline_not_met"
+      details="runtime commit is behind required baseline"
+    fi
+  fi
+
+  printf '%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$runtime_commit" "$required" "$details"
+}
+
+integrity_gate_eval() {
+  local worktree="$1"
+  local reported_commit="$2"
+  local branch_name="${3:-}"
+
+  local passed=false
+  local reason_code="unknown"
+  local details=""
+  local branch_head=""
+
+  if [[ -z "$reported_commit" ]]; then
+    reason_code="reported_commit_missing"
+    details="reported commit not provided"
+  elif [[ ! -d "$worktree" ]]; then
+    reason_code="worktree_missing"
+    details="worktree not found: $worktree"
+  elif ! git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
+    reason_code="not_a_git_repo"
+    details="not a git worktree: $worktree"
+  else
+    if [[ -z "$branch_name" ]]; then
+      branch_name="$(git -C "$worktree" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    fi
+    if [[ -z "$branch_name" ]]; then
+      reason_code="branch_missing"
+      details="could not resolve branch name"
+    elif ! branch_head="$(git -C "$worktree" rev-parse "$branch_name" 2>/dev/null)"; then
+      reason_code="branch_head_missing"
+      details="branch not found: $branch_name"
+      branch_head=""
+    elif ! git -C "$worktree" cat-file -e "${reported_commit}^{commit}" >/dev/null 2>&1; then
+      reason_code="reported_commit_not_found"
+      details="reported commit does not exist"
+    elif git -C "$worktree" merge-base --is-ancestor "$reported_commit" "$branch_head" >/dev/null 2>&1; then
+      passed=true
+      reason_code="integrity_ok"
+      details="reported commit is ancestor of branch head"
+    else
+      reason_code="reported_not_ancestor"
+      details="reported commit is not ancestor of branch head"
+    fi
+  fi
+
+  printf '%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$branch_name" "$branch_head" "$reported_commit" "$details"
+}
+
+feature_key_gate_eval() {
+  local worktree="$1"
+  local feature_key="$2"
+  local branch_name="${3:-}"
+  local base_branch="${4:-master}"
+
+  local passed=false
+  local reason_code="unknown"
+  local details=""
+  local checked_commits=0
+  local missing_commits=0
+
+  if [[ -z "$feature_key" ]]; then
+    reason_code="feature_key_missing"
+    details="feature key is required"
+  elif [[ ! -d "$worktree" ]]; then
+    reason_code="worktree_missing"
+    details="worktree not found: $worktree"
+  elif ! git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
+    reason_code="not_a_git_repo"
+    details="not a git worktree: $worktree"
+  else
+    if [[ -z "$branch_name" ]]; then
+      branch_name="$(git -C "$worktree" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    fi
+    if [[ -z "$branch_name" ]]; then
+      reason_code="branch_missing"
+      details="could not resolve branch name"
+    elif ! git -C "$worktree" rev-parse "$branch_name" >/dev/null 2>&1; then
+      reason_code="branch_head_missing"
+      details="branch not found: $branch_name"
+    elif ! git -C "$worktree" rev-parse "$base_branch" >/dev/null 2>&1; then
+      reason_code="base_branch_missing"
+      details="base branch not found: $base_branch"
+    else
+      local commit
+      while IFS= read -r commit; do
+        [[ -n "$commit" ]] || continue
+        checked_commits=$((checked_commits + 1))
+        local body
+        body="$(git -C "$worktree" show -s --format=%B "$commit" 2>/dev/null || true)"
+        if ! printf '%s\n' "$body" | grep -q "^Feature-Key: ${feature_key}$"; then
+          missing_commits=$((missing_commits + 1))
+        fi
+      done < <(git -C "$worktree" rev-list "${base_branch}..${branch_name}" 2>/dev/null || true)
+
+      if [[ "$checked_commits" -eq 0 ]]; then
+        reason_code="no_commits_in_range"
+        details="no commits in range ${base_branch}..${branch_name}"
+      elif [[ "$missing_commits" -eq 0 ]]; then
+        passed=true
+        reason_code="feature_key_ok"
+        details="all ${checked_commits} commits include Feature-Key: ${feature_key}"
+      else
+        reason_code="feature_key_missing_in_commits"
+        details="${missing_commits}/${checked_commits} commits missing Feature-Key: ${feature_key}"
+      fi
+    fi
+  fi
+
+  printf '%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$branch_name" "$base_branch" "$feature_key" "$checked_commits" "$details"
 }
 
 # Process state (no file dependency)
@@ -683,6 +904,12 @@ parse_common_args() {
   TAIL_LINES=20
   SHOW_OVERRIDES=false
   SHOW_MUTATIONS=false  # V3.3
+  OUTPUT_JSON=false
+  REQUIRED_BASELINE=""
+  REPORTED_COMMIT=""
+  BRANCH_NAME=""
+  FEATURE_KEY=""
+  BASE_BRANCH="${CC_GLM_BASE_BRANCH:-master}"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -763,6 +990,30 @@ parse_common_args() {
       --mutations)
         SHOW_MUTATIONS=true
         shift
+        ;;
+      --json)
+        OUTPUT_JSON=true
+        shift
+        ;;
+      --required-baseline)
+        REQUIRED_BASELINE="${2:-}"
+        shift 2
+        ;;
+      --reported-commit)
+        REPORTED_COMMIT="${2:-}"
+        shift 2
+        ;;
+      --branch)
+        BRANCH_NAME="${2:-}"
+        shift 2
+        ;;
+      --feature-key)
+        FEATURE_KEY="${2:-}"
+        shift 2
+        ;;
+      --base-branch)
+        BASE_BRANCH="${2:-}"
+        shift 2
         ;;
       -h|--help)
         usage
@@ -918,6 +1169,19 @@ start_cmd() {
     exit 1
   fi
 
+  # Optional pre-dispatch runtime baseline gate (P0).
+  if [[ -n "${CC_GLM_REQUIRED_BASELINE:-}" ]]; then
+    local gate_worktree gate_result gate_pass gate_reason gate_runtime gate_required gate_details
+    gate_worktree="$(resolve_worktree "$BEADS" "$WORKTREE")"
+    gate_result="$(baseline_gate_eval "$gate_worktree" "$CC_GLM_REQUIRED_BASELINE")"
+    IFS='|' read -r gate_pass gate_reason gate_runtime gate_required gate_details <<< "$gate_result"
+    if [[ "$gate_pass" != "true" ]]; then
+      echo "baseline gate failed: reason=$gate_reason required=$gate_required runtime=${gate_runtime:--} worktree=$gate_worktree" >&2
+      echo "details: $gate_details" >&2
+      exit 1
+    fi
+  fi
+
   # Rotate any existing log
   rotate_log "$LOG_FILE"
 
@@ -975,12 +1239,14 @@ EOF
 status_line() {
   local beads="$1"
   job_paths "$beads"
-  local pid="" state="missing" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-" override="" mutations="-"
+  local pid="" state="missing" reason="-" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-" override="" mutations="-"
 
   if [[ -f "$PID_FILE" ]]; then
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
   fi
-  state="$(job_state "$PID_FILE")"
+  local detail
+  detail="$(job_health_detail "$beads" "$((STALL_MINUTES * 60))")"
+  IFS='|' read -r state reason mutations log_bytes _cpu _pid_age _log_age <<< "$detail"
 
   # Check for completed outcome
   if [[ -f "$OUTCOME_FILE" ]]; then
@@ -995,7 +1261,6 @@ status_line() {
   fi
 
   if [[ -f "$LOG_FILE" ]]; then
-    log_bytes="$(wc -c < "$LOG_FILE" | tr -d ' ')"
     local mtime
     mtime="$(file_mtime_epoch "$LOG_FILE" 2>/dev/null || echo "")"
     if [[ -n "$mtime" ]]; then
@@ -1020,7 +1285,7 @@ status_line() {
   fi
 
   # V3.3: Check for mutations if requested
-  if [[ "$SHOW_MUTATIONS" == "true" ]]; then
+  if [[ "$SHOW_MUTATIONS" == "true" && "$mutations" == "-" ]]; then
     mutations="$(check_mutations "$beads")"
     # Write mutation marker for later queries
     write_mutation_marker "$beads" "$mutations"
@@ -1034,6 +1299,23 @@ status_line() {
       now="$(date +%s)"
       elapsed="$(format_elapsed "$((now - pid_mtime))")"
     fi
+  fi
+
+  if [[ "$OUTPUT_JSON" == "true" ]]; then
+    printf '{'
+    printf '"beads":"%s",' "$(json_escape "$beads")"
+    printf '"pid":"%s",' "$(json_escape "${pid:--}")"
+    printf '"state":"%s",' "$(json_escape "$state")"
+    printf '"reason_code":"%s",' "$(json_escape "$reason")"
+    printf '"elapsed":"%s",' "$(json_escape "$elapsed")"
+    printf '"log_bytes":%s,' "${log_bytes:-0}"
+    printf '"last_update":"%s",' "$(json_escape "$last_update")"
+    printf '"retry_count":%s,' "${retries:-0}"
+    printf '"mutation_count":%s,' "${mutations:-0}"
+    printf '"override":"%s",' "$(json_escape "$override")"
+    printf '"outcome":"%s"' "$(json_escape "$outcome")"
+    printf '}\n'
+    return 0
   fi
 
   local output
@@ -1063,6 +1345,26 @@ status_cmd() {
 
   # Guardrail: warn about multi-log-dir ambiguity
   check_log_dir_ambiguity "status"
+
+  if [[ "$OUTPUT_JSON" == "true" ]]; then
+    local rows=()
+    if [[ -n "$BEADS" ]]; then
+      rows+=("$(status_line "$BEADS")")
+    else
+      shopt -s nullglob
+      local pidf beads
+      for pidf in "$LOG_DIR"/*.pid; do
+        beads="$(basename "$pidf" .pid)"
+        rows+=("$(status_line "$beads")")
+      done
+    fi
+    printf '{'
+    printf '"generated_at":"%s",' "$(json_escape "$(now_utc)")"
+    printf '"log_dir":"%s",' "$(json_escape "$LOG_DIR")"
+    printf '"jobs":[%s]' "$(join_by "," "${rows[@]}")"
+    printf '}\n'
+    return 0
+  fi
 
   if [[ "$SHOW_MUTATIONS" == "true" && "$SHOW_OVERRIDES" == "true" ]]; then
     printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-9s %-10s %s\n" \
@@ -1102,153 +1404,135 @@ status_cmd() {
   fi
 }
 
-# V3.0: Progress-aware health check
-# Uses process CPU time as primary signal, log growth as secondary
-job_health() {
+# V3.4: Deterministic health detail classification with explicit reason codes.
+# Output format:
+#   state|reason_code|mutation_count|log_bytes|cpu_time|pid_age_seconds|log_age_seconds
+job_health_detail() {
   local beads="$1"
   job_paths "$beads"
   local stall_threshold="${2:-$((STALL_MINUTES * 60))}"
 
+  local state="missing"
+  local reason_code="pid_file_missing"
+  local mutation_count=0
+  local log_bytes=0
+  local cpu_time=0
+  local pid_age=0
+  local log_age=0
+
   if [[ ! -f "$PID_FILE" ]]; then
-    printf "missing"
+    printf "%s|%s|%s|%s|%s|%s|%s\n" "$state" "$reason_code" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
     return 0
   fi
 
   local pid
   pid="$(cat "$PID_FILE" 2>/dev/null || true)"
   if [[ -z "$pid" ]]; then
-    printf "missing"
+    printf "missing|pid_empty|0|0|0|0|0\n"
     return 0
   fi
 
-  # Check if process is still running
+  if [[ -f "$PID_FILE" ]]; then
+    local pid_mtime now
+    pid_mtime="$(file_mtime_epoch "$PID_FILE" 2>/dev/null || echo "")"
+    now="$(date +%s)"
+    if [[ -n "$pid_mtime" ]]; then
+      pid_age=$((now - pid_mtime))
+    fi
+  fi
+
+  if [[ -f "$META_FILE" ]]; then
+    mutation_count="$(check_mutations "$beads")"
+    write_mutation_marker "$beads" "$mutation_count"
+  fi
+
+  if [[ -f "$LOG_FILE" ]]; then
+    log_bytes="$(wc -c < "$LOG_FILE" | tr -d ' ')"
+    local log_mtime now
+    log_mtime="$(file_mtime_epoch "$LOG_FILE" 2>/dev/null || echo "")"
+    now="$(date +%s)"
+    if [[ -n "$log_mtime" ]]; then
+      log_age=$((now - log_mtime))
+    fi
+  fi
+
   if ! ps -p "$pid" >/dev/null 2>&1; then
-    # Process exited - check outcome
     if [[ -f "$OUTCOME_FILE" ]]; then
       local exit_code
       exit_code="$(meta_get "$OUTCOME_FILE" "exit_code")"
       exit_code="${exit_code:-1}"
       if [[ "$exit_code" -eq 0 ]]; then
-        printf "exited_ok"
+        printf "exited_ok|outcome_exit_0|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
       else
-        printf "exited_err"
+        printf "exited_err|outcome_exit_nonzero|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
       fi
       return 0
     fi
-
-    # No outcome file - check log for evidence
-    local log_bytes=0
-    if [[ -f "$LOG_FILE" ]]; then
-      log_bytes="$(wc -c < "$LOG_FILE" | tr -d ' ')"
-    fi
-
     if [[ "$log_bytes" -eq 0 ]]; then
-      printf "stalled"  # Exited with no output = stalled/failed launch
-    else
-      # Heuristic: check last line for success indicators
-      local last_line
-      last_line="$(tail -1 "$LOG_FILE" 2>/dev/null || true)"
-      if [[ "$last_line" == *"success"* ]] || [[ "$last_line" == *"completed"* ]]; then
-        printf "exited_ok"
-      else
-        printf "exited_err"
-      fi
+      printf "stalled|process_exited_no_output|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
+      return 0
     fi
+    printf "exited_err|process_exited_without_outcome|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
     return 0
   fi
 
-  # Process is running - check for blocked state
   if [[ -f "$META_FILE" ]]; then
     local blocked
     blocked="$(meta_get "$META_FILE" "blocked")"
     if [[ "$blocked" == "true" ]]; then
-      printf "blocked"
+      printf "blocked|blocked_flag_set|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
       return 0
     fi
   fi
 
-  # Check log file existence
-  if [[ ! -f "$LOG_FILE" ]]; then
-    printf "stalled"
-    return 0
-  fi
-
-  # Get process CPU time for progress detection
-  local cpu_time
   cpu_time="$(process_cpu_time "$pid")"
 
-  # Check for zero output - use grace window
-  local log_bytes
-  log_bytes="$(wc -c < "$LOG_FILE" | tr -d ' ')"
   if [[ "$log_bytes" -eq 0 ]]; then
-    local pid_age=0
-    if [[ -f "$PID_FILE" ]]; then
-      local pid_mtime
-      pid_mtime="$(file_mtime_epoch "$PID_FILE" 2>/dev/null || echo "")"
-      if [[ -n "$pid_mtime" ]]; then
-        pid_age=$(( $(date +%s) - pid_mtime ))
-      fi
+    if [[ "$mutation_count" -gt 0 ]]; then
+      printf "silent_mutation|worktree_changed_no_output|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+      return 0
     fi
-    # If process has CPU time but no log output, it's making progress
     if [[ "$cpu_time" -gt 0 ]]; then
-      printf "healthy"  # Process is working, just hasn't written yet
+      if [[ "$pid_age" -gt "$stall_threshold" ]]; then
+        printf "waiting_first_output|cpu_progress_no_output_past_threshold|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+      else
+        printf "launching|cpu_progress_no_output|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+      fi
       return 0
     fi
-    # V3.2.1: Process alive but no output/CPU time - treat as active startup, not stalled
-    # Only consider truly stalled if we've seen NO progress for multiple check intervals
-    # This prevents false-positive restarts during slow startup (e.g., auth, model loading)
     if [[ "$pid_age" -gt "$stall_threshold" ]]; then
-      # Check if we've recorded CPU time before (indicates repeated checks)
-      if [[ -f "$META_FILE" ]]; then
-        local prev_cpu_check
-        prev_cpu_check="$(meta_get "$META_FILE" "last_cpu_time")"
-        if [[ -n "$prev_cpu_check" && "$prev_cpu_check" != "0" ]]; then
-          # We've seen CPU activity before, now it's gone - truly stalled
-          printf "stalled"
-          return 0
-        fi
-      fi
-      # First time we're seeing zero CPU after threshold - give benefit of doubt
-      # Record that we're in extended startup for next check
-      if [[ -f "$META_FILE" ]]; then
-        meta_set "$META_FILE" "extended_startup" "true"
-      fi
-      printf "starting"  # Still in startup, even past threshold
-      return 0
+      printf "stalled|no_output_no_progress_after_threshold|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+    else
+      printf "launching|no_output_within_grace|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
     fi
-    printf "starting"  # Within grace window
     return 0
   fi
 
-  # Has output - check log staleness as secondary signal
-  local now mtime age
-  now="$(date +%s)"
-  mtime="$(file_mtime_epoch "$LOG_FILE")"
-  age=$((now - mtime))
-
-  # Primary signal: process CPU time indicates activity
-  # Save current CPU time to meta for comparison on next check
   if [[ -f "$META_FILE" ]]; then
     local prev_cpu
     prev_cpu="$(meta_get "$META_FILE" "last_cpu_time")"
     prev_cpu="${prev_cpu:-0}"
     meta_set "$META_FILE" "last_cpu_time" "$cpu_time"
-
-    # If CPU time increased, process is making progress regardless of log
     if [[ "$cpu_time" -gt "$prev_cpu" ]]; then
-      printf "healthy"
+      printf "healthy|cpu_progress|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
       return 0
     fi
   fi
 
-  # Secondary signal: log staleness
-  if [[ "$age" -gt "$stall_threshold" ]]; then
-    # Log is stale AND CPU time didn't increase = stalled
-    printf "stalled"
+  if [[ "$log_age" -gt "$stall_threshold" ]]; then
+    printf "stalled|stale_log_and_no_cpu_progress|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
     return 0
   fi
 
-  printf "healthy"
+  printf "healthy|recent_log_activity|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+}
+
+job_health() {
+  local beads="$1"
+  local stall_threshold="${2:-$((STALL_MINUTES * 60))}"
+  local detail
+  detail="$(job_health_detail "$beads" "$stall_threshold")"
+  printf "%s" "${detail%%|*}"
 }
 
 check_cmd() {
@@ -1266,16 +1550,23 @@ check_cmd() {
     exit 1
   fi
 
-  local health
-  health="$(job_health "$BEADS" "$((STALL_MINUTES * 60))")"
+  local detail health reason mutation_count log_bytes cpu_time pid_age log_age
+  detail="$(job_health_detail "$BEADS" "$((STALL_MINUTES * 60))")"
+  IFS='|' read -r health reason mutation_count log_bytes cpu_time pid_age log_age <<< "$detail"
 
   local output
   case "$health" in
     healthy)
       output="job $BEADS healthy: running with progress"
       ;;
-    starting)
-      output="job $BEADS starting: within grace window"
+    starting|launching)
+      output="job $BEADS launching: waiting for first output"
+      ;;
+    waiting_first_output)
+      output="job $BEADS waiting_first_output: process active but no output yet"
+      ;;
+    silent_mutation)
+      output="job $BEADS silent_mutation: worktree changed while log is empty (inspect mutations)"
       ;;
     stalled)
       output="job $BEADS stalled: no progress detected"
@@ -1300,15 +1591,31 @@ check_cmd() {
       ;;
   esac
 
+  output="$output reason=$reason mutation_count=$mutation_count log_bytes=$log_bytes cpu_time=${cpu_time}s"
+
+  if [[ "$OUTPUT_JSON" == "true" ]]; then
+    printf '{'
+    printf '"beads":"%s",' "$(json_escape "$BEADS")"
+    printf '"health":"%s",' "$(json_escape "$health")"
+    printf '"reason_code":"%s",' "$(json_escape "$reason")"
+    printf '"stall_threshold_seconds":%s,' "$((STALL_MINUTES * 60))"
+    printf '"mutation_count":%s,' "${mutation_count:-0}"
+    printf '"log_bytes":%s,' "${log_bytes:-0}"
+    printf '"cpu_time_seconds":%s,' "${cpu_time:-0}"
+    printf '"pid_age_seconds":%s,' "${pid_age:-0}"
+    printf '"log_age_seconds":%s' "${log_age:-0}"
+    printf '}\n'
+  else
   if [[ "$NO_ANSI" == "true" ]]; then
     echo "$output" | strip_ansi
   else
     echo "$output"
   fi
+  fi
 
   # Exit codes for scripting
   case "$health" in
-    healthy|starting|exited_ok) exit 0 ;;
+    healthy|starting|launching|waiting_first_output|silent_mutation|exited_ok) exit 0 ;;
     stalled) exit 2 ;;
     exited_err|blocked) exit 3 ;;
     missing) exit 1 ;;
@@ -1362,6 +1669,27 @@ health_cmd() {
   # Guardrail: warn about multi-log-dir ambiguity
   check_log_dir_ambiguity "health"
 
+  if [[ "$OUTPUT_JSON" == "true" ]]; then
+    local rows=()
+    if [[ -n "$BEADS" ]]; then
+      rows+=("$(health_line "$BEADS" "$stall_seconds")")
+    else
+      shopt -s nullglob
+      local pidf beads
+      for pidf in "$LOG_DIR"/*.pid; do
+        beads="$(basename "$pidf" .pid)"
+        rows+=("$(health_line "$beads" "$stall_seconds")")
+      done
+    fi
+    printf '{'
+    printf '"generated_at":"%s",' "$(json_escape "$(now_utc)")"
+    printf '"log_dir":"%s",' "$(json_escape "$LOG_DIR")"
+    printf '"stall_threshold_seconds":%s,' "$stall_seconds"
+    printf '"jobs":[%s]' "$(join_by "," "${rows[@]}")"
+    printf '}\n'
+    return 0
+  fi
+
   if [[ "$SHOW_OVERRIDES" == "true" ]]; then
     printf "%-14s %-8s %-12s %-16s %-6s %-10s %s\n" \
       "bead" "pid" "health" "last_update" "retry" "override" "outcome"
@@ -1398,12 +1726,14 @@ health_line() {
   local beads="$1"
   local stall_threshold="$2"
   job_paths "$beads"
-  local pid="" health="missing" last_update="-" retries="0" outcome="-" override=""
+  local pid="" health="missing" reason="-" last_update="-" retries="0" outcome="-" override="" mutation_count="0" log_bytes="0" cpu_time="0" pid_age="0" log_age="0"
 
   if [[ -f "$PID_FILE" ]]; then
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
   fi
-  health="$(job_health "$beads" "$stall_threshold")"
+  local detail
+  detail="$(job_health_detail "$beads" "$stall_threshold")"
+  IFS='|' read -r health reason mutation_count log_bytes cpu_time pid_age log_age <<< "$detail"
 
   if [[ -f "$LOG_FILE" ]]; then
     local mtime
@@ -1441,6 +1771,25 @@ health_line() {
     if [[ -n "$outcome_duration" && "$outcome_duration" != "-" && "$outcome_duration" != "-"* ]]; then
       outcome="${outcome} (${outcome_duration}s)"
     fi
+  fi
+
+  if [[ "$OUTPUT_JSON" == "true" ]]; then
+    printf '{'
+    printf '"beads":"%s",' "$(json_escape "$beads")"
+    printf '"pid":"%s",' "$(json_escape "${pid:--}")"
+    printf '"health":"%s",' "$(json_escape "$health")"
+    printf '"reason_code":"%s",' "$(json_escape "$reason")"
+    printf '"last_update":"%s",' "$(json_escape "$last_update")"
+    printf '"retry_count":%s,' "${retries:-0}"
+    printf '"mutation_count":%s,' "${mutation_count:-0}"
+    printf '"log_bytes":%s,' "${log_bytes:-0}"
+    printf '"cpu_time_seconds":%s,' "${cpu_time:-0}"
+    printf '"pid_age_seconds":%s,' "${pid_age:-0}"
+    printf '"log_age_seconds":%s,' "${log_age:-0}"
+    printf '"override":"%s",' "$(json_escape "$override")"
+    printf '"outcome":"%s"' "$(json_escape "$outcome")"
+    printf '}\n'
+    return 0
   fi
 
   local output
@@ -1695,8 +2044,11 @@ watchdog_cmd() {
       echo "[$beads] health=$health"
 
       case "$health" in
-        healthy|starting|exited_ok)
+        healthy|starting|launching|waiting_first_output|exited_ok)
           # Nothing to do
+          ;;
+        silent_mutation)
+          echo "[$beads] SILENT_MUTATION: worktree changed with no output; inspect via 'cc-glm-job.sh mutations --beads $beads'"
           ;;
         exited_err)
           echo "[$beads] exited with error - check logs"
@@ -1769,6 +2121,19 @@ watchdog_cmd() {
 # V3.3: Preflight command - verify job prerequisites
 preflight_cmd() {
   parse_common_args "$@"
+  if [[ "$OUTPUT_JSON" == "true" ]]; then
+    local out rc
+    out="$(preflight_check "$BEADS" 2>&1)" || rc=$?
+    rc="${rc:-0}"
+    printf '{'
+    printf '"generated_at":"%s",' "$(json_escape "$(now_utc)")"
+    printf '"beads":"%s",' "$(json_escape "$BEADS")"
+    printf '"passed":%s,' "$([[ "$rc" -eq 0 ]] && echo true || echo false)"
+    printf '"exit_code":%s,' "$rc"
+    printf '"output":"%s"' "$(json_escape "$out")"
+    printf '}\n'
+    return "$rc"
+  fi
   preflight_check "$BEADS"
 }
 
@@ -1820,6 +2185,117 @@ mutations_cmd() {
   write_mutation_marker "$BEADS" "$mutation_count"
 }
 
+baseline_gate_cmd() {
+  parse_common_args "$@"
+  [[ -n "$REQUIRED_BASELINE" ]] || { echo "baseline-gate requires --required-baseline" >&2; exit 2; }
+
+  local worktree
+  worktree="$(resolve_worktree "$BEADS" "$WORKTREE")"
+
+  local result pass reason runtime required details
+  result="$(baseline_gate_eval "$worktree" "$REQUIRED_BASELINE")"
+  IFS='|' read -r pass reason runtime required details <<< "$result"
+
+  if [[ "$OUTPUT_JSON" == "true" ]]; then
+    printf '{'
+    printf '"generated_at":"%s",' "$(json_escape "$(now_utc)")"
+    printf '"worktree":"%s",' "$(json_escape "$worktree")"
+    printf '"required_baseline":"%s",' "$(json_escape "$required")"
+    printf '"runtime_commit":"%s",' "$(json_escape "$runtime")"
+    printf '"passed":%s,' "$([[ "$pass" == "true" ]] && echo true || echo false)"
+    printf '"reason_code":"%s",' "$(json_escape "$reason")"
+    printf '"details":"%s"' "$(json_escape "$details")"
+    printf '}\n'
+  else
+    if [[ "$pass" == "true" ]]; then
+      echo "baseline gate passed: runtime=$runtime required=$required worktree=$worktree"
+    else
+      echo "baseline gate failed: reason=$reason runtime=${runtime:--} required=$required worktree=$worktree"
+      echo "details: $details"
+    fi
+  fi
+
+  if [[ "$pass" == "true" ]]; then
+    return 0
+  fi
+  return 4
+}
+
+integrity_gate_cmd() {
+  parse_common_args "$@"
+  [[ -n "$REPORTED_COMMIT" ]] || { echo "integrity-gate requires --reported-commit" >&2; exit 2; }
+
+  local worktree
+  worktree="$(resolve_worktree "$BEADS" "$WORKTREE")"
+
+  local result pass reason branch_name branch_head reported details
+  result="$(integrity_gate_eval "$worktree" "$REPORTED_COMMIT" "$BRANCH_NAME")"
+  IFS='|' read -r pass reason branch_name branch_head reported details <<< "$result"
+
+  if [[ "$OUTPUT_JSON" == "true" ]]; then
+    printf '{'
+    printf '"generated_at":"%s",' "$(json_escape "$(now_utc)")"
+    printf '"worktree":"%s",' "$(json_escape "$worktree")"
+    printf '"branch":"%s",' "$(json_escape "$branch_name")"
+    printf '"branch_head":"%s",' "$(json_escape "$branch_head")"
+    printf '"reported_commit":"%s",' "$(json_escape "$reported")"
+    printf '"passed":%s,' "$([[ "$pass" == "true" ]] && echo true || echo false)"
+    printf '"reason_code":"%s",' "$(json_escape "$reason")"
+    printf '"details":"%s"' "$(json_escape "$details")"
+    printf '}\n'
+  else
+    if [[ "$pass" == "true" ]]; then
+      echo "integrity gate passed: reported=$reported branch=$branch_name head=$branch_head"
+    else
+      echo "integrity gate failed: reason=$reason reported=$reported branch=$branch_name head=${branch_head:--}"
+      echo "details: $details"
+    fi
+  fi
+
+  if [[ "$pass" == "true" ]]; then
+    return 0
+  fi
+  return 4
+}
+
+feature_key_gate_cmd() {
+  parse_common_args "$@"
+  [[ -n "$FEATURE_KEY" ]] || { echo "feature-key-gate requires --feature-key" >&2; exit 2; }
+
+  local worktree
+  worktree="$(resolve_worktree "$BEADS" "$WORKTREE")"
+
+  local result pass reason branch_name base_branch feature_key checked_commits details
+  result="$(feature_key_gate_eval "$worktree" "$FEATURE_KEY" "$BRANCH_NAME" "$BASE_BRANCH")"
+  IFS='|' read -r pass reason branch_name base_branch feature_key checked_commits details <<< "$result"
+
+  if [[ "$OUTPUT_JSON" == "true" ]]; then
+    printf '{'
+    printf '"generated_at":"%s",' "$(json_escape "$(now_utc)")"
+    printf '"worktree":"%s",' "$(json_escape "$worktree")"
+    printf '"branch":"%s",' "$(json_escape "$branch_name")"
+    printf '"base_branch":"%s",' "$(json_escape "$base_branch")"
+    printf '"feature_key":"%s",' "$(json_escape "$feature_key")"
+    printf '"checked_commits":%s,' "${checked_commits:-0}"
+    printf '"passed":%s,' "$([[ "$pass" == "true" ]] && echo true || echo false)"
+    printf '"reason_code":"%s",' "$(json_escape "$reason")"
+    printf '"details":"%s"' "$(json_escape "$details")"
+    printf '}\n'
+  else
+    if [[ "$pass" == "true" ]]; then
+      echo "feature-key gate passed: feature_key=$feature_key branch=$branch_name base=$base_branch commits=$checked_commits"
+    else
+      echo "feature-key gate failed: reason=$reason feature_key=$feature_key branch=$branch_name base=$base_branch"
+      echo "details: $details"
+    fi
+  fi
+
+  if [[ "$pass" == "true" ]]; then
+    return 0
+  fi
+  return 4
+}
+
 case "$CMD" in
   start) start_cmd "$@" ;;
   status) status_cmd "$@" ;;
@@ -1831,6 +2307,9 @@ case "$CMD" in
   set-override) set_override_cmd "$@" ;;
   preflight) preflight_cmd "$@" ;;
   mutations) mutations_cmd "$@" ;;
+  baseline-gate) baseline_gate_cmd "$@" ;;
+  integrity-gate) integrity_gate_cmd "$@" ;;
+  feature-key-gate) feature_key_gate_cmd "$@" ;;
   watchdog) watchdog_cmd "$@" ;;
   -h|--help|help|"")
     usage
