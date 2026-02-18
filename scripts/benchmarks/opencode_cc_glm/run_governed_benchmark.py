@@ -2,10 +2,11 @@
 """Provider-agnostic governed benchmark runner.
 
 This wrapper executes any supported workflows through a shared governance layer:
-1) optional pre-dispatch baseline gate
-2) benchmark execution (via launch_parallel_jobs.py)
-3) collection + summary generation
-4) optional post-wave integrity gate
+1) model preflight (opencode_preflight)
+2) optional pre-dispatch baseline gate
+3) benchmark execution (via launch_parallel_jobs.py)
+4) collection + summary generation
+5) optional post-wave integrity gate
 """
 
 from __future__ import annotations
@@ -18,6 +19,18 @@ import subprocess
 from typing import Any
 
 from governance_gates import baseline_gate, integrity_gate
+from opencode_preflight import run_preflight
+
+
+TAXONOMY_CODES = {
+    "model_unavailable": "model_unavailable",
+    "preflight_failed": "preflight_failed",
+    "stalled_run": "stalled_run",
+    "ancestry_gate_failed": "ancestry_gate_failed",
+    "scope_drift_failed": "scope_drift_failed",
+    "baseline_gate_failed": "baseline_gate_failed",
+    "integrity_gate_failed": "integrity_gate_failed",
+}
 
 
 def utc_now_compact() -> str:
@@ -31,13 +44,17 @@ def run_cmd(cmd: list[str], cwd: pathlib.Path) -> subprocess.CompletedProcess[st
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run governed benchmark wave")
     parser.add_argument("--run-id", default="")
-    parser.add_argument("--workflows", required=True, help="Comma-separated workflow IDs")
+    parser.add_argument(
+        "--workflows", required=True, help="Comma-separated workflow IDs"
+    )
     parser.add_argument(
         "--prompts-file",
         type=pathlib.Path,
-        default=pathlib.Path("scripts/benchmarks/opencode_cc_glm/benchmark_prompts.json"),
+        default=pathlib.Path(
+            "scripts/benchmarks/opencode_cc_glm/benchmark_prompts.json"
+        ),
     )
-    parser.add_argument("--model", default="glm-5")
+    parser.add_argument("--model", default="zai-coding-plan/glm-5")
     parser.add_argument("--parallel", type=int, default=6)
     parser.add_argument("--max-retries", type=int, default=1)
     parser.add_argument("--timeout-sec", type=float, default=300.0)
@@ -50,6 +67,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--required-baseline", default="")
     parser.add_argument("--reported-commit", default="")
     parser.add_argument("--branch", default="")
+    parser.add_argument(
+        "--skip-preflight", action="store_true", help="Skip model preflight check"
+    )
     return parser.parse_args()
 
 
@@ -75,6 +95,32 @@ def main() -> int:
     run_id = args.run_id or f"governed-{utc_now_compact()}"
     output_dir = args.output_dir.resolve()
     run_dir = output_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    preflight_result: dict[str, Any] | None = None
+    if not args.skip_preflight:
+        preflight = run_preflight(preferred_model=args.model, json_output=False)
+        preflight_result = preflight.to_dict()
+        if not preflight.passed:
+            payload = {
+                "run_id": run_id,
+                "passed": False,
+                "reason_code": preflight.reason_code,
+                "preflight": preflight_result,
+                "taxonomy": TAXONOMY_CODES.get(
+                    preflight.reason_code, preflight.reason_code
+                ),
+                "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            }
+            (run_dir / "governance_report.json").write_text(
+                json.dumps(payload, indent=2), encoding="utf-8"
+            )
+            print(json.dumps(payload, indent=2))
+            return 1
+
+    effective_model = (
+        preflight_result.get("selected_model") if preflight_result else args.model
+    ) or args.model
 
     baseline_result: dict[str, Any] | None = None
     if args.required_baseline:
@@ -84,12 +130,14 @@ def main() -> int:
             payload = {
                 "run_id": run_id,
                 "passed": False,
-                "reason_code": "baseline_gate_failed",
+                "reason_code": TAXONOMY_CODES["baseline_gate_failed"],
+                "preflight": preflight_result,
                 "baseline_gate": baseline_result,
                 "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             }
-            run_dir.mkdir(parents=True, exist_ok=True)
-            (run_dir / "governance_report.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            (run_dir / "governance_report.json").write_text(
+                json.dumps(payload, indent=2), encoding="utf-8"
+            )
             print(json.dumps(payload, indent=2))
             return 4
 
@@ -105,7 +153,7 @@ def main() -> int:
             "--parallel",
             str(args.parallel),
             "--model",
-            args.model,
+            effective_model,
             "--output-dir",
             str(output_dir),
             "--max-retries",
@@ -125,7 +173,11 @@ def main() -> int:
     }
     if launch_proc.returncode != 0:
         raw_dir = run_dir / "raw"
-        raw_records = sorted(path for path in raw_dir.glob("*.json") if "__" in path.name) if raw_dir.exists() else []
+        raw_records = (
+            sorted(path for path in raw_dir.glob("*.json") if "__" in path.name)
+            if raw_dir.exists()
+            else []
+        )
         if not raw_records:
             payload = {
                 "run_id": run_id,
@@ -162,11 +214,19 @@ def main() -> int:
             },
             "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         }
-        (run_dir / "governance_report.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        (run_dir / "governance_report.json").write_text(
+            json.dumps(payload, indent=2), encoding="utf-8"
+        )
         print(json.dumps(payload, indent=2))
         return 6
     summarize_proc = run_cmd(
-        [str(summarize), "--results-json", str(results_json), "--out-json", str(summary_json)],
+        [
+            str(summarize),
+            "--results-json",
+            str(results_json),
+            "--out-json",
+            str(summary_json),
+        ],
         cwd=repo_root,
     )
     if summarize_proc.returncode != 0:
@@ -183,26 +243,37 @@ def main() -> int:
             },
             "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         }
-        (run_dir / "governance_report.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        (run_dir / "governance_report.json").write_text(
+            json.dumps(payload, indent=2), encoding="utf-8"
+        )
         print(json.dumps(payload, indent=2))
         return 7
 
     integrity_result: dict[str, Any] | None = None
     if args.reported_commit:
-        integ = integrity_gate(args.cwd.resolve(), args.reported_commit, args.branch or None)
+        integ = integrity_gate(
+            args.cwd.resolve(), args.reported_commit, args.branch or None
+        )
         integrity_result = integ.to_dict()
 
     results_payload = load_results(results_json)
     run_success = compute_run_success(results_payload)
-    passed = run_success and (integrity_result is None or bool(integrity_result.get("passed")))
+    passed = run_success and (
+        integrity_result is None or bool(integrity_result.get("passed"))
+    )
 
     report = {
         "run_id": run_id,
         "run_dir": str(run_dir),
         "workflows": [w.strip() for w in args.workflows.split(",") if w.strip()],
         "model": args.model,
+        "model_selected": effective_model,
+        "fallback_reason": preflight_result.get("fallback_reason")
+        if preflight_result
+        else None,
         "passed": passed,
         "run_success": run_success,
+        "preflight": preflight_result,
         "baseline_gate": baseline_result,
         "integrity_gate": integrity_result,
         "launch": launch_result,
@@ -210,7 +281,9 @@ def main() -> int:
         "summary_md": str(run_dir / "collected" / "summary.md"),
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
     }
-    (run_dir / "governance_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    (run_dir / "governance_report.json").write_text(
+        json.dumps(report, indent=2), encoding="utf-8"
+    )
     print(json.dumps(report, indent=2))
     return 0 if passed else 3
 

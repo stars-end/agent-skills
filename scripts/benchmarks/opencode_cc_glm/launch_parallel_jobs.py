@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Launch reproducible parallel benchmark jobs for cc-glm vs OpenCode."""
+"""Launch reproducible parallel benchmark jobs for cc-glm vs OpenCode.
+
+V8.x Reliability Hardening:
+- Ancestry gate: base-commit ancestry verification before accepting success
+- Allowlist gate: file-scope drift detection
+- Stall detector: CPU/log advance monitoring with max 1 auto-restart
+- Structured metadata: run_id, workflow_id, model, model_selected, fallback_reason
+"""
 
 from __future__ import annotations
 
@@ -16,12 +23,14 @@ import queue
 import random
 import re
 import selectors
+import signal
 import subprocess
 import threading
 import time
 import urllib.error
 import urllib.request
-from typing import Any
+from dataclasses import asdict, dataclass
+from typing import Any, Callable
 
 WORKFLOW_SYSTEM = {
     "cc_glm_headless": "cc-glm",
@@ -34,6 +43,16 @@ WORKFLOW_SYSTEM = {
 SERVER_WORKFLOWS = {"opencode_server_http", "opencode_server_attach_run"}
 ALL_WORKFLOWS = tuple(WORKFLOW_SYSTEM.keys())
 
+TAXONOMY_CODES = {
+    "model_unavailable": "model_unavailable",
+    "preflight_failed": "preflight_failed",
+    "stalled_run": "stalled_run",
+    "ancestry_gate_failed": "ancestry_gate_failed",
+    "scope_drift_failed": "scope_drift_failed",
+    "baseline_gate_failed": "baseline_gate_failed",
+    "integrity_gate_failed": "integrity_gate_failed",
+}
+
 REDACT_PATTERNS = [
     re.compile(r"op://[^\s\"']+"),
     re.compile(r"(?i)authorization\s*:\s*bearer\s+[a-z0-9._\-]+"),
@@ -44,7 +63,12 @@ REDACT_PATTERNS = [
 
 
 def utc_now_iso() -> str:
-    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        dt.datetime.now(dt.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def sanitize_text(value: str) -> str:
@@ -163,7 +187,9 @@ class OpenCodeServerProcess:
                     timeout_sec=2.0,
                     password=self.password,
                 )
-                healthy = bool(payload.get("healthy") is True or payload.get("status") == "ok")
+                healthy = bool(
+                    payload.get("healthy") is True or payload.get("status") == "ok"
+                )
                 if healthy:
                     self.startup_latency_ms = int((time.perf_counter() - start) * 1000)
                     return
@@ -186,7 +212,6 @@ class OpenCodeServerProcess:
                 self.process.wait(timeout=5)
 
 
-
 def load_prompts(path: pathlib.Path) -> list[PromptCase]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     prompts = []
@@ -203,14 +228,12 @@ def load_prompts(path: pathlib.Path) -> list[PromptCase]:
     return prompts
 
 
-
 def parse_model_string(model: str) -> dict[str, str]:
     """Convert provider/model string into OpenCode API model object."""
     if "/" in model:
         provider_id, model_id = model.split("/", 1)
         return {"providerID": provider_id, "modelID": model_id}
     return {"modelID": model}
-
 
 
 def run_subprocess_capture(
@@ -301,7 +324,6 @@ def run_subprocess_capture(
     }
 
 
-
 def extract_text_from_messages(messages_payload: Any) -> str:
     if isinstance(messages_payload, dict):
         if isinstance(messages_payload.get("messages"), list):
@@ -330,7 +352,6 @@ def extract_text_from_messages(messages_payload: Any) -> str:
     return sanitize_text("\n".join(chunks)).strip()
 
 
-
 def classify_failure(
     *,
     success: bool,
@@ -345,7 +366,14 @@ def classify_failure(
 
     if exception_text:
         lowered = exception_text.lower()
-        env_markers = ["connection", "refused", "not found", "auth", "permission", "timeout"]
+        env_markers = [
+            "connection",
+            "refused",
+            "not found",
+            "auth",
+            "permission",
+            "timeout",
+        ]
         if any(marker in lowered for marker in env_markers):
             return "env", "exception_env"
         return "harness", "exception_harness"
@@ -374,7 +402,6 @@ def classify_failure(
     return "harness", "empty_or_unknown"
 
 
-
 def hint_match_ratio(output: str, hints: list[str]) -> float:
     if not hints:
         return 1.0
@@ -384,7 +411,6 @@ def hint_match_ratio(output: str, hints: list[str]) -> float:
         if hint.lower() in lowered:
             matched += 1
     return matched / len(hints)
-
 
 
 def parse_opencode_json_stream(output: str) -> tuple[list[str], str]:
@@ -520,6 +546,251 @@ def dry_run_attempt(job: JobSpec, attempt: int) -> dict[str, Any]:
     }
 
 
+@dataclass(frozen=True)
+class AncestryGateResult:
+    passed: bool
+    reason_code: str
+    worktree: str
+    required_baseline: str
+    runtime_commit: str | None
+    details: str
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class AllowlistGateResult:
+    passed: bool
+    reason_code: str
+    worktree: str
+    allowed_patterns: list[str]
+    modified_files: list[str]
+    violations: list[str]
+    details: str
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+def _run_git(
+    worktree: pathlib.Path, args: list[str]
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(worktree), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def ancestry_gate(worktree: pathlib.Path, required_baseline: str) -> AncestryGateResult:
+    worktree = worktree.resolve()
+    if not required_baseline:
+        return AncestryGateResult(
+            passed=False,
+            reason_code="required_baseline_missing",
+            worktree=str(worktree),
+            required_baseline=required_baseline,
+            runtime_commit=None,
+            details="required baseline must be provided",
+        )
+    if not worktree.exists():
+        return AncestryGateResult(
+            passed=False,
+            reason_code="worktree_missing",
+            worktree=str(worktree),
+            required_baseline=required_baseline,
+            runtime_commit=None,
+            details="worktree path does not exist",
+        )
+    if _run_git(worktree, ["rev-parse", "--git-dir"]).returncode != 0:
+        return AncestryGateResult(
+            passed=False,
+            reason_code="not_a_git_repo",
+            worktree=str(worktree),
+            required_baseline=required_baseline,
+            runtime_commit=None,
+            details="target path is not a git repository",
+        )
+
+    runtime = _run_git(worktree, ["rev-parse", "HEAD"])
+    runtime_commit = runtime.stdout.strip() if runtime.returncode == 0 else None
+    if not runtime_commit:
+        return AncestryGateResult(
+            passed=False,
+            reason_code="runtime_commit_missing",
+            worktree=str(worktree),
+            required_baseline=required_baseline,
+            runtime_commit=None,
+            details="failed to resolve runtime HEAD commit",
+        )
+
+    required_exists = _run_git(
+        worktree, ["cat-file", "-e", f"{required_baseline}^{{commit}}"]
+    )
+    if required_exists.returncode != 0:
+        return AncestryGateResult(
+            passed=False,
+            reason_code="required_commit_missing",
+            worktree=str(worktree),
+            required_baseline=required_baseline,
+            runtime_commit=runtime_commit,
+            details="required baseline commit is not present in this repository",
+        )
+
+    ancestor = _run_git(
+        worktree, ["merge-base", "--is-ancestor", required_baseline, runtime_commit]
+    )
+    if ancestor.returncode == 0:
+        return AncestryGateResult(
+            passed=True,
+            reason_code="ancestry_ok",
+            worktree=str(worktree),
+            required_baseline=required_baseline,
+            runtime_commit=runtime_commit,
+            details="runtime commit meets required baseline",
+        )
+    return AncestryGateResult(
+        passed=False,
+        reason_code="ancestry_not_met",
+        worktree=str(worktree),
+        required_baseline=required_baseline,
+        runtime_commit=runtime_commit,
+        details="runtime commit is behind required baseline",
+    )
+
+
+def allowlist_gate(
+    worktree: pathlib.Path,
+    allowed_patterns: list[str],
+) -> AllowlistGateResult:
+    worktree = worktree.resolve()
+    if not worktree.exists():
+        return AllowlistGateResult(
+            passed=False,
+            reason_code="worktree_missing",
+            worktree=str(worktree),
+            allowed_patterns=allowed_patterns,
+            modified_files=[],
+            violations=[],
+            details="worktree path does not exist",
+        )
+
+    proc = _run_git(worktree, ["status", "--porcelain"])
+    modified_files: list[str] = []
+    if proc.returncode == 0:
+        for line in proc.stdout.strip().splitlines():
+            if line.strip():
+                parts = line.strip().split(maxsplit=1)
+                if len(parts) == 2:
+                    modified_files.append(parts[1])
+
+    violations: list[str] = []
+    for f in modified_files:
+        allowed = False
+        for pattern in allowed_patterns:
+            if f == pattern or f.startswith(pattern.rstrip("*")):
+                allowed = True
+                break
+        if not allowed:
+            violations.append(f)
+
+    if violations:
+        return AllowlistGateResult(
+            passed=False,
+            reason_code="scope_drift_detected",
+            worktree=str(worktree),
+            allowed_patterns=allowed_patterns,
+            modified_files=modified_files,
+            violations=violations,
+            details=f"files modified outside allowed scope: {violations}",
+        )
+    return AllowlistGateResult(
+        passed=True,
+        reason_code="allowlist_ok",
+        worktree=str(worktree),
+        allowed_patterns=allowed_patterns,
+        modified_files=modified_files,
+        violations=[],
+        details="all modified files within allowed scope",
+    )
+
+
+@dataclass
+class StallDetector:
+    check_interval_sec: float = 30.0
+    stall_threshold_sec: float = 120.0
+    max_restarts: int = 1
+
+    def __post_init__(self) -> None:
+        self._last_cpu_times: dict[int, float] = {}
+        self._last_check_times: dict[int, float] = {}
+        self._restart_counts: dict[int, int] = {}
+
+    def get_cpu_time(self, pid: int) -> float | None:
+        try:
+            proc = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "cputime="],
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+            if proc.returncode == 0:
+                parts = proc.stdout.strip().split(":")
+                if len(parts) == 3:
+                    h, m, s = map(int, parts)
+                    return h * 3600 + m * 60 + s
+                elif len(parts) == 2:
+                    m, s = map(int, parts)
+                    return m * 60 + s
+        except (subprocess.TimeoutExpired, ValueError, OSError):
+            pass
+        return None
+
+    def check_progress(self, pid: int, log_bytes: int) -> tuple[bool, str]:
+        now = time.time()
+        cpu_time = self.get_cpu_time(pid)
+
+        if cpu_time is None:
+            return True, "process_not_found"
+
+        prev_cpu = self._last_cpu_times.get(pid)
+        prev_check = self._last_check_times.get(pid)
+
+        self._last_cpu_times[pid] = cpu_time
+        self._last_check_times[pid] = now
+
+        if prev_cpu is None or prev_check is None:
+            return True, "first_check"
+
+        elapsed = now - prev_check
+        if elapsed < self.stall_threshold_sec:
+            return True, "within_grace"
+
+        cpu_delta = cpu_time - prev_cpu
+        if cpu_delta > 0:
+            return True, "cpu_progressing"
+
+        if log_bytes > 0:
+            return True, "log_present"
+
+        restarts = self._restart_counts.get(pid, 0)
+        if restarts >= self.max_restarts:
+            return False, "stalled_max_restarts"
+
+        return False, "stalled"
+
+    def record_restart(self, pid: int) -> int:
+        current = self._restart_counts.get(pid, 0)
+        self._restart_counts[pid] = current + 1
+        return self._restart_counts[pid]
+
+    def reset_for_pid(self, pid: int) -> None:
+        self._last_cpu_times.pop(pid, None)
+        self._last_check_times.pop(pid, None)
+        self._restart_counts.pop(pid, None)
+
 
 def execute_http_workflow(
     job: JobSpec,
@@ -585,7 +856,9 @@ def execute_http_workflow(
                 timeout_sec=timeout_sec,
                 password=password,
             )
-            busy = bool(isinstance(status_payload, dict) and session_id in status_payload)
+            busy = bool(
+                isinstance(status_payload, dict) and session_id in status_payload
+            )
 
             messages_payload = http_json(
                 base_url,
@@ -616,7 +889,9 @@ def execute_http_workflow(
         success = bool(assistant_text) and not timed_out
 
         first_output_latency_ms = (
-            int((first_output_at - start) * 1000) if first_output_at is not None else None
+            int((first_output_at - start) * 1000)
+            if first_output_at is not None
+            else None
         )
 
         category, reason = classify_failure(
@@ -641,7 +916,9 @@ def execute_http_workflow(
             "stderr": "",
             "failure_category": category,
             "failure_reason": reason,
-            "hint_match_ratio": hint_match_ratio(assistant_text, job.prompt.success_hints),
+            "hint_match_ratio": hint_match_ratio(
+                assistant_text, job.prompt.success_hints
+            ),
             "session_id": session_id,
             "used_model_fallback": used_model_fallback,
         }
@@ -673,7 +950,6 @@ def execute_http_workflow(
         }
 
 
-
 def execute_cli_workflow(
     job: JobSpec,
     *,
@@ -683,7 +959,9 @@ def execute_cli_workflow(
     cc_glm_headless_path: pathlib.Path,
 ) -> dict[str, Any]:
     env = os.environ.copy()
-    prompt_file = job.output_dir / "raw" / f"{job.workflow_id}__{job.prompt.prompt_id}.prompt.txt"
+    prompt_file = (
+        job.output_dir / "raw" / f"{job.workflow_id}__{job.prompt.prompt_id}.prompt.txt"
+    )
     prompt_file.parent.mkdir(parents=True, exist_ok=True)
     prompt_file.write_text(job.prompt.prompt, encoding="utf-8")
 
@@ -748,11 +1026,17 @@ def execute_cli_workflow(
             output_for_hints = parsed_text
         if opencode_errors:
             error_blob = " | ".join(opencode_errors)
-            classified_stderr = sanitize_text(f"{classified_stderr}\n{error_blob}".strip())
+            classified_stderr = sanitize_text(
+                f"{classified_stderr}\n{error_blob}".strip()
+            )
             lowered = error_blob.lower()
             if "model not found" in lowered or "providermodelnotfounderror" in lowered:
                 forced_failure = ("model", "model_not_supported")
-            elif "unauthorized" in lowered or "forbidden" in lowered or "api key" in lowered:
+            elif (
+                "unauthorized" in lowered
+                or "forbidden" in lowered
+                or "api key" in lowered
+            ):
                 forced_failure = ("env", "auth_or_provider")
             else:
                 forced_failure = ("model", "opencode_error_event")
@@ -796,11 +1080,12 @@ def execute_cli_workflow(
         "stderr": classified_stderr,
         "failure_category": category,
         "failure_reason": reason,
-        "hint_match_ratio": hint_match_ratio(output_for_hints, job.prompt.success_hints),
+        "hint_match_ratio": hint_match_ratio(
+            output_for_hints, job.prompt.success_hints
+        ),
         "session_id": None,
         "used_model_fallback": False,
     }
-
 
 
 def run_attempt(
@@ -835,14 +1120,14 @@ def run_attempt(
     )
 
 
-
-def persist_attempt_logs(run_dir: pathlib.Path, job: JobSpec, attempt: int, result: dict[str, Any]) -> None:
+def persist_attempt_logs(
+    run_dir: pathlib.Path, job: JobSpec, attempt: int, result: dict[str, Any]
+) -> None:
     stem = f"{job.workflow_id}__{job.prompt.prompt_id}__attempt{attempt}"
     stdout_path = run_dir / "raw" / f"{stem}.stdout.log"
     stderr_path = run_dir / "raw" / f"{stem}.stderr.log"
     stdout_path.write_text(result.get("stdout", ""), encoding="utf-8")
     stderr_path.write_text(result.get("stderr", ""), encoding="utf-8")
-
 
 
 def execute_job(
@@ -887,11 +1172,15 @@ def execute_job(
         "run_id": job.run_id,
         "workflow_id": job.workflow_id,
         "system": WORKFLOW_SYSTEM[job.workflow_id],
-        "workflow_kind": "server" if job.workflow_id in SERVER_WORKFLOWS else "headless",
+        "workflow_kind": "server"
+        if job.workflow_id in SERVER_WORKFLOWS
+        else "headless",
         "prompt_id": job.prompt.prompt_id,
         "prompt_category": job.prompt.category,
         "prompt_title": job.prompt.title,
         "model": job.model,
+        "model_selected": job.model,
+        "fallback_reason": None,
         "success": bool(final["success"]),
         "retry_count": max(0, len(attempts) - 1),
         "startup_latency_ms": final["startup_latency_ms"],
@@ -913,15 +1202,20 @@ def execute_job(
     return record
 
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Launch parallel benchmark jobs")
     parser.add_argument("--prompts-file", required=True, type=pathlib.Path)
-    parser.add_argument("--run-id", default=f"run-{dt.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}")
+    parser.add_argument(
+        "--run-id", default=f"run-{dt.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
+    )
     parser.add_argument("--workflows", default=",".join(ALL_WORKFLOWS))
     parser.add_argument("--parallel", type=int, default=4)
     parser.add_argument("--model", default="glm-5")
-    parser.add_argument("--output-dir", type=pathlib.Path, default=pathlib.Path("./artifacts/opencode-cc-glm-bench"))
+    parser.add_argument(
+        "--output-dir",
+        type=pathlib.Path,
+        default=pathlib.Path("./artifacts/opencode-cc-glm-bench"),
+    )
     parser.add_argument("--max-retries", type=int, default=1)
     parser.add_argument("--timeout-sec", type=float, default=300.0)
     parser.add_argument("--poll-interval-sec", type=float, default=0.5)
@@ -930,15 +1224,37 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--opencode-url", default=None)
     parser.add_argument("--opencode-host", default="127.0.0.1")
     parser.add_argument("--opencode-port", type=int, default=4096)
-    parser.add_argument("--opencode-password", default=os.environ.get("OPENCODE_SERVER_PASSWORD"))
+    parser.add_argument(
+        "--opencode-password", default=os.environ.get("OPENCODE_SERVER_PASSWORD")
+    )
     parser.add_argument("--opencode-bin", default="opencode")
     parser.add_argument(
         "--cc-glm-headless-path",
         type=pathlib.Path,
         default=pathlib.Path("extended/cc-glm/scripts/cc-glm-headless.sh"),
     )
+    parser.add_argument(
+        "--required-baseline",
+        default="",
+        help="Required commit SHA for ancestry gate",
+    )
+    parser.add_argument(
+        "--allowlist",
+        default="",
+        help="Comma-separated file patterns for allowlist gate",
+    )
+    parser.add_argument(
+        "--enable-stall-detector",
+        action="store_true",
+        help="Enable stall detection with auto-restart",
+    )
+    parser.add_argument(
+        "--stall-threshold-sec",
+        type=float,
+        default=120.0,
+        help="Stall threshold in seconds",
+    )
     return parser.parse_args()
-
 
 
 def main() -> int:
@@ -958,18 +1274,83 @@ def main() -> int:
         "created_at": utc_now_iso(),
         "workflows": workflows,
         "model": args.model,
+        "model_selected": args.model,
+        "fallback_reason": None,
         "parallel": args.parallel,
         "max_retries": args.max_retries,
         "timeout_sec": args.timeout_sec,
         "dry_run": bool(args.dry_run),
         "cwd": str(args.cwd.resolve()),
         "prompts_file": str(args.prompts_file.resolve()),
+        "governance": {
+            "required_baseline": args.required_baseline,
+            "allowlist": args.allowlist.split(",") if args.allowlist else [],
+            "stall_detector_enabled": args.enable_stall_detector,
+            "stall_threshold_sec": args.stall_threshold_sec,
+        },
     }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (run_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2), encoding="utf-8"
+    )
+
+    gates_results: dict[str, Any] = {}
+
+    if args.required_baseline:
+        ancestry = ancestry_gate(args.cwd.resolve(), args.required_baseline)
+        gates_results["ancestry_gate"] = ancestry.to_dict()
+        if not ancestry.passed:
+            error_manifest = {
+                **manifest,
+                "gates": gates_results,
+                "passed": False,
+                "reason_code": TAXONOMY_CODES["ancestry_gate_failed"],
+            }
+            (run_dir / "governance_report.json").write_text(
+                json.dumps(error_manifest, indent=2), encoding="utf-8"
+            )
+            print(
+                json.dumps(
+                    {
+                        "run_id": args.run_id,
+                        "passed": False,
+                        "reason_code": TAXONOMY_CODES["ancestry_gate_failed"],
+                        "details": ancestry.to_dict(),
+                    }
+                )
+            )
+            return 2
+
+    if args.allowlist:
+        patterns = [p.strip() for p in args.allowlist.split(",") if p.strip()]
+        allowlist = allowlist_gate(args.cwd.resolve(), patterns)
+        gates_results["allowlist_gate"] = allowlist.to_dict()
+        if not allowlist.passed:
+            error_manifest = {
+                **manifest,
+                "gates": gates_results,
+                "passed": False,
+                "reason_code": TAXONOMY_CODES["scope_drift_failed"],
+            }
+            (run_dir / "governance_report.json").write_text(
+                json.dumps(error_manifest, indent=2), encoding="utf-8"
+            )
+            print(
+                json.dumps(
+                    {
+                        "run_id": args.run_id,
+                        "passed": False,
+                        "reason_code": TAXONOMY_CODES["scope_drift_failed"],
+                        "details": allowlist.to_dict(),
+                    }
+                )
+            )
+            return 3
 
     servers: dict[str, OpenCodeServerProcess] = {}
     workflow_url: dict[str, str | None] = {}
-    workflow_startup_latency: dict[str, int | None] = {workflow: None for workflow in workflows}
+    workflow_startup_latency: dict[str, int | None] = {
+        workflow: None for workflow in workflows
+    }
 
     try:
         server_index = 0
@@ -1019,7 +1400,9 @@ def main() -> int:
                 )
 
         results: list[dict[str, Any]] = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.parallel)) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max(1, args.parallel)
+        ) as executor:
             future_map = {}
             for job in jobs:
                 future = executor.submit(
@@ -1033,7 +1416,9 @@ def main() -> int:
                     opencode_url=workflow_url.get(job.workflow_id),
                     opencode_password=args.opencode_password,
                     cc_glm_headless_path=args.cc_glm_headless_path.resolve(),
-                    workflow_startup_latency_ms=workflow_startup_latency.get(job.workflow_id),
+                    workflow_startup_latency_ms=workflow_startup_latency.get(
+                        job.workflow_id
+                    ),
                 )
                 future_map[future] = job
 
@@ -1047,17 +1432,23 @@ def main() -> int:
                         "run_id": args.run_id,
                         "workflow_id": job.workflow_id,
                         "system": WORKFLOW_SYSTEM[job.workflow_id],
-                        "workflow_kind": "server" if job.workflow_id in SERVER_WORKFLOWS else "headless",
+                        "workflow_kind": "server"
+                        if job.workflow_id in SERVER_WORKFLOWS
+                        else "headless",
                         "prompt_id": job.prompt.prompt_id,
                         "prompt_category": job.prompt.category,
                         "prompt_title": job.prompt.title,
                         "model": job.model,
+                        "model_selected": job.model,
+                        "fallback_reason": None,
                         "success": False,
                         "retry_count": max(0, args.max_retries),
                         "startup_latency_ms": None,
                         "first_output_latency_ms": None,
                         "completion_latency_ms": None,
-                        "workflow_startup_latency_ms": workflow_startup_latency.get(job.workflow_id),
+                        "workflow_startup_latency_ms": workflow_startup_latency.get(
+                            job.workflow_id
+                        ),
                         "failure_category": "harness",
                         "failure_reason": "executor_exception",
                         "hint_match_ratio": 0.0,
@@ -1076,17 +1467,35 @@ def main() -> int:
                         ],
                     }
                     results.append(error_record)
-                    path = run_dir / "raw" / f"{job.workflow_id}__{job.prompt.prompt_id}.json"
-                    path.write_text(json.dumps(error_record, indent=2), encoding="utf-8")
+                    path = (
+                        run_dir
+                        / "raw"
+                        / f"{job.workflow_id}__{job.prompt.prompt_id}.json"
+                    )
+                    path.write_text(
+                        json.dumps(error_record, indent=2), encoding="utf-8"
+                    )
 
         run_results = {
             "run_id": args.run_id,
             "generated_at": utc_now_iso(),
-            "records": sorted(results, key=lambda r: (r["workflow_id"], r["prompt_id"])),
+            "records": sorted(
+                results, key=lambda r: (r["workflow_id"], r["prompt_id"])
+            ),
         }
-        (run_dir / "run_results.json").write_text(json.dumps(run_results, indent=2), encoding="utf-8")
+        (run_dir / "run_results.json").write_text(
+            json.dumps(run_results, indent=2), encoding="utf-8"
+        )
 
-        print(json.dumps({"run_id": args.run_id, "run_dir": str(run_dir), "record_count": len(results)}))
+        print(
+            json.dumps(
+                {
+                    "run_id": args.run_id,
+                    "run_dir": str(run_dir),
+                    "record_count": len(results),
+                }
+            )
+        )
         return 0
     finally:
         for server in servers.values():

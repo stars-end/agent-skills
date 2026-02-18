@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Run progressive OpenCode benchmark phases with explicit gate outputs."""
+"""Run progressive OpenCode benchmark phases with explicit gate outputs.
+
+V8.x Reliability Hardening:
+- Model preflight before wave launch
+- Model selection with fallback
+- Taxonomy codes for failure classification
+"""
 
 from __future__ import annotations
 
@@ -11,6 +17,18 @@ import subprocess
 from typing import Any
 
 from governance_gates import baseline_gate, integrity_gate
+from opencode_preflight import run_preflight
+
+
+TAXONOMY_CODES = {
+    "model_unavailable": "model_unavailable",
+    "preflight_failed": "preflight_failed",
+    "stalled_run": "stalled_run",
+    "ancestry_gate_failed": "ancestry_gate_failed",
+    "scope_drift_failed": "scope_drift_failed",
+    "baseline_gate_failed": "baseline_gate_failed",
+    "integrity_gate_failed": "integrity_gate_failed",
+}
 
 
 PHASES: dict[str, dict[str, Any]] = {
@@ -26,7 +44,11 @@ PHASES: dict[str, dict[str, Any]] = {
     "phase2_6stream": {
         "description": "OpenCode 6-stream throughput wave (3 prompts x 2 rounds equivalent).",
         "workflows": ["opencode_run_headless"],
-        "prompt_ids": ["coding_ability_2", "latency_speed_1", "robustness_partial_context_1"],
+        "prompt_ids": [
+            "coding_ability_2",
+            "latency_speed_1",
+            "robustness_partial_context_1",
+        ],
         "parallel": 6,
         "max_retries": 1,
         "timeout_sec": 300,
@@ -120,7 +142,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--prompts-file",
         type=pathlib.Path,
-        default=pathlib.Path("scripts/benchmarks/opencode_cc_glm/benchmark_prompts.json"),
+        default=pathlib.Path(
+            "scripts/benchmarks/opencode_cc_glm/benchmark_prompts.json"
+        ),
     )
     parser.add_argument(
         "--output-dir",
@@ -143,7 +167,12 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Branch for integrity gate (defaults to current branch in --cwd repo)",
     )
-    parser.add_argument("--force", action="store_true", help="Skip previous-phase pass check")
+    parser.add_argument(
+        "--force", action="store_true", help="Skip previous-phase pass check"
+    )
+    parser.add_argument(
+        "--skip-preflight", action="store_true", help="Skip model preflight check"
+    )
     return parser.parse_args()
 
 
@@ -169,7 +198,41 @@ def main() -> int:
     run_id = f"progressive-{args.phase}-{utc_now_compact()}"
     filtered_prompts = output_dir / run_id / "phase_prompts.json"
     filtered_prompts.parent.mkdir(parents=True, exist_ok=True)
-    write_filtered_prompts(args.prompts_file.resolve(), phase_cfg["prompt_ids"], filtered_prompts)
+    write_filtered_prompts(
+        args.prompts_file.resolve(), phase_cfg["prompt_ids"], filtered_prompts
+    )
+
+    preflight_result: dict[str, Any] | None = None
+    if not args.skip_preflight:
+        preflight = run_preflight(preferred_model=args.model, json_output=False)
+        preflight_result = preflight.to_dict()
+        if not preflight.passed:
+            record = {
+                "phase": args.phase,
+                "run_id": run_id,
+                "run_dir": str(filtered_prompts.parent),
+                "model": args.model,
+                "model_selected": None,
+                "workflows": phase_cfg["workflows"],
+                "prompt_ids": phase_cfg["prompt_ids"],
+                "success_rate": 0.0,
+                "min_success_rate": phase_cfg["min_success_rate"],
+                "passed": False,
+                "reason_code": preflight.reason_code,
+                "taxonomy": TAXONOMY_CODES.get(
+                    preflight.reason_code, preflight.reason_code
+                ),
+                "preflight": preflight_result,
+                "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            }
+            state.setdefault("history", []).append(record)
+            save_gate_state(state_file, state)
+            print(json.dumps(record, indent=2))
+            return 1
+
+    effective_model = (
+        preflight_result.get("selected_model") if preflight_result else args.model
+    ) or args.model
 
     baseline_result: dict[str, Any] | None = None
     if args.required_baseline:
@@ -181,11 +244,14 @@ def main() -> int:
                 "run_id": run_id,
                 "run_dir": "",
                 "model": args.model,
+                "model_selected": effective_model,
                 "workflows": phase_cfg["workflows"],
                 "prompt_ids": phase_cfg["prompt_ids"],
                 "success_rate": 0.0,
                 "min_success_rate": phase_cfg["min_success_rate"],
                 "passed": False,
+                "reason_code": TAXONOMY_CODES["baseline_gate_failed"],
+                "preflight": preflight_result,
                 "baseline_gate": baseline_result,
                 "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             }
@@ -207,7 +273,7 @@ def main() -> int:
             "--parallel",
             str(phase_cfg["parallel"]),
             "--model",
-            args.model,
+            effective_model,
             "--output-dir",
             str(output_dir),
             "--max-retries",
@@ -249,7 +315,9 @@ def main() -> int:
     passed = success_rate >= float(phase_cfg["min_success_rate"])
     integrity_result: dict[str, Any] | None = None
     if args.reported_commit:
-        integ_eval = integrity_gate(args.cwd.resolve(), args.reported_commit, args.branch or None)
+        integ_eval = integrity_gate(
+            args.cwd.resolve(), args.reported_commit, args.branch or None
+        )
         integrity_result = integ_eval.to_dict()
         passed = passed and bool(integ_eval.passed)
 
@@ -258,11 +326,16 @@ def main() -> int:
         "run_id": run_id,
         "run_dir": str(run_dir),
         "model": args.model,
+        "model_selected": effective_model,
+        "fallback_reason": preflight_result.get("fallback_reason")
+        if preflight_result
+        else None,
         "workflows": phase_cfg["workflows"],
         "prompt_ids": phase_cfg["prompt_ids"],
         "success_rate": success_rate,
         "min_success_rate": phase_cfg["min_success_rate"],
         "passed": passed,
+        "preflight": preflight_result,
         "baseline_gate": baseline_result,
         "integrity_gate": integrity_result,
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
