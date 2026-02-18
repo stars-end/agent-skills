@@ -331,6 +331,83 @@ echo $! > /tmp/cc-glm-jobs/bd-xxx.pid
 
 For deterministic headless execution on remote hosts (CI, epyc servers, etc.), ensure auth is properly configured. **Parallel jobs require deterministic auth - the legacy zsh/cc-glm fallback path is disabled by default.**
 
+### Default Host Behavior: epyc12 Dispatch Policy
+
+When running cc-glm headless operations without explicit host specification:
+
+**Default target**: `epyc12` (the canonical heavy-compute runtime)
+
+**Auth token resolution** (hostname-based, deterministic order):
+1. `OP_SERVICE_ACCOUNT_TOKEN_FILE` (if explicitly set)
+2. `/home/fengning/.config/systemd/user/op-epyc12-token` (epyc12 canonical path)
+3. `$HOME/.config/systemd/user/op-$(hostname)-token` (hostname-based)
+4. `$HOME/.config/systemd/user/op-macmini-token` (legacy fallback)
+
+**User/host naming conventions**:
+- Token files follow pattern: `op-<hostname>-token` (e.g., `op-epyc12-token`)
+- Use lowercase hostnames in token filenames
+- For new hosts, run `~/agent-skills/scripts/create-op-credential.sh` on that host
+
+**Operator runbook for headless execution**:
+
+```bash
+# 1. On first use of a host, create the op credential
+ssh epyc12
+~/agent-skills/scripts/create-op-credential.sh
+
+# 2. Verify op resolution works
+op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+
+# 3. From control plane, dispatch job (default target: epyc12)
+cc-glm-job.sh start \
+  --beads bd-xxx \
+  --prompt-file /tmp/prompts/task.prompt \
+  --pty
+
+# 4. Monitor job health
+cc-glm-job.sh health --beads bd-xxx
+
+# 5. If auth fails (exit code 10), check token file
+ls -la ~/.config/systemd/user/op-epyc12-token
+
+# 6. Troubleshooting: enable debug logging
+CC_GLM_DEBUG=1 cc-glm-headless.sh --prompt "test"
+```
+
+**Troubleshooting flow**:
+1. **Exit code 10** → Auth resolution failed
+   - Check: `ls -la ~/.config/systemd/user/op-$(hostname)-token`
+   - Remedy: Run `create-op-credential.sh` on target host
+2. **Zero-byte log** → Job stalled or PTY issue
+   - Check: `cc-glm-job.sh check --beads bd-xxx`
+   - Remedy: `cc-glm-job.sh restart --beads bd-xxx --pty`
+3. **Log not advancing** → Job hung or waiting
+   - Check: `tail -20 /tmp/cc-glm-jobs/bd-xxx.log`
+   - Remedy: `cc-glm-job.sh stop --beads bd-xxx` then restart
+
+**Multi-host explicit mode preservation**:
+
+When using `dx-dispatch` with explicit `--hosts` specification, the default epyc12 policy does NOT apply:
+
+```bash
+# Explicit multi-host dispatch (bypasses epyc12 default)
+dx-dispatch epyc6 "Run tests" --repo affordabot
+dx-dispatch macmini "Build iOS" --repo prime-radiant-ai
+
+# Default dispatch (uses epyc12)
+cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
+```
+
+The epyc12-default policy applies **only** to:
+- `cc-glm-headless.sh` direct invocations
+- `cc-glm-job.sh` managed background jobs
+- Cases where no explicit host is specified
+
+It does **NOT** affect:
+- `dx-dispatch <host>` (explicit host specification)
+- Fleet dispatcher backend selection
+- Jules Cloud dispatch
+
 ### Auth Resolution Order (First Match Wins)
 
 | Priority | Environment Variable | Description |

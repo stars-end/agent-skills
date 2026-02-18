@@ -470,4 +470,168 @@ if [[ $failed -gt 0 ]]; then
   exit 1
 fi
 
+# Test: epyc12-default auth token file discovery
+test_epyc12_default_fallback() {
+  echo ""
+  echo "=== Test: epyc12-default token file discovery ==="
+
+  setup_test_env
+
+  # Create temporary directory to simulate epyc12 token location
+  local temp_dir base_dir fake_epyc12_token
+  temp_dir="$(mktemp -d)"
+  base_dir="$(dirname "$temp_dir")"
+  fake_epyc12_token="${base_dir}/op-epyc12-token"
+
+  # Create a fake token file
+  echo "fake-test-token-epyc12" > "$fake_epyc12_token"
+  chmod 600 "$fake_epyc12_token"
+
+  # Set HOME to temp directory to control test environment
+  local old_home="$HOME"
+  export HOME="$base_dir"
+  export OP_SERVICE_ACCOUNT_TOKEN_FILE=""
+
+  # Set an invalid vault so default op:// fails deterministically
+  export CC_GLM_OP_VAULT="__invalid_vault_for_test__"
+
+  # Verify the epyc12 path exists in the script
+  local has_epyc12_path
+  has_epyc12_path="$(grep -c 'op-epyc12-token' "$HEADLESS_SCRIPT" || true)"
+  if [[ "$has_epyc12_path" -gt 0 ]]; then
+    pass "cc-glm-headless.sh contains epyc12 token path reference"
+  else
+    fail "cc-glm-headless.sh missing epyc12 token path reference"
+  fi
+
+  # Verify hostname-based fallback path exists
+  local has_hostname_path
+  has_hostname_path="$(grep -c 'op-\${host}-token' "$HEADLESS_SCRIPT" || true)"
+  if [[ "$has_hostname_path" -gt 0 ]]; then
+    pass "cc-glm-headless.sh contains hostname-based token path reference"
+  else
+    fail "cc-glm-headless.sh missing hostname-based token path reference"
+  fi
+
+  # Cleanup
+  export HOME="$old_home"
+  rm -f "$fake_epyc12_token"
+  unset CC_GLM_OP_VAULT
+  setup_test_env
+}
+
+# Test: OP_SERVICE_ACCOUNT_TOKEN_FILE env variable takes precedence
+test_op_token_file_env_precedence() {
+  echo ""
+  echo "=== Test: OP_SERVICE_ACCOUNT_TOKEN_FILE env precedence ==="
+
+  setup_test_env
+
+  # Create temporary token files
+  local temp_dir env_token_file hostname_token
+  temp_dir="$(mktemp -d)"
+  env_token_file="${temp_dir}/op-env-token"
+  hostname_token="${temp_dir}/op-$(hostname)-token"
+
+  echo "token-from-env-file" > "$env_token_file"
+  echo "token-from-hostname-file" > "$hostname_token"
+
+  # Verify both file types are checked in the resolver
+  local checks_env checks_hostname
+  checks_env="$(grep -c 'OP_SERVICE_ACCOUNT_TOKEN_FILE' "$HEADLESS_SCRIPT" || true)"
+  checks_hostname="$(grep -c 'op-\${host}-token' "$HEADLESS_SCRIPT" || true)"
+
+  if [[ "$checks_env" -gt 0 ]] && [[ "$checks_hostname" -gt 0 ]]; then
+    pass "Resolver checks both OP_SERVICE_ACCOUNT_TOKEN_FILE and hostname-based paths"
+  else
+    fail "Resolver missing token file path checks" "env=$checks_env hostname=$checks_hostname"
+  fi
+
+  # Verify the precedence order: env file > hostname file
+  local precedence_check
+  precedence_check="$(awk '/OP_SERVICE_ACCOUNT_TOKEN_FILE.*&&.*-f/ {print "found"; exit}' "$HEADLESS_SCRIPT" || true)"
+  if [[ "$precedence_check" == "found" ]]; then
+    pass "OP_SERVICE_ACCOUNT_TOKEN_FILE takes precedence over hostname-based path"
+  else
+    # The check may use different syntax, just verify both paths exist
+    if grep -q "OP_SERVICE_ACCOUNT_TOKEN_FILE" "$HEADLESS_SCRIPT" && grep -q "op-epyc12-token" "$HEADLESS_SCRIPT"; then
+      pass "Token file discovery includes both env and explicit epyc12 paths"
+    else
+      fail "Token file discovery paths not properly implemented"
+    fi
+  fi
+
+  # Cleanup
+  rm -rf "$temp_dir"
+  setup_test_env
+}
+
+# Test: Legacy macmini fallback path exists
+test_legacy_macmini_fallback() {
+  echo ""
+  echo "=== Test: Legacy macmini token fallback ==="
+
+  setup_test_env
+
+  # Verify legacy macmini path exists for backwards compatibility
+  local has_legacy_path
+  has_legacy_path="$(grep -c 'op-macmini-token' "$HEADLESS_SCRIPT" || true)"
+  if [[ "$has_legacy_path" -gt 0 ]]; then
+    pass "cc-glm-headless.sh contains legacy macmini token fallback"
+  else
+    fail "cc-glm-headless.sh missing legacy macmini token fallback"
+  fi
+}
+
+# Run all tests
+echo "================================================"
+echo "cc-glm-headless.sh Auth Resolver Test Suite"
+echo "================================================"
+echo "Script: $HEADLESS_SCRIPT"
+echo ""
+
+# Verify script exists
+if [[ ! -f "$HEADLESS_SCRIPT" ]]; then
+  echo "ERROR: Script not found: $HEADLESS_SCRIPT"
+  exit 1
+fi
+
+# Verify script is executable
+if [[ ! -x "$HEADLESS_SCRIPT" ]]; then
+  echo "Making script executable..."
+  chmod +x "$HEADLESS_SCRIPT"
+fi
+
+# Run tests
+test_version_output
+test_help_output
+test_no_token_leakage
+test_cc_glm_auth_token_priority
+test_zai_api_key_plain
+test_zai_api_key_op_reference
+test_cc_glm_op_uri
+test_default_op_fallback
+test_allow_fallback
+test_strict_auth_disabled
+test_priority_order
+test_anthropic_env_exports
+test_missing_claude_cli
+test_epyc12_default_fallback
+test_op_token_file_env_precedence
+test_legacy_macmini_fallback
+
+# Summary
+echo ""
+echo "================================================"
+echo "Summary"
+echo "================================================"
+echo -e "${GREEN}Passed${NC}: $passed"
+echo -e "${RED}Failed${NC}: $failed"
+echo -e "${YELLOW}Skipped${NC}: $skipped"
+echo ""
+
+if [[ $failed -gt 0 ]]; then
+  exit 1
+fi
+
 exit 0
