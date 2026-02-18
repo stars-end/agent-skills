@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# cc-glm-job.sh (V3.0 - Progress-Aware Health + Forensics + Guardrails)
+# cc-glm-job.sh (V3.1 - Forensic Log Retention + Outcome Metadata)
 #
 # Lightweight background job manager for cc-glm headless runs.
 # Keeps consistent artifacts under /tmp/cc-glm-jobs:
 #   <beads>.pid, <beads>.log, <beads>.meta, <beads>.outcome, <beads>.contract
 #   <beads>.log.<n> (rotated logs)
+#   <beads>.outcome.<n> (rotated outcomes - V3.1)
 #
 # Commands:
 #   start    --beads <id> --prompt-file <path> [--repo <name>] [--worktree <path>] [--log-dir <dir>] [--pty]
@@ -19,10 +20,15 @@ set -euo pipefail
 #   watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>] [--once]
 #            [--observe-only] [--no-auto-restart] [--pidfile <path>]
 #
-# V3.0 Changes:
+# V3.1 Changes:
+#   - Forensic log retention: outcome rotation instead of deletion
+#   - Enhanced outcome metadata: run_id, duration_sec, retries
+#   - Status/health now show duration for completed jobs
+#
+# V3.0 Features (preserved):
 #   - Progress-aware health: process liveness is primary signal, log growth is secondary
 #   - Restart env contract integrity: preserves auth source/mode/model/base-url
-#   - Forensics: log rotation on restart, outcome metadata persistence
+#   - Log rotation on restart (no truncation)
 #   - Operator guardrails: ANSI stripping, observe-only mode, per-bead no-auto-restart
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +36,7 @@ HEADLESS="${SCRIPT_DIR}/cc-glm-headless.sh"
 PTY_RUN="${SCRIPT_DIR}/pty-run.sh"
 
 # Version for debugging
-CC_GLM_JOB_VERSION="3.0.0"
+CC_GLM_JOB_VERSION="3.1.0"
 
 LOG_DIR="/tmp/cc-glm-jobs"
 CMD="${1:-}"
@@ -38,7 +44,7 @@ shift || true
 
 usage() {
   cat <<'EOF'
-cc-glm-job.sh (V3.0 - Progress-Aware Health + Forensics + Guardrails)
+cc-glm-job.sh (V3.1 - Forensic Log Retention + Outcome Metadata)
 
 Usage:
   cc-glm-job.sh start --beads <id> --prompt-file <path> [options]
@@ -69,7 +75,7 @@ Options:
   --once              Run exactly one watchdog iteration, then exit.
   --lines N           Number of lines for tail command (default: 20).
 
-Health States (V3.0):
+Health States (V3.1):
   healthy      - Process running with recent activity
   starting     - Process running but within grace window
   stalled      - Process alive but no progress for N minutes
@@ -87,17 +93,28 @@ Exit Codes:
   11 - Token file error
 
 Job Artifacts:
-  <beads>.pid       - Process ID file
-  <beads>.log       - Current output log
-  <beads>.log.<n>   - Rotated logs (preserved on restart)
-  <beads>.meta      - Job metadata (repo, worktree, retries, etc.)
-  <beads>.outcome   - Final outcome (exit_code, completed_at, state)
-  <beads>.contract  - Runtime contract (auth_source, model, base_url)
+  <beads>.pid         - Process ID file
+  <beads>.log         - Current output log
+  <beads>.log.<n>     - Rotated logs (preserved on restart)
+  <beads>.meta        - Job metadata (repo, worktree, retries, etc.)
+  <beads>.outcome     - Final outcome (run_id, exit_code, state, duration_sec)
+  <beads>.outcome.<n> - Rotated outcomes (V3.1 forensic history)
+  <beads>.contract    - Runtime contract (auth_source, model, base_url)
+
+Outcome Metadata Fields (V3.1):
+  beads        - Beads ID
+  run_id       - Unique run identifier (timestamp-based)
+  exit_code    - Process exit code
+  state        - success/failed/killed
+  completed_at - ISO 8601 completion timestamp
+  duration_sec - Total run duration in seconds
+  retries      - Number of restarts before completion
 
 Notes:
   - Log rotation: old logs preserved as <beads>.log.<n> on restart
+  - Outcome rotation: old outcomes preserved as <beads>.outcome.<n> (V3.1)
   - Contract file ensures restart consistency (no env drift)
-  - status/health show outcome column for completed jobs
+  - status/health show outcome with duration for completed jobs
 EOF
 }
 
@@ -342,17 +359,76 @@ rotate_log() {
   mv "$log_file" "${base_dir}/${base_name}.log.${n}"
 }
 
-# Persist outcome metadata
+# Rotate outcome file (preserve forensic history)
+# Renames outcome -> outcome.1, outcome.1 -> outcome.2, etc.
+rotate_outcome() {
+  local outcome_file="$1"
+  if [[ ! -f "$outcome_file" ]]; then
+    return 0
+  fi
+
+  local base_dir base_name n=1
+  base_dir="$(dirname "$outcome_file")"
+  base_name="$(basename "$outcome_file" .outcome)"
+
+  # Find next rotation number
+  while [[ -f "${base_dir}/${base_name}.outcome.${n}" ]]; do
+    n=$((n + 1))
+  done
+
+  # Rotate
+  mv "$outcome_file" "${base_dir}/${base_name}.outcome.${n}"
+}
+
+# Persist outcome metadata (V3.1: enhanced with run_id, duration, retries)
 persist_outcome() {
   local beads="$1"
   local exit_code="$2"
   local outcome_file="$3"
+  local meta_file="$4"
+
+  local state="failed"
+  if [[ "$exit_code" -eq 0 ]]; then
+    state="success"
+  elif [[ "$exit_code" -eq 137 ]]; then
+    state="killed"
+  fi
+
+  # Calculate duration if we have start time
+  local duration_sec="-"
+  local started_at=""
+  if [[ -f "$meta_file" ]]; then
+    started_at="$(meta_get "$meta_file" "started_at")"
+    if [[ -n "$started_at" ]]; then
+      local now_epoch start_epoch
+      now_epoch="$(date +%s)"
+      # Parse ISO 8601 timestamp (assumes UTC)
+      start_epoch="$(date -d "${started_at}" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "${started_at}" +%s 2>/dev/null || echo "")"
+      if [[ -n "$start_epoch" ]]; then
+        duration_sec=$((now_epoch - start_epoch))
+      fi
+    fi
+  fi
+
+  # Get final retry count
+  local final_retries="0"
+  if [[ -f "$meta_file" ]]; then
+    final_retries="$(meta_get "$meta_file" "retries")"
+    final_retries="${final_retries:-0}"
+  fi
+
+  # Generate run_id (timestamp-based for uniqueness)
+  local run_id
+  run_id="$(date +%Y%m%d%H%M%S)"
 
   cat > "$outcome_file" <<EOF
 beads=$beads
+run_id=$run_id
 exit_code=$exit_code
+state=$state
 completed_at=$(now_utc)
-state=$([[ "$exit_code" -eq 0 ]] && echo "success" || echo "failed")
+duration_sec=$duration_sec
+retries=$final_retries
 EOF
 }
 
@@ -511,8 +587,8 @@ start_cmd() {
   # Rotate any existing log
   rotate_log "$LOG_FILE"
 
-  # Clear outcome from previous run
-  rm -f "$OUTCOME_FILE"
+  # Rotate outcome from previous run (preserve forensic history)
+  rotate_outcome "$OUTCOME_FILE"
 
   cat > "$META_FILE" <<EOF
 beads=$BEADS
@@ -564,7 +640,7 @@ EOF
 status_line() {
   local beads="$1"
   job_paths "$beads"
-  local pid="" state="missing" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-"
+  local pid="" state="missing" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-"
 
   if [[ -f "$PID_FILE" ]]; then
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -573,10 +649,15 @@ status_line() {
 
   # Check for completed outcome
   if [[ -f "$OUTCOME_FILE" ]]; then
-    local outcome_state outcome_exit
+    local outcome_state outcome_exit outcome_duration
     outcome_state="$(meta_get "$OUTCOME_FILE" "state")"
     outcome_exit="$(meta_get "$OUTCOME_FILE" "exit_code")"
+    outcome_duration="$(meta_get "$OUTCOME_FILE" "duration_sec")"
     outcome="${outcome_state:-completed}:${outcome_exit:-?}"
+    # Add duration if available and job is done
+    if [[ -n "$outcome_duration" && "$outcome_duration" != "-" && "$outcome_duration" != "-"* ]]; then
+      outcome="${outcome} (${outcome_duration}s)"
+    fi
   fi
 
   if [[ -f "$LOG_FILE" ]]; then
@@ -857,7 +938,7 @@ stop_cmd() {
     # Record outcome
     local exit_code=137  # SIGKILL
     if [[ -f "$META_FILE" ]]; then
-      persist_outcome "$BEADS" "$exit_code" "$OUTCOME_FILE"
+      persist_outcome "$BEADS" "$exit_code" "$OUTCOME_FILE" "$META_FILE"
     fi
 
     echo "stopped $BEADS (pid=$pid, killed)"
@@ -868,7 +949,7 @@ stop_cmd() {
     if [[ -f "$OUTCOME_FILE" ]]; then
       : # Already has outcome
     elif [[ -f "$META_FILE" ]]; then
-      persist_outcome "$BEADS" "1" "$OUTCOME_FILE"  # Unknown exit
+      persist_outcome "$BEADS" "1" "$OUTCOME_FILE" "$META_FILE"  # Unknown exit
     fi
   fi
 }
@@ -932,10 +1013,15 @@ health_line() {
 
   # Check outcome
   if [[ -f "$OUTCOME_FILE" ]]; then
-    local outcome_state outcome_exit
+    local outcome_state outcome_exit outcome_duration
     outcome_state="$(meta_get "$OUTCOME_FILE" "state")"
     outcome_exit="$(meta_get "$OUTCOME_FILE" "exit_code")"
+    outcome_duration="$(meta_get "$OUTCOME_FILE" "duration_sec")"
     outcome="${outcome_state:-?}:${outcome_exit:-?}"
+    # Add duration if available and job is done
+    if [[ -n "$outcome_duration" && "$outcome_duration" != "-" && "$outcome_duration" != "-"* ]]; then
+      outcome="${outcome} (${outcome_duration}s)"
+    fi
   fi
 
   local output
@@ -1012,8 +1098,8 @@ restart_cmd() {
   # Rotate log (preserves history)
   rotate_log "$LOG_FILE"
 
-  # Clear old outcome
-  rm -f "$OUTCOME_FILE"
+  # Rotate outcome (preserves forensic history)
+  rotate_outcome "$OUTCOME_FILE"
 
   # Increment retries
   local new_retries=$((retries + 1))

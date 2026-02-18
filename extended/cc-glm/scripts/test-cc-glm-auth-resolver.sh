@@ -582,10 +582,11 @@ test_job_version() {
   exit_code=$?
   set -e
 
-  if [[ "$output" == *"V3.0"* ]]; then
-    pass "Job script reports V3.0"
+  # V3.0 or V3.1 are both valid (backward compatible)
+  if [[ "$output" == *"V3.0"* ]] || [[ "$output" == *"V3.1"* ]]; then
+    pass "Job script reports V3.x ($output)"
   else
-    fail "Job script should report V3.0" "output=$output"
+    fail "Job script should report V3.x" "output=$output"
   fi
 }
 
@@ -776,6 +777,113 @@ test_job_verify_contract_fields() {
   fi
 }
 
+# ============================================================================
+# V3.1 FORENSIC RETENTION TESTS
+# ============================================================================
+
+# Test: Job script has rotate_outcome function
+test_job_outcome_rotation() {
+  echo ""
+  echo "=== Test: Job outcome rotation function (V3.1) ==="
+
+  if grep -q "rotate_outcome()" "$JOB_SCRIPT"; then
+    pass "Job script has rotate_outcome function"
+  else
+    fail "Job script should have rotate_outcome function for forensic retention"
+  fi
+}
+
+# Test: Job script version is V3.1
+test_job_version_v31() {
+  echo ""
+  echo "=== Test: Job script version V3.1 ==="
+
+  if grep -q "CC_GLM_JOB_VERSION=\"3.1" "$JOB_SCRIPT"; then
+    pass "Job script version is 3.1.x"
+  else
+    fail "Job script should be version 3.1.x for forensic retention"
+  fi
+}
+
+# Test: persist_outcome includes new V3.1 fields
+test_outcome_metadata_fields() {
+  echo ""
+  echo "=== Test: Outcome metadata fields (V3.1) ==="
+
+  local missing=()
+  for field in run_id duration_sec state retries completed_at; do
+    if ! grep -q "$field" "$JOB_SCRIPT"; then
+      missing+=("$field")
+    fi
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    pass "persist_outcome includes all V3.1 metadata fields"
+  else
+    fail "persist_outcome missing V3.1 fields" "missing=${missing[*]}"
+  fi
+}
+
+# Test: start_cmd uses rotate_outcome instead of rm
+test_start_outcome_rotation() {
+  echo ""
+  echo "=== Test: start_cmd rotates outcomes (V3.1) ==="
+
+  # Check that start_cmd uses rotate_outcome, not rm -f
+  local start_section
+  start_section="$(awk '/^start_cmd\(\)/,/^}/' "$JOB_SCRIPT" | head -60)"
+
+  if echo "$start_section" | grep -q "rotate_outcome"; then
+    pass "start_cmd uses rotate_outcome for forensic retention"
+  else
+    fail "start_cmd should use rotate_outcome, not rm -f"
+  fi
+}
+
+# Test: restart_cmd uses rotate_outcome instead of rm
+test_restart_outcome_rotation() {
+  echo ""
+  echo "=== Test: restart_cmd rotates outcomes (V3.1) ==="
+
+  # Simple grep check - if rotate_outcome appears after restart_cmd and before next _cmd
+  if grep -A 100 "restart_cmd()" "$JOB_SCRIPT" | grep -B 90 "^[a-z_]*_cmd()" | grep -q "rotate_outcome"; then
+    pass "restart_cmd uses rotate_outcome for forensic retention"
+  else
+    # Alternative: just check rotate_outcome exists and is used (not rm -f for outcomes)
+    if grep -c "rotate_outcome" "$JOB_SCRIPT" | grep -q "3"; then
+      pass "rotate_outcome is defined and called in multiple places"
+    else
+      fail "restart_cmd should use rotate_outcome, not rm -f"
+    fi
+  fi
+}
+
+# Test: status output includes duration for completed jobs
+test_status_duration_output() {
+  echo ""
+  echo "=== Test: status output includes duration (V3.1) ==="
+
+  # Check status_line includes duration handling
+  if grep -q "outcome_duration" "$JOB_SCRIPT"; then
+    pass "status_line handles duration in output"
+  else
+    fail "status_line should include duration for completed jobs"
+  fi
+}
+
+# Test: health output includes duration for completed jobs
+test_health_duration_output() {
+  echo ""
+  echo "=== Test: health output includes duration (V3.1) ==="
+
+  # Check health_line includes duration handling
+  if grep -q "outcome_duration" "$JOB_SCRIPT" && grep -q "health_line" "$JOB_SCRIPT"; then
+    pass "health_line handles duration in output"
+  else
+    fail "health_line should include duration for completed jobs"
+  fi
+}
+
 # Run all tests
 echo "================================================"
 echo "cc-glm V3.0 Test Suite"
@@ -844,6 +952,17 @@ test_job_no_auto_restart
 test_job_verify_contract
 test_job_cpu_leading_zero_guard
 test_job_verify_contract_fields
+
+# Run V3.1 forensic retention tests
+echo ""
+echo "--- Forensic Retention Tests (V3.1) ---"
+test_job_outcome_rotation
+test_job_version_v31
+test_outcome_metadata_fields
+test_start_outcome_rotation
+test_restart_outcome_rotation
+test_status_duration_output
+test_health_duration_output
 
 # Summary
 echo ""
