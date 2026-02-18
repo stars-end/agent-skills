@@ -287,19 +287,19 @@ test_help_output() {
   local output
   output=$("$HEADLESS_SCRIPT" --help 2>&1)
 
-  local has_auth_order has_fallback has_examples
+  local has_auth_order has_fallback has_epyc12
   has_auth_order=0
   has_fallback=0
-  has_examples=0
+  has_epyc12=0
 
   [[ "$output" == *"CC_GLM_AUTH_TOKEN"* ]] && has_auth_order=1
   [[ "$output" == *"CC_GLM_ALLOW_FALLBACK"* ]] && has_fallback=1
-  [[ "$output" == *"Examples:"* ]] && has_examples=1
+  [[ "$output" == *"epyc12"* ]] && has_epyc12=1
 
-  if [[ $has_auth_order -eq 1 ]] && [[ $has_fallback -eq 1 ]] && [[ $has_examples -eq 1 ]]; then
-    pass "Help output contains auth order, fallback info, and examples"
+  if [[ $has_auth_order -eq 1 ]] && [[ $has_fallback -eq 1 ]] && [[ $has_epyc12 -eq 1 ]]; then
+    pass "Help output contains auth order, fallback info, and epyc12 default"
   else
-    fail "Help output missing expected sections" "auth=$has_auth_order fallback=$has_fallback examples=$has_examples"
+    fail "Help output missing expected sections" "auth=$has_auth_order fallback=$has_fallback epyc12=$has_epyc12"
   fi
 }
 
@@ -422,78 +422,12 @@ test_missing_claude_cli() {
   fi
 }
 
-# Run all tests
-echo "================================================"
-echo "cc-glm-headless.sh Auth Resolver Test Suite"
-echo "================================================"
-echo "Script: $HEADLESS_SCRIPT"
-echo ""
-
-# Verify script exists
-if [[ ! -f "$HEADLESS_SCRIPT" ]]; then
-  echo "ERROR: Script not found: $HEADLESS_SCRIPT"
-  exit 1
-fi
-
-# Verify script is executable
-if [[ ! -x "$HEADLESS_SCRIPT" ]]; then
-  echo "Making script executable..."
-  chmod +x "$HEADLESS_SCRIPT"
-fi
-
-# Run tests
-test_version_output
-test_help_output
-test_no_token_leakage
-test_cc_glm_auth_token_priority
-test_zai_api_key_plain
-test_zai_api_key_op_reference
-test_cc_glm_op_uri
-test_default_op_fallback
-test_allow_fallback
-test_strict_auth_disabled
-test_priority_order
-test_anthropic_env_exports
-test_missing_claude_cli
-
-# Summary
-echo ""
-echo "================================================"
-echo "Summary"
-echo "================================================"
-echo -e "${GREEN}Passed${NC}: $passed"
-echo -e "${RED}Failed${NC}: $failed"
-echo -e "${YELLOW}Skipped${NC}: $skipped"
-echo ""
-
-if [[ $failed -gt 0 ]]; then
-  exit 1
-fi
-
 # Test: epyc12-default auth token file discovery
 test_epyc12_default_fallback() {
   echo ""
   echo "=== Test: epyc12-default token file discovery ==="
 
   setup_test_env
-
-  # Create temporary directory to simulate epyc12 token location
-  local temp_dir base_dir fake_epyc12_token
-  temp_dir="$(mktemp -d)"
-  base_dir="$(dirname "$temp_dir")"
-  fake_epyc12_token="${base_dir}/op-epyc12-token"
-
-  # Create a fake token file
-  echo "fake-test-token-epyc12" > "$fake_epyc12_token"
-  chmod 600 "$fake_epyc12_token"
-
-  # Set HOME to temp directory to control test environment
-  local old_home="$HOME"
-  export HOME="$base_dir"
-  export OP_SERVICE_ACCOUNT_TOKEN_FILE=""
-
-  # Set an invalid vault so default op:// fails deterministically
-  export CC_GLM_OP_VAULT="__invalid_vault_for_test__"
 
   # Verify the epyc12 path exists in the script
   local has_epyc12_path
@@ -513,10 +447,6 @@ test_epyc12_default_fallback() {
     fail "cc-glm-headless.sh missing hostname-based token path reference"
   fi
 
-  # Cleanup
-  export HOME="$old_home"
-  rm -f "$fake_epyc12_token"
-  unset CC_GLM_OP_VAULT
   setup_test_env
 }
 
@@ -526,15 +456,6 @@ test_op_token_file_env_precedence() {
   echo "=== Test: OP_SERVICE_ACCOUNT_TOKEN_FILE env precedence ==="
 
   setup_test_env
-
-  # Create temporary token files
-  local temp_dir env_token_file hostname_token
-  temp_dir="$(mktemp -d)"
-  env_token_file="${temp_dir}/op-env-token"
-  hostname_token="${temp_dir}/op-$(hostname)-token"
-
-  echo "token-from-env-file" > "$env_token_file"
-  echo "token-from-hostname-file" > "$hostname_token"
 
   # Verify both file types are checked in the resolver
   local checks_env checks_hostname
@@ -561,8 +482,6 @@ test_op_token_file_env_precedence() {
     fi
   fi
 
-  # Cleanup
-  rm -rf "$temp_dir"
   setup_test_env
 }
 
@@ -580,6 +499,22 @@ test_legacy_macmini_fallback() {
     pass "cc-glm-headless.sh contains legacy macmini token fallback"
   else
     fail "cc-glm-headless.sh missing legacy macmini token fallback"
+  fi
+}
+
+# Test: Version 2.1.x indicates epyc12-default policy
+test_version_epyc12_policy() {
+  echo ""
+  echo "=== Test: Version indicates epyc12-default policy ==="
+
+  local version
+  version="$("$HEADLESS_SCRIPT" --version 2>&1 || true)"
+
+  # Version 2.1.x indicates epyc12-default policy implementation
+  if [[ "$version" == *"2.1"* ]]; then
+    pass "Version 2.1.x indicates epyc12-default policy"
+  else
+    fail "Expected version 2.1.x for epyc12-default policy" "version=$version"
   fi
 }
 
@@ -619,6 +554,7 @@ test_missing_claude_cli
 test_epyc12_default_fallback
 test_op_token_file_env_precedence
 test_legacy_macmini_fallback
+test_version_epyc12_policy
 
 # Summary
 echo ""
