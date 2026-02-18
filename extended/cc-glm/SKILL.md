@@ -1,20 +1,26 @@
 ---
 name: cc-glm
 description: |
-  Use cc-glm for batched delegation with plan-first execution.
-  Batch by outcome (not file). Primary: local headless (cc-glm-job.sh). Optional: Task tool or cross-VM (dx-dispatch).
-  Trigger when user mentions cc-glm, delegation, parallel agents, or batch execution.
-tags: [workflow, delegation, automation, claude-code, glm, parallel]
+  Use cc-glm as the reliability/quality backstop lane for batched delegation with plan-first execution.
+  Batch by outcome (not file). Primary dispatch is OpenCode; cc-glm-job.sh is governed fallback for critical waves and OpenCode failures.
+  Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution.
+tags: [workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode]
 allowed-tools:
   - Bash
   - Task
 ---
 
-# cc-glm: Plan-First Batched Dispatch (V8.3 + V3.2 Operator Experience)
+# cc-glm: Reliability Backstop Dispatch (V8.3 + V3.4 Operator Experience)
 
 ## Core Principle
 
 **Batch by outcome, not by file.** One agent per coherent change set.
+
+## Lane Positioning
+
+- Primary throughput lane: OpenCode (`opencode run` / `opencode serve`)
+- Reliability backstop lane: cc-glm (`cc-glm-job.sh`) with baseline/integrity/feature-key gates
+- Use cc-glm when OpenCode misses SLOs, fails governance gates, or the wave is marked critical
 
 ## When To Use
 
@@ -91,9 +97,9 @@ Put mini-plan in Beads notes instead of file:
 
 **Rule**: 1 agent per repo or coherent change set, NOT 1 agent per file.
 
-### Step 3: Execute with cc-glm-job.sh (Primary)
+### Step 3: Execute with cc-glm-job.sh (Backstop Lane)
 
-**Local headless execution is the primary method:**
+**Local headless execution is the governed fallback method:**
 
 ```bash
 # Start a background job with PTY for reliable output capture
@@ -901,7 +907,7 @@ cc-glm-job.sh health --show-overrides
 
 ### dx-delegate Broken
 - **Symptom**: "Error: missing wrapper: ~/agent-skills/extended/cc-glm/scripts/cc-glm-headless.sh"
-- **Workaround**: Use `cc-glm-job.sh` directly (primary method above)
+- **Workaround**: Use `cc-glm-job.sh` directly (backstop method above)
 - **Status**: Deprecation pending
 
 ### Feature-Key Format

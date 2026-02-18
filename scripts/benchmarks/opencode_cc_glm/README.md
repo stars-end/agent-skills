@@ -1,5 +1,11 @@
 # OpenCode/cc-glm Benchmark Harness
 
+## Lane policy
+
+- Primary throughput lane: OpenCode (`opencode run`, `opencode serve`)
+- Reliability/quality fallback lane: cc-glm (`cc-glm-job.sh` / `cc_glm_headless`)
+- Switch to cc-glm when OpenCode fails governance gates or critical-wave policy requires fallback
+
 ## Progressive OpenCode-first flow
 
 1. Phase 1 smoke:
@@ -37,11 +43,13 @@ scripts/benchmarks/opencode_cc_glm/run_progressive_opencode.py \
 Provider-agnostic governed wave runner:
 ```bash
 scripts/benchmarks/opencode_cc_glm/run_governed_benchmark.py \
-  --workflows opencode_run_headless,cc_glm_headless \
+  --workflows opencode_run_headless,opencode_server_http,opencode_server_attach_run,cc_glm_headless \
   --model zai-coding-plan/glm-5 \
   --required-baseline <sha> \
   --reported-commit <sha> \
   --branch feature-bd-cbsb
 ```
+
+`run_governed_benchmark.py` always attempts collection/summary even if launcher returns non-zero, so partial failures still produce machine-readable taxonomy and governance reports.
 
 Deferred DX v8.x residual fix integration should begin only after `phase3_real_coding_gate` passes.
