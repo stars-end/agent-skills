@@ -1,6 +1,6 @@
 ---
 name: multi-agent-dispatch
-description: Cross-VM task dispatch using dx-dispatch (canonical). Supports SSH dispatch to canonical VMs (homedesktop-wsl, macmini, epyc6), Jules Cloud dispatch for async work, and fleet orchestration.
+description: Cross-VM task dispatch using dx-dispatch (canonical). Supports SSH dispatch to canonical VMs (homedesktop-wsl, macmini, epyc12), Jules Cloud dispatch for async work, and fleet orchestration. EPYC6 is currently disabled - see enablement gate.
 ---
 
 # Multi-Agent Dispatch
@@ -9,7 +9,7 @@ description: Cross-VM task dispatch using dx-dispatch (canonical). Supports SSH 
 
 ## When to Use
 
-- Task needs **specific VM** (GPU → epyc6, macOS → macmini)
+- Task needs **specific VM** (GPU → epyc12, macOS → macmini)
 - **Parallelize** work across VMs
 - **Jules Cloud** dispatch for async work
 - Need **status notifications** via Slack
@@ -19,8 +19,8 @@ description: Cross-VM task dispatch using dx-dispatch (canonical). Supports SSH 
 ### SSH Dispatch (default)
 
 ```bash
-# Dispatch to canonical VMs
-dx-dispatch epyc6 "Run make test in ~/affordabot"
+# Dispatch to canonical VMs (use epyc12, NOT epyc6)
+dx-dispatch epyc12 "Run make test in ~/affordabot"
 dx-dispatch macmini "Build the iOS app"
 dx-dispatch homedesktop-wsl "Run integration tests"
 
@@ -28,10 +28,10 @@ dx-dispatch homedesktop-wsl "Run integration tests"
 dx-dispatch --list
 
 # Resume existing session
-dx-dispatch epyc6 "Continue" --session ses_abc123
+dx-dispatch epyc12 "Continue" --session ses_abc123
 
 # Wait for completion
-dx-dispatch epyc6 "Run tests" --wait --timeout 600
+dx-dispatch epyc12 "Run tests" --wait --timeout 600
 ```
 
 ### Jules Cloud Dispatch
@@ -54,16 +54,19 @@ dx-dispatch --finalize-pr ses_abc123 --beads bd-123
 dx-dispatch --abort ses_abc123
 
 # Check VM health
-dx-dispatch --status epyc6
+dx-dispatch --status epyc12
 ```
 
 ## Canonical VMs
 
-| VM | User | Auth Mode | Capabilities |
-|----|------|-----------|--------------|
-| homedesktop-wsl | fengning | local | Primary dev, DCG, CASS |
-| macmini | fengning | tailscale | macOS builds, iOS |
-| epyc6 | feng | tailscale | GPU work, ML training |
+| VM | User | Auth Mode | Capabilities | Status |
+|----|------|-----------|--------------|--------|
+| homedesktop-wsl | fengning | local | Primary dev, DCG, CASS | Enabled |
+| macmini | fengning | tailscale | macOS builds, iOS | Enabled |
+| epyc12 | fengning | tailscale | Linux compute | **Default Linux** |
+| epyc6 | feng | tailscale | GPU work, ML training | **DISABLED** |
+
+**EPYC6 Enablement Gate:** EPYC6 is currently disabled pending resolution of runtime/session issues. Use `epyc12` as the default Linux dispatch target. See `extended/cc-glm/docs/EPYC6_ENABLEMENT_GATE.md` for preflight checks and enablement criteria.
 
 ## SSH Fanout Hardening
 
@@ -108,7 +111,7 @@ if preflight.status == PreflightStatus.OK:
 Use `--slack` to enable audit trail (default: enabled):
 
 ```bash
-dx-dispatch epyc6 "Run tests" --slack
+dx-dispatch epyc12 "Run tests" --slack
 ```
 
 Include in task prompt for completion notifications:
