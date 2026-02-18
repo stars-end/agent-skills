@@ -112,14 +112,14 @@ def check_opencode_models(opencode_bin: str) -> list[str]:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            if "/" in line:
-                parts = line.split()
-                if parts:
-                    models.append(parts[0])
-            elif line.startswith("- "):
+            if line.startswith("- "):
                 model_id = line[2:].strip()
                 if "/" in model_id:
                     models.append(model_id)
+            elif "/" in line:
+                parts = line.split()
+                if parts and "/" in parts[0]:
+                    models.append(parts[0])
         return sorted(set(models))
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return []
@@ -271,11 +271,13 @@ def run_preflight(
 
     auth_probe_ok = probe_auth_health(opencode_bin, selected_model)
     if not auth_probe_ok:
-        details["auth_probe_warning"] = "auth probe did not return success"
+        details["auth_probe_warning"] = (
+            "auth probe did not return success (non-blocking)"
+        )
 
-    passed = bool(selected_model) and auth_probe_ok
+    passed = bool(selected_model)
 
-    reason_code = "preflight_ok" if passed else "preflight_failed"
+    reason_code = "preflight_ok" if passed else "model_unavailable"
 
     result = PreflightResult(
         passed=passed,

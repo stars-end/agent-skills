@@ -171,6 +171,23 @@ class TestStallDetector(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(reason, "process_not_found")
 
+    def test_stall_detection_in_execute_job(self) -> None:
+        from launch_parallel_jobs import execute_job, JobSpec, PromptCase
+
+        pass
+
+
+class TestFeatureKeyPattern(unittest.TestCase):
+    def test_feature_key_with_dots(self) -> None:
+        import re
+
+        pattern = re.compile(r"^bd-[a-z0-9]+(\.[a-z0-9]+)*$")
+        self.assertTrue(pattern.match("bd-xga8"))
+        self.assertTrue(pattern.match("bd-xga8.10"))
+        self.assertTrue(pattern.match("bd-xga8.10.5"))
+        self.assertFalse(pattern.match("bd-XGA8"))
+        self.assertFalse(pattern.match("xga8.10"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

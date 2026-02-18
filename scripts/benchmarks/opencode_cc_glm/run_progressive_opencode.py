@@ -75,9 +75,11 @@ def utc_now_compact() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def run_cmd(cmd: list[str], cwd: pathlib.Path) -> str:
-    proc = subprocess.run(cmd, cwd=str(cwd), check=True, capture_output=True, text=True)
-    return proc.stdout.strip()
+def run_cmd(cmd: list[str], cwd: pathlib.Path) -> tuple[str, int, str]:
+    proc = subprocess.run(
+        cmd, cwd=str(cwd), check=False, capture_output=True, text=True
+    )
+    return proc.stdout.strip(), proc.returncode, proc.stderr.strip()
 
 
 def load_prompts(path: pathlib.Path) -> list[dict[str, Any]]:
@@ -261,7 +263,7 @@ def main() -> int:
             return 4
 
     workflows_csv = ",".join(phase_cfg["workflows"])
-    run_cmd(
+    launch_stdout, launch_rc, launch_stderr = run_cmd(
         [
             str(launch),
             "--prompts-file",
@@ -285,12 +287,40 @@ def main() -> int:
         ],
         cwd=repo_root,
     )
+    if launch_rc != 0:
+        record = {
+            "phase": args.phase,
+            "run_id": run_id,
+            "run_dir": str(output_dir / run_id),
+            "model": args.model,
+            "model_selected": effective_model,
+            "fallback_reason": preflight_result.get("fallback_reason")
+            if preflight_result
+            else None,
+            "workflows": phase_cfg["workflows"],
+            "prompt_ids": phase_cfg["prompt_ids"],
+            "success_rate": 0.0,
+            "min_success_rate": phase_cfg["min_success_rate"],
+            "passed": False,
+            "reason_code": "launch_failed",
+            "preflight": preflight_result,
+            "launch": {
+                "exit_code": launch_rc,
+                "stdout": launch_stdout[:500],
+                "stderr": launch_stderr[:500],
+            },
+            "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        }
+        state.setdefault("history", []).append(record)
+        save_gate_state(state_file, state)
+        print(json.dumps(record, indent=2))
+        return 5
 
     run_dir = output_dir / run_id
     results_json = run_dir / "collected" / "results.json"
     summary_json = run_dir / "collected" / "summary.json"
 
-    run_cmd(
+    collect_stdout, collect_rc, collect_stderr = run_cmd(
         [
             str(collect),
             "--run-dir",
@@ -300,7 +330,35 @@ def main() -> int:
         ],
         cwd=repo_root,
     )
-    run_cmd(
+    if collect_rc != 0:
+        record = {
+            "phase": args.phase,
+            "run_id": run_id,
+            "run_dir": str(run_dir),
+            "model": args.model,
+            "model_selected": effective_model,
+            "fallback_reason": preflight_result.get("fallback_reason")
+            if preflight_result
+            else None,
+            "workflows": phase_cfg["workflows"],
+            "prompt_ids": phase_cfg["prompt_ids"],
+            "success_rate": 0.0,
+            "min_success_rate": phase_cfg["min_success_rate"],
+            "passed": False,
+            "reason_code": "collect_failed",
+            "preflight": preflight_result,
+            "collect": {
+                "exit_code": collect_rc,
+                "stderr": collect_stderr[:500],
+            },
+            "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        }
+        state.setdefault("history", []).append(record)
+        save_gate_state(state_file, state)
+        print(json.dumps(record, indent=2))
+        return 6
+
+    summarize_stdout, summarize_rc, summarize_stderr = run_cmd(
         [
             str(summarize),
             "--results-json",
@@ -310,6 +368,33 @@ def main() -> int:
         ],
         cwd=repo_root,
     )
+    if summarize_rc != 0:
+        record = {
+            "phase": args.phase,
+            "run_id": run_id,
+            "run_dir": str(run_dir),
+            "model": args.model,
+            "model_selected": effective_model,
+            "fallback_reason": preflight_result.get("fallback_reason")
+            if preflight_result
+            else None,
+            "workflows": phase_cfg["workflows"],
+            "prompt_ids": phase_cfg["prompt_ids"],
+            "success_rate": 0.0,
+            "min_success_rate": phase_cfg["min_success_rate"],
+            "passed": False,
+            "reason_code": "summarize_failed",
+            "preflight": preflight_result,
+            "summarize": {
+                "exit_code": summarize_rc,
+                "stderr": summarize_stderr[:500],
+            },
+            "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        }
+        state.setdefault("history", []).append(record)
+        save_gate_state(state_file, state)
+        print(json.dumps(record, indent=2))
+        return 7
 
     success_rate = parse_success_rate(summary_json)
     passed = success_rate >= float(phase_cfg["min_success_rate"])

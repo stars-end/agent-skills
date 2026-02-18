@@ -38,8 +38,8 @@
       "properties": {
         "Feature-Key": {
           "type": "string",
-          "pattern": "^bd-[a-z0-9]+$",
-          "description": "Beads tracking ID"
+          "pattern": "^bd-[a-z0-9]+(\\.[a-z0-9]+)*$",
+          "description": "Beads tracking ID (supports dotted children e.g. bd-xga8.10.5)"
         },
         "Agent": {
           "type": "string",

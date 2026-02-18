@@ -1142,9 +1142,18 @@ def execute_job(
     opencode_password: str | None,
     cc_glm_headless_path: pathlib.Path,
     workflow_startup_latency_ms: int | None,
+    enable_stall_detector: bool = False,
+    stall_threshold_sec: float = 120.0,
 ) -> dict[str, Any]:
     attempts: list[dict[str, Any]] = []
     job_started_at = utc_now_iso()
+    stall_detector = (
+        StallDetector(stall_threshold_sec=stall_threshold_sec)
+        if enable_stall_detector
+        else None
+    )
+    stalled = False
+    stall_reason: str | None = None
 
     for attempt in range(max_retries + 1):
         attempt_started = utc_now_iso()
@@ -1164,10 +1173,25 @@ def execute_job(
         result["attempt_completed_at"] = attempt_completed
         attempts.append(result)
         persist_attempt_logs(run_dir, job, attempt, result)
+
+        if enable_stall_detector and not result["success"]:
+            if result.get("timed_out") or (
+                result.get("first_output_latency_ms") is None
+                and result.get("completion_latency_ms", 0) > stall_threshold_sec * 1000
+            ):
+                stalled = True
+                stall_reason = "timeout_no_output"
+                result["failure_category"] = "model"
+                result["failure_reason"] = TAXONOMY_CODES["stalled_run"]
+
         if result["success"]:
             break
 
     final = attempts[-1]
+    if stalled and stall_reason and not final.get("failure_reason"):
+        final["failure_category"] = "model"
+        final["failure_reason"] = TAXONOMY_CODES["stalled_run"]
+
     record = {
         "run_id": job.run_id,
         "workflow_id": job.workflow_id,
@@ -1187,6 +1211,8 @@ def execute_job(
         "first_output_latency_ms": final["first_output_latency_ms"],
         "completion_latency_ms": final["completion_latency_ms"],
         "workflow_startup_latency_ms": workflow_startup_latency_ms,
+        "stall_detected": stalled,
+        "stall_reason": stall_reason,
         "failure_category": final.get("failure_category"),
         "failure_reason": final.get("failure_reason"),
         "hint_match_ratio": final.get("hint_match_ratio"),
@@ -1419,6 +1445,8 @@ def main() -> int:
                     workflow_startup_latency_ms=workflow_startup_latency.get(
                         job.workflow_id
                     ),
+                    enable_stall_detector=args.enable_stall_detector,
+                    stall_threshold_sec=args.stall_threshold_sec,
                 )
                 future_map[future] = job
 
@@ -1449,6 +1477,8 @@ def main() -> int:
                         "workflow_startup_latency_ms": workflow_startup_latency.get(
                             job.workflow_id
                         ),
+                        "stall_detected": False,
+                        "stall_reason": None,
                         "failure_category": "harness",
                         "failure_reason": "executor_exception",
                         "hint_match_ratio": 0.0,
