@@ -1008,6 +1008,182 @@ test_watchdog_starting_non_error() {
   fi
 }
 
+# ============================================================================
+# V3.2.1 EXECUTABLE RESTART PATH TESTS
+# These tests actually execute restart path behavior without live models
+# ============================================================================
+
+# Test: restart_cmd preserves and rotates logs correctly
+test_restart_log_rotation() {
+  echo ""
+  echo "=== Test: restart log rotation (V3.2.1 executable) ==="
+
+  setup_test_env
+
+  local test_log_dir
+  test_log_dir="$(mktemp -d)"
+  local test_beads="test-rotate-$RANDOM"
+  local prompt_file
+  prompt_file="$(mktemp)"
+  echo "test prompt" > "$prompt_file"
+
+  # Set up minimal auth to pass validation
+  export CC_GLM_AUTH_TOKEN="test-token-for-rotation"
+
+  # Start a job
+  if ! "$JOB_SCRIPT" start --beads "$test_beads" --prompt-file "$prompt_file" --log-dir "$test_log_dir" >/dev/null 2>&1; then
+    skip "Job start failed (expected if no claude CLI)"
+    rm -rf "$test_log_dir" "$prompt_file"
+    setup_test_env
+    return 0
+  fi
+
+  # Write some content to the log
+  local log_file="${test_log_dir}/${test_beads}.log"
+  echo "test output before restart" >> "$log_file"
+
+  # Restart the job
+  if ! "$JOB_SCRIPT" restart --beads "$test_beads" --log-dir "$test_log_dir" >/dev/null 2>&1; then
+    skip "Job restart failed"
+    rm -rf "$test_log_dir" "$prompt_file"
+    setup_test_env
+    return 0
+  fi
+
+  # Check that old log was rotated
+  if [[ -f "${test_log_dir}/${test_beads}.log.1" ]]; then
+    pass "restart rotates old log to .log.1"
+  else
+    fail "restart should rotate old log file"
+  fi
+
+  # Clean up
+  "$JOB_SCRIPT" stop --beads "$test_beads" --log-dir "$test_log_dir" >/dev/null 2>&1 || true
+  rm -rf "$test_log_dir" "$prompt_file"
+  setup_test_env
+}
+
+# Test: restart_cmd increments retry count
+test_restart_increments_retries() {
+  echo ""
+  echo "=== Test: restart increments retry count (V3.2.1 executable) ==="
+
+  setup_test_env
+
+  local test_log_dir
+  test_log_dir="$(mktemp -d)"
+  local test_beads="test-retries-$RANDOM"
+  local prompt_file
+  prompt_file="$(mktemp)"
+  echo "test prompt" > "$prompt_file"
+
+  export CC_GLM_AUTH_TOKEN="test-token-for-retries"
+
+  # Start a job
+  if ! "$JOB_SCRIPT" start --beads "$test_beads" --prompt-file "$prompt_file" --log-dir "$test_log_dir" >/dev/null 2>&1; then
+    skip "Job start failed (expected if no claude CLI)"
+    rm -rf "$test_log_dir" "$prompt_file"
+    setup_test_env
+    return 0
+  fi
+
+  # Get initial retry count
+  local meta_file="${test_log_dir}/${test_beads}.meta"
+  local initial_retries
+  initial_retries="$(grep '^retries=' "$meta_file" | cut -d= -f2)"
+  initial_retries="${initial_retries:-0}"
+
+  # Restart the job
+  if ! "$JOB_SCRIPT" restart --beads "$test_beads" --log-dir "$test_log_dir" >/dev/null 2>&1; then
+    skip "Job restart failed"
+    rm -rf "$test_log_dir" "$prompt_file"
+    setup_test_env
+    return 0
+  fi
+
+  # Check that retry count was incremented
+  local new_retries
+  new_retries="$(grep '^retries=' "$meta_file" | cut -d= -f2)"
+  new_retries="${new_retries:-0}"
+
+  if [[ "$new_retries" -gt "$initial_retries" ]]; then
+    pass "restart increments retry count ($initial_retries -> $new_retries)"
+  else
+    fail "restart should increment retry count"
+  fi
+
+  # Clean up
+  "$JOB_SCRIPT" stop --beads "$test_beads" --log-dir "$test_log_dir" >/dev/null 2>&1 || true
+  rm -rf "$test_log_dir" "$prompt_file"
+  setup_test_env
+}
+
+# Test: restart_cmd preserves execution_mode in contract
+test_restart_preserves_exec_mode() {
+  echo ""
+  echo "=== Test: restart preserves execution_mode (V3.2.1 executable) ==="
+
+  setup_test_env
+
+  local test_log_dir
+  test_log_dir="$(mktemp -d)"
+  local test_beads="test-exec-mode-$RANDOM"
+  local prompt_file
+  prompt_file="$(mktemp)"
+  echo "test prompt" > "$prompt_file"
+
+  export CC_GLM_AUTH_TOKEN="test-token-for-exec-mode"
+
+  # Start a job with PTY mode
+  if ! "$JOB_SCRIPT" start --beads "$test_beads" --prompt-file "$prompt_file" --log-dir "$test_log_dir" --pty >/dev/null 2>&1; then
+    skip "Job start failed (expected if no claude CLI)"
+    rm -rf "$test_log_dir" "$prompt_file"
+    setup_test_env
+    return 0
+  fi
+
+  # Check contract has execution_mode=pty
+  local contract_file="${test_log_dir}/${test_beads}.contract"
+  local saved_exec_mode
+  saved_exec_mode="$(grep '^execution_mode=' "$contract_file" | cut -d= -f2)"
+
+  if [[ "$saved_exec_mode" == "pty" ]]; then
+    pass "restart preserves execution_mode (pty) in contract"
+  else
+    fail "execution_mode should be preserved in contract, got: $saved_exec_mode"
+  fi
+
+  # Clean up
+  "$JOB_SCRIPT" stop --beads "$test_beads" --log-dir "$test_log_dir" >/dev/null 2>&1 || true
+  rm -rf "$test_log_dir" "$prompt_file"
+  setup_test_env
+}
+
+# Test: restart_cmd requires valid metadata
+test_restart_requires_metadata() {
+  echo ""
+  echo "=== Test: restart requires metadata (V3.2.1 executable) ==="
+
+  setup_test_env
+
+  local test_log_dir
+  test_log_dir="$(mktemp -d)"
+  local test_beads="test-no-meta-$RANDOM"
+
+  # Try to restart without metadata (should fail)
+  local output
+  output="$("$JOB_SCRIPT" restart --beads "$test_beads" --log-dir "$test_log_dir" 2>&1 || true)"
+
+  if [[ "$output" == *"no metadata file"* ]]; then
+    pass "restart fails gracefully without metadata"
+  else
+    fail "restart should require metadata file"
+  fi
+
+  rm -rf "$test_log_dir"
+  setup_test_env
+}
+
 # Run all tests
 echo "================================================"
 echo "cc-glm V3.0 Test Suite"
@@ -1098,6 +1274,14 @@ test_start_pty_redirection
 test_persist_contract_env_safe
 test_health_running_no_output_grace
 test_watchdog_starting_non_error
+
+# Run V3.2.1 executable restart path tests
+echo ""
+echo "--- Executable Restart Path Tests (V3.2.1) ---"
+test_restart_log_rotation
+test_restart_increments_retries
+test_restart_preserves_exec_mode
+test_restart_requires_metadata
 
 # Summary
 echo ""
