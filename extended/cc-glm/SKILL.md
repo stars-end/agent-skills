@@ -234,7 +234,7 @@ Task:
 
 ### Option B: Cross-VM Dispatch (dx-dispatch)
 
-For work that must run on a different VM (e.g., macmini, epyc6):
+For work that must run on a different VM:
 
 ```bash
 # Dispatch to remote VM via Tailscale SSH
@@ -244,14 +244,30 @@ dx-dispatch macmini "cd ~/repo && make test"
 tailscale ssh fengning@macmini "command"
 ```
 
+**Canonical VM Dispatch Targets:**
+
+| VM | Use Case | Status |
+|----|----------|--------|
+| `macmini` | macOS builds, iOS development | Enabled |
+| `homedesktop-wsl` | Primary Linux dev, DCG, CASS | Enabled |
+| `epyc12` | Linux compute, alternative to epyc6 | **Default Linux** |
+| `epyc6` | GPU work, ML training | **DISABLED** (see gate) |
+
 **When to use dx-dispatch:**
 - Build requires macOS-specific tools (macmini)
-- Heavy compute workloads (epyc6)
+- Heavy compute workloads (epyc12 - NOT epyc6)
 - Remote environment has required secrets/tools
 
 **When NOT to use dx-dispatch:**
 - Local execution works (default to cc-glm-job.sh)
 - No cross-VM requirement specified
+
+**EPYC6 Enablement Gate:**
+
+EPYC6 is currently **disabled for dispatch** due to runtime/session issues.
+- Use `epyc12` as the default Linux dispatch target
+- See [EPYC6_ENABLEMENT_GATE.md](docs/EPYC6_ENABLEMENT_GATE.md) for preflight checks and enablement criteria
+- Gate must be explicitly passed before epyc6 can be used
 
 ---
 

@@ -43,7 +43,8 @@ hosts:
       - "$HOME/affordabot"
       - "$HOME/llm-common"
     beads_db: "$HOME/bd/.beads"
-    notes: "GPU work, ML training (user differs: feng vs fengning)"
+    dispatch_enabled: false
+    notes: "DISABLED for dispatch - runtime/session issues. See extended/cc-glm/docs/EPYC6_ENABLEMENT_GATE.md for enablement criteria. GPU work, ML training (user differs: feng vs fengning)"
 
   epyc12:
     ssh: "fengning@epyc12"
@@ -57,4 +58,5 @@ hosts:
       - "$HOME/affordabot"
       - "$HOME/llm-common"
     beads_db: "$HOME/bd/.beads"
-    notes: "Expanded canonical VM universe (Linux; user fengning)"
+    dispatch_enabled: true
+    notes: "DEFAULT Linux dispatch target (use instead of epyc6). Expanded canonical VM universe (Linux; user fengning)"
