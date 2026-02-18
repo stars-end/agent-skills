@@ -1,7 +1,8 @@
 # P6: Multi-VM Orchestration Architecture
 
-**Added:** 2026-01-04  
-**Status:** DESIGN COMPLETE, pending implementation
+**Added:** 2026-01-04
+**Updated:** 2026-02-18
+**Status:** IMPLEMENTED with hardened SSH fanout
 
 ---
 
@@ -219,6 +220,87 @@ You: "Switch to feature-xyz branch and retry"
 
 ---
 
+## SSH Fanout Hardening (bd-xga8.1.2)
+
+The SSH fanout path is hardened with deterministic preflight checks, bounded retries,
+and standardized logging.
+
+### Canonical Host->User Mapping
+
+Source of truth in `lib/fleet/ssh_fanout.py`:
+
+| Hostname | User | Auth Mode | Aliases |
+|----------|------|-----------|---------|
+| homedesktop-wsl | fengning | local | homedesktop, wsl, local |
+| macmini | fengning | tailscale | mac, mac-mini |
+| epyc6 | feng | tailscale | epyc, gpu |
+
+### Preflight Checks
+
+All SSH fanout operations run these checks before connection:
+
+1. **Host mapping validation** - Verifies host has canonical user mapping
+2. **DNS resolution** - Hostname must be resolvable (5s timeout)
+3. **TCP reachability** - SSH port 22 must be accessible (5s timeout)
+4. **Auth mode validation** - Required auth method must be available
+
+Preflight failures return `PREFLIGHT_FAILED` terminal state with detailed error.
+
+### Bounded Retry Semantics
+
+- Maximum **2 attempts** (1 initial + 1 retry)
+- **2-second delay** between retries
+- **No retry** on authentication failures (terminal state)
+- Clear terminal states:
+  - `SUCCESS` - Command completed with exit code 0
+  - `FAILURE` - Command failed after all retries
+  - `TIMEOUT` - Command timed out
+  - `ABORTED` - Operation was aborted
+  - `PREFLIGHT_FAILED` - Preflight checks failed
+
+### Standardized Logging
+
+All fanout operations log with consistent key=value structure:
+
+```
+preflight_ok host=epyc6 user=feng auth_mode=tailscale duration_ms=150
+success host=epyc6 user=feng command="make test" attempt=1 duration_ms=2340
+failure host=epyc6 user=feng command="make test" final_error="Exit code 1" attempts=2
+```
+
+### Programmatic API
+
+```python
+from lib.fleet import (
+    fanout_ssh,
+    run_preflight_checks,
+    PreflightStatus,
+    FanoutOutcome,
+)
+
+# Run preflight checks
+preflight = run_preflight_checks("epyc6")
+if preflight.status != PreflightStatus.OK:
+    print(f"Preflight failed: {preflight.error_detail}")
+    return
+
+# Execute command with hardened fanout
+result = fanout_ssh(
+    host="epyc6",
+    command="make test",
+    timeout_sec=120.0,
+    max_retries=1,  # Total 2 attempts
+    preflight=True,
+)
+
+if result.outcome == FanoutOutcome.SUCCESS:
+    print(result.stdout)
+else:
+    print(f"Failed: {result.error} (attempts: {result.attempts})")
+```
+
+---
+
 ## Summary Table
 
 | Component | Qty | Purpose |
@@ -236,8 +318,13 @@ You: "Switch to feature-xyz branch and retry"
 | Phase | Description | Status |
 |-------|-------------|--------|
 | P0-P5 | Original implementation | ✅ COMPLETE |
-| **P6.1** | Create vm-endpoints.json config | TODO |
-| **P6.2** | Implement dx-dispatch script | TODO |
-| **P6.3** | Add Slack audit to dispatches | TODO |
-| **P6.4** | Test multi-VM routing | TODO |
-| **P6.5** | Integration tests for full flow | TODO |
+| **P6.1** | Create vm-endpoints.json config | ✅ COMPLETE |
+| **P6.2** | Implement dx-dispatch script | ✅ COMPLETE |
+| **P6.3** | Add Slack audit to dispatches | ✅ COMPLETE |
+| **P6.4** | Test multi-VM routing | ✅ COMPLETE |
+| **P6.5** | Integration tests for full flow | ✅ COMPLETE |
+| **P6.6** | SSH fanout hardening (bd-xga8.1.2) | ✅ COMPLETE |
+  - Preflight checks (host resolvable, user mapping, auth guard)
+  - Bounded retry semantics (max 2 attempts)
+  - Standardized logging (host, user, command, outcome)
+  - Canonical host->user mapping |

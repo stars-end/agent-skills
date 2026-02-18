@@ -27,6 +27,10 @@ from .config import FleetConfig, BackendConfig
 from .state import FleetStateStore, DispatchRecord
 from .monitor import FleetMonitor, StuckStatus, MonitorResult
 from .event_emitter import EventEmitter
+from .ssh_fanout import (
+    fanout_ssh, run_preflight_checks, get_host_mapping,
+    PreflightStatus, FanoutOutcome
+)
 
 
 @dataclass
@@ -211,68 +215,82 @@ class FleetDispatcher:
                 raise RuntimeError(f"Local worktree setup failed: {e}")
 
         else:
-            # Remote execution
+            # Remote execution via hardened SSH fanout
             if not backend_config.ssh:
                  raise RuntimeError(f"OpenCode backend {backend_config.name} has no SSH target")
 
+            # Extract hostname from SSH target (user@host -> host)
+            ssh_host = backend_config.ssh.split("@")[-1] if "@" in backend_config.ssh else backend_config.ssh
+
+            # Run preflight checks before fanout
+            preflight = run_preflight_checks(ssh_host, check_reachable=True)
+            if preflight.status != PreflightStatus.OK:
+                raise RuntimeError(
+                    f"Preflight check failed for {ssh_host}: {preflight.error_detail}"
+                )
+
             # Best-effort: ensure the control plane (agent-skills) and ~/bin tools are fresh on the target VM.
             # This is intentionally non-blocking: dispatch should still proceed if the VM is temporarily offline.
-            try:
-                pre_cmd = (
-                    'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"; '
-                    'cd "$HOME/agent-skills" 2>/dev/null && git pull --ff-only origin master >/dev/null 2>&1 || true; '
-                    '~/agent-skills/scripts/dx-ensure-bins.sh >/dev/null 2>&1 || true'
-                )
-                subprocess.run(
-                    ["ssh", backend_config.ssh, pre_cmd],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
-            except Exception:
-                pass
+            sync_cmd = (
+                'export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"; '
+                'cd "$HOME/agent-skills" 2>/dev/null && git pull --ff-only origin master >/dev/null 2>&1 || true; '
+                '~/agent-skills/scripts/dx-ensure-bins.sh >/dev/null 2>&1 || true'
+            )
+            sync_result = fanout_ssh(
+                host=ssh_host,
+                command=sync_cmd,
+                timeout_sec=60.0,
+                max_retries=0,  # Best-effort, no retry
+                preflight=False,  # Already checked above
+            )
+            # Ignore sync failures - best-effort only
 
             # Try canonical script first (preferred, repo-aware).
-            try:
-                result = subprocess.run(
-                    ["ssh", backend_config.ssh, f"~/bin/{script_cmd}"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
-                if result.returncode == 0:
-                    script_path = (result.stdout or "").strip()
-                    if script_path.startswith("/"):
-                        # Best-effort: trust mise config inside the worktree.
-                        subprocess.run(
-                            ["ssh", backend_config.ssh, f"mise trust --yes {script_path}/.mise.toml 2>/dev/null || true"],
-                            capture_output=True,
-                            text=True,
-                            timeout=30,
-                        )
-                        return script_path
-            except Exception:
-                pass
-
-        # Fallback: inline worktree setup
-        # NOTE: This assumes a bare repo clone exists at ~/{repo}; in your stack the
-        # canonical script is the source of truth (and is strongly preferred).
-        repo_path = f"~/{repo}"
-        worktree_path = f"/tmp/agents/{beads_id}/{repo}"
-        commands = [
-            f"cd {repo_path} && git worktree add {worktree_path} -b {beads_id}",
-            f"mise trust --yes {worktree_path}/.mise.toml 2>/dev/null || true",
-        ]
-        
-        for cmd in commands:
-            subprocess.run(
-                ["ssh", backend_config.ssh, cmd],
-                capture_output=True,
-                text=True,
-                timeout=60
+            script_result = fanout_ssh(
+                host=ssh_host,
+                command=f"~/bin/{script_cmd}",
+                timeout_sec=60.0,
+                max_retries=1,
+                preflight=False,
             )
-        
-        return worktree_path
+
+            if script_result.outcome == FanoutOutcome.SUCCESS:
+                script_path = (script_result.stdout or "").strip()
+                if script_path.startswith("/"):
+                    # Best-effort: trust mise config inside the worktree.
+                    fanout_ssh(
+                        host=ssh_host,
+                        command=f"mise trust --yes {script_path}/.mise.toml 2>/dev/null || true",
+                        timeout_sec=30.0,
+                        max_retries=0,
+                        preflight=False,
+                    )
+                    return script_path
+
+            # Fallback: inline worktree setup
+            # NOTE: This assumes a bare repo clone exists at ~/{repo}; in your stack the
+            # canonical script is the source of truth (and is strongly preferred).
+            repo_path = f"~/{repo}"
+            worktree_path = f"/tmp/agents/{beads_id}/{repo}"
+            commands = [
+                f"cd {repo_path} && git worktree add {worktree_path} -b {beads_id}",
+                f"mise trust --yes {worktree_path}/.mise.toml 2>/dev/null || true",
+            ]
+
+            for cmd in commands:
+                result = fanout_ssh(
+                    host=ssh_host,
+                    command=cmd,
+                    timeout_sec=60.0,
+                    max_retries=1,
+                    preflight=False,
+                )
+                if result.outcome != FanoutOutcome.SUCCESS:
+                    raise RuntimeError(
+                        f"Worktree setup failed on {ssh_host}: {result.error}"
+                    )
+
+            return worktree_path
     
     def dispatch(
         self,
