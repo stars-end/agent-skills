@@ -13,7 +13,6 @@ This guide covers safe 1Password CLI usage patterns. **Never pass secret values 
 - `Slack-Coordinator-Secrets` - Slack bot tokens for coordination service
 - `Slack-MCP-Secrets` - Slack tokens for MCP server (IDEs)
 - `Railway-Delivery` - Railway deployment tokens
-- `GitHub-Delivery` - GitHub automation tokens
 - `OpenCode-Config` - OpenCode IDE configuration
 
 **Benefits:**
@@ -184,7 +183,7 @@ See `./scripts/migrate-secrets-structure.sh` for detailed migration guide.
 | Service Account | Access | Purpose |
 |-----------------|--------|---------|
 | `agent-skills-production` | Read-only: `Anthropic-Config`, `Slack-Coordinator-Secrets`, `OpenCode-Config` | Systemd services |
-| `cicd-deployment` | Read-only: `Railway-Delivery`, `GitHub-Delivery` | CI/CD pipelines |
+| `cicd-deployment` | Read-only: `Railway-Delivery`, `Agent-Secrets-Production` | CI/CD pipelines |
 
 **To configure:**
 1. Log in to 1Password.com

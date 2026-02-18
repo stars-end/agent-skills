@@ -237,39 +237,40 @@ evacuate_dirty_worktree() {
 
     # Create rescue branch from current state
     # Use --no-track to avoid setting upstream
-    if ! git -C "$wt_path" checkout -b "$rescue_branch" --no-track 2>/dev/null; then
+    # NOTE: Redirect BOTH stdout and stderr to avoid polluting process_repo output
+    if ! git -C "$wt_path" checkout -b "$rescue_branch" --no-track >/dev/null 2>&1; then
         # If checkout fails, we cannot safely evacuate - abort
         error "  Failed to create rescue branch in worktree - aborting evacuation" >&2
         return 1
     fi
 
     # Stage all changes including untracked
-    git -C "$wt_path" add -A 2>/dev/null || true
+    git -C "$wt_path" add -A >/dev/null 2>&1 || true
 
     # Commit if there are changes
     # Use --no-verify to bypass commit hooks (rescue operation, not user commit)
-    if git -C "$wt_path" diff --cached --quiet 2>/dev/null; then
+    if git -C "$wt_path" diff --cached --quiet >/dev/null 2>&1; then
         log "  No changes to commit in evacuation" >&2
     else
-        if ! git -C "$wt_path" commit --no-verify -m "evacuate: dirty worktree rescue $timestamp" 2>/dev/null; then
+        if ! git -C "$wt_path" commit --no-verify -m "evacuate: dirty worktree rescue $timestamp" >/dev/null 2>&1; then
             error "  Failed to commit evacuation changes - aborting" >&2
             # Switch back to original branch to avoid leaving user on rescue branch
-            git -C "$wt_path" checkout "$wt_branch" 2>/dev/null || true
+            git -C "$wt_path" checkout "$wt_branch" >/dev/null 2>&1 || true
             return 1
         fi
     fi
 
     # Push rescue branch from worktree's current state
-    if ! git -C "$wt_path" push origin "$rescue_branch" 2>/dev/null; then
+    if ! git -C "$wt_path" push origin "$rescue_branch" >/dev/null 2>&1; then
         warn "  Failed to push rescue branch: $rescue_branch" >&2
         # Switch back to original branch
-        git -C "$wt_path" checkout "$wt_branch" 2>/dev/null || true
+        git -C "$wt_path" checkout "$wt_branch" >/dev/null 2>&1 || true
         return 1
     fi
 
     success "  Evacuated to: $rescue_branch" >&2
     # Switch back to original branch before return
-    git -C "$wt_path" checkout "$wt_branch" 2>/dev/null || true
+    git -C "$wt_path" checkout "$wt_branch" >/dev/null 2>&1 || true
     return 0
 }
 
