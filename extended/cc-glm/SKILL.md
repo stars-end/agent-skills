@@ -10,7 +10,7 @@ allowed-tools:
   - Task
 ---
 
-# cc-glm: Plan-First Batched Dispatch (V8.3)
+# cc-glm: Plan-First Batched Dispatch (V8.3 + V3.0 Reliability)
 
 ## Core Principle
 
@@ -107,28 +107,38 @@ cc-glm-job.sh start \
 # Check status of all jobs
 cc-glm-job.sh status
 
-# Check single job health
+# Check single job health (V3.0: progress-aware)
 cc-glm-job.sh check --beads bd-xxx
 
 # View detailed health state
 cc-glm-job.sh health --beads bd-xxx
 
+# View log tail with optional ANSI stripping
+cc-glm-job.sh tail --beads bd-xxx --lines 50 --no-ansi
+
 # Restart a stalled job
 cc-glm-job.sh restart --beads bd-xxx --pty
 
-# Stop a running job
+# Stop a running job (records outcome)
 cc-glm-job.sh stop --beads bd-xxx
 
-# Run watchdog for auto-restart (1 retry max)
-cc-glm-job.sh watchdog --beads bd-xxx --once
+# Run watchdog with observe-only mode (V3.0)
+cc-glm-job.sh watchdog --beads bd-xxx --once --observe-only
+
+# Run watchdog with no-auto-restart (V3.0)
+cc-glm-job.sh watchdog --beads bd-xxx --no-auto-restart --once
 ```
 
-**Job artifacts location:**
+**Job artifacts location (V3.0):**
 ```bash
 /tmp/cc-glm-jobs/
-├── bd-xxx.pid      # Process ID
-├── bd-xxx.log      # Output log
-└── bd-xxx.meta     # Metadata (repo, worktree, retries, etc.)
+├── bd-xxx.pid         # Process ID
+├── bd-xxx.log         # Current output log
+├── bd-xxx.log.1       # Rotated log (preserved on restart)
+├── bd-xxx.log.2       # Older rotated log
+├── bd-xxx.meta        # Metadata (repo, worktree, retries, etc.)
+├── bd-xxx.outcome     # Final outcome (exit_code, completed_at, state)
+└── bd-xxx.contract    # Runtime contract (auth_source, model, base_url)
 ```
 
 **Model selection (glm-5 recommended for complex tasks):**
@@ -141,12 +151,23 @@ export CC_GLM_MODEL=glm-5
 cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
 ```
 
-### Step 4: Monitor (Simplified)
+### Step 4: Monitor (V3.0 - Progress-Aware)
 
-**Check every 5 minutes. Only 2 signals:**
+**V3.0 health states:**
 
-1. **Process alive?** `cc-glm-job.sh check --beads bd-xxx`
-2. **Log advancing?** `tail -20 /tmp/cc-glm-jobs/bd-xxx.log`
+| State | Meaning | Action |
+|-------|---------|--------|
+| `healthy` | Process running with CPU activity | None |
+| `starting` | Within grace window | Wait |
+| `stalled` | No CPU progress for N minutes | Restart (if retries left) |
+| `exited_ok` | Exited with code 0 | Review output |
+| `exited_err` | Exited with non-zero code | Check logs |
+| `blocked` | Max retries exhausted | Manual intervention |
+| `missing` | No job metadata found | Investigate |
+
+**Check signals:**
+1. **Process progress**: `cc-glm-job.sh check --beads bd-xxx`
+2. **Log growth**: `cc-glm-job.sh tail --beads bd-xxx`
 
 **Restart policy**: 1 restart max, then escalate.
 
@@ -154,8 +175,8 @@ cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
 # Quick status check
 cc-glm-job.sh status
 
-# View last 20 lines of log
-tail -20 /tmp/cc-glm-jobs/bd-xxx.log
+# View health with outcomes
+cc-glm-job.sh health
 ```
 
 ### Step 5: Review, Push, PR
@@ -327,95 +348,32 @@ echo $! > /tmp/cc-glm-jobs/bd-xxx.pid
 
 ---
 
-## Remote Host Environment Setup (V2.0)
+## Remote Host Environment Setup (V3.0)
 
 For deterministic headless execution on remote hosts (CI, epyc servers, etc.), ensure auth is properly configured. **Parallel jobs require deterministic auth - the legacy zsh/cc-glm fallback path is disabled by default.**
 
-### Default Host Behavior: epyc12 Dispatch Policy
+### Auth Resolution Order (First Match Wins) - V3.0
 
-When running cc-glm headless operations without explicit host specification:
+| Priority | Environment Variable | Description | Exit Code |
+|----------|---------------------|-------------|-----------|
+| 1 | `CC_GLM_AUTH_TOKEN` | Direct token (highest priority) | - |
+| 2 | `CC_GLM_TOKEN_FILE` | Path to file containing token (V3.0) | 11 if error |
+| 3 | `ZAI_API_KEY` | Plain token OR `op://` reference | - |
+| 4 | `CC_GLM_OP_URI` | Explicit `op://` reference | - |
+| 5 | Default | `op://dev/Agent-Secrets-Production/ZAI_API_KEY` | 10 if fail |
 
-**Default target**: `epyc12` (the canonical heavy-compute runtime)
+### V3.0 New Auth Option: CC_GLM_TOKEN_FILE
 
-**Auth token resolution** (hostname-based, deterministic order):
-1. `OP_SERVICE_ACCOUNT_TOKEN_FILE` (if explicitly set)
-2. `/home/fengning/.config/systemd/user/op-epyc12-token` (epyc12 canonical path)
-3. `$HOME/.config/systemd/user/op-$(hostname)-token` (hostname-based)
-4. `$HOME/.config/systemd/user/op-macmini-token` (legacy fallback)
-
-**User/host naming conventions**:
-- Token files follow pattern: `op-<hostname>-token` (e.g., `op-epyc12-token`)
-- Use lowercase hostnames in token filenames
-- For new hosts, run `~/agent-skills/scripts/create-op-credential.sh` on that host
-
-**Operator runbook for headless execution**:
+For environments with mounted secrets (Kubernetes, Docker secrets, CI):
 
 ```bash
-# 1. On first use of a host, create the op credential
-ssh epyc12
-~/agent-skills/scripts/create-op-credential.sh
+# Use a mounted secret file
+export CC_GLM_TOKEN_FILE=/run/secrets/zai-api-key
+cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt
 
-# 2. Verify op resolution works
-op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
-
-# 3. From control plane, dispatch job (default target: epyc12)
-cc-glm-job.sh start \
-  --beads bd-xxx \
-  --prompt-file /tmp/prompts/task.prompt \
-  --pty
-
-# 4. Monitor job health
-cc-glm-job.sh health --beads bd-xxx
-
-# 5. If auth fails (exit code 10), check token file
-ls -la ~/.config/systemd/user/op-epyc12-token
-
-# 6. Troubleshooting: enable debug logging
-CC_GLM_DEBUG=1 cc-glm-headless.sh --prompt "test"
+# Exit code 11 if file not found or unreadable
+# Exit code 11 if file is empty
 ```
-
-**Troubleshooting flow**:
-1. **Exit code 10** → Auth resolution failed
-   - Check: `ls -la ~/.config/systemd/user/op-$(hostname)-token`
-   - Remedy: Run `create-op-credential.sh` on target host
-2. **Zero-byte log** → Job stalled or PTY issue
-   - Check: `cc-glm-job.sh check --beads bd-xxx`
-   - Remedy: `cc-glm-job.sh restart --beads bd-xxx --pty`
-3. **Log not advancing** → Job hung or waiting
-   - Check: `tail -20 /tmp/cc-glm-jobs/bd-xxx.log`
-   - Remedy: `cc-glm-job.sh stop --beads bd-xxx` then restart
-
-**Multi-host explicit mode preservation**:
-
-When using `dx-dispatch` with explicit `--hosts` specification, the default epyc12 policy does NOT apply:
-
-```bash
-# Explicit multi-host dispatch (bypasses epyc12 default)
-dx-dispatch epyc6 "Run tests" --repo affordabot
-dx-dispatch macmini "Build iOS" --repo prime-radiant-ai
-
-# Default dispatch (uses epyc12)
-cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
-```
-
-The epyc12-default policy applies **only** to:
-- `cc-glm-headless.sh` direct invocations
-- `cc-glm-job.sh` managed background jobs
-- Cases where no explicit host is specified
-
-It does **NOT** affect:
-- `dx-dispatch <host>` (explicit host specification)
-- Fleet dispatcher backend selection
-- Jules Cloud dispatch
-
-### Auth Resolution Order (First Match Wins)
-
-| Priority | Environment Variable | Description |
-|----------|---------------------|-------------|
-| 1 | `CC_GLM_AUTH_TOKEN` | Direct token (recommended for CI) |
-| 2 | `ZAI_API_KEY` | Plain token OR `op://` reference |
-| 3 | `CC_GLM_OP_URI` | Explicit `op://` reference |
-| 4 | Default | `op://dev/Agent-Secrets-Production/ZAI_API_KEY` |
 
 ### Recommended Setup for Remote Hosts
 
@@ -445,7 +403,14 @@ export CC_GLM_AUTH_TOKEN="your-api-token"
 export ZAI_API_KEY="your-api-token"
 ```
 
-**Option C: Explicit op:// Reference**
+**Option C: Token File (Mounted Secrets)**
+
+```bash
+# For Kubernetes/Docker secrets
+export CC_GLM_TOKEN_FILE=/run/secrets/zai-api-key
+```
+
+**Option D: Explicit op:// Reference**
 
 ```bash
 # Custom vault/item path
@@ -454,14 +419,21 @@ export CC_GLM_OP_URI="op://my-vault/my-item/my-field"
 
 ### Parallel Job Safety
 
-The headless script fails fast (exit code 10) when auth cannot be resolved, preventing silent failures in parallel dispatch:
+The headless script fails fast when auth cannot be resolved, preventing silent failures in parallel dispatch:
+
+| Exit Code | Meaning |
+|-----------|---------|
+| 0 | Success |
+| 1 | General error (missing prompt, etc.) |
+| 2 | Argument parsing error |
+| 10 | Auth resolution failed |
+| 11 | Token file error (not found/unreadable/empty) |
 
 ```bash
 # This will fail with actionable error if auth not configured
 cc-glm-headless.sh --prompt "task"
 
 # Error output includes remediation steps
-# Exit code 10 = auth resolution failure
 ```
 
 ### Environment Variables Reference
@@ -469,6 +441,7 @@ cc-glm-headless.sh --prompt "task"
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CC_GLM_AUTH_TOKEN` | - | Direct auth token (highest priority) |
+| `CC_GLM_TOKEN_FILE` | - | Path to file containing token (V3.0) |
 | `ZAI_API_KEY` | - | Token or op:// reference |
 | `CC_GLM_OP_URI` | - | Explicit op:// reference |
 | `CC_GLM_OP_VAULT` | `dev` | 1Password vault name |
@@ -494,6 +467,16 @@ op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
 CC_GLM_DEBUG=1 cc-glm-headless.sh --prompt "test"
 ```
 
+**Symptom**: Exit code 11 with "Token file not found"
+
+```bash
+# Check file exists and is readable
+ls -la $CC_GLM_TOKEN_FILE
+
+# Check file is not empty
+cat $CC_GLM_TOKEN_FILE
+```
+
 **Symptom**: "op CLI not found"
 
 ```bash
@@ -507,6 +490,75 @@ CC_GLM_DEBUG=1 cc-glm-headless.sh --prompt "test"
 ```bash
 # Allow legacy zsh/cc-glm fallback
 CC_GLM_ALLOW_FALLBACK=1 cc-glm-headless.sh --prompt "task"
+```
+
+---
+
+## V3.0 Reliability Features
+
+### Progress-Aware Health Detection
+
+The job runner uses **CPU time** as the primary progress signal, not just log growth:
+
+- If CPU time increases → process is healthy (even if log is quiet)
+- If CPU time stalls AND log is stale → process is stalled
+- Grace window for zero-output during startup
+
+### Log Rotation (No Truncation)
+
+On restart, logs are preserved:
+
+```bash
+/tmp/cc-glm-jobs/
+├── bd-xxx.log      # Current log
+├── bd-xxx.log.1    # First restart's log
+└── bd-xxx.log.2    # Second restart's log
+```
+
+### Outcome Persistence
+
+When jobs complete, outcome is recorded:
+
+```bash
+# bd-xxx.outcome
+beads=bd-xxx
+exit_code=0
+completed_at=2026-02-17T12:00:00Z
+state=success
+```
+
+### Restart Contract Integrity
+
+When `--preserve-contract` is used, restarts verify the environment matches:
+
+```bash
+# Abort restart if model or base URL changed
+cc-glm-job.sh restart --beads bd-xxx --preserve-contract
+```
+
+### Operator Guardrails
+
+**ANSI stripping for clean output:**
+```bash
+cc-glm-job.sh status --no-ansi
+cc-glm-job.sh tail --beads bd-xxx --no-ansi
+```
+
+**Log locality hints:**
+```bash
+cc-glm-job.sh status
+# hint: logs on hostname at /tmp/cc-glm-jobs
+```
+
+**Watchdog modes:**
+```bash
+# Observe only - never restart
+cc-glm-job.sh watchdog --observe-only
+
+# Global no-auto-restart
+cc-glm-job.sh watchdog --no-auto-restart
+
+# Per-bead no-auto-restart (set in metadata)
 ```
 
 ---
