@@ -798,7 +798,7 @@ test_job_version_v31() {
   echo ""
   echo "=== Test: Job script version V3.x ==="
 
-  if grep -q "CC_GLM_JOB_VERSION=\"3.1" "$JOB_SCRIPT"; then
+  if grep -Eq "CC_GLM_JOB_VERSION=\"3\.[0-9]+" "$JOB_SCRIPT"; then
     pass "Job script version is 3.x"
   else
     fail "Job script should be version 3.x for forensic retention"
