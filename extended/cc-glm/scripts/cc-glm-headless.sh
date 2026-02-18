@@ -7,6 +7,15 @@ set -euo pipefail
 # Auth resolution is strict by default - use CC_GLM_ALLOW_FALLBACK=1 to enable
 # legacy zsh/cc-glm path when token resolution fails.
 #
+# DEFAULT REMOTE TARGET POLICY (V2.1):
+#   When running headless without explicit host specification, epyc12 is the
+#   default target for auth token resolution. The OP_SERVICE_ACCOUNT_TOKEN
+#   discovery order is:
+#     1) OP_SERVICE_ACCOUNT_TOKEN_FILE (explicit override)
+#     2) /home/fengning/.config/systemd/user/op-epyc12-token (canonical epyc12 path)
+#     3) $HOME/.config/systemd/user/op-$(hostname)-token (hostname-based)
+#     4) $HOME/.config/systemd/user/op-macmini-token (legacy fallback)
+#
 # Auth resolution precedence (deterministic):
 #   1) CC_GLM_AUTH_TOKEN (plain token - highest priority)
 #   2) ZAI_API_KEY (plain token OR op:// reference resolved via op CLI)
@@ -25,11 +34,11 @@ set -euo pipefail
 #   CC_GLM_STRICT_AUTH=0     - Set to 0 to suppress strict auth errors (not recommended)
 
 # Version for debugging/logging
-CC_GLM_HEADLESS_VERSION="2.1.0"
+CC_GLM_HEADLESS_VERSION="2.1.1"
 
 usage() {
   cat >&2 <<'EOF'
-cc-glm-headless.sh (V2.0 - Deterministic Auth)
+cc-glm-headless.sh (V2.1 - Deterministic Auth with epyc12 Default)
 
 Run cc-glm in headless mode with deterministic auth resolution.
 
@@ -37,6 +46,13 @@ Usage:
   cc-glm-headless.sh --prompt "..."
   cc-glm-headless.sh --prompt-file /path/to/prompt.txt
   echo "..." | cc-glm-headless.sh
+
+Default Remote Target: epyc12
+  When no explicit host is specified, auth token discovery prioritizes:
+    1. OP_SERVICE_ACCOUNT_TOKEN_FILE (if set)
+    2. /home/fengning/.config/systemd/user/op-epyc12-token (canonical)
+    3. $HOME/.config/systemd/user/op-$(hostname)-token (hostname-based)
+    4. $HOME/.config/systemd/user/op-macmini-token (legacy)
 
 Auth resolution order (first match wins):
   1. CC_GLM_AUTH_TOKEN env (plain token)
