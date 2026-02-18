@@ -566,7 +566,7 @@ show_enhanced_locality_hint() {
     echo "hint: local logs on $host at $LOG_DIR are $([ $local_count -eq 0 ] && echo "empty" || echo "stale")"
     echo "hint: if jobs were dispatched to remote VMs, check:"
     echo "  - macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh status'"
-    echo "  - epyc6:   tailscale ssh fengning@epyc6 'cc-glm-job.sh status'"
+    echo "  - epyc6:   tailscale ssh feng@epyc6 'cc-glm-job.sh status'"
     echo "  - homedesktop-wsl: tailscale ssh fengning@homedesktop-wsl 'cc-glm-job.sh status'"
 
     # Check for remote log dir patterns that might indicate cross-VM dispatch
@@ -957,7 +957,7 @@ check_cmd() {
     # Help operator find job on remote hosts
     echo "hint: if job was dispatched to a remote VM, check:" >&2
     echo "  macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh check --beads $BEADS'" >&2
-    echo "  epyc6:   tailscale ssh fengning@epyc6 'cc-glm-job.sh check --beads $BEADS'" >&2
+    echo "  epyc6:   tailscale ssh feng@epyc6 'cc-glm-job.sh check --beads $BEADS'" >&2
     suggest_alternative_log_dirs
     exit 1
   fi
@@ -1241,7 +1241,7 @@ tail_cmd() {
     # Help operator find logs on remote hosts
     echo "hint: if job was dispatched to a remote VM, check:" >&2
     echo "  macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh tail --beads $BEADS'" >&2
-    echo "  epyc6:   tailscale ssh fengning@epyc6 'cc-glm-job.sh tail --beads $BEADS'" >&2
+    echo "  epyc6:   tailscale ssh feng@epyc6 'cc-glm-job.sh tail --beads $BEADS'" >&2
     suggest_alternative_log_dirs
     exit 1
   fi
@@ -1254,7 +1254,7 @@ tail_cmd() {
     echo "hint: empty log may indicate job not yet started or output redirected elsewhere"
     echo "hint: if job was dispatched to a remote VM, check logs there:"
     echo "  macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh tail --beads $BEADS'"
-    echo "  epyc6:   tailscale ssh fengning@epyc6 'cc-glm-job.sh tail --beads $BEADS'"
+    echo "  epyc6:   tailscale ssh feng@epyc6 'cc-glm-job.sh tail --beads $BEADS'"
     return 0
   fi
 

@@ -551,7 +551,7 @@ cc-glm-job.sh status
 # hint: local logs on hostname at /tmp/cc-glm-jobs (empty)
 # hint: if jobs were dispatched to remote VMs, check:
 #   - macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh status'
-#   - epyc6:   tailscale ssh fengning@epyc6 'cc-glm-job.sh status'
+#   - epyc6:   tailscale ssh feng@epyc6 'cc-glm-job.sh status'
 ```
 
 **Multi-log-dir ambiguity guardrails (V3.1):**
