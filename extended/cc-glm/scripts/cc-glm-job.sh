@@ -548,6 +548,46 @@ show_log_locality_hint() {
   echo "hint: logs on $host at $LOG_DIR"
 }
 
+# Show enhanced locality hint with remote log suggestions when local is empty/stale
+# Usage: show_enhanced_locality_hint [--stale]
+show_enhanced_locality_hint() {
+  local is_stale="${1:-}"
+  local host
+  host="$(hostname 2>/dev/null || echo "unknown")"
+
+  # Count local jobs
+  local local_count=0
+  shopt -s nullglob
+  local pids=("$LOG_DIR"/*.pid)
+  local_count=${#pids[@]}
+
+  if [[ "$is_stale" == "--stale" ]] || [[ $local_count -eq 0 ]]; then
+    # Local is empty or stale - suggest where to look for authoritative logs
+    echo "hint: local logs on $host at $LOG_DIR are $([ $local_count -eq 0 ] && echo "empty" || echo "stale")"
+    echo "hint: if jobs were dispatched to remote VMs, check:"
+    echo "  - macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh status'"
+    echo "  - epyc6:   tailscale ssh fengning@epyc6 'cc-glm-job.sh status'"
+    echo "  - homedesktop-wsl: tailscale ssh fengning@homedesktop-wsl 'cc-glm-job.sh status'"
+
+    # Check for remote log dir patterns that might indicate cross-VM dispatch
+    local found_remote_hints=()
+    if [[ -d "$HOME/.cache/dx-dispatch" ]]; then
+      found_remote_hints+=("$HOME/.cache/dx-dispatch (dx-dispatch cache)")
+    fi
+    if [[ -f "$HOME/.config/dx-dispatch" ]]; then
+      found_remote_hints+=("$HOME/.config/dx-dispatch (dx-dispatch config)")
+    fi
+
+    if [[ ${#found_remote_hints[@]} -gt 0 ]]; then
+      echo "hint: found dispatch artifacts suggesting remote execution:"
+      printf '  - %s\n' "${found_remote_hints[@]}"
+    fi
+  else
+    # Normal case - just show the standard hint
+    echo "hint: logs on $host at $LOG_DIR ($local_count job(s))"
+  fi
+}
+
 suggest_alternative_log_dirs() {
   if [[ "$LOG_DIR" == "/tmp/cc-glm-jobs" ]]; then
     shopt -s nullglob
@@ -562,6 +602,51 @@ suggest_alternative_log_dirs() {
       echo "hint: rerun with --log-dir <one-of-the-above>"
     fi
   fi
+}
+
+# Guardrail: warn about multi-log-dir ambiguity before operations
+# Returns 0 if ok to proceed, 1 if user should be warned
+check_log_dir_ambiguity() {
+  local operation="$1"
+  local warn_file="/tmp/.cc-glm-last-logdir-warning"
+
+  # Only warn for default log dir
+  if [[ "$LOG_DIR" != "/tmp/cc-glm-jobs" ]]; then
+    return 0
+  fi
+
+  # Check for alternative log dirs
+  shopt -s nullglob
+  local alt_dirs=()
+  for d in /tmp/cc-glm-jobs-*; do
+    [[ -d "$d" ]] || continue
+    alt_dirs+=("$d")
+  done
+
+  if [[ ${#alt_dirs[@]} -gt 0 ]]; then
+    # Throttle warnings (max once per hour)
+    local now hour_ago
+    now="$(date +%s)"
+    hour_ago=$((now - 3600))
+
+    if [[ -f "$warn_file" ]]; then
+      local last_warn
+      last_warn="$(cat "$warn_file" 2>/dev/null || echo "0")"
+      if [[ "$last_warn" -gt "$hour_ago" ]]; then
+        return 0  # Already warned recently
+      fi
+    fi
+
+    echo "WARN: Multiple log directories detected. Using default: $LOG_DIR"
+    echo "WARN: Alternative dirs found:"
+    printf '  - %s\n' "${alt_dirs[@]}"
+    echo "WARN: Use --log-dir <path> to target a specific directory"
+    echo "WARN: (this warning throttles to once per hour)"
+
+    echo "$now" > "$warn_file"
+  fi
+
+  return 0
 }
 
 start_cmd() {
@@ -701,6 +786,9 @@ status_line() {
 status_cmd() {
   parse_common_args "$@"
 
+  # Guardrail: warn about multi-log-dir ambiguity
+  check_log_dir_ambiguity "status"
+
   printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %s\n" \
     "bead" "pid" "state" "elapsed" "bytes" "last_update" "retry" "outcome"
 
@@ -722,6 +810,7 @@ status_cmd() {
   if [[ "$found" -eq 0 ]]; then
     echo "(no jobs found in $LOG_DIR)"
     suggest_alternative_log_dirs
+    show_enhanced_locality_hint  # Show remote log hints when local is empty
   else
     show_log_locality_hint
   fi
@@ -865,6 +954,11 @@ check_cmd() {
 
   if [[ ! -f "$META_FILE" ]]; then
     echo "job $BEADS has no metadata file"
+    # Help operator find job on remote hosts
+    echo "hint: if job was dispatched to a remote VM, check:" >&2
+    echo "  macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh check --beads $BEADS'" >&2
+    echo "  epyc6:   tailscale ssh fengning@epyc6 'cc-glm-job.sh check --beads $BEADS'" >&2
+    suggest_alternative_log_dirs
     exit 1
   fi
 
@@ -881,6 +975,9 @@ check_cmd() {
       ;;
     stalled)
       output="job $BEADS stalled: no progress detected"
+      # Add remote hints for stalled jobs
+      echo "hint: if job was dispatched remotely, check authoritative logs:" >&2
+      echo "  macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh tail --beads $BEADS'" >&2
       ;;
     exited_ok)
       output="job $BEADS completed successfully (exit 0)"
@@ -958,6 +1055,9 @@ health_cmd() {
   parse_common_args "$@"
   local stall_seconds=$((STALL_MINUTES * 60))
 
+  # Guardrail: warn about multi-log-dir ambiguity
+  check_log_dir_ambiguity "health"
+
   printf "%-14s %-8s %-12s %-16s %-6s %s\n" \
     "bead" "pid" "health" "last_update" "retry" "outcome"
 
@@ -979,6 +1079,7 @@ health_cmd() {
   if [[ "$found" -eq 0 ]]; then
     echo "(no jobs found in $LOG_DIR)"
     suggest_alternative_log_dirs
+    show_enhanced_locality_hint  # Show remote log hints when local is empty
   else
     show_log_locality_hint
   fi
@@ -1137,7 +1238,24 @@ tail_cmd() {
 
   if [[ ! -f "$LOG_FILE" ]]; then
     echo "no log file for $BEADS: $LOG_FILE" >&2
+    # Help operator find logs on remote hosts
+    echo "hint: if job was dispatched to a remote VM, check:" >&2
+    echo "  macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh tail --beads $BEADS'" >&2
+    echo "  epyc6:   tailscale ssh fengning@epyc6 'cc-glm-job.sh tail --beads $BEADS'" >&2
+    suggest_alternative_log_dirs
     exit 1
+  fi
+
+  # Check for empty log file - might indicate remote execution
+  local log_bytes
+  log_bytes="$(wc -c < "$LOG_FILE" | tr -d ' ')"
+  if [[ "$log_bytes" -eq 0 ]]; then
+    echo "(log file exists but is empty: $LOG_FILE)"
+    echo "hint: empty log may indicate job not yet started or output redirected elsewhere"
+    echo "hint: if job was dispatched to a remote VM, check logs there:"
+    echo "  macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh tail --beads $BEADS'"
+    echo "  epyc6:   tailscale ssh fengning@epyc6 'cc-glm-job.sh tail --beads $BEADS'"
+    return 0
   fi
 
   if [[ "$NO_ANSI" == "true" ]]; then
@@ -1166,6 +1284,9 @@ watchdog_cmd() {
   echo "watchdog started: mode=$mode_desc interval=${WATCHDOG_INTERVAL}s stall=${STALL_MINUTES}m max-retries=${WATCHDOG_MAX_RETRIES} once=${WATCHDOG_ONCE} beads=${BEADS:-all}"
   echo "press Ctrl+C to stop"
   show_log_locality_hint
+
+  # Guardrail: warn about multi-log-dir ambiguity
+  check_log_dir_ambiguity "watchdog"
 
   local iteration=0
   while true; do
@@ -1262,6 +1383,10 @@ watchdog_cmd() {
     if [[ "$found" -eq 0 ]]; then
       echo "(no jobs found in $LOG_DIR)"
       suggest_alternative_log_dirs
+      # Show remote hints on first iteration when empty
+      if [[ $iteration -eq 1 ]]; then
+        show_enhanced_locality_hint
+      fi
     fi
 
     if [[ "$WATCHDOG_ONCE" == "true" ]]; then
