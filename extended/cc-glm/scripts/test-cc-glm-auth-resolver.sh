@@ -884,6 +884,130 @@ test_health_duration_output() {
   fi
 }
 
+# ============================================================================
+# V3.2.1 RESTART PATH REGRESSION TESTS
+# ============================================================================
+
+# Test: restart_cmd initializes exec_mode with default before conditional
+test_restart_exec_mode_default() {
+  echo ""
+  echo "=== Test: restart_cmd exec_mode has default (V3.2.1) ==="
+
+  # Check that restart_cmd initializes exec_mode with a default value
+  # This prevents 'unbound variable' errors under set -u
+  local restart_section
+  restart_section="$(awk '/^restart_cmd\(\)/,/^}$/' "$JOB_SCRIPT" | head -100)"
+
+  if echo "$restart_section" | grep -q 'local exec_mode="nohup"'; then
+    pass "restart_cmd initializes exec_mode with default (nohup)"
+  else
+    fail "restart_cmd should initialize exec_mode with default to prevent set -u errors"
+  fi
+}
+
+# Test: start_cmd initializes exec_mode with default before conditional
+test_start_exec_mode_default() {
+  echo ""
+  echo "=== Test: start_cmd exec_mode has default (V3.2.1) ==="
+
+  # Check that start_cmd initializes exec_mode with a default value
+  local start_section
+  start_section="$(awk '/^start_cmd\(\)/,/^}$/' "$JOB_SCRIPT" | head -80)"
+
+  if echo "$start_section" | grep -q 'local exec_mode="nohup"'; then
+    pass "start_cmd initializes exec_mode with default (nohup)"
+  else
+    fail "start_cmd should initialize exec_mode with default to prevent set -u errors"
+  fi
+}
+
+# Test: restart_cmd PTY branch uses correct redirection
+test_restart_pty_redirection() {
+  echo ""
+  echo "=== Test: restart_cmd PTY branch redirection (V3.2.1) ==="
+
+  # PTY branch should use 2>> for stderr only, not >> for both stdout/stderr
+  # Because pty-run handles stdout via --output flag
+  local restart_section
+  restart_section="$(awk '/^restart_cmd\(\)/,/^}$/' "$JOB_SCRIPT")"
+
+  # Check that PTY branch uses 2>> for stderr only
+  # Use more specific pattern to match the actual spawn branch
+  if echo "$restart_section" | grep -q 'nohup "\$PTY_RUN".*2>> "\$LOG_FILE"'; then
+    pass "restart_cmd PTY branch uses 2>> for stderr (pty-run handles stdout)"
+  else
+    fail "restart_cmd PTY branch should use 2>> not >> ... 2>&1 (pty-run handles stdout)"
+  fi
+}
+
+# Test: start_cmd PTY branch uses correct redirection
+test_start_pty_redirection() {
+  echo ""
+  echo "=== Test: start_cmd PTY branch redirection (V3.2.1) ==="
+
+  local start_section
+  start_section="$(awk '/^start_cmd\(\)/,/^}$/' "$JOB_SCRIPT")"
+
+  local pty_branch
+  pty_branch="$(echo "$start_section" | awk '/if.*USE_PTY.*true/,/else/' | head -10)"
+
+  if echo "$pty_branch" | grep -q '2>>'; then
+    pass "start_cmd PTY branch uses 2>> for stderr (pty-run handles stdout)"
+  else
+    fail "start_cmd PTY branch should use 2>> not >> ... 2>&1 (pty-run handles stdout)"
+  fi
+}
+
+# Test: persist_contract handles EXECUTION_MODE safely under set -u
+test_persist_contract_env_safe() {
+  echo ""
+  echo "=== Test: persist_contract EXECUTION_MODE safety (V3.2.1) ==="
+
+  # Check that persist_contract uses safe variable expansion for EXECUTION_MODE
+  local contract_section
+  contract_section="$(awk '/^persist_contract\(\)/,/^}$/' "$JOB_SCRIPT")"
+
+  # Should use the safe pattern: ${EXECUTION_MODE:+$EXECUTION_MODE} then :-nohup
+  if echo "$contract_section" | grep -q 'EXECUTION_MODE:+\$EXECUTION_MODE'; then
+    pass "persist_contract uses safe EXECUTION_MODE expansion under set -u"
+  else
+    fail "persist_contract should use safe expansion for EXECUTION_MODE"
+  fi
+}
+
+# Test: job_health gives benefit of doubt for running_no_output past threshold
+test_health_running_no_output_grace() {
+  echo ""
+  echo "=== Test: job_health running_no_output grace (V3.2.1) ==="
+
+  # Check that job_health has extended_startup logic for running but no output case
+  local health_section
+  health_section="$(awk '/^job_health\(\)/,/^}$/' "$JOB_SCRIPT")"
+
+  if echo "$health_section" | grep -q 'extended_startup'; then
+    pass "job_health has extended_startup logic for running_no_output past threshold"
+  else
+    fail "job_health should give benefit of doubt for running_no_output past threshold"
+  fi
+}
+
+# Test: watchdog treats starting as non-error
+test_watchdog_starting_non_error() {
+  echo ""
+  echo "=== Test: watchdog starting state non-error (V3.2.1) ==="
+
+  # Check that watchdog's case statement includes 'starting' in non-error branch
+  local watchdog_section
+  watchdog_section="$(awk '/^watchdog_cmd\(\)/,/^}$/' "$JOB_SCRIPT")"
+
+  # Look for the pattern: healthy|starting|exited_ok)
+  if echo "$watchdog_section" | grep -q 'healthy|starting|exited_ok)'; then
+    pass "watchdog treats 'starting' as non-error (no restart/escalation)"
+  else
+    fail "watchdog should include 'starting' in non-error case branch"
+  fi
+}
+
 # Run all tests
 echo "================================================"
 echo "cc-glm V3.0 Test Suite"
@@ -963,6 +1087,17 @@ test_start_outcome_rotation
 test_restart_outcome_rotation
 test_status_duration_output
 test_health_duration_output
+
+# Run V3.2.1 restart path regression tests
+echo ""
+echo "--- Restart Path Regression Tests (V3.2.1) ---"
+test_restart_exec_mode_default
+test_start_exec_mode_default
+test_restart_pty_redirection
+test_start_pty_redirection
+test_persist_contract_env_safe
+test_health_running_no_output_grace
+test_watchdog_starting_non_error
 
 # Summary
 echo ""

@@ -290,8 +290,13 @@ persist_contract() {
   auth_mode="$(meta_get "$META_FILE" "auth_mode")"
   [[ -n "$auth_mode" ]] || auth_mode="$([[ "${CC_GLM_STRICT_AUTH:-1}" == "0" ]] && echo "non_strict" || echo "strict")"
 
+  # execution_mode: prefer meta file, then env var (with safe default under set -u)
   execution_mode="$(meta_get "$META_FILE" "execution_mode")"
-  [[ -n "$execution_mode" ]] || execution_mode="${EXECUTION_MODE:-nohup}"
+  if [[ -z "$execution_mode" ]]; then
+    # Use environment variable if set, otherwise default to nohup
+    execution_mode="${EXECUTION_MODE:+$EXECUTION_MODE}"
+    execution_mode="${execution_mode:-nohup}"
+  fi
 
   cat > "$contract_file" <<EOF
 # Runtime contract for $beads (generated $(now_utc))
@@ -737,10 +742,11 @@ EOF
   meta_set "$META_FILE" "auth_mode" "$([[ "${CC_GLM_STRICT_AUTH:-1}" == "0" ]] && echo "non_strict" || echo "strict")"
 
   # Detached run; stdout/stderr go to per-job log.
-  local exec_mode
+  local exec_mode="nohup"  # Default; overridden below if PTY mode
   if [[ "$USE_PTY" == "true" ]]; then
     [[ -x "$PTY_RUN" ]] || { echo "PTY wrapper not executable: $PTY_RUN" >&2; exit 1; }
-    nohup "$PTY_RUN" --output "$LOG_FILE" -- "$HEADLESS" --prompt-file "$PROMPT_FILE" >> "$LOG_FILE" 2>&1 &
+    # PTY handles output via --output; shell redirect is for pty-run's own stderr only
+    nohup "$PTY_RUN" --output "$LOG_FILE" -- "$HEADLESS" --prompt-file "$PROMPT_FILE" 2>> "$LOG_FILE" &
     exec_mode="pty"
   else
     nohup "$HEADLESS" --prompt-file "$PROMPT_FILE" >> "$LOG_FILE" 2>&1 &
@@ -961,8 +967,26 @@ job_health() {
       printf "healthy"  # Process is working, just hasn't written yet
       return 0
     fi
+    # V3.2.1: Process alive but no output/CPU time - treat as active startup, not stalled
+    # Only consider truly stalled if we've seen NO progress for multiple check intervals
+    # This prevents false-positive restarts during slow startup (e.g., auth, model loading)
     if [[ "$pid_age" -gt "$stall_threshold" ]]; then
-      printf "stalled"
+      # Check if we've recorded CPU time before (indicates repeated checks)
+      if [[ -f "$META_FILE" ]]; then
+        local prev_cpu_check
+        prev_cpu_check="$(meta_get "$META_FILE" "last_cpu_time")"
+        if [[ -n "$prev_cpu_check" && "$prev_cpu_check" != "0" ]]; then
+          # We've seen CPU activity before, now it's gone - truly stalled
+          printf "stalled"
+          return 0
+        fi
+      fi
+      # First time we're seeing zero CPU after threshold - give benefit of doubt
+      # Record that we're in extended startup for next check
+      if [[ -f "$META_FILE" ]]; then
+        meta_set "$META_FILE" "extended_startup" "true"
+      fi
+      printf "starting"  # Still in startup, even past threshold
       return 0
     fi
     printf "starting"  # Within grace window
@@ -1283,10 +1307,11 @@ restart_cmd() {
 
   # Start new job
   [[ -x "$HEADLESS" ]] || { echo "headless wrapper not executable: $HEADLESS" >&2; exit 1; }
-  local exec_mode
+  local exec_mode="nohup"  # Default; overridden below if PTY mode
   if [[ "$effective_use_pty" == "true" ]]; then
     [[ -x "$PTY_RUN" ]] || { echo "PTY wrapper not executable: $PTY_RUN" >&2; exit 1; }
-    nohup "$PTY_RUN" --output "$LOG_FILE" -- "$HEADLESS" --prompt-file "$prompt_file" >> "$LOG_FILE" 2>&1 &
+    # PTY handles output via --output; shell redirect is for pty-run's own stderr only
+    nohup "$PTY_RUN" --output "$LOG_FILE" -- "$HEADLESS" --prompt-file "$prompt_file" 2>> "$LOG_FILE" &
     exec_mode="pty"
   else
     nohup "$HEADLESS" --prompt-file "$prompt_file" >> "$LOG_FILE" 2>&1 &
