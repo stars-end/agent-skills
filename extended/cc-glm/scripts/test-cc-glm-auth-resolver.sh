@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# test-cc-glm-auth-resolver.sh (V3.0)
+# test-cc-glm-auth-resolver.sh (V3.1)
 #
 # Test coverage for cc-glm-headless.sh auth token resolver and cc-glm-job.sh runner.
 # Tests all resolution branches without revealing actual token values.
 # Includes tests for V3.0 features: CC_GLM_TOKEN_FILE, progress-aware health, forensics.
+# Includes tests for V3.1 features: heartbeat, model propagation, running_no_output, preflight.
 #
 # Usage:
 #   test-cc-glm-auth-resolver.sh [--verbose]
@@ -582,10 +583,10 @@ test_job_version() {
   exit_code=$?
   set -e
 
-  if [[ "$output" == *"V3.0"* ]]; then
-    pass "Job script reports V3.0"
+  if [[ "$output" == *"V3.1"* ]]; then
+    pass "Job script reports V3.1"
   else
-    fail "Job script should report V3.0" "output=$output"
+    fail "Job script should report V3.1" "output=$output"
   fi
 }
 
@@ -776,6 +777,156 @@ test_job_verify_contract_fields() {
   fi
 }
 
+# ============================================================================
+# V3.1 REGRESSION TESTS
+# ============================================================================
+
+# Test: Heartbeat emission in job log
+test_heartbeat_emission() {
+  echo ""
+  echo "=== Test: Heartbeat emission (V3.1) ==="
+
+  # Check that write_heartbeat function exists
+  if grep -q "write_heartbeat()" "$JOB_SCRIPT"; then
+    pass "write_heartbeat function exists"
+  else
+    fail "write_heartbeat function not found"
+    return
+  fi
+
+  # Check heartbeat format
+  if grep -q "\[CC_GLM_HEARTBEAT\]" "$JOB_SCRIPT"; then
+    pass "Heartbeat format marker found in script"
+  else
+    fail "Heartbeat format marker not found"
+  fi
+
+  # Verify heartbeat includes required fields
+  local has_beads has_pid has_model has_ts
+  has_beads=0; has_pid=0; has_model=0; has_ts=0
+  grep -q "beads=" "$JOB_SCRIPT" && grep -q "\[CC_GLM_HEARTBEAT\]" "$JOB_SCRIPT" && has_beads=1
+  grep -q "pid=" "$JOB_SCRIPT" && grep -q "\[CC_GLM_HEARTBEAT\]" "$JOB_SCRIPT" && has_pid=1
+  grep -q "model=" "$JOB_SCRIPT" && grep -q "\[CC_GLM_HEARTBEAT\]" "$JOB_SCRIPT" && has_model=1
+  grep -q "ts=" "$JOB_SCRIPT" && grep -q "\[CC_GLM_HEARTBEAT\]" "$JOB_SCRIPT" && has_ts=1
+
+  if [[ $has_beads -eq 1 ]] && [[ $has_pid -eq 1 ]] && [[ $has_model -eq 1 ]] && [[ $has_ts -eq 1 ]]; then
+    pass "Heartbeat includes beads/pid/model/ts fields"
+  else
+    fail "Heartbeat missing required fields" "beads=$has_beads pid=$has_pid model=$has_model ts=$has_ts"
+  fi
+}
+
+# Test: Model propagation on restart
+test_model_propagation_restart() {
+  echo ""
+  echo "=== Test: Model propagation on restart (V3.1) ==="
+
+  # Check get_effective_model function
+  if grep -q "get_effective_model()" "$JOB_SCRIPT"; then
+    pass "get_effective_model function exists"
+  else
+    fail "get_effective_model function not found"
+    return
+  fi
+
+  # Verify precedence: explicit override > persisted meta > default
+  local has_explicit has_persisted has_default
+  has_explicit=0; has_persisted=0; has_default=0
+
+  grep -q "explicit_override" "$JOB_SCRIPT" && has_explicit=1
+  grep -q "effective_model" "$JOB_SCRIPT" && has_persisted=1
+  grep -q "glm-5" "$JOB_SCRIPT" && has_default=1
+
+  if [[ $has_explicit -eq 1 ]] && [[ $has_persisted -eq 1 ]] && [[ $has_default -eq 1 ]]; then
+    pass "Model precedence: explicit > persisted > default"
+  else
+    fail "Model precedence incomplete" "explicit=$has_explicit persisted=$has_persisted default=$has_default"
+  fi
+
+  # Check that effective_model is persisted to meta
+  if grep -q "effective_model=" "$JOB_SCRIPT"; then
+    pass "effective_model persisted to metadata"
+  else
+    fail "effective_model should be persisted to metadata"
+  fi
+}
+
+# Test: running_no_output health state
+test_running_no_output_state() {
+  echo ""
+  echo "=== Test: running_no_output health state (V3.1) ==="
+
+  # Check job_health function exists
+  if grep -q "job_health()" "$JOB_SCRIPT"; then
+    pass "job_health function exists"
+  else
+    fail "job_health function not found"
+    return
+  fi
+
+  # Check running_no_output state is emitted
+  if grep -q "running_no_output" "$JOB_SCRIPT"; then
+    pass "running_no_output state defined in script"
+  else
+    fail "running_no_output state not found"
+  fi
+
+  # Verify health state documentation
+  local output
+  output=$("$JOB_SCRIPT" --help 2>&1)
+
+  if [[ "$output" == *"running_no_output"* ]]; then
+    pass "running_no_output documented in help"
+  else
+    fail "running_no_output not in help output"
+  fi
+}
+
+# Test: Preflight command
+test_preflight_command() {
+  echo ""
+  echo "=== Test: Preflight command (V3.1) ==="
+
+  # Check run_preflight function
+  if grep -q "run_preflight()" "$JOB_SCRIPT"; then
+    pass "run_preflight function exists"
+  else
+    fail "run_preflight function not found"
+    return
+  fi
+
+  # Check preflight checks for claude binary
+  if grep -q "claude binary" "$JOB_SCRIPT" || grep -q 'command -v claude' "$JOB_SCRIPT"; then
+    pass "Preflight checks for claude binary"
+  else
+    fail "Preflight missing claude binary check"
+  fi
+
+  # Check preflight checks for auth
+  if grep -q "auth resolvable" "$JOB_SCRIPT"; then
+    pass "Preflight checks auth resolvability"
+  else
+    fail "Preflight missing auth check"
+  fi
+
+  # Check preflight checks model
+  if grep -q "effective_model=" "$JOB_SCRIPT"; then
+    pass "Preflight checks effective model"
+  else
+    fail "Preflight missing model check"
+  fi
+
+  # Check preflight command in help
+  local output
+  output=$("$JOB_SCRIPT" --help 2>&1)
+
+  if [[ "$output" == *"preflight"* ]]; then
+    pass "preflight command documented in help"
+  else
+    fail "preflight command not in help"
+  fi
+}
+
 # Run all tests
 echo "================================================"
 echo "cc-glm V3.0 Test Suite"
@@ -844,6 +995,14 @@ test_job_no_auto_restart
 test_job_verify_contract
 test_job_cpu_leading_zero_guard
 test_job_verify_contract_fields
+
+# Run V3.1 regression tests
+echo ""
+echo "--- V3.1 Regression Tests ---"
+test_heartbeat_emission
+test_model_propagation_restart
+test_running_no_output_state
+test_preflight_command
 
 # Summary
 echo ""

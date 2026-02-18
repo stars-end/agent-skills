@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# cc-glm-job.sh (V3.0 - Progress-Aware Health + Forensics + Guardrails)
+# cc-glm-job.sh (V3.1 - Startup Heartbeat + Model Propagation + Health Clarity)
 #
 # Lightweight background job manager for cc-glm headless runs.
 # Keeps consistent artifacts under /tmp/cc-glm-jobs:
@@ -16,9 +16,15 @@ set -euo pipefail
 #   restart  --beads <id> [--log-dir <dir>] [--pty] [--preserve-contract]
 #   stop     --beads <id> [--log-dir <dir>]
 #   tail     --beads <id> [--log-dir <dir>] [--lines <n>] [--no-ansi]
+#   preflight [--beads <id>] [--log-dir <dir>]
 #   watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>] [--once]
 #            [--observe-only] [--no-auto-restart] [--pidfile <path>]
 #
+# V3.1 Changes:
+#   - Startup heartbeat: immediate machine-parsable launch line to log
+#   - Deterministic model propagation: persist effective model, honor on restart
+#   - Health clarity: running_no_output state, effective_model in status/health
+#   - Preflight: lightweight checks for claude/auth/model before launch
 # V3.0 Changes:
 #   - Progress-aware health: process liveness is primary signal, log growth is secondary
 #   - Restart env contract integrity: preserves auth source/mode/model/base-url
@@ -30,7 +36,7 @@ HEADLESS="${SCRIPT_DIR}/cc-glm-headless.sh"
 PTY_RUN="${SCRIPT_DIR}/pty-run.sh"
 
 # Version for debugging
-CC_GLM_JOB_VERSION="3.0.0"
+CC_GLM_JOB_VERSION="3.1.0"
 
 LOG_DIR="/tmp/cc-glm-jobs"
 CMD="${1:-}"
@@ -38,7 +44,7 @@ shift || true
 
 usage() {
   cat <<'EOF'
-cc-glm-job.sh (V3.0 - Progress-Aware Health + Forensics + Guardrails)
+cc-glm-job.sh (V3.1 - Startup Heartbeat + Model Propagation + Health Clarity)
 
 Usage:
   cc-glm-job.sh start --beads <id> --prompt-file <path> [options]
@@ -48,6 +54,7 @@ Usage:
   cc-glm-job.sh restart --beads <id> [--log-dir <dir>] [--pty] [--preserve-contract]
   cc-glm-job.sh stop --beads <id> [--log-dir <dir>]
   cc-glm-job.sh tail --beads <id> [--log-dir <dir>] [--lines <n>] [--no-ansi]
+  cc-glm-job.sh preflight [--beads <id>] [--log-dir <dir>]
   cc-glm-job.sh watchdog [--beads <id>] [options]
 
 Commands:
@@ -58,6 +65,7 @@ Commands:
   restart  Restart a job (preserves metadata, rotates logs, increments retry count).
   stop     Stop a running job and record outcome.
   tail     Show last N lines of job log with optional ANSI stripping.
+  preflight Run preflight checks (claude binary, auth, model).
   watchdog Run watchdog loop: monitor jobs, restart stalled jobs.
 
 Options:
@@ -69,14 +77,15 @@ Options:
   --once              Run exactly one watchdog iteration, then exit.
   --lines N           Number of lines for tail command (default: 20).
 
-Health States (V3.0):
-  healthy      - Process running with recent activity
-  starting     - Process running but within grace window
-  stalled      - Process alive but no progress for N minutes
-  exited_ok    - Process exited with code 0 (completed successfully)
-  exited_err   - Process exited with non-zero code (crashed/failed)
-  blocked      - Max retries exhausted, manual intervention needed
-  missing      - No metadata found for job
+Health States (V3.1):
+  healthy            - Process running with recent activity
+  running_no_output  - Process running with CPU activity but no log output (V3.1)
+  starting           - Process running but within grace window
+  stalled            - Process alive but no progress for N minutes
+  exited_ok          - Process exited with code 0 (completed successfully)
+  exited_err         - Process exited with non-zero code (crashed/failed)
+  blocked            - Max retries exhausted, manual intervention needed
+  missing            - No metadata found for job
 
 Exit Codes:
   0  - Success (or healthy)
@@ -88,16 +97,22 @@ Exit Codes:
 
 Job Artifacts:
   <beads>.pid       - Process ID file
-  <beads>.log       - Current output log
+  <beads>.log       - Current output log (starts with heartbeat line)
   <beads>.log.<n>   - Rotated logs (preserved on restart)
-  <beads>.meta      - Job metadata (repo, worktree, retries, etc.)
+  <beads>.meta      - Job metadata (repo, worktree, retries, effective_model, etc.)
   <beads>.outcome   - Final outcome (exit_code, completed_at, state)
   <beads>.contract  - Runtime contract (auth_source, model, base_url)
+
+V3.1 Features:
+  - Startup heartbeat: [CC_GLM_HEARTBEAT] line written to log immediately
+  - Model propagation: effective_model persisted and honored on restart
+  - running_no_output: explicit health state for no-output startup
+  - Preflight checks: verify claude/auth/model before launch
 
 Notes:
   - Log rotation: old logs preserved as <beads>.log.<n> on restart
   - Contract file ensures restart consistency (no env drift)
-  - status/health show outcome column for completed jobs
+  - status/health show effective_model column
 EOF
 }
 
@@ -342,6 +357,104 @@ rotate_log() {
   mv "$log_file" "${base_dir}/${base_name}.log.${n}"
 }
 
+# ============================================================================
+# V3.1: Startup Observability + Model Propagation
+# ============================================================================
+
+# Get effective model with precedence: explicit override > persisted meta > env default
+get_effective_model() {
+  local meta_file="${1:-}"
+  local explicit_override="${CC_GLM_MODEL:-}"
+
+  # 1) Explicit override wins
+  if [[ -n "$explicit_override" ]]; then
+    echo "$explicit_override"
+    return 0
+  fi
+
+  # 2) Persisted effective model from metadata
+  if [[ -n "$meta_file" && -f "$meta_file" ]]; then
+    local persisted
+    persisted="$(meta_get "$meta_file" "effective_model")"
+    if [[ -n "$persisted" ]]; then
+      echo "$persisted"
+      return 0
+    fi
+  fi
+
+  # 3) Default from env or hardcoded
+  echo "${CC_GLM_MODEL:-glm-5}"
+}
+
+# Write machine-parsable heartbeat to log immediately before launch
+# Format: [CC_GLM_HEARTBEAT] beads=<id> pid=<pid> model=<model> mode=<pty|nohup> ts=<iso8601>
+write_heartbeat() {
+  local beads="$1"
+  local pid="$2"
+  local model="$3"
+  local mode="$4"
+  local log_file="$5"
+
+  local ts
+  ts="$(now_utc)"
+
+  cat >> "$log_file" <<EOF
+[CC_GLM_HEARTBEAT] beads=$beads pid=$pid model=$model mode=$mode ts=$ts
+EOF
+}
+
+# Preflight checks: claude binary, auth resolution preview, model selection
+# Returns 0 if all checks pass, non-zero with error message on failure
+run_preflight() {
+  local errors=0
+
+  # Check 1: claude binary exists
+  if ! command -v claude >/dev/null 2>&1; then
+    echo "PREFLIGHT FAIL: claude binary not found on PATH" >&2
+    errors=$((errors + 1))
+  fi
+
+  # Check 2: Auth can be resolved (dry-run style - don't leak secrets)
+  local auth_ok=false
+  if [[ -n "${CC_GLM_AUTH_TOKEN:-}" ]]; then
+    auth_ok=true
+  elif [[ -n "${CC_GLM_TOKEN_FILE:-}" ]]; then
+    if [[ -f "${CC_GLM_TOKEN_FILE}" && -r "${CC_GLM_TOKEN_FILE}" ]]; then
+      auth_ok=true
+    else
+      echo "PREFLIGHT FAIL: CC_GLM_TOKEN_FILE not found/readable: ${CC_GLM_TOKEN_FILE}" >&2
+      errors=$((errors + 1))
+    fi
+  elif [[ -n "${ZAI_API_KEY:-}" ]]; then
+    # ZAI_API_KEY present (may be op://, actual resolution happens at runtime)
+    auth_ok=true
+  elif [[ -n "${CC_GLM_OP_URI:-}" ]]; then
+    auth_ok=true
+  else
+    # Will try default op:// - check if op CLI exists
+    if command -v op >/dev/null 2>&1; then
+      auth_ok=true  # op available, will attempt resolution
+    else
+      echo "PREFLIGHT FAIL: No auth configured and op CLI not available" >&2
+      errors=$((errors + 1))
+    fi
+  fi
+
+  if [[ "$auth_ok" == "true" ]]; then
+    echo "PREFLIGHT OK: auth resolvable" >&2
+  fi
+
+  # Check 3: Model selection
+  local effective_model
+  effective_model="$(get_effective_model "")"
+  echo "PREFLIGHT OK: effective_model=$effective_model" >&2
+
+  return $errors
+}
+
+# Health state classification with running_no_output distinction
+# States: healthy, running_no_output, starting, stalled, exited_ok, exited_err, blocked, missing
+
 # Persist outcome metadata
 persist_outcome() {
   local beads="$1"
@@ -508,11 +621,25 @@ start_cmd() {
     exit 1
   fi
 
+  # V3.1: Run preflight checks (non-blocking, info only)
+  echo "Running preflight checks..." >&2
+  if ! run_preflight 2>&1; then
+    echo "Preflight warnings detected, proceeding anyway..." >&2
+  fi
+
+  # V3.1: Determine effective model BEFORE any metadata write
+  local effective_model
+  effective_model="$(get_effective_model "")"
+  echo "Effective model: $effective_model" >&2
+
   # Rotate any existing log
   rotate_log "$LOG_FILE"
 
   # Clear outcome from previous run
   rm -f "$OUTCOME_FILE"
+
+  # Create initial log file for heartbeat
+  touch "$LOG_FILE"
 
   cat > "$META_FILE" <<EOF
 beads=$BEADS
@@ -523,6 +650,7 @@ started_at=$(now_utc)
 retries=0
 use_pty=$USE_PTY
 version=$CC_GLM_JOB_VERSION
+effective_model=$effective_model
 EOF
   meta_set "$META_FILE" "launch_marker_at" "$(now_utc)"
   meta_set "$META_FILE" "launch_state" "starting"
@@ -541,30 +669,41 @@ EOF
   meta_set "$META_FILE" "auth_source" "$auth_source"
   meta_set "$META_FILE" "auth_mode" "$([[ "${CC_GLM_STRICT_AUTH:-1}" == "0" ]] && echo "non_strict" || echo "strict")"
 
-  # Detached run; stdout/stderr go to per-job log.
+  # V3.1: Determine execution mode for heartbeat
   local exec_mode
   if [[ "$USE_PTY" == "true" ]]; then
-    [[ -x "$PTY_RUN" ]] || { echo "PTY wrapper not executable: $PTY_RUN" >&2; exit 1; }
-    nohup "$PTY_RUN" --output "$LOG_FILE" -- "$HEADLESS" --prompt-file "$PROMPT_FILE" >> "$LOG_FILE" 2>&1 &
     exec_mode="pty"
   else
-    nohup "$HEADLESS" --prompt-file "$PROMPT_FILE" >> "$LOG_FILE" 2>&1 &
     exec_mode="nohup"
+  fi
+
+  # Detached run; stdout/stderr go to per-job log.
+  # V3.1: Pass effective model explicitly to headless
+  if [[ "$USE_PTY" == "true" ]]; then
+    [[ -x "$PTY_RUN" ]] || { echo "PTY wrapper not executable: $PTY_RUN" >&2; exit 1; }
+    nohup "$PTY_RUN" --output "$LOG_FILE" -- env CC_GLM_MODEL="$effective_model" "$HEADLESS" --prompt-file "$PROMPT_FILE" >> "$LOG_FILE" 2>&1 &
+  else
+    nohup env CC_GLM_MODEL="$effective_model" "$HEADLESS" --prompt-file "$PROMPT_FILE" >> "$LOG_FILE" 2>&1 &
   fi
   local pid=$!
   echo "$pid" > "$PID_FILE"
+
+  # V3.1: Write heartbeat IMMEDIATELY after capturing PID
+  # This provides startup observability even if headless takes time to write output
+  write_heartbeat "$BEADS" "$pid" "$effective_model" "$exec_mode" "$LOG_FILE"
+
   meta_set "$META_FILE" "pid" "$pid"
   meta_set "$META_FILE" "launch_state" "running"
   meta_set "$META_FILE" "execution_mode" "$exec_mode"
   persist_contract "$BEADS" "$CONTRACT_FILE"
 
-  echo "started beads=$BEADS pid=$pid log=$LOG_FILE pty=$USE_PTY"
+  echo "started beads=$BEADS pid=$pid log=$LOG_FILE pty=$USE_PTY model=$effective_model"
 }
 
 status_line() {
   local beads="$1"
   job_paths "$beads"
-  local pid="" state="missing" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-"
+  local pid="" state="missing" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" model="-"
 
   if [[ -f "$PID_FILE" ]]; then
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -594,6 +733,9 @@ status_line() {
   if [[ -f "$META_FILE" ]]; then
     retries="$(meta_get "$META_FILE" "retries")"
     [[ -n "$retries" ]] || retries="0"
+    # V3.1: Show effective model
+    model="$(meta_get "$META_FILE" "effective_model")"
+    [[ -n "$model" ]] || model="-"
   fi
 
   # Elapsed from PID file age
@@ -607,8 +749,8 @@ status_line() {
   fi
 
   local output
-  output="$(printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %s" \
-    "$beads" "${pid:--}" "$state" "$elapsed" "$log_bytes" "$last_update" "$retries" "$outcome")"
+  output="$(printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-7s %s" \
+    "$beads" "${pid:--}" "$state" "$elapsed" "$log_bytes" "$last_update" "$retries" "$model" "$outcome")"
 
   if [[ "$NO_ANSI" == "true" ]]; then
     echo "$output" | strip_ansi
@@ -620,8 +762,8 @@ status_line() {
 status_cmd() {
   parse_common_args "$@"
 
-  printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %s\n" \
-    "bead" "pid" "state" "elapsed" "bytes" "last_update" "retry" "outcome"
+  printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-7s %s\n" \
+    "bead" "pid" "state" "elapsed" "bytes" "last_update" "retry" "model" "outcome"
 
   if [[ -n "$BEADS" ]]; then
     status_line "$BEADS"
@@ -721,7 +863,7 @@ job_health() {
   local cpu_time
   cpu_time="$(process_cpu_time "$pid")"
 
-  # Check for zero output - use grace window
+  # Check for zero output - use grace window with running_no_output distinction
   local log_bytes
   log_bytes="$(wc -c < "$LOG_FILE" | tr -d ' ')"
   if [[ "$log_bytes" -eq 0 ]]; then
@@ -733,16 +875,23 @@ job_health() {
         pid_age=$(( $(date +%s) - pid_mtime ))
       fi
     fi
-    # If process has CPU time but no log output, it's making progress
+
+    # V3.1: Check for heartbeat in log (0 bytes = no heartbeat yet = launching)
+    # Heartbeat is written before nohup, so 0-byte log means still launching
+    # A non-zero log with heartbeat means launched but no model output yet
+
+    # If process has CPU time but no log output, it's making progress but hasn't written
     if [[ "$cpu_time" -gt 0 ]]; then
-      printf "healthy"  # Process is working, just hasn't written yet
+      printf "running_no_output"  # V3.1: Explicit state for running without output
       return 0
     fi
+
+    # No CPU time yet - check age for stall detection
     if [[ "$pid_age" -gt "$stall_threshold" ]]; then
       printf "stalled"
       return 0
     fi
-    printf "starting"  # Within grace window
+    printf "starting"  # Within grace window, no activity yet
     return 0
   fi
 
@@ -795,6 +944,9 @@ check_cmd() {
     healthy)
       output="job $BEADS healthy: running with progress"
       ;;
+    running_no_output)
+      output="job $BEADS running_no_output: process active but no log output yet"
+      ;;
     starting)
       output="job $BEADS starting: within grace window"
       ;;
@@ -826,7 +978,7 @@ check_cmd() {
 
   # Exit codes for scripting
   case "$health" in
-    healthy|starting|exited_ok) exit 0 ;;
+    healthy|running_no_output|starting|exited_ok) exit 0 ;;
     stalled) exit 2 ;;
     exited_err|blocked) exit 3 ;;
     missing) exit 1 ;;
@@ -877,8 +1029,8 @@ health_cmd() {
   parse_common_args "$@"
   local stall_seconds=$((STALL_MINUTES * 60))
 
-  printf "%-14s %-8s %-12s %-16s %-6s %s\n" \
-    "bead" "pid" "health" "last_update" "retry" "outcome"
+  printf "%-14s %-8s %-16s %-16s %-6s %-7s %s\n" \
+    "bead" "pid" "health" "last_update" "retry" "model" "outcome"
 
   if [[ -n "$BEADS" ]]; then
     health_line "$BEADS" "$stall_seconds"
@@ -907,7 +1059,7 @@ health_line() {
   local beads="$1"
   local stall_threshold="$2"
   job_paths "$beads"
-  local pid="" health="missing" last_update="-" retries="0" outcome="-"
+  local pid="" health="missing" last_update="-" retries="0" outcome="-" model="-"
 
   if [[ -f "$PID_FILE" ]]; then
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -928,6 +1080,9 @@ health_line() {
   if [[ -f "$META_FILE" ]]; then
     retries="$(meta_get "$META_FILE" "retries")"
     [[ -n "$retries" ]] || retries="0"
+    # V3.1: Show effective model
+    model="$(meta_get "$META_FILE" "effective_model")"
+    [[ -n "$model" ]] || model="-"
   fi
 
   # Check outcome
@@ -939,8 +1094,8 @@ health_line() {
   fi
 
   local output
-  output="$(printf "%-14s %-8s %-12s %-16s %-6s %s" \
-    "$beads" "${pid:--}" "$health" "$last_update" "$retries" "$outcome")"
+  output="$(printf "%-14s %-8s %-16s %-16s %-6s %-7s %s" \
+    "$beads" "${pid:--}" "$health" "$last_update" "$retries" "$model" "$outcome")"
 
   if [[ "$NO_ANSI" == "true" ]]; then
     echo "$output" | strip_ansi
@@ -999,6 +1154,14 @@ restart_cmd() {
     exit 1
   fi
 
+  # V3.1: Determine effective model with precedence:
+  # 1) Explicit override from CC_GLM_MODEL env
+  # 2) Persisted effective_model from metadata
+  # 3) Default (glm-5)
+  local effective_model
+  effective_model="$(get_effective_model "$META_FILE")"
+  echo "Effective model for restart: $effective_model" >&2
+
   # Stop existing job if running
   local pid
   if [[ -f "$PID_FILE" ]]; then
@@ -1015,33 +1178,37 @@ restart_cmd() {
   # Clear old outcome
   rm -f "$OUTCOME_FILE"
 
+  # Create initial log file for heartbeat
+  touch "$LOG_FILE"
+
   # Increment retries
   local new_retries=$((retries + 1))
   meta_set "$META_FILE" "retries" "$new_retries"
   meta_set "$META_FILE" "restarted_at" "$(now_utc)"
   meta_set "$META_FILE" "launch_marker_at" "$(now_utc)"
   meta_set "$META_FILE" "launch_state" "restarting"
+  meta_set "$META_FILE" "effective_model" "$effective_model"
 
-  # Start new job
-  [[ -x "$HEADLESS" ]] || { echo "headless wrapper not executable: $HEADLESS" >&2; exit 1; }
+  # V3.1: Determine execution mode for heartbeat
   local exec_mode
   if [[ "$effective_use_pty" == "true" ]]; then
-    [[ -x "$PTY_RUN" ]] || { echo "PTY wrapper not executable: $PTY_RUN" >&2; exit 1; }
-    nohup "$PTY_RUN" --output "$LOG_FILE" -- "$HEADLESS" --prompt-file "$prompt_file" >> "$LOG_FILE" 2>&1 &
     exec_mode="pty"
   else
-    nohup "$HEADLESS" --prompt-file "$prompt_file" >> "$LOG_FILE" 2>&1 &
-    exec_mode="nohup"
+    nohup env CC_GLM_MODEL="$effective_model" "$HEADLESS" --prompt-file "$prompt_file" >> "$LOG_FILE" 2>&1 &
   fi
   local new_pid=$!
   echo "$new_pid" > "$PID_FILE"
+
+  # V3.1: Write heartbeat immediately after capturing PID
+  write_heartbeat "$BEADS" "$new_pid" "$effective_model" "$exec_mode" "$LOG_FILE"
+
   meta_set "$META_FILE" "pid" "$new_pid"
   meta_set "$META_FILE" "launch_state" "running"
   meta_set "$META_FILE" "execution_mode" "$exec_mode"
   meta_set "$META_FILE" "use_pty" "$effective_use_pty"
   persist_contract "$BEADS" "$CONTRACT_FILE"
 
-  echo "restarted beads=$BEADS pid=$new_pid retries=$new_retries log=$LOG_FILE pty=$effective_use_pty"
+  echo "restarted beads=$BEADS pid=$new_pid retries=$new_retries log=$LOG_FILE pty=$effective_use_pty model=$effective_model"
 }
 
 tail_cmd() {
@@ -1187,6 +1354,86 @@ watchdog_cmd() {
   done
 }
 
+# V3.1: Preflight command for lightweight checks
+preflight_cmd() {
+  parse_common_args "$@"
+
+  echo "=== cc-glm Preflight Checks ==="
+  echo ""
+
+  local errors=0
+  local warnings=0
+
+  # Check 1: claude binary
+  echo -n "claude binary: "
+  if command -v claude >/dev/null 2>&1; then
+    local claude_version
+    claude_version="$(claude --version 2>&1 | head -1 || echo "unknown")"
+    echo "OK ($claude_version)"
+  else
+    echo "MISSING"
+    errors=$((errors + 1))
+  fi
+
+  # Check 2: Auth resolution
+  echo -n "auth resolution: "
+  local auth_source="none"
+  if [[ -n "${CC_GLM_AUTH_TOKEN:-}" ]]; then
+    auth_source="CC_GLM_AUTH_TOKEN"
+    echo "OK ($auth_source)"
+  elif [[ -n "${CC_GLM_TOKEN_FILE:-}" ]]; then
+    auth_source="CC_GLM_TOKEN_FILE"
+    if [[ -f "${CC_GLM_TOKEN_FILE}" && -r "${CC_GLM_TOKEN_FILE}" ]]; then
+      echo "OK ($auth_source: ${CC_GLM_TOKEN_FILE})"
+    else
+      echo "FAIL (file not found/readable: ${CC_GLM_TOKEN_FILE})"
+      errors=$((errors + 1))
+    fi
+  elif [[ -n "${ZAI_API_KEY:-}" ]]; then
+    auth_source="ZAI_API_KEY"
+    echo "OK ($auth_source)"
+  elif [[ -n "${CC_GLM_OP_URI:-}" ]]; then
+    auth_source="CC_GLM_OP_URI"
+    echo "OK ($auth_source)"
+  else
+    # Check for op CLI
+    if command -v op >/dev/null 2>&1; then
+      echo "OK (will use default op:// resolution)"
+    else
+      echo "FAIL (no auth configured and op CLI not available)"
+      errors=$((errors + 1))
+    fi
+  fi
+
+  # Check 3: Effective model
+  local effective_model
+  effective_model="$(get_effective_model "")"
+  echo -n "effective model: "
+  echo "$effective_model"
+
+  # Check 4: Headless script
+  echo -n "headless script: "
+  if [[ -x "$HEADLESS" ]]; then
+    echo "OK"
+  else
+    echo "MISSING or not executable"
+    errors=$((errors + 1))
+  fi
+
+  # Summary
+  echo ""
+  echo "=== Summary ==="
+  echo "Errors: $errors"
+  echo "Warnings: $warnings"
+
+  if [[ $errors -gt 0 ]]; then
+    echo "Preflight FAILED"
+    return 1
+  fi
+  echo "Preflight PASSED"
+  return 0
+}
+
 case "$CMD" in
   start) start_cmd "$@" ;;
   status) status_cmd "$@" ;;
@@ -1195,6 +1442,7 @@ case "$CMD" in
   restart) restart_cmd "$@" ;;
   stop) stop_cmd "$@" ;;
   tail) tail_cmd "$@" ;;
+  preflight) preflight_cmd "$@" ;;
   watchdog) watchdog_cmd "$@" ;;
   -h|--help|help|"")
     usage
