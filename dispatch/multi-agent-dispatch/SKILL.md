@@ -57,13 +57,51 @@ dx-dispatch --abort ses_abc123
 dx-dispatch --status epyc6
 ```
 
-### Canonical VMs
+## Canonical VMs
 
-| VM | User | Capabilities |
-|----|------|--------------|
-| homedesktop-wsl | fengning | Primary dev, DCG, CASS |
-| macmini | fengning | macOS builds, iOS |
-| epyc6 | feng | GPU work, ML training |
+| VM | User | Auth Mode | Capabilities |
+|----|------|-----------|--------------|
+| homedesktop-wsl | fengning | local | Primary dev, DCG, CASS |
+| macmini | fengning | tailscale | macOS builds, iOS |
+| epyc6 | feng | tailscale | GPU work, ML training |
+
+## SSH Fanout Hardening
+
+Dispatch operations use hardened SSH fanout with:
+
+### Preflight Checks
+All SSH operations run deterministic preflight checks before attempting connection:
+1. **Host mapping validation** - Ensures host has canonical user mapping
+2. **DNS resolution** - Verifies hostname is resolvable
+3. **TCP reachability** - Checks SSH port is accessible
+4. **Auth mode validation** - Confirms required auth method is available
+
+### Bounded Retry Semantics
+- Maximum 2 attempts (1 retry) per operation
+- 2-second delay between retries
+- No retry on authentication failures (terminal)
+- Clear terminal states: SUCCESS, FAILURE, TIMEOUT, ABORTED, PREFLIGHT_FAILED
+
+### Standardized Logging
+All fanout operations log with consistent structure:
+```
+preflight_ok host=epyc6 user=feng auth_mode=tailscale duration_ms=150
+success host=epyc6 user=feng command="make test" attempt=1 duration_ms=2340
+```
+
+### Programmatic Usage
+```python
+from lib.fleet import fanout_ssh, run_preflight_checks, PreflightStatus
+
+# Run preflight checks
+preflight = run_preflight_checks("epyc6")
+if preflight.status == PreflightStatus.OK:
+    result = fanout_ssh("epyc6", "make test", timeout_sec=120.0)
+    if result.outcome == FanoutOutcome.SUCCESS:
+        print(result.stdout)
+    else:
+        print(f"Failed: {result.error}")
+```
 
 ## Slack Notifications
 
