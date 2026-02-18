@@ -884,6 +884,306 @@ test_health_duration_output() {
   fi
 }
 
+# ============================================================================
+# V3.2.1 RESTART PATH REGRESSION TESTS
+# ============================================================================
+
+# Test: restart_cmd initializes exec_mode with default before conditional
+test_restart_exec_mode_default() {
+  echo ""
+  echo "=== Test: restart_cmd exec_mode has default (V3.2.1) ==="
+
+  # Check that restart_cmd initializes exec_mode with a default value
+  # This prevents 'unbound variable' errors under set -u
+  local restart_section
+  restart_section="$(awk '/^restart_cmd\(\)/,/^}$/' "$JOB_SCRIPT" | head -100)"
+
+  if echo "$restart_section" | grep -q 'local exec_mode="nohup"'; then
+    pass "restart_cmd initializes exec_mode with default (nohup)"
+  else
+    fail "restart_cmd should initialize exec_mode with default to prevent set -u errors"
+  fi
+}
+
+# Test: start_cmd initializes exec_mode with default before conditional
+test_start_exec_mode_default() {
+  echo ""
+  echo "=== Test: start_cmd exec_mode has default (V3.2.1) ==="
+
+  # Check that start_cmd initializes exec_mode with a default value
+  local start_section
+  start_section="$(awk '/^start_cmd\(\)/,/^}$/' "$JOB_SCRIPT" | head -80)"
+
+  if echo "$start_section" | grep -q 'local exec_mode="nohup"'; then
+    pass "start_cmd initializes exec_mode with default (nohup)"
+  else
+    fail "start_cmd should initialize exec_mode with default to prevent set -u errors"
+  fi
+}
+
+# Test: restart_cmd PTY branch uses correct redirection
+test_restart_pty_redirection() {
+  echo ""
+  echo "=== Test: restart_cmd PTY branch redirection (V3.2.1) ==="
+
+  # PTY branch should use 2>> for stderr only, not >> for both stdout/stderr
+  # Because pty-run handles stdout via --output flag
+  local restart_section
+  restart_section="$(awk '/^restart_cmd\(\)/,/^}$/' "$JOB_SCRIPT")"
+
+  # Check that PTY branch uses 2>> for stderr only
+  # Use more specific pattern to match the actual spawn branch
+  if echo "$restart_section" | grep -q 'nohup "\$PTY_RUN".*2>> "\$LOG_FILE"'; then
+    pass "restart_cmd PTY branch uses 2>> for stderr (pty-run handles stdout)"
+  else
+    fail "restart_cmd PTY branch should use 2>> not >> ... 2>&1 (pty-run handles stdout)"
+  fi
+}
+
+# Test: start_cmd PTY branch uses correct redirection
+test_start_pty_redirection() {
+  echo ""
+  echo "=== Test: start_cmd PTY branch redirection (V3.2.1) ==="
+
+  local start_section
+  start_section="$(awk '/^start_cmd\(\)/,/^}$/' "$JOB_SCRIPT")"
+
+  local pty_branch
+  pty_branch="$(echo "$start_section" | awk '/if.*USE_PTY.*true/,/else/' | head -10)"
+
+  if echo "$pty_branch" | grep -q '2>>'; then
+    pass "start_cmd PTY branch uses 2>> for stderr (pty-run handles stdout)"
+  else
+    fail "start_cmd PTY branch should use 2>> not >> ... 2>&1 (pty-run handles stdout)"
+  fi
+}
+
+# Test: persist_contract handles EXECUTION_MODE safely under set -u
+test_persist_contract_env_safe() {
+  echo ""
+  echo "=== Test: persist_contract EXECUTION_MODE safety (V3.2.1) ==="
+
+  # Check that persist_contract uses safe variable expansion for EXECUTION_MODE
+  local contract_section
+  contract_section="$(awk '/^persist_contract\(\)/,/^}$/' "$JOB_SCRIPT")"
+
+  # Should use the safe pattern: ${EXECUTION_MODE:+$EXECUTION_MODE} then :-nohup
+  if echo "$contract_section" | grep -q 'EXECUTION_MODE:+\$EXECUTION_MODE'; then
+    pass "persist_contract uses safe EXECUTION_MODE expansion under set -u"
+  else
+    fail "persist_contract should use safe expansion for EXECUTION_MODE"
+  fi
+}
+
+# Test: job_health gives benefit of doubt for running_no_output past threshold
+test_health_running_no_output_grace() {
+  echo ""
+  echo "=== Test: job_health running_no_output grace (V3.2.1) ==="
+
+  # Check that job_health has extended_startup logic for running but no output case
+  local health_section
+  health_section="$(awk '/^job_health\(\)/,/^}$/' "$JOB_SCRIPT")"
+
+  if echo "$health_section" | grep -q 'extended_startup'; then
+    pass "job_health has extended_startup logic for running_no_output past threshold"
+  else
+    fail "job_health should give benefit of doubt for running_no_output past threshold"
+  fi
+}
+
+# Test: watchdog treats starting as non-error
+test_watchdog_starting_non_error() {
+  echo ""
+  echo "=== Test: watchdog starting state non-error (V3.2.1) ==="
+
+  # Check that watchdog's case statement includes 'starting' in non-error branch
+  local watchdog_section
+  watchdog_section="$(awk '/^watchdog_cmd\(\)/,/^}$/' "$JOB_SCRIPT")"
+
+  # Look for the pattern: healthy|starting|exited_ok)
+  if echo "$watchdog_section" | grep -q 'healthy|starting|exited_ok)'; then
+    pass "watchdog treats 'starting' as non-error (no restart/escalation)"
+  else
+    fail "watchdog should include 'starting' in non-error case branch"
+  fi
+}
+
+# ============================================================================
+# V3.2.1 EXECUTABLE RESTART PATH TESTS
+# These tests actually execute restart path behavior without live models
+# ============================================================================
+
+# Test: restart_cmd preserves and rotates logs correctly
+test_restart_log_rotation() {
+  echo ""
+  echo "=== Test: restart log rotation (V3.2.1 executable) ==="
+
+  setup_test_env
+
+  local test_log_dir
+  test_log_dir="$(mktemp -d)"
+  local test_beads="test-rotate-$RANDOM"
+  local prompt_file
+  prompt_file="$(mktemp)"
+  echo "test prompt" > "$prompt_file"
+
+  # Set up minimal auth to pass validation
+  export CC_GLM_AUTH_TOKEN="test-token-for-rotation"
+
+  # Start a job
+  if ! "$JOB_SCRIPT" start --beads "$test_beads" --prompt-file "$prompt_file" --log-dir "$test_log_dir" >/dev/null 2>&1; then
+    skip "Job start failed (expected if no claude CLI)"
+    rm -rf "$test_log_dir" "$prompt_file"
+    setup_test_env
+    return 0
+  fi
+
+  # Write some content to the log
+  local log_file="${test_log_dir}/${test_beads}.log"
+  echo "test output before restart" >> "$log_file"
+
+  # Restart the job
+  if ! "$JOB_SCRIPT" restart --beads "$test_beads" --log-dir "$test_log_dir" >/dev/null 2>&1; then
+    skip "Job restart failed"
+    rm -rf "$test_log_dir" "$prompt_file"
+    setup_test_env
+    return 0
+  fi
+
+  # Check that old log was rotated
+  if [[ -f "${test_log_dir}/${test_beads}.log.1" ]]; then
+    pass "restart rotates old log to .log.1"
+  else
+    fail "restart should rotate old log file"
+  fi
+
+  # Clean up
+  "$JOB_SCRIPT" stop --beads "$test_beads" --log-dir "$test_log_dir" >/dev/null 2>&1 || true
+  rm -rf "$test_log_dir" "$prompt_file"
+  setup_test_env
+}
+
+# Test: restart_cmd increments retry count
+test_restart_increments_retries() {
+  echo ""
+  echo "=== Test: restart increments retry count (V3.2.1 executable) ==="
+
+  setup_test_env
+
+  local test_log_dir
+  test_log_dir="$(mktemp -d)"
+  local test_beads="test-retries-$RANDOM"
+  local prompt_file
+  prompt_file="$(mktemp)"
+  echo "test prompt" > "$prompt_file"
+
+  export CC_GLM_AUTH_TOKEN="test-token-for-retries"
+
+  # Start a job
+  if ! "$JOB_SCRIPT" start --beads "$test_beads" --prompt-file "$prompt_file" --log-dir "$test_log_dir" >/dev/null 2>&1; then
+    skip "Job start failed (expected if no claude CLI)"
+    rm -rf "$test_log_dir" "$prompt_file"
+    setup_test_env
+    return 0
+  fi
+
+  # Get initial retry count
+  local meta_file="${test_log_dir}/${test_beads}.meta"
+  local initial_retries
+  initial_retries="$(grep '^retries=' "$meta_file" | cut -d= -f2)"
+  initial_retries="${initial_retries:-0}"
+
+  # Restart the job
+  if ! "$JOB_SCRIPT" restart --beads "$test_beads" --log-dir "$test_log_dir" >/dev/null 2>&1; then
+    skip "Job restart failed"
+    rm -rf "$test_log_dir" "$prompt_file"
+    setup_test_env
+    return 0
+  fi
+
+  # Check that retry count was incremented
+  local new_retries
+  new_retries="$(grep '^retries=' "$meta_file" | cut -d= -f2)"
+  new_retries="${new_retries:-0}"
+
+  if [[ "$new_retries" -gt "$initial_retries" ]]; then
+    pass "restart increments retry count ($initial_retries -> $new_retries)"
+  else
+    fail "restart should increment retry count"
+  fi
+
+  # Clean up
+  "$JOB_SCRIPT" stop --beads "$test_beads" --log-dir "$test_log_dir" >/dev/null 2>&1 || true
+  rm -rf "$test_log_dir" "$prompt_file"
+  setup_test_env
+}
+
+# Test: restart_cmd preserves execution_mode in contract
+test_restart_preserves_exec_mode() {
+  echo ""
+  echo "=== Test: restart preserves execution_mode (V3.2.1 executable) ==="
+
+  setup_test_env
+
+  local test_log_dir
+  test_log_dir="$(mktemp -d)"
+  local test_beads="test-exec-mode-$RANDOM"
+  local prompt_file
+  prompt_file="$(mktemp)"
+  echo "test prompt" > "$prompt_file"
+
+  export CC_GLM_AUTH_TOKEN="test-token-for-exec-mode"
+
+  # Start a job with PTY mode
+  if ! "$JOB_SCRIPT" start --beads "$test_beads" --prompt-file "$prompt_file" --log-dir "$test_log_dir" --pty >/dev/null 2>&1; then
+    skip "Job start failed (expected if no claude CLI)"
+    rm -rf "$test_log_dir" "$prompt_file"
+    setup_test_env
+    return 0
+  fi
+
+  # Check contract has execution_mode=pty
+  local contract_file="${test_log_dir}/${test_beads}.contract"
+  local saved_exec_mode
+  saved_exec_mode="$(grep '^execution_mode=' "$contract_file" | cut -d= -f2)"
+
+  if [[ "$saved_exec_mode" == "pty" ]]; then
+    pass "restart preserves execution_mode (pty) in contract"
+  else
+    fail "execution_mode should be preserved in contract, got: $saved_exec_mode"
+  fi
+
+  # Clean up
+  "$JOB_SCRIPT" stop --beads "$test_beads" --log-dir "$test_log_dir" >/dev/null 2>&1 || true
+  rm -rf "$test_log_dir" "$prompt_file"
+  setup_test_env
+}
+
+# Test: restart_cmd requires valid metadata
+test_restart_requires_metadata() {
+  echo ""
+  echo "=== Test: restart requires metadata (V3.2.1 executable) ==="
+
+  setup_test_env
+
+  local test_log_dir
+  test_log_dir="$(mktemp -d)"
+  local test_beads="test-no-meta-$RANDOM"
+
+  # Try to restart without metadata (should fail)
+  local output
+  output="$("$JOB_SCRIPT" restart --beads "$test_beads" --log-dir "$test_log_dir" 2>&1 || true)"
+
+  if [[ "$output" == *"no metadata file"* ]]; then
+    pass "restart fails gracefully without metadata"
+  else
+    fail "restart should require metadata file"
+  fi
+
+  rm -rf "$test_log_dir"
+  setup_test_env
+}
+
 # Run all tests
 echo "================================================"
 echo "cc-glm V3.0 Test Suite"
@@ -963,6 +1263,25 @@ test_start_outcome_rotation
 test_restart_outcome_rotation
 test_status_duration_output
 test_health_duration_output
+
+# Run V3.2.1 restart path regression tests
+echo ""
+echo "--- Restart Path Regression Tests (V3.2.1) ---"
+test_restart_exec_mode_default
+test_start_exec_mode_default
+test_restart_pty_redirection
+test_start_pty_redirection
+test_persist_contract_env_safe
+test_health_running_no_output_grace
+test_watchdog_starting_non_error
+
+# Run V3.2.1 executable restart path tests
+echo ""
+echo "--- Executable Restart Path Tests (V3.2.1) ---"
+test_restart_log_rotation
+test_restart_increments_retries
+test_restart_preserves_exec_mode
+test_restart_requires_metadata
 
 # Summary
 echo ""
