@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# cc-glm-job.sh (V3.1 - Forensic Log Retention + Outcome Metadata)
+# cc-glm-job.sh (V3.2 - Watchdog Modes + Operator Control)
 #
 # Lightweight background job manager for cc-glm headless runs.
 # Keeps consistent artifacts under /tmp/cc-glm-jobs:
@@ -10,17 +10,23 @@ set -euo pipefail
 #   <beads>.outcome.<n> (rotated outcomes - V3.1)
 #
 # Commands:
-#   start    --beads <id> --prompt-file <path> [--repo <name>] [--worktree <path>] [--log-dir <dir>] [--pty]
-#   status   [--beads <id>] [--log-dir <dir>] [--no-ansi]
-#   check    --beads <id> [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
-#   health   [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
-#   restart  --beads <id> [--log-dir <dir>] [--pty] [--preserve-contract]
-#   stop     --beads <id> [--log-dir <dir>]
-#   tail     --beads <id> [--log-dir <dir>] [--lines <n>] [--no-ansi]
-#   watchdog [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>] [--once]
-#            [--observe-only] [--no-auto-restart] [--pidfile <path>]
+#   start        --beads <id> --prompt-file <path> [--repo <name>] [--worktree <path>] [--log-dir <dir>] [--pty]
+#   status       [--beads <id>] [--log-dir <dir>] [--no-ansi]
+#   check        --beads <id> [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
+#   health       [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
+#   restart      --beads <id> [--log-dir <dir>] [--pty] [--preserve-contract]
+#   stop         --beads <id> [--log-dir <dir>]
+#   tail         --beads <id> [--log-dir <dir>] [--lines <n>] [--no-ansi]
+#   set-override --beads <id> [--no-auto-restart <true|false>] [--log-dir <dir>]
+#   watchdog     [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>]
+#                [--once] [--observe-only] [--no-auto-restart] [--pidfile <path>]
 #
-# V3.1 Changes:
+# V3.2 Changes:
+#   - Watchdog modes: observe-only (monitor only, never restart), no-auto-restart (disable restarts)
+#   - Per-bead override control: set-override command for fine-grained control
+#   - Mode/override state surfaced in status/health output
+#
+# V3.1 Features (preserved):
 #   - Forensic log retention: outcome rotation instead of deletion
 #   - Enhanced outcome metadata: run_id, duration_sec, retries
 #   - Status/health now show duration for completed jobs
@@ -29,14 +35,14 @@ set -euo pipefail
 #   - Progress-aware health: process liveness is primary signal, log growth is secondary
 #   - Restart env contract integrity: preserves auth source/mode/model/base-url
 #   - Log rotation on restart (no truncation)
-#   - Operator guardrails: ANSI stripping, observe-only mode, per-bead no-auto-restart
+#   - Operator guardrails: ANSI stripping
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HEADLESS="${SCRIPT_DIR}/cc-glm-headless.sh"
 PTY_RUN="${SCRIPT_DIR}/pty-run.sh"
 
 # Version for debugging
-CC_GLM_JOB_VERSION="3.1.0"
+CC_GLM_JOB_VERSION="3.2.0"
 
 LOG_DIR="/tmp/cc-glm-jobs"
 CMD="${1:-}"
@@ -44,7 +50,7 @@ shift || true
 
 usage() {
   cat <<'EOF'
-cc-glm-job.sh (V3.1 - Forensic Log Retention + Outcome Metadata)
+cc-glm-job.sh (V3.2 - Watchdog Modes + Operator Control)
 
 Usage:
   cc-glm-job.sh start --beads <id> --prompt-file <path> [options]
@@ -54,17 +60,19 @@ Usage:
   cc-glm-job.sh restart --beads <id> [--log-dir <dir>] [--pty] [--preserve-contract]
   cc-glm-job.sh stop --beads <id> [--log-dir <dir>]
   cc-glm-job.sh tail --beads <id> [--log-dir <dir>] [--lines <n>] [--no-ansi]
+  cc-glm-job.sh set-override --beads <id> [--no-auto-restart <true|false>]
   cc-glm-job.sh watchdog [--beads <id>] [options]
 
 Commands:
-  start    Launch a cc-glm job in background with nohup (default) or PTY wrapper.
-  status   Show status table of jobs (all or specific).
-  check    Check single job health (exit 2 if stalled, 3 if completed with error).
-  health   Show detailed health state for jobs.
-  restart  Restart a job (preserves metadata, rotates logs, increments retry count).
-  stop     Stop a running job and record outcome.
-  tail     Show last N lines of job log with optional ANSI stripping.
-  watchdog Run watchdog loop: monitor jobs, restart stalled jobs.
+  start        Launch a cc-glm job in background with nohup (default) or PTY wrapper.
+  status       Show status table of jobs (all or specific).
+  check        Check single job health (exit 2 if stalled, 3 if completed with error).
+  health       Show detailed health state for jobs.
+  restart      Restart a job (preserves metadata, rotates logs, increments retry count).
+  stop         Stop a running job and record outcome.
+  tail         Show last N lines of job log with optional ANSI stripping.
+  set-override Set per-bead override flags for watchdog behavior.
+  watchdog     Run watchdog loop: monitor jobs, restart stalled jobs.
 
 Options:
   --pty               Use PTY-backed execution for reliable output capture.
@@ -75,13 +83,26 @@ Options:
   --once              Run exactly one watchdog iteration, then exit.
   --lines N           Number of lines for tail command (default: 20).
 
-Health States (V3.1):
+Watchdog Modes (V3.2):
+  normal            - Default: restart stalled jobs up to max-retries, then block.
+  observe-only      - Monitor jobs but never restart (useful for manual supervision).
+  no-auto-restart   - Disable restarts globally or per-bead (sets blocked flag).
+
+Per-Bead Overrides (V3.2):
+  Use set-override to control watchdog behavior for individual beads:
+    cc-glm-job.sh set-override --beads bd-xxx --no-auto-restart true
+    cc-glm-job.sh set-override --beads bd-xxx --no-auto-restart false
+
+  When no-auto-restart is true, watchdog will mark job as blocked instead of
+  restarting. This is useful when an operator wants to manually supervise.
+
+Health States (V3.2):
   healthy      - Process running with recent activity
   starting     - Process running but within grace window
   stalled      - Process alive but no progress for N minutes
   exited_ok    - Process exited with code 0 (completed successfully)
   exited_err   - Process exited with non-zero code (crashed/failed)
-  blocked      - Max retries exhausted, manual intervention needed
+  blocked      - Max retries exhausted OR no-auto-restart set
   missing      - No metadata found for job
 
 Exit Codes:
@@ -96,12 +117,12 @@ Job Artifacts:
   <beads>.pid         - Process ID file
   <beads>.log         - Current output log
   <beads>.log.<n>     - Rotated logs (preserved on restart)
-  <beads>.meta        - Job metadata (repo, worktree, retries, etc.)
+  <beads>.meta        - Job metadata (repo, worktree, retries, no_auto_restart, etc.)
   <beads>.outcome     - Final outcome (run_id, exit_code, state, duration_sec)
   <beads>.outcome.<n> - Rotated outcomes (V3.1 forensic history)
   <beads>.contract    - Runtime contract (auth_source, model, base_url)
 
-Outcome Metadata Fields (V3.1):
+Outcome Metadata Fields (V3.2):
   beads        - Beads ID
   run_id       - Unique run identifier (timestamp-based)
   exit_code    - Process exit code
@@ -115,6 +136,7 @@ Notes:
   - Outcome rotation: old outcomes preserved as <beads>.outcome.<n> (V3.1)
   - Contract file ensures restart consistency (no env drift)
   - status/health show outcome with duration for completed jobs
+  - Per-bead no-auto-restart is stored in meta file and persists across restarts
 EOF
 }
 
@@ -444,10 +466,12 @@ parse_common_args() {
   WATCHDOG_ONCE=false
   WATCHDOG_OBSERVE_ONLY=false
   WATCHDOG_NO_AUTO_RESTART=false
+  OVERRIDE_NO_AUTO_RESTART=""  # For set-override command: "true", "false", or ""
   USE_PTY=false
   NO_ANSI=false
   PRESERVE_CONTRACT=false
   TAIL_LINES=20
+  SHOW_OVERRIDES=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -492,8 +516,14 @@ parse_common_args() {
         shift
         ;;
       --no-auto-restart)
-        WATCHDOG_NO_AUTO_RESTART=true
-        shift
+        # Can be either a flag (for watchdog) or a value (for set-override)
+        if [[ -n "${2:-}" ]] && [[ "$2" == "true" || "$2" == "false" ]]; then
+          OVERRIDE_NO_AUTO_RESTART="$2"
+          shift 2
+        else
+          WATCHDOG_NO_AUTO_RESTART=true
+          shift
+        fi
         ;;
       --pidfile)
         WATCHDOG_PIDFILE="${2:-}"
@@ -514,6 +544,10 @@ parse_common_args() {
       --lines)
         TAIL_LINES="${2:-20}"
         shift 2
+        ;;
+      --show-overrides)
+        SHOW_OVERRIDES=true
+        shift
         ;;
       -h|--help)
         usage
@@ -725,7 +759,7 @@ EOF
 status_line() {
   local beads="$1"
   job_paths "$beads"
-  local pid="" state="missing" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-"
+  local pid="" state="missing" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-" override=""
 
   if [[ -f "$PID_FILE" ]]; then
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -760,6 +794,15 @@ status_line() {
   if [[ -f "$META_FILE" ]]; then
     retries="$(meta_get "$META_FILE" "retries")"
     [[ -n "$retries" ]] || retries="0"
+    # Check for per-bead override flags (V3.2)
+    local no_auto_restart blocked
+    no_auto_restart="$(meta_get "$META_FILE" "no_auto_restart")"
+    blocked="$(meta_get "$META_FILE" "blocked")"
+    if [[ "$no_auto_restart" == "true" ]]; then
+      override="no-restart"
+    elif [[ "$blocked" == "true" ]]; then
+      override="blocked"
+    fi
   fi
 
   # Elapsed from PID file age
@@ -773,8 +816,13 @@ status_line() {
   fi
 
   local output
-  output="$(printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %s" \
-    "$beads" "${pid:--}" "$state" "$elapsed" "$log_bytes" "$last_update" "$retries" "$outcome")"
+  if [[ "$SHOW_OVERRIDES" == "true" ]]; then
+    output="$(printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-10s %s" \
+      "$beads" "${pid:--}" "$state" "$elapsed" "$log_bytes" "$last_update" "$retries" "$override" "$outcome")"
+  else
+    output="$(printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %s" \
+      "$beads" "${pid:--}" "$state" "$elapsed" "$log_bytes" "$last_update" "$retries" "$outcome")"
+  fi
 
   if [[ "$NO_ANSI" == "true" ]]; then
     echo "$output" | strip_ansi
@@ -789,8 +837,13 @@ status_cmd() {
   # Guardrail: warn about multi-log-dir ambiguity
   check_log_dir_ambiguity "status"
 
-  printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %s\n" \
-    "bead" "pid" "state" "elapsed" "bytes" "last_update" "retry" "outcome"
+  if [[ "$SHOW_OVERRIDES" == "true" ]]; then
+    printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-10s %s\n" \
+      "bead" "pid" "state" "elapsed" "bytes" "last_update" "retry" "override" "outcome"
+  else
+    printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %s\n" \
+      "bead" "pid" "state" "elapsed" "bytes" "last_update" "retry" "outcome"
+  fi
 
   if [[ -n "$BEADS" ]]; then
     status_line "$BEADS"
@@ -1058,8 +1111,13 @@ health_cmd() {
   # Guardrail: warn about multi-log-dir ambiguity
   check_log_dir_ambiguity "health"
 
-  printf "%-14s %-8s %-12s %-16s %-6s %s\n" \
-    "bead" "pid" "health" "last_update" "retry" "outcome"
+  if [[ "$SHOW_OVERRIDES" == "true" ]]; then
+    printf "%-14s %-8s %-12s %-16s %-6s %-10s %s\n" \
+      "bead" "pid" "health" "last_update" "retry" "override" "outcome"
+  else
+    printf "%-14s %-8s %-12s %-16s %-6s %s\n" \
+      "bead" "pid" "health" "last_update" "retry" "outcome"
+  fi
 
   if [[ -n "$BEADS" ]]; then
     health_line "$BEADS" "$stall_seconds"
@@ -1089,7 +1147,7 @@ health_line() {
   local beads="$1"
   local stall_threshold="$2"
   job_paths "$beads"
-  local pid="" health="missing" last_update="-" retries="0" outcome="-"
+  local pid="" health="missing" last_update="-" retries="0" outcome="-" override=""
 
   if [[ -f "$PID_FILE" ]]; then
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -1110,6 +1168,15 @@ health_line() {
   if [[ -f "$META_FILE" ]]; then
     retries="$(meta_get "$META_FILE" "retries")"
     [[ -n "$retries" ]] || retries="0"
+    # Check for per-bead override flags (V3.2)
+    local no_auto_restart blocked
+    no_auto_restart="$(meta_get "$META_FILE" "no_auto_restart")"
+    blocked="$(meta_get "$META_FILE" "blocked")"
+    if [[ "$no_auto_restart" == "true" ]]; then
+      override="no-restart"
+    elif [[ "$blocked" == "true" ]]; then
+      override="blocked"
+    fi
   fi
 
   # Check outcome
@@ -1126,8 +1193,13 @@ health_line() {
   fi
 
   local output
-  output="$(printf "%-14s %-8s %-12s %-16s %-6s %s" \
-    "$beads" "${pid:--}" "$health" "$last_update" "$retries" "$outcome")"
+  if [[ "$SHOW_OVERRIDES" == "true" ]]; then
+    output="$(printf "%-14s %-8s %-12s %-16s %-6s %-10s %s" \
+      "$beads" "${pid:--}" "$health" "$last_update" "$retries" "$override" "$outcome")"
+  else
+    output="$(printf "%-14s %-8s %-12s %-16s %-6s %s" \
+      "$beads" "${pid:--}" "$health" "$last_update" "$retries" "$outcome")"
+  fi
 
   if [[ "$NO_ANSI" == "true" ]]; then
     echo "$output" | strip_ansi
@@ -1262,6 +1334,50 @@ tail_cmd() {
     tail -n "$TAIL_LINES" "$LOG_FILE" | strip_ansi
   else
     tail -n "$TAIL_LINES" "$LOG_FILE"
+  fi
+}
+
+set_override_cmd() {
+  parse_common_args "$@"
+  [[ -n "$BEADS" ]] || { echo "set-override requires --beads" >&2; exit 2; }
+  job_paths "$BEADS"
+
+  if [[ ! -f "$META_FILE" ]]; then
+    echo "no metadata file for $BEADS: $META_FILE" >&2
+    echo "hint: job must be started first before setting overrides" >&2
+    exit 1
+  fi
+
+  local current_value
+  current_value="$(meta_get "$META_FILE" "no_auto_restart")"
+  current_value="${current_value:-false}"
+
+  # If no value specified, just show current state
+  if [[ -z "$OVERRIDE_NO_AUTO_RESTART" ]]; then
+    echo "override for $BEADS:"
+    echo "  no_auto_restart=$current_value"
+    return 0
+  fi
+
+  # Validate the value
+  if [[ "$OVERRIDE_NO_AUTO_RESTART" != "true" && "$OVERRIDE_NO_AUTO_RESTART" != "false" ]]; then
+    echo "invalid value for --no-auto-restart: $OVERRIDE_NO_AUTO_RESTART" >&2
+    echo "valid values: true, false" >&2
+    exit 2
+  fi
+
+  # Set the new value
+  meta_set "$META_FILE" "no_auto_restart" "$OVERRIDE_NO_AUTO_RESTART"
+  meta_set "$META_FILE" "override_set_at" "$(now_utc)"
+
+  echo "override updated for $BEADS:"
+  echo "  no_auto_restart: $current_value -> $OVERRIDE_NO_AUTO_RESTART"
+  echo ""
+  echo " watchdog will now:"
+  if [[ "$OVERRIDE_NO_AUTO_RESTART" == "true" ]]; then
+    echo "  - mark as blocked instead of restarting when stalled"
+  else
+    echo "  - restart normally when stalled (subject to max-retries)"
   fi
 }
 
@@ -1406,6 +1522,7 @@ case "$CMD" in
   restart) restart_cmd "$@" ;;
   stop) stop_cmd "$@" ;;
   tail) tail_cmd "$@" ;;
+  set-override) set_override_cmd "$@" ;;
   watchdog) watchdog_cmd "$@" ;;
   -h|--help|help|"")
     usage

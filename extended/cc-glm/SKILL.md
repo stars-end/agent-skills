@@ -10,7 +10,7 @@ allowed-tools:
   - Task
 ---
 
-# cc-glm: Plan-First Batched Dispatch (V8.3 + V3.1 Operator Experience)
+# cc-glm: Plan-First Batched Dispatch (V8.3 + V3.2 Operator Experience)
 
 ## Core Principle
 
@@ -565,16 +565,84 @@ cc-glm-job.sh status
 # WARN: Use --log-dir <path> to target a specific directory
 ```
 
-**Watchdog modes:**
+**Watchdog modes (V3.2):**
+
+The watchdog supports three modes for controlling restart behavior:
+
+| Mode | Flag | Behavior |
+|------|------|----------|
+| `normal` | (default) | Restart stalled jobs up to `--max-retries`, then mark blocked |
+| `observe-only` | `--observe-only` | Monitor jobs but never restart (logs only) |
+| `no-auto-restart` | `--no-auto-restart` | Mark jobs as blocked instead of restarting |
+
 ```bash
-# Observe only - never restart
-cc-glm-job.sh watchdog --observe-only
+# Normal mode (default): restart once, then block
+cc-glm-job.sh watchdog --interval 60
 
-# Global no-auto-restart
-cc-glm-job.sh watchdog --no-auto-restart
+# Observe-only: monitor but don't restart (for manual supervision)
+cc-glm-job.sh watchdog --observe-only --interval 30
 
-# Per-bead no-auto-restart (set in metadata)
+# No-auto-restart: block on first stall
+cc-glm-job.sh watchdog --no-auto-restart --once
+
+# Combined: observe-only + single iteration
+cc-glm-job.sh watchdog --observe-only --once
 ```
+
+**Per-bead override control (V3.2):**
+
+Set `no-auto-restart` for individual beads without affecting others:
+
+```bash
+# Enable no-auto-restart for a specific bead
+cc-glm-job.sh set-override --beads bd-xxx --no-auto-restart true
+
+# Disable no-auto-restart (restore normal behavior)
+cc-glm-job.sh set-override --beads bd-xxx --no-auto-restart false
+
+# Check current override status
+cc-glm-job.sh set-override --beads bd-xxx
+# override for bd-xxx:
+#   no_auto_restart=true
+```
+
+When `no-auto-restart=true` is set for a bead, the watchdog will mark it as blocked instead of restarting, regardless of global settings.
+
+**Viewing override state (V3.2):**
+
+Use `--show-overrides` to see override status in status/health output:
+
+```bash
+# Show override column in status
+cc-glm-job.sh status --show-overrides
+# bead           pid      state        elapsed   bytes     last_update      retry  override   outcome
+# bd-xxx         12345    running      5m        1024      10s ago          0      no-restart -
+
+# Show override column in health
+cc-glm-job.sh health --show-overrides
+# bead           pid      health      last_update      retry  override   outcome
+# bd-xxx         12345    healthy     10s ago          0      no-restart -
+# bd-yyy         12346    blocked     2h ago           1      blocked    failed:1
+```
+
+**Override values:**
+- (empty): Normal operation
+- `no-restart`: Per-bead no-auto-restart is enabled
+- `blocked`: Job has been blocked by watchdog
+
+**Operator workflow for manual supervision:**
+
+1. Start jobs in batch
+2. Enable observe-only mode for monitoring
+3. For jobs needing manual review, set per-bead override:
+   ```bash
+   cc-glm-job.sh set-override --beads bd-xxx --no-auto-restart true
+   ```
+4. When ready to resume normal watchdog:
+   ```bash
+   cc-glm-job.sh set-override --beads bd-xxx --no-auto-restart false
+   cc-glm-job.sh watchdog  # back to normal mode
+   ```
 
 ---
 
