@@ -191,6 +191,21 @@ job_state() {
 
 # Get process CPU time (for progress detection)
 # Returns user+system seconds, or 0 if unavailable
+parse_decimal_component() {
+  local raw="$1"
+  local normalized="${raw%.*}"
+  if [[ -z "$normalized" ]]; then
+    echo 0
+    return 0
+  fi
+  # Force base-10 to avoid octal parsing on leading zeros (08, 09).
+  if [[ "$normalized" =~ ^[0-9]+$ ]]; then
+    echo $((10#$normalized))
+    return 0
+  fi
+  echo 0
+}
+
 process_cpu_time() {
   local pid="$1"
   if [[ -z "$pid" ]]; then
@@ -211,11 +226,11 @@ process_cpu_time() {
   case "${#parts[@]}" in
     2)
       # MM:SS or MM:SS.ss
-      seconds=$(( ${parts[0]%.*} * 60 + ${parts[1]%.*} ))
+      seconds=$(( $(parse_decimal_component "${parts[0]}") * 60 + $(parse_decimal_component "${parts[1]}") ))
       ;;
     3)
       # H:MM:SS or H:MM:SS.ss
-      seconds=$(( ${parts[0]%.*} * 3600 + ${parts[1]%.*} * 60 + ${parts[2]%.*} ))
+      seconds=$(( $(parse_decimal_component "${parts[0]}") * 3600 + $(parse_decimal_component "${parts[1]}") * 60 + $(parse_decimal_component "${parts[2]}") ))
       ;;
     *)
       seconds=0
@@ -228,16 +243,26 @@ process_cpu_time() {
 persist_contract() {
   local beads="$1"
   local contract_file="$2"
+  local auth_source auth_mode execution_mode
+
+  auth_source="$(meta_get "$META_FILE" "auth_source")"
+  [[ -n "$auth_source" ]] || auth_source="${CC_GLM_AUTH_SOURCE:-unknown}"
+
+  auth_mode="$(meta_get "$META_FILE" "auth_mode")"
+  [[ -n "$auth_mode" ]] || auth_mode="$([[ "${CC_GLM_STRICT_AUTH:-1}" == "0" ]] && echo "non_strict" || echo "strict")"
+
+  execution_mode="$(meta_get "$META_FILE" "execution_mode")"
+  [[ -n "$execution_mode" ]] || execution_mode="${EXECUTION_MODE:-nohup}"
 
   cat > "$contract_file" <<EOF
 # Runtime contract for $beads (generated $(now_utc))
 # DO NOT store secrets here
-auth_source=${CC_GLM_AUTH_SOURCE:-unknown}
-auth_mode=${CC_GLM_AUTH_MODE:-unknown}
+auth_source=${auth_source}
+auth_mode=${auth_mode}
 model=${CC_GLM_MODEL:-glm-5}
 base_url=${CC_GLM_BASE_URL:-https://api.z.ai/api/anthropic}
 timeout_ms=${CC_GLM_TIMEOUT_MS:-3000000}
-execution_mode=${EXECUTION_MODE:-nohup}
+execution_mode=${execution_mode}
 EOF
 }
 
@@ -248,13 +273,43 @@ verify_contract() {
     return 0  # No contract = first run, ok to proceed
   fi
 
-  local saved_model saved_base current_model current_base
+  local saved_model saved_base saved_timeout saved_auth_source saved_auth_mode saved_exec_mode
+  local current_model current_base current_timeout current_auth_source current_auth_mode current_exec_mode
+
   saved_model="$(meta_get "$contract_file" "model")"
   saved_base="$(meta_get "$contract_file" "base_url")"
+  saved_timeout="$(meta_get "$contract_file" "timeout_ms")"
+  saved_auth_source="$(meta_get "$contract_file" "auth_source")"
+  saved_auth_mode="$(meta_get "$contract_file" "auth_mode")"
+  saved_exec_mode="$(meta_get "$contract_file" "execution_mode")"
+
   current_model="${CC_GLM_MODEL:-glm-5}"
   current_base="${CC_GLM_BASE_URL:-https://api.z.ai/api/anthropic}"
+  current_timeout="${CC_GLM_TIMEOUT_MS:-3000000}"
+  current_auth_source="$(meta_get "$META_FILE" "auth_source")"
+  [[ -n "$current_auth_source" ]] || current_auth_source="${CC_GLM_AUTH_SOURCE:-unknown}"
+  current_auth_mode="$(meta_get "$META_FILE" "auth_mode")"
+  [[ -n "$current_auth_mode" ]] || current_auth_mode="$([[ "${CC_GLM_STRICT_AUTH:-1}" == "0" ]] && echo "non_strict" || echo "strict")"
+  current_exec_mode="$(meta_get "$META_FILE" "execution_mode")"
+  [[ -n "$current_exec_mode" ]] || current_exec_mode="nohup"
 
-  if [[ "$saved_model" != "$current_model" || "$saved_base" != "$current_base" ]]; then
+  # Backward compatibility: if a key is absent in legacy contracts, skip that comparison.
+  if [[ -n "$saved_model" && "$saved_model" != "$current_model" ]]; then
+    return 1
+  fi
+  if [[ -n "$saved_base" && "$saved_base" != "$current_base" ]]; then
+    return 1
+  fi
+  if [[ -n "$saved_timeout" && "$saved_timeout" != "$current_timeout" ]]; then
+    return 1
+  fi
+  if [[ -n "$saved_auth_source" && "$saved_auth_source" != "$current_auth_source" ]]; then
+    return 1
+  fi
+  if [[ -n "$saved_auth_mode" && "$saved_auth_mode" != "$current_auth_mode" ]]; then
+    return 1
+  fi
+  if [[ -n "$saved_exec_mode" && "$saved_exec_mode" != "$current_exec_mode" ]]; then
     return 1  # Contract mismatch
   fi
   return 0
@@ -472,9 +527,6 @@ EOF
   meta_set "$META_FILE" "launch_marker_at" "$(now_utc)"
   meta_set "$META_FILE" "launch_state" "starting"
 
-  # Persist runtime contract
-  persist_contract "$BEADS" "$CONTRACT_FILE"
-
   # Capture auth source if available
   local auth_source="unknown"
   if [[ -n "${CC_GLM_AUTH_TOKEN:-}" ]]; then
@@ -487,6 +539,7 @@ EOF
     auth_source="CC_GLM_OP_URI"
   fi
   meta_set "$META_FILE" "auth_source" "$auth_source"
+  meta_set "$META_FILE" "auth_mode" "$([[ "${CC_GLM_STRICT_AUTH:-1}" == "0" ]] && echo "non_strict" || echo "strict")"
 
   # Detached run; stdout/stderr go to per-job log.
   local exec_mode
@@ -503,6 +556,7 @@ EOF
   meta_set "$META_FILE" "pid" "$pid"
   meta_set "$META_FILE" "launch_state" "running"
   meta_set "$META_FILE" "execution_mode" "$exec_mode"
+  persist_contract "$BEADS" "$CONTRACT_FILE"
 
   echo "started beads=$BEADS pid=$pid log=$LOG_FILE pty=$USE_PTY"
 }
@@ -968,9 +1022,6 @@ restart_cmd() {
   meta_set "$META_FILE" "launch_marker_at" "$(now_utc)"
   meta_set "$META_FILE" "launch_state" "restarting"
 
-  # Update contract
-  persist_contract "$BEADS" "$CONTRACT_FILE"
-
   # Start new job
   [[ -x "$HEADLESS" ]] || { echo "headless wrapper not executable: $HEADLESS" >&2; exit 1; }
   local exec_mode
@@ -988,6 +1039,7 @@ restart_cmd() {
   meta_set "$META_FILE" "launch_state" "running"
   meta_set "$META_FILE" "execution_mode" "$exec_mode"
   meta_set "$META_FILE" "use_pty" "$effective_use_pty"
+  persist_contract "$BEADS" "$CONTRACT_FILE"
 
   echo "restarted beads=$BEADS pid=$new_pid retries=$new_retries log=$LOG_FILE pty=$effective_use_pty"
 }

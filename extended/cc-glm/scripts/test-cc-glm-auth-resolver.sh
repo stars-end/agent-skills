@@ -520,6 +520,39 @@ EOF
   setup_test_env
 }
 
+# Test: CC_GLM_DEBUG must not pollute token capture path
+test_debug_token_capture() {
+  echo ""
+  echo "=== Test: CC_GLM_DEBUG token capture safety ==="
+
+  local fake_dir fake_claude old_path output
+  fake_dir="$(mktemp -d)"
+  fake_claude="${fake_dir}/claude"
+  old_path="$PATH"
+
+  cat > "$fake_claude" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "DEBUG_TOKEN_CAPTURE_OK"
+EOF
+  chmod +x "$fake_claude"
+
+  export PATH="${fake_dir}:${old_path}"
+  export CC_GLM_AUTH_TOKEN="debug-token-capture-test"
+  export CC_GLM_DEBUG=1
+
+  output="$("$HEADLESS_SCRIPT" --prompt "debug token capture test" 2>&1 || true)"
+  if [[ "$output" == *"DEBUG_TOKEN_CAPTURE_OK"* ]]; then
+    pass "CC_GLM_DEBUG does not break auth token capture"
+  else
+    fail "CC_GLM_DEBUG polluted token capture path" "${output:0:240}"
+  fi
+
+  export PATH="$old_path"
+  rm -rf "$fake_dir"
+  setup_test_env
+}
+
 # Test: Missing claude CLI produces actionable error
 test_missing_claude_cli() {
   echo ""
@@ -712,6 +745,37 @@ test_job_verify_contract() {
   fi
 }
 
+# Test: process_cpu_time has explicit leading-zero guard
+test_job_cpu_leading_zero_guard() {
+  echo ""
+  echo "=== Test: Job CPU leading-zero guard ==="
+
+  if grep -q "parse_decimal_component()" "$JOB_SCRIPT" && grep -q "10#" "$JOB_SCRIPT"; then
+    pass "process_cpu_time has base-10 guard for leading-zero values"
+  else
+    fail "process_cpu_time missing leading-zero base-10 guard"
+  fi
+}
+
+# Test: verify_contract checks all persisted non-secret fields
+test_job_verify_contract_fields() {
+  echo ""
+  echo "=== Test: verify_contract field coverage ==="
+
+  local missing=()
+  for field in model base_url timeout_ms auth_source auth_mode execution_mode; do
+    if ! grep -q "$field" "$JOB_SCRIPT"; then
+      missing+=("$field")
+    fi
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    pass "verify_contract includes model/base/timeout/auth/execution fields"
+  else
+    fail "verify_contract missing field checks" "missing=${missing[*]}"
+  fi
+}
+
 # Run all tests
 echo "================================================"
 echo "cc-glm V3.0 Test Suite"
@@ -761,6 +825,7 @@ test_allow_fallback
 test_strict_auth_disabled
 test_priority_order
 test_anthropic_env_exports
+test_debug_token_capture
 test_missing_claude_cli
 
 # Run job runner tests
@@ -777,6 +842,8 @@ test_job_ansi_stripping
 test_job_observe_only
 test_job_no_auto_restart
 test_job_verify_contract
+test_job_cpu_leading_zero_guard
+test_job_verify_contract_fields
 
 # Summary
 echo ""

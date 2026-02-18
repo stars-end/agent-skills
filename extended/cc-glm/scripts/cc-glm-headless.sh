@@ -349,17 +349,9 @@ token=""
 token_source=""
 resolve_exit=0
 
-# Try to resolve token using the unified resolver
-# Note: We use '|| resolve_exit=$?' pattern to capture the actual exit code
-# because '$?' inside 'if ! ... then' block is not the command's exit code
-token="$(resolve_glm_auth_token 2>&1)" || resolve_exit=$?
-
-# Check if output contains error markers vs actual token
-if [[ "$token" == *"[cc-glm-headless]"* ]]; then
-  # This is error output, not a token
-  echo "$token" >&2
-  token=""
-fi
+# Try to resolve token using the unified resolver.
+# Capture stdout only so debug/error logs on stderr never pollute token parsing.
+token="$(resolve_glm_auth_token)" || resolve_exit=$?
 
 # Determine token source for logging
 if [[ -n "${token:-}" ]]; then
