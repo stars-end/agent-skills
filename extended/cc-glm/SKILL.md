@@ -510,6 +510,174 @@ CC_GLM_ALLOW_FALLBACK=1 cc-glm-headless.sh --prompt "task"
 
 ---
 
+## V3.3 Reliability Features
+
+### Mutation Detection
+
+Detect worktree file changes even when log is empty (critical for false-stall diagnosis):
+
+```bash
+# Check mutations for a specific job
+cc-glm-job.sh mutations --beads bd-xxx
+# mutation_count: 5
+# Changed files:
+#  M src/file1.ts
+#  ?? src/new-file.ts
+
+# Show mutations in status output
+cc-glm-job.sh status --mutations
+# bead           pid      state        bytes     mut    outcome
+# bd-xxx         12345    running      0         5      -
+```
+
+### Preflight Checks
+
+Verify prerequisites before dispatching jobs:
+
+```bash
+# Run preflight check
+cc-glm-job.sh preflight
+# === Preflight Check ===
+# claude binary: OK (/usr/local/bin/claude)
+# auth resolution: OK (ZAI_API_KEY)
+# model config: OK (glm-5)
+# backend URL: https://api.z.ai/api/anthropic
+# === Preflight PASSED ===
+
+# Preflight with worktree check
+cc-glm-job.sh preflight --beads bd-xxx
+```
+
+### Startup Heartbeat
+
+The headless runner emits an immediate heartbeat on launch:
+
+```bash
+# In log output (to stderr):
+[cc-glm-headless] LAUNCH_OK ts=2026-02-17T12:00:00Z model=glm-5 auth_source=ZAI_API_KEY pid=12345
+```
+
+This allows monitors to distinguish:
+1. Process launched, waiting on model → LAUNCH_OK present
+2. Blocked auth/model init → No LAUNCH_OK
+3. True dead process → No LAUNCH_OK, no output
+
+---
+
+## Detection & Recovery Runbook
+
+### Symptom: `running` + 0-byte log + age > threshold
+
+**Detection:**
+```bash
+cc-glm-job.sh health --beads bd-xxx
+# Check: health=healthy (process_active=true, cpu_time=N)
+
+# Check for mutations (worktree changes despite empty log)
+cc-glm-job.sh mutations --beads bd-xxx
+# If mutation_count > 0, process is making progress
+```
+
+**Recovery:**
+```bash
+# If CPU time increasing → wait (process is healthy)
+watch -n 30 'cc-glm-job.sh health --beads bd-xxx'
+
+# If CPU NOT increasing after 2 checks:
+cc-glm-job.sh restart --beads bd-xxx --pty
+
+# Check startup heartbeat in log:
+tail -1 /tmp/cc-glm-jobs/bd-xxx.log
+# Should see: [cc-glm-headless] LAUNCH_OK ...
+```
+
+### Symptom: Model drift on restart
+
+**Detection:**
+```bash
+cc-glm-job.sh status --beads bd-xxx
+# Check: effective_model matches expected
+
+# Check contract file
+cat /tmp/cc-glm-jobs/bd-xxx.contract
+# model=glm-5
+```
+
+**Recovery:**
+```bash
+# Explicit model on restart
+CC_GLM_MODEL=glm-5 cc-glm-job.sh restart --beads bd-xxx --pty
+
+# Or abort if contract mismatch
+cc-glm-job.sh restart --beads bd-xxx --preserve-contract
+```
+
+### Symptom: Hidden mutations with empty log
+
+**Detection:**
+```bash
+cc-glm-job.sh status --mutations --beads bd-xxx
+# Check: mut column shows change count
+
+# Full mutation details
+cc-glm-job.sh mutations --beads bd-xxx
+```
+
+**Recovery:**
+```bash
+# Inspect worktree
+worktree=$(cat /tmp/cc-glm-jobs/bd-xxx.meta | grep worktree | cut -d= -f2)
+cd "$worktree"
+git status
+git diff
+
+# Decide: commit changes, discard, or continue job
+```
+
+### Symptom: Auth resolution failure (exit code 10)
+
+**Detection:**
+```bash
+cc-glm-job.sh preflight
+# auth resolution: NO_AUTH_SOURCE
+#   ERROR: No auth source configured
+```
+
+**Recovery:**
+```bash
+# Check token file on remote host
+ssh epyc12 'ls -la ~/.config/systemd/user/op-epyc12-token'
+
+# Recreate token if missing
+ssh epyc12 '~/agent-skills/scripts/create-op-credential.sh'
+
+# Or set explicit token
+export CC_GLM_AUTH_TOKEN="..."
+```
+
+### Symptom: Watchdog conflicts with manual supervision
+
+**Detection:**
+```bash
+cc-glm-job.sh status --show-overrides
+# Check: override column for active jobs
+```
+
+**Recovery:**
+```bash
+# Option A: Use observe-only mode
+cc-glm-job.sh watchdog --observe-only --interval 60
+
+# Option B: Set per-bead no-auto-restart
+cc-glm-job.sh set-override --beads bd-xxx --no-auto-restart true
+
+# Option C: Disable watchdog entirely (run manual checks)
+# Just don't start watchdog, use manual health checks
+cc-glm-job.sh health --beads bd-xxx
+```
+
+---
+
 ## V3.0 Reliability Features
 
 ### Progress-Aware Health Detection

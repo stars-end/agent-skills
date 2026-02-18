@@ -446,6 +446,18 @@ if [[ "${CC_GLM_REPORT_AUTH_SOURCE:-}" == "1" ]]; then
   echo "[CC_GLM_AUTH_SOURCE] $token_source" >&2
 fi
 
+# ============================================================================
+# STARTUP HEARTBEAT (V2.2)
+# Emits immediately after auth resolution to provide early observability.
+# This allows monitors to distinguish:
+#   1. Process launched, waiting on model
+#   2. Blocked auth/model init
+#   3. True dead/stuck subprocess
+# Format: LAUNCH_OK ts=<iso8601> model=<model> auth_source=<source> pid=<$$>
+# ============================================================================
+effective_model="${CC_GLM_MODEL:-glm-5}"
+log_info "LAUNCH_OK ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ") model=$effective_model auth_source=$token_source pid=$$"
+
 # Run claude with resolved auth
 # Export both ANTHROPIC_AUTH_TOKEN and ANTHROPIC_API_KEY for compatibility
 ANTHROPIC_AUTH_TOKEN="$token" \

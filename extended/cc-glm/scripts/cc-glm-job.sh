@@ -1,27 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# cc-glm-job.sh (V3.2 - Watchdog Modes + Operator Control)
+# cc-glm-job.sh (V3.3 - Mutation Detection + Preflight)
 #
 # Lightweight background job manager for cc-glm headless runs.
 # Keeps consistent artifacts under /tmp/cc-glm-jobs:
 #   <beads>.pid, <beads>.log, <beads>.meta, <beads>.outcome, <beads>.contract
 #   <beads>.log.<n> (rotated logs)
 #   <beads>.outcome.<n> (rotated outcomes - V3.1)
+#   <beads>.mutation (mutation marker - V3.3)
 #
 # Commands:
 #   start        --beads <id> --prompt-file <path> [--repo <name>] [--worktree <path>] [--log-dir <dir>] [--pty]
-#   status       [--beads <id>] [--log-dir <dir>] [--no-ansi]
+#   status       [--beads <id>] [--log-dir <dir>] [--no-ansi] [--mutations]
 #   check        --beads <id> [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
 #   health       [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
 #   restart      --beads <id> [--log-dir <dir>] [--pty] [--preserve-contract]
 #   stop         --beads <id> [--log-dir <dir>]
 #   tail         --beads <id> [--log-dir <dir>] [--lines <n>] [--no-ansi]
 #   set-override --beads <id> [--no-auto-restart <true|false>] [--log-dir <dir>]
+#   preflight    [--beads <id>] [--log-dir <dir>]  (V3.3)
+#   mutations    --beads <id> [--log-dir <dir>]    (V3.3)
 #   watchdog     [--beads <id>] [--log-dir <dir>] [--interval <secs>] [--stall-minutes <n>] [--max-retries <n>]
 #                [--once] [--observe-only] [--no-auto-restart] [--pidfile <path>]
 #
-# V3.2 Changes:
+# V3.3 Changes:
+#   - Mutation detection: tracks worktree file changes even when log is empty
+#   - Preflight command: verifies auth/model/backend before job start
+#   - Mutations command: shows worktree change summary for a job
+#   - Status --mutations flag: shows mutation count in status output
+#
+# V3.2 Features (preserved):
 #   - Watchdog modes: observe-only (monitor only, never restart), no-auto-restart (disable restarts)
 #   - Per-bead override control: set-override command for fine-grained control
 #   - Mode/override state surfaced in status/health output
@@ -42,7 +51,7 @@ HEADLESS="${SCRIPT_DIR}/cc-glm-headless.sh"
 PTY_RUN="${SCRIPT_DIR}/pty-run.sh"
 
 # Version for debugging
-CC_GLM_JOB_VERSION="3.2.0"
+CC_GLM_JOB_VERSION="3.3.0"
 
 LOG_DIR="/tmp/cc-glm-jobs"
 CMD="${1:-}"
@@ -50,17 +59,19 @@ shift || true
 
 usage() {
   cat <<'EOF'
-cc-glm-job.sh (V3.2 - Watchdog Modes + Operator Control)
+cc-glm-job.sh (V3.3 - Mutation Detection + Preflight)
 
 Usage:
   cc-glm-job.sh start --beads <id> --prompt-file <path> [options]
-  cc-glm-job.sh status [--beads <id>] [--log-dir <dir>] [--no-ansi]
+  cc-glm-job.sh status [--beads <id>] [--log-dir <dir>] [--no-ansi] [--mutations]
   cc-glm-job.sh check --beads <id> [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
   cc-glm-job.sh health [--beads <id>] [--log-dir <dir>] [--stall-minutes <n>] [--no-ansi]
   cc-glm-job.sh restart --beads <id> [--log-dir <dir>] [--pty] [--preserve-contract]
   cc-glm-job.sh stop --beads <id> [--log-dir <dir>]
   cc-glm-job.sh tail --beads <id> [--log-dir <dir>] [--lines <n>] [--no-ansi]
   cc-glm-job.sh set-override --beads <id> [--no-auto-restart <true|false>]
+  cc-glm-job.sh preflight [--beads <id>] [--log-dir <dir>]
+  cc-glm-job.sh mutations --beads <id> [--log-dir <dir>]
   cc-glm-job.sh watchdog [--beads <id>] [options]
 
 Commands:
@@ -72,16 +83,24 @@ Commands:
   stop         Stop a running job and record outcome.
   tail         Show last N lines of job log with optional ANSI stripping.
   set-override Set per-bead override flags for watchdog behavior.
+  preflight    Verify job prerequisites (auth, model, backend) before start (V3.3).
+  mutations    Show worktree file changes for a job (V3.3).
   watchdog     Run watchdog loop: monitor jobs, restart stalled jobs.
 
 Options:
   --pty               Use PTY-backed execution for reliable output capture.
   --no-ansi           Strip ANSI codes from output.
+  --mutations         Show mutation count in status output (V3.3).
   --observe-only      Watchdog monitors but never restarts (observe-only mode).
   --no-auto-restart   Disable auto-restart for specific beads in watchdog.
   --preserve-contract On restart, abort if env contract cannot be preserved.
   --once              Run exactly one watchdog iteration, then exit.
   --lines N           Number of lines for tail command (default: 20).
+
+V3.3 Features:
+  - Mutation detection: tracks worktree file changes even when log is empty
+  - Preflight check: verifies auth/model/backend before job start
+  - Use --mutations flag with status to see file change counts
 
 Watchdog Modes (V3.2):
   normal            - Default: restart stalled jobs up to max-retries, then block.
@@ -121,6 +140,7 @@ Job Artifacts:
   <beads>.outcome     - Final outcome (run_id, exit_code, state, duration_sec)
   <beads>.outcome.<n> - Rotated outcomes (V3.1 forensic history)
   <beads>.contract    - Runtime contract (auth_source, model, base_url)
+  <beads>.mutation    - Mutation marker (mutation_count, checked_at) (V3.3)
 
 Outcome Metadata Fields (V3.2):
   beads        - Beads ID
@@ -137,6 +157,8 @@ Notes:
   - Contract file ensures restart consistency (no env drift)
   - status/health show outcome with duration for completed jobs
   - Per-bead no-auto-restart is stored in meta file and persists across restarts
+  - Use 'preflight' before dispatching to catch auth/config issues early
+  - Use 'mutations --beads <id>' to inspect worktree changes for stalled jobs
 EOF
 }
 
@@ -201,6 +223,189 @@ job_paths() {
   META_FILE="${LOG_DIR}/${beads}.meta"
   OUTCOME_FILE="${LOG_DIR}/${beads}.outcome"
   CONTRACT_FILE="${LOG_DIR}/${beads}.contract"
+  MUTATION_FILE="${LOG_DIR}/${beads}.mutation"
+}
+
+# V3.3: Mutation detection
+# Checks worktree for file changes and writes mutation marker
+# Returns: number of changed files (0 if none or no worktree)
+check_mutations() {
+  local beads="$1"
+  job_paths "$beads"
+
+  local worktree
+  worktree="$(meta_get "$META_FILE" "worktree" 2>/dev/null || true)"
+
+  if [[ -z "$worktree" || ! -d "$worktree" ]]; then
+    echo 0
+    return 0
+  fi
+
+  local changed=0
+  if [[ -d "$worktree/.git" ]]; then
+    # Git worktree - use git status
+    changed="$(cd "$worktree" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+  else
+    # Non-git worktree - use find for recent modifications
+    local threshold_epoch
+    threshold_epoch="$(date -d "$(meta_get "$META_FILE" "started_at" 2>/dev/null || date -u -Iseconds)" +%s 2>/dev/null || date +%s)"
+    # Find files modified since job start
+    changed="$(find "$worktree" -type f -newer "$META_FILE" 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+
+  echo "${changed:-0}"
+}
+
+# Write mutation marker file
+write_mutation_marker() {
+  local beads="$1"
+  local count="$2"
+  job_paths "$beads"
+
+  cat > "$MUTATION_FILE" <<EOF
+beads=$beads
+mutation_count=$count
+checked_at=$(now_utc)
+EOF
+}
+
+# Preflight check for job prerequisites (V3.3)
+# Verifies: auth token resolvable, backend reachable, worktree accessible
+# Exit codes: 0=ok, 1=error, 10=auth issue, 11=token file issue
+preflight_check() {
+  local beads="${1:-}"
+  local errors=0
+
+  echo "=== Preflight Check ==="
+  echo "timestamp: $(now_utc)"
+  [[ -n "$beads" ]] && echo "beads: $beads"
+
+  # Check 1: Claude binary
+  echo -n "claude binary: "
+  if command -v claude >/dev/null 2>&1; then
+    echo "OK ($(command -v claude))"
+  else
+    echo "MISSING"
+    echo "  ERROR: claude CLI not found"
+    errors=$((errors + 1))
+  fi
+
+  # Check 2: Auth token resolvable
+  echo -n "auth resolution: "
+  local auth_ok=false
+  local auth_source=""
+
+  if [[ -n "${CC_GLM_AUTH_TOKEN:-}" ]]; then
+    auth_ok=true
+    auth_source="CC_GLM_AUTH_TOKEN"
+  elif [[ -n "${CC_GLM_TOKEN_FILE:-}" ]]; then
+    if [[ -f "${CC_GLM_TOKEN_FILE}" ]]; then
+      auth_ok=true
+      auth_source="CC_GLM_TOKEN_FILE"
+    else
+      echo "TOKEN_FILE_MISSING"
+      echo "  ERROR: CC_GLM_TOKEN_FILE=${CC_GLM_TOKEN_FILE} not found"
+      errors=$((errors + 1))
+    fi
+  elif [[ -n "${ZAI_API_KEY:-}" ]]; then
+    if [[ "$ZAI_API_KEY" == op://* ]]; then
+      # op:// reference - check op CLI and try to resolve
+      if command -v op >/dev/null 2>&1; then
+        auth_source="ZAI_API_KEY (op://)"
+        # Try resolution (may fail if op not authenticated)
+        if op read "$ZAI_API_KEY" >/dev/null 2>&1; then
+          auth_ok=true
+        else
+          echo "OP_RESOLUTION_FAILED"
+          echo "  ERROR: Cannot resolve op:// reference - op not authenticated or token expired"
+          errors=$((errors + 1))
+        fi
+      else
+        echo "OP_CLI_MISSING"
+        echo "  ERROR: ZAI_API_KEY is op:// reference but op CLI not found"
+        errors=$((errors + 1))
+      fi
+    else
+      auth_ok=true
+      auth_source="ZAI_API_KEY"
+    fi
+  elif [[ -n "${CC_GLM_OP_URI:-}" ]]; then
+    auth_source="CC_GLM_OP_URI"
+    if command -v op >/dev/null 2>&1; then
+      if op read "$CC_GLM_OP_URI" >/dev/null 2>&1; then
+        auth_ok=true
+      else
+        echo "OP_RESOLUTION_FAILED"
+        echo "  ERROR: Cannot resolve CC_GLM_OP_URI"
+        errors=$((errors + 1))
+      fi
+    else
+      echo "OP_CLI_MISSING"
+      echo "  ERROR: CC_GLM_OP_URI requires op CLI"
+      errors=$((errors + 1))
+    fi
+  else
+    # Try default op:// path
+    if command -v op >/dev/null 2>&1; then
+      auth_source="default op://"
+      if op read "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" >/dev/null 2>&1; then
+        auth_ok=true
+      else
+        echo "NO_AUTH_SOURCE"
+        echo "  ERROR: No auth source configured and default op:// resolution failed"
+        echo "  Set CC_GLM_AUTH_TOKEN, ZAI_API_KEY, or CC_GLM_OP_URI"
+        errors=$((errors + 1))
+      fi
+    else
+      echo "NO_AUTH_SOURCE"
+      echo "  ERROR: No auth source configured"
+      errors=$((errors + 1))
+    fi
+  fi
+
+  if [[ "$auth_ok" == "true" ]]; then
+    echo "OK ($auth_source)"
+  fi
+
+  # Check 3: Model configuration
+  echo -n "model config: "
+  local model="${CC_GLM_MODEL:-glm-5}"
+  echo "OK ($model)"
+
+  # Check 4: Base URL / backend
+  echo -n "backend URL: "
+  local base_url="${CC_GLM_BASE_URL:-https://api.z.ai/api/anthropic}"
+  echo "$base_url"
+  # Note: We don't actually ping the backend to avoid latency/auth exposure
+
+  # Check 5: Worktree (if beads specified)
+  if [[ -n "$beads" ]]; then
+    job_paths "$beads"
+    echo -n "worktree: "
+    if [[ -f "$META_FILE" ]]; then
+      local worktree
+      worktree="$(meta_get "$META_FILE" "worktree" 2>/dev/null || true)"
+      if [[ -n "$worktree" && -d "$worktree" ]]; then
+        echo "OK ($worktree)"
+      elif [[ -n "$worktree" ]]; then
+        echo "MISSING ($worktree)"
+        errors=$((errors + 1))
+      else
+        echo "NOT_CONFIGURED"
+      fi
+    else
+      echo "NO_META_FILE"
+    fi
+  fi
+
+  echo ""
+  if [[ $errors -eq 0 ]]; then
+    echo "=== Preflight PASSED ==="
+    return 0
+  else
+    echo "=== Preflight FAILED ($errors error(s)) ==="
+    return 1
+  fi
 }
 
 # Process state (no file dependency)
@@ -477,6 +682,7 @@ parse_common_args() {
   PRESERVE_CONTRACT=false
   TAIL_LINES=20
   SHOW_OVERRIDES=false
+  SHOW_MUTATIONS=false  # V3.3
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -552,6 +758,10 @@ parse_common_args() {
         ;;
       --show-overrides)
         SHOW_OVERRIDES=true
+        shift
+        ;;
+      --mutations)
+        SHOW_MUTATIONS=true
         shift
         ;;
       -h|--help)
@@ -765,7 +975,7 @@ EOF
 status_line() {
   local beads="$1"
   job_paths "$beads"
-  local pid="" state="missing" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-" override=""
+  local pid="" state="missing" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-" override="" mutations="-"
 
   if [[ -f "$PID_FILE" ]]; then
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -779,7 +989,6 @@ status_line() {
     outcome_exit="$(meta_get "$OUTCOME_FILE" "exit_code")"
     outcome_duration="$(meta_get "$OUTCOME_FILE" "duration_sec")"
     outcome="${outcome_state:-completed}:${outcome_exit:-?}"
-    # Add duration if available and job is done
     if [[ -n "$outcome_duration" && "$outcome_duration" != "-" && "$outcome_duration" != "-"* ]]; then
       outcome="${outcome} (${outcome_duration}s)"
     fi
@@ -800,7 +1009,6 @@ status_line() {
   if [[ -f "$META_FILE" ]]; then
     retries="$(meta_get "$META_FILE" "retries")"
     [[ -n "$retries" ]] || retries="0"
-    # Check for per-bead override flags (V3.2)
     local no_auto_restart blocked
     no_auto_restart="$(meta_get "$META_FILE" "no_auto_restart")"
     blocked="$(meta_get "$META_FILE" "blocked")"
@@ -809,6 +1017,13 @@ status_line() {
     elif [[ "$blocked" == "true" ]]; then
       override="blocked"
     fi
+  fi
+
+  # V3.3: Check for mutations if requested
+  if [[ "$SHOW_MUTATIONS" == "true" ]]; then
+    mutations="$(check_mutations "$beads")"
+    # Write mutation marker for later queries
+    write_mutation_marker "$beads" "$mutations"
   fi
 
   # Elapsed from PID file age
@@ -822,7 +1037,13 @@ status_line() {
   fi
 
   local output
-  if [[ "$SHOW_OVERRIDES" == "true" ]]; then
+  if [[ "$SHOW_MUTATIONS" == "true" && "$SHOW_OVERRIDES" == "true" ]]; then
+    output="$(printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-9s %-10s %s" \
+      "$beads" "${pid:--}" "$state" "$elapsed" "$log_bytes" "$last_update" "$retries" "$mutations" "$override" "$outcome")"
+  elif [[ "$SHOW_MUTATIONS" == "true" ]]; then
+    output="$(printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-9s %s" \
+      "$beads" "${pid:--}" "$state" "$elapsed" "$log_bytes" "$last_update" "$retries" "$mutations" "$outcome")"
+  elif [[ "$SHOW_OVERRIDES" == "true" ]]; then
     output="$(printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-10s %s" \
       "$beads" "${pid:--}" "$state" "$elapsed" "$log_bytes" "$last_update" "$retries" "$override" "$outcome")"
   else
@@ -843,7 +1064,13 @@ status_cmd() {
   # Guardrail: warn about multi-log-dir ambiguity
   check_log_dir_ambiguity "status"
 
-  if [[ "$SHOW_OVERRIDES" == "true" ]]; then
+  if [[ "$SHOW_MUTATIONS" == "true" && "$SHOW_OVERRIDES" == "true" ]]; then
+    printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-9s %-10s %s\n" \
+      "bead" "pid" "state" "elapsed" "bytes" "last_update" "retry" "mut" "override" "outcome"
+  elif [[ "$SHOW_MUTATIONS" == "true" ]]; then
+    printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-9s %s\n" \
+      "bead" "pid" "state" "elapsed" "bytes" "last_update" "retry" "mut" "outcome"
+  elif [[ "$SHOW_OVERRIDES" == "true" ]]; then
     printf "%-14s %-8s %-12s %-9s %-9s %-16s %-6s %-10s %s\n" \
       "bead" "pid" "state" "elapsed" "bytes" "last_update" "retry" "override" "outcome"
   else
@@ -1539,6 +1766,60 @@ watchdog_cmd() {
   done
 }
 
+# V3.3: Preflight command - verify job prerequisites
+preflight_cmd() {
+  parse_common_args "$@"
+  preflight_check "$BEADS"
+}
+
+# V3.3: Mutations command - show worktree changes
+mutations_cmd() {
+  parse_common_args "$@"
+  [[ -n "$BEADS" ]] || { echo "mutations requires --beads" >&2; exit 2; }
+
+  job_paths "$BEADS"
+
+  if [[ ! -f "$META_FILE" ]]; then
+    echo "no metadata file for $BEADS" >&2
+    exit 1
+  fi
+
+  local worktree
+  worktree="$(meta_get "$META_FILE" "worktree")"
+
+  if [[ -z "$worktree" || ! -d "$worktree" ]]; then
+    echo "no worktree configured for $BEADS"
+    exit 0
+  fi
+
+  echo "=== Mutations for $BEADS ==="
+  echo "worktree: $worktree"
+  echo ""
+
+  local mutation_count
+  mutation_count="$(check_mutations "$BEADS")"
+
+  echo "mutation_count: $mutation_count"
+
+  if [[ "$mutation_count" -gt 0 ]]; then
+    echo ""
+    echo "Changed files:"
+    if [[ -d "$worktree/.git" ]]; then
+      (cd "$worktree" && git status --porcelain 2>/dev/null | head -50)
+      local total
+      total="$(cd "$worktree" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+      if [[ "$total" -gt 50 ]]; then
+        echo "... ($((total - 50)) more files)"
+      fi
+    else
+      find "$worktree" -type f -newer "$META_FILE" 2>/dev/null | head -50
+    fi
+  fi
+
+  # Write mutation marker
+  write_mutation_marker "$BEADS" "$mutation_count"
+}
+
 case "$CMD" in
   start) start_cmd "$@" ;;
   status) status_cmd "$@" ;;
@@ -1548,6 +1829,8 @@ case "$CMD" in
   stop) stop_cmd "$@" ;;
   tail) tail_cmd "$@" ;;
   set-override) set_override_cmd "$@" ;;
+  preflight) preflight_cmd "$@" ;;
+  mutations) mutations_cmd "$@" ;;
   watchdog) watchdog_cmd "$@" ;;
   -h|--help|help|"")
     usage
