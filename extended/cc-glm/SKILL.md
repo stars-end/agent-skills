@@ -10,7 +10,7 @@ allowed-tools:
   - Task
 ---
 
-# cc-glm: Plan-First Batched Dispatch (V8.3 + V3.0 Reliability)
+# cc-glm: Plan-First Batched Dispatch (V8.3 + V3.1 Operator Experience)
 
 ## Core Principle
 
@@ -538,16 +538,31 @@ cc-glm-job.sh restart --beads bd-xxx --preserve-contract
 
 ### Operator Guardrails
 
-**ANSI stripping for clean output:**
+**ANSI stripping for clean output (machine-parse-safe):**
 ```bash
 cc-glm-job.sh status --no-ansi
 cc-glm-job.sh tail --beads bd-xxx --no-ansi
+cc-glm-job.sh health --no-ansi
 ```
 
-**Log locality hints:**
+**Enhanced log locality hints (V3.1):**
 ```bash
 cc-glm-job.sh status
-# hint: logs on hostname at /tmp/cc-glm-jobs
+# hint: local logs on hostname at /tmp/cc-glm-jobs (empty)
+# hint: if jobs were dispatched to remote VMs, check:
+#   - macmini: tailscale ssh fengning@macmini 'cc-glm-job.sh status'
+#   - epyc6:   tailscale ssh feng@epyc6 'cc-glm-job.sh status'
+```
+
+**Multi-log-dir ambiguity guardrails (V3.1):**
+```bash
+# When multiple log directories exist, status/health/watchdog warn:
+cc-glm-job.sh status
+# WARN: Multiple log directories detected. Using default: /tmp/cc-glm-jobs
+# WARN: Alternative dirs found:
+#   - /tmp/cc-glm-jobs-alt1
+#   - /tmp/cc-glm-jobs-alt2
+# WARN: Use --log-dir <path> to target a specific directory
 ```
 
 **Watchdog modes:**
