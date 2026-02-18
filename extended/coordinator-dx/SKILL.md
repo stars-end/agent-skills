@@ -1,11 +1,15 @@
 ---
 name: coordinator-dx
-description: Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists.
+description: Coordinator playbook for multi-repo, multi-VM parallel execution with OpenCode as primary dispatch service and governed cc-glm fallback.
 ---
 
-# coordinator-dx
+# coordinator-dx (OpenCode-Primary)
 
 Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists.
+
+Lane defaults:
+- Throughput lane: OpenCode (`opencode run` / `opencode serve`)
+- Backstop lane: cc-glm (`cc-glm-job.sh`) only when policy/gates require fallback
 
 Key conventions:
 - Each VM/agent sets `AGENT_NAME=<vm>-<tool>` (e.g. `macmini-codex`, `epyc6-claude-code`, `homedesktop-wsl-gemini`)

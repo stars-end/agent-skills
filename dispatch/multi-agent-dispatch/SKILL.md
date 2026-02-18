@@ -1,11 +1,16 @@
 ---
 name: multi-agent-dispatch
-description: Cross-VM task dispatch using dx-dispatch (canonical). Supports SSH dispatch to canonical VMs (homedesktop-wsl, macmini, epyc12), Jules Cloud dispatch for async work, and fleet orchestration. EPYC6 is currently disabled - see enablement gate.
+description: Cross-VM task dispatch with OpenCode as the primary service and dx-dispatch as transport/orchestration. Supports OpenCode run/serve flows on canonical VMs, Jules Cloud dispatch for async work, and fleet orchestration. EPYC6 is currently disabled - see enablement gate.
 ---
 
-# Multi-Agent Dispatch
+# Multi-Agent Dispatch (OpenCode-Primary)
 
-`dx-dispatch` is the canonical tool for cross-VM and cloud dispatch.
+OpenCode (`opencode run` / `opencode serve`) is the primary execution service. `dx-dispatch` is the canonical transport for cross-VM and cloud fanout.
+
+## Dispatch Lanes
+
+- Primary throughput lane: OpenCode on `zai-coding-plan/glm-5`
+- Reliability lane: cc-glm when governance gates fail or critical-wave policy requires fallback
 
 ## When to Use
 

@@ -3,7 +3,7 @@ set -euo pipefail
 
 # test-cc-glm-job-v33.sh
 #
-# Test coverage for cc-glm-job.sh V3.3 features:
+# Test coverage for cc-glm-job.sh V3.3+ features:
 #   - Mutation detection
 #   - Preflight checks
 #   - Startup heartbeat
@@ -283,10 +283,10 @@ test_usage_v33_commands() {
     fail "Usage missing --mutations flag"
   fi
 
-  if echo "$output" | grep -q "V3.3"; then
-    pass "Usage shows V3.3 version"
+  if echo "$output" | grep -Eq "V3\\.[34]"; then
+    pass "Usage shows V3.3+ version"
   else
-    fail "Usage doesn't show V3.3 version"
+    fail "Usage doesn't show expected V3.x version"
   fi
 }
 

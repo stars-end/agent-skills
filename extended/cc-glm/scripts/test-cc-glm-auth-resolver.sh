@@ -975,36 +975,36 @@ test_persist_contract_env_safe() {
   fi
 }
 
-# Test: job_health gives benefit of doubt for running_no_output past threshold
+# Test: job_health has deterministic no-output substates (launching/waiting_first_output)
 test_health_running_no_output_grace() {
   echo ""
-  echo "=== Test: job_health running_no_output grace (V3.2.1) ==="
+  echo "=== Test: job_health running_no_output substates (V3.4) ==="
 
-  # Check that job_health has extended_startup logic for running but no output case
+  # Check that job_health_detail has deterministic no-output substates.
   local health_section
-  health_section="$(awk '/^job_health\(\)/,/^}$/' "$JOB_SCRIPT")"
+  health_section="$(awk '/^job_health_detail\(\)/,/^}$/' "$JOB_SCRIPT")"
 
-  if echo "$health_section" | grep -q 'extended_startup'; then
-    pass "job_health has extended_startup logic for running_no_output past threshold"
+  if echo "$health_section" | grep -q 'launching' && echo "$health_section" | grep -q 'waiting_first_output'; then
+    pass "job_health_detail defines launching/waiting_first_output substates for no-output startup"
   else
-    fail "job_health should give benefit of doubt for running_no_output past threshold"
+    fail "job_health_detail should define deterministic no-output substates"
   fi
 }
 
-# Test: watchdog treats starting as non-error
+# Test: watchdog treats startup substates as non-error
 test_watchdog_starting_non_error() {
   echo ""
-  echo "=== Test: watchdog starting state non-error (V3.2.1) ==="
+  echo "=== Test: watchdog startup substates non-error (V3.4) ==="
 
   # Check that watchdog's case statement includes 'starting' in non-error branch
   local watchdog_section
   watchdog_section="$(awk '/^watchdog_cmd\(\)/,/^}$/' "$JOB_SCRIPT")"
 
-  # Look for the pattern: healthy|starting|exited_ok)
-  if echo "$watchdog_section" | grep -q 'healthy|starting|exited_ok)'; then
-    pass "watchdog treats 'starting' as non-error (no restart/escalation)"
+  # Look for startup substates in non-error branch.
+  if echo "$watchdog_section" | grep -q 'healthy|starting|launching|waiting_first_output|exited_ok)'; then
+    pass "watchdog treats startup substates as non-error (no restart/escalation)"
   else
-    fail "watchdog should include 'starting' in non-error case branch"
+    fail "watchdog should include launching/waiting_first_output in non-error branch"
   fi
 }
 

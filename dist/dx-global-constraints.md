@@ -62,18 +62,26 @@ cd /tmp/agents/bd-xxxx/repo-name
 
 ### Dispatch Method
 
-**Primary: Local headless with cc-glm-job.sh**
+**Primary: OpenCode (headless + server)**
 
 ```bash
-# Start a background job
-cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
+# Headless single-run lane
+opencode run -m zai-coding-plan/glm-5 "Implement task T1 from plan.md"
 
-# Monitor jobs
-cc-glm-job.sh status
-cc-glm-job.sh check --beads bd-xxx
+# Server lane for parallel clients
+opencode serve --hostname 127.0.0.1 --port 4096
+opencode run --attach http://127.0.0.1:4096 -m zai-coding-plan/glm-5 "Implement task T2 from plan.md"
+```
 
-# Model selection (glm-5 for complex tasks)
+**Reliability backstop: cc-glm-job.sh (governed fallback lane)**
+
+```bash
+# Start a governed fallback job
 CC_GLM_MODEL=glm-5 cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
+
+# Monitor fallback jobs
+cc-glm-job.sh status --json
+cc-glm-job.sh check --beads bd-xxx --json
 ```
 
 **Optional: Task tool (Codex runtime only)**
@@ -131,6 +139,7 @@ For 1-2 file changes, use Beads notes instead of plan file:
 References:
 - `~/agent-skills/docs/ENV_SOURCES_CONTRACT.md`
 - `~/agent-skills/docs/SECRET_MANAGEMENT.md`
+- `~/agent-skills/scripts/benchmarks/opencode_cc_glm/README.md`
 - `~/agent-skills/extended/cc-glm/SKILL.md`
 
 Notes:

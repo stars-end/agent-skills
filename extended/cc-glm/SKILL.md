@@ -1,20 +1,26 @@
 ---
 name: cc-glm
 description: |
-  Use cc-glm for batched delegation with plan-first execution.
-  Batch by outcome (not file). Primary: local headless (cc-glm-job.sh). Optional: Task tool or cross-VM (dx-dispatch).
-  Trigger when user mentions cc-glm, delegation, parallel agents, or batch execution.
-tags: [workflow, delegation, automation, claude-code, glm, parallel]
+  Use cc-glm as the reliability/quality backstop lane for batched delegation with plan-first execution.
+  Batch by outcome (not file). Primary dispatch is OpenCode; cc-glm-job.sh is governed fallback for critical waves and OpenCode failures.
+  Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution.
+tags: [workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode]
 allowed-tools:
   - Bash
   - Task
 ---
 
-# cc-glm: Plan-First Batched Dispatch (V8.3 + V3.2 Operator Experience)
+# cc-glm: Reliability Backstop Dispatch (V8.3 + V3.4 Operator Experience)
 
 ## Core Principle
 
 **Batch by outcome, not by file.** One agent per coherent change set.
+
+## Lane Positioning
+
+- Primary throughput lane: OpenCode (`opencode run` / `opencode serve`)
+- Reliability backstop lane: cc-glm (`cc-glm-job.sh`) with baseline/integrity/feature-key gates
+- Use cc-glm when OpenCode misses SLOs, fails governance gates, or the wave is marked critical
 
 ## When To Use
 
@@ -91,9 +97,9 @@ Put mini-plan in Beads notes instead of file:
 
 **Rule**: 1 agent per repo or coherent change set, NOT 1 agent per file.
 
-### Step 3: Execute with cc-glm-job.sh (Primary)
+### Step 3: Execute with cc-glm-job.sh (Backstop Lane)
 
-**Local headless execution is the primary method:**
+**Local headless execution is the governed fallback method:**
 
 ```bash
 # Start a background job with PTY for reliable output capture
@@ -562,6 +568,73 @@ This allows monitors to distinguish:
 2. Blocked auth/model init → No LAUNCH_OK
 3. True dead process → No LAUNCH_OK, no output
 
+## V3.4 Deterministic Gates and JSON Automation
+
+### Deterministic Substates (No Ambiguous Running+Empty)
+
+When logs are empty, health/check now report explicit substates:
+
+```bash
+cc-glm-job.sh check --beads bd-xxx
+# launching|waiting_first_output|silent_mutation|stalled (plus reason code)
+```
+
+`silent_mutation` means the worktree changed even though no output was written to log.
+
+### Machine-Readable Status/Health/Check
+
+Use `--json` for automation loops:
+
+```bash
+cc-glm-job.sh status --json
+cc-glm-job.sh health --json
+cc-glm-job.sh check --beads bd-xxx --json
+```
+
+JSON includes stable fields:
+- `state`/`health`
+- `reason_code`
+- `mutation_count`
+- `log_bytes`
+- `cpu_time_seconds`
+- `pid_age_seconds`
+
+### Pre-Dispatch Baseline Gate
+
+Fail fast if runtime commit is behind required baseline:
+
+```bash
+cc-glm-job.sh baseline-gate --worktree /tmp/agents/bd-xxx/repo --required-baseline 40ffdc4
+cc-glm-job.sh baseline-gate --beads bd-xxx --required-baseline 40ffdc4 --json
+```
+
+You can enforce this automatically on start:
+
+```bash
+CC_GLM_REQUIRED_BASELINE=40ffdc4 cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt
+```
+
+### Post-Wave Integrity Gate
+
+Verify reported commit exists and is ancestor of branch head:
+
+```bash
+cc-glm-job.sh integrity-gate --worktree /tmp/agents/bd-xxx/repo --reported-commit <sha> --branch feature-bd-xxx
+cc-glm-job.sh integrity-gate --beads bd-xxx --reported-commit <sha> --json
+```
+
+### Feature-Key Governance Gate
+
+Validate task-specific `Feature-Key` trailers before PR creation:
+
+```bash
+cc-glm-job.sh feature-key-gate \
+  --worktree /tmp/agents/bd-xxx/repo \
+  --feature-key bd-xxx \
+  --branch feature-bd-xxx \
+  --base-branch master
+```
+
 ---
 
 ## Detection & Recovery Runbook
@@ -834,7 +907,7 @@ cc-glm-job.sh health --show-overrides
 
 ### dx-delegate Broken
 - **Symptom**: "Error: missing wrapper: ~/agent-skills/extended/cc-glm/scripts/cc-glm-headless.sh"
-- **Workaround**: Use `cc-glm-job.sh` directly (primary method above)
+- **Workaround**: Use `cc-glm-job.sh` directly (backstop method above)
 - **Status**: Deprecation pending
 
 ### Feature-Key Format

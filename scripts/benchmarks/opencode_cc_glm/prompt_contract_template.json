@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "name": "opencode-wave-contract-v1",
+  "description": "OpenCode wave prompt contract template for DX v8.x dispatch",
+  "contract": {
+    "file_allowlist": {
+      "description": "Files that the agent is permitted to modify",
+      "type": "array",
+      "items": "string",
+      "required": true,
+      "example": ["src/utils/semver.py", "tests/test_semver.py"]
+    },
+    "forbidden_patterns": {
+      "description": "Patterns that must never be modified",
+      "type": "array",
+      "items": "string",
+      "default": [".env*", "*.pem", "*.key", "secrets/*", ".git/*"]
+    },
+    "validation_commands": {
+      "description": "Commands to run for validation",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "command": "string",
+          "cwd": "string",
+          "expected_exit_code": "integer"
+        }
+      },
+      "example": [
+        {"command": "python3 -m py_compile src/utils/semver.py", "cwd": "."},
+        {"command": "pytest tests/test_semver.py -v", "cwd": "."}
+      ]
+    },
+    "commit_trailers": {
+      "description": "Required git commit trailers",
+      "type": "object",
+      "properties": {
+        "Feature-Key": {
+          "type": "string",
+          "pattern": "^bd-[a-z0-9]+(\\.[a-z0-9]+)*$",
+          "description": "Beads tracking ID (supports dotted children e.g. bd-xga8.10.5)"
+        },
+        "Agent": {
+          "type": "string",
+          "description": "Agent identifier"
+        }
+      },
+      "required": true
+    },
+    "output_schema": {
+      "description": "Expected JSON output schema for parser-safe automation",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["success", "partial", "failed"]
+        },
+        "files_modified": {
+          "type": "array",
+          "items": "string"
+        },
+        "files_created": {
+          "type": "array",
+          "items": "string"
+        },
+        "validation_results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "command": "string",
+              "exit_code": "integer",
+              "passed": "boolean"
+            }
+          }
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "errors": {
+          "type": "array",
+          "items": "string"
+        }
+      },
+      "required": ["status", "files_modified", "summary"]
+    }
+  },
+  "prompt_template": "You are implementing a batched task from a development plan.\n\n## Context\n- Plan: {{plan_file}}\n- Your Task: {{task_id}}\n- Dependencies: {{dependencies}}\n\n## Your Task\n- **repo**: {{repo_name}}\n- **location** (ONLY modify these files):\n  {{#each file_allowlist}}\n  - {{this}}\n  {{/each}}\n- **description**: {{description}}\n- **validation**: {{validation}}\n\n## CRITICAL RULES\n\n1. **FILE SCOPE**: You MUST ONLY modify files in the location list above.\n   - DO NOT touch any files not explicitly listed\n   - DO NOT create files outside the allowed paths\n   - Violation will cause scope_drift_failed gate failure\n\n2. **FORBIDDEN FILES**: Never modify these patterns:\n   {{#each forbidden_patterns}}\n   - {{this}}\n   {{/each}}\n\n3. **VALIDATION**: Before committing, run:\n   {{#each validation_commands}}\n   - `{{this.command}}` (expect exit code {{this.expected_exit_code}})\n   {{/each}}\n\n4. **COMMIT**: When done, commit with these trailers:\n   ```\n   Feature-Key: {{feature_key}}\n   Agent: {{agent_id}}\n   ```\n\n5. **OUTPUT**: Return JSON in this exact format:\n   ```json\n   {\n     \"status\": \"success|partial|failed\",\n     \"files_modified\": [\"list\", \"of\", \"files\"],\n     \"files_created\": [\"list\", \"of\", \"new\", \"files\"],\n     \"validation_results\": [\n       {\"command\": \"cmd\", \"exit_code\": 0, \"passed\": true}\n     ],\n     \"summary\": \"Brief summary of changes (max 500 chars)\",\n     \"errors\": []\n   }\n   ```\n\n## Instructions\n1. cd to worktree: cd {{worktree_path}}\n2. Read ALL files in location list first\n3. Implement changes for all acceptance criteria\n4. Keep work atomic and committable\n5. Run validation commands\n6. Commit with Feature-Key and Agent trailers\n7. DO NOT PUSH - orchestrator will push\n8. Return JSON summary",
+  "examples": [
+    {
+      "name": "Implement semver comparator",
+      "input": {
+        "plan_file": "/tmp/plan.md",
+        "task_id": "T1",
+        "dependencies": "None",
+        "repo_name": "agent-skills",
+        "file_allowlist": ["scripts/utils/semver.py", "tests/test_semver.py"],
+        "description": "Implement a semantic version comparator with full semver 2.0 support",
+        "validation": "Run pytest on test_semver.py",
+        "feature_key": "bd-f6fh",
+        "agent_id": "opencode-wave-1",
+        "worktree_path": "/tmp/agents/bd-f6fh/agent-skills"
+      },
+      "expected_output": {
+        "status": "success",
+        "files_modified": ["scripts/utils/semver.py"],
+        "files_created": ["tests/test_semver.py"],
+        "validation_results": [
+          {"command": "pytest tests/test_semver.py -v", "exit_code": 0, "passed": true}
+        ],
+        "summary": "Implemented semver comparator with prerelease support",
+        "errors": []
+      }
+    }
+  ]
+}
