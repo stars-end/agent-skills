@@ -2,9 +2,6 @@
 # dx-dispatch - Dispatch tasks via dx-runner (canonical) or legacy Python path
 # Part of agent-skills dx-* workflow
 #
-# Migration note: This script now prefers dx-runner. Set DX_DISPATCH_LEGACY=1
-# to use the old Python path (dx-dispatch.py).
-#
 # Usage:
 #   dx-dispatch <vm> "task description" [options]
 #   dx-dispatch --list
@@ -16,8 +13,62 @@ PYTHON_SCRIPT="${SCRIPT_DIR}/dx-dispatch.py"
 
 # Prefer dx-runner unless explicitly requested legacy mode
 if [[ "${DX_DISPATCH_LEGACY:-0}" != "1" && -x "$DX_RUNNER" ]]; then
-    # Forward to dx-dispatch-v2 compat shim which translates to dx-runner
-    exec "${SCRIPT_DIR}/dx-dispatch-v2" "$@"
+    # Translate legacy dx-dispatch commands to dx-runner
+    case "${1:-}" in
+        --list)
+            shift
+            exec "$DX_RUNNER" status "$@"
+            ;;
+        --status)
+            shift
+            exec "$DX_RUNNER" status "$@"
+            ;;
+        --help|-h)
+            echo "dx-dispatch - Dispatch tasks via dx-runner"
+            echo ""
+            echo "Usage:"
+            echo "  dx-dispatch <vm> <task> [options]   Dispatch task"
+            echo "  dx-dispatch --list                  List active jobs"
+            echo "  dx-dispatch --help                  Show this help"
+            echo ""
+            echo "Note: This is a compat wrapper around dx-runner."
+            echo "For full options, run: dx-runner --help"
+            exit 0
+            ;;
+        *)
+            # Build dx-runner command from legacy args
+            vm="${1:-}"
+            task="${2:-}"
+            if [[ -z "$vm" || -z "$task" ]]; then
+                echo "ERROR: dx-dispatch requires <vm> and <task>" >&2
+                exit 2
+            fi
+            shift 2
+            
+            # Map VM to provider
+            provider="opencode"
+            case "$vm" in
+                cc-glm|local) provider="cc-glm" ;;
+                gemini) provider="gemini" ;;
+            esac
+            
+            # Parse remaining options
+            beads_id=""
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --beads) beads_id="$2"; shift 2 ;;
+                    *) shift ;;
+                esac
+            done
+            
+            [[ -z "$beads_id" ]] && beads_id="dispatch-$(date +%Y%m%d%H%M%S)"
+            
+            prompt_file="/tmp/dx-dispatch-${beads_id}.prompt"
+            echo "$task" > "$prompt_file"
+            
+            exec "$DX_RUNNER" start --provider "$provider" --beads "$beads_id" --prompt-file "$prompt_file"
+            ;;
+    esac
 fi
 
 # Fallback to legacy Python path

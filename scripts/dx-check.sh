@@ -33,7 +33,7 @@ if [[ -z "${BEADS_DIR:-}" ]]; then
         echo -e "${RED}❌ FATAL: BEADS_DIR not set and default DB not found.${RESET}"
         echo "   Expected Beads DB at: $DEFAULT_BEADS_DIR"
         echo "   Action:"
-        echo "     1) Create it by running: cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh"
+        echo "     1) Clone bd repo: git clone git@github.com:stars-end/bd.git ~/bd"
         echo "     2) Persist: export BEADS_DIR=\"$DEFAULT_BEADS_DIR\""
         echo "     3) Persist: export BEADS_IGNORE_REPO_MISMATCH=1"
         exit 1
@@ -86,9 +86,8 @@ if [[ "${BEADS_DIR}" == "${DEFAULT_BEADS_DIR}" ]]; then
     if [[ ! -d "$HOME/bd/.git" ]]; then
         echo -e "${RED}❌ FATAL: BEADS_DIR points at $DEFAULT_BEADS_DIR but ~/bd is not a git repo.${RESET}"
         echo "   Action:"
-        echo "     1) Create repo dir: mkdir -p ~/bd"
-        echo "     2) Initialize (one-time): cd ~/agent-skills && ./scripts/migrate-to-external-beads.sh"
-        echo "     3) Configure remote sync: git -C ~/bd remote add origin git@github.com:stars-end/bd.git"
+        echo "     1) Clone bd repo: git clone git@github.com:stars-end/bd.git ~/bd"
+        echo "     2) Configure remote sync: git -C ~/bd remote add origin git@github.com:stars-end/bd.git"
         needs_fix=1
     elif ! git -C "$HOME/bd" remote get-url origin >/dev/null 2>&1; then
         echo -e "${RED}❌ FATAL: ~/bd has no 'origin' remote. Beads state will not sync across VMs.${RESET}"
