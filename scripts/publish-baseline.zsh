@@ -77,7 +77,18 @@ cd /tmp/agents/bd-xxxx/repo-name
 
 ### Dispatch Method
 
-**Primary: OpenCode (headless + server)**
+**Canonical: dx-runner (governed multi-provider runner)**
+
+\`\`\`bash
+# OpenCode throughput lane
+dx-runner start --provider opencode --beads bd-xxx --prompt-file /tmp/p.prompt
+
+# Shared monitoring/reporting
+dx-runner status --json
+dx-runner check --beads bd-xxx --json
+\`\`\`
+
+**Direct OpenCode lane (advanced, non-governed)**
 
 \`\`\`bash
 # Headless single-run lane
@@ -88,15 +99,15 @@ opencode serve --hostname 127.0.0.1 --port 4096
 opencode run --attach http://127.0.0.1:4096 -m zai-coding-plan/glm-5 "Implement task T2 from plan.md"
 \`\`\`
 
-**Reliability backstop: cc-glm-job.sh (governed fallback lane)**
+**Reliability backstop: cc-glm via dx-runner**
 
 \`\`\`bash
-# Start a governed fallback job
-CC_GLM_MODEL=glm-5 cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
+# Start governed fallback job
+dx-runner start --provider cc-glm --beads bd-xxx --prompt-file /tmp/p.prompt
 
 # Monitor fallback jobs
-cc-glm-job.sh status --json
-cc-glm-job.sh check --beads bd-xxx --json
+dx-runner status --json
+dx-runner check --beads bd-xxx --json
 \`\`\`
 
 **Optional: Task tool (Codex runtime only)**
@@ -119,7 +130,7 @@ Task:
   run_in_background: true
 \`\`\`
 
-**Cross-VM: dx-dispatch** (for remote execution only)
+**Cross-VM: dx-dispatch** (compat wrapper to \`dx-runner\` for remote execution)
 
 ### Monitoring (Simplified)
 
@@ -155,6 +166,7 @@ References:
 - \`~/agent-skills/docs/ENV_SOURCES_CONTRACT.md\`
 - \`~/agent-skills/docs/SECRET_MANAGEMENT.md\`
 - \`~/agent-skills/scripts/benchmarks/opencode_cc_glm/README.md\`
+- \`~/agent-skills/extended/dx-runner/SKILL.md\`
 - \`~/agent-skills/extended/cc-glm/SKILL.md\`
 
 Notes:

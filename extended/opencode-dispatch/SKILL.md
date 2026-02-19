@@ -9,6 +9,7 @@ allowed-tools:
 # opencode-dispatch
 
 OpenCode is the default execution lane for parallel workstreams.
+Use `dx-runner --provider opencode` as the governed default entrypoint.
 
 ## When To Use
 
@@ -25,7 +26,11 @@ OpenCode is the default execution lane for parallel workstreams.
 ## Standard Commands
 
 ```bash
-# Headless lane
+# Governed headless lane (canonical)
+dx-runner start --provider opencode --beads bd-xxx --prompt-file /tmp/task.prompt
+dx-runner check --beads bd-xxx --json
+
+# Direct headless lane (advanced)
 opencode run -m zai-coding-plan/glm-5 "Implement task T1 from plan.md"
 
 # Server lane (single host)

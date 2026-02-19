@@ -1,11 +1,11 @@
 ---
 name: multi-agent-dispatch
-description: Cross-VM task dispatch with OpenCode as the primary service and dx-dispatch as transport/orchestration. Supports OpenCode run/serve flows on canonical VMs, Jules Cloud dispatch for async work, and fleet orchestration. EPYC6 is currently disabled - see enablement gate.
+description: Cross-VM task dispatch with dx-runner as canonical governance runner and OpenCode as primary execution lane. Use dx-dispatch as compatibility transport/orchestration for remote fanout, Jules Cloud, and fleet workflows. EPYC6 is currently disabled - see enablement gate.
 ---
 
-# Multi-Agent Dispatch (OpenCode-Primary)
+# Multi-Agent Dispatch (dx-runner Canonical)
 
-OpenCode (`opencode run` / `opencode serve`) is the primary execution service. `dx-dispatch` is the canonical transport for cross-VM and cloud fanout.
+`dx-runner` is the canonical dispatch/governance surface. OpenCode (`opencode run` / `opencode serve`) remains the primary execution lane. `dx-dispatch` is a compatibility wrapper for cross-VM/cloud fanout workflows.
 
 ## Dispatch Lanes
 
@@ -21,7 +21,19 @@ OpenCode (`opencode run` / `opencode serve`) is the primary execution service. `
 
 ## Usage
 
-### SSH Dispatch (default)
+### Governed Local Dispatch (preferred)
+
+```bash
+# Start governed OpenCode wave
+dx-runner start --provider opencode --beads bd-123 --prompt-file /tmp/prompt.md
+
+# Shared status/check/report API
+dx-runner status --json
+dx-runner check --beads bd-123 --json
+dx-runner report --beads bd-123 --format json
+```
+
+### SSH Dispatch (dx-dispatch compatibility wrapper)
 
 ```bash
 # Dispatch to canonical VMs (use epyc12, NOT epyc6)
