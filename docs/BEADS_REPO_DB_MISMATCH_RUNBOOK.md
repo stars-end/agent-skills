@@ -162,6 +162,81 @@ bd show <known-issue-id>
 bd comments add <known-issue-id> "dx test"
 ```
 
+## Evidence Collection Template
+
+When remediating on a remote VM (e.g., EPYC12), collect this evidence:
+
+### Before Remediation
+
+```bash
+# Record the mismatch error
+echo "=== BEFORE REMEDIATION ===" > /tmp/beads-remediation-evidence.txt
+echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> /tmp/beads-remediation-evidence.txt
+echo "" >> /tmp/beads-remediation-evidence.txt
+
+# Capture the mismatch error
+echo "--- bd status output ---" >> /tmp/beads-remediation-evidence.txt
+cd ~/agent-skills && bd status 2>&1 >> /tmp/beads-remediation-evidence.txt || true
+echo "" >> /tmp/beads-remediation-evidence.txt
+
+# Capture repo IDs
+echo "--- Repo IDs ---" >> /tmp/beads-remediation-evidence.txt
+echo "Git toplevel: $(cd ~/agent-skills && git rev-parse --show-toplevel)" >> /tmp/beads-remediation-evidence.txt
+echo "Beads db-config.json repo_id: $(cd ~/agent-skills && cat .beads/db-config.json 2>/dev/null | jq -r '.repo_id // "missing"')" >> /tmp/beads-remediation-evidence.txt
+echo "" >> /tmp/beads-remediation-evidence.txt
+
+# Repeat for prime-radiant-ai
+echo "--- prime-radiant-ai status ---" >> /tmp/beads-remediation-evidence.txt
+cd ~/prime-radiant-ai && bd status 2>&1 >> /tmp/beads-remediation-evidence.txt || true
+```
+
+### Apply Remediation
+
+```bash
+# Apply the fix
+cd ~/agent-skills && rm -rf .beads && bd init && bd sync
+cd ~/prime-radiant-ai && rm -rf .beads && bd init && bd sync
+```
+
+### After Remediation
+
+```bash
+# Capture success evidence
+echo "=== AFTER REMEDIATION ===" >> /tmp/beads-remediation-evidence.txt
+echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> /tmp/beads-remediation-evidence.txt
+echo "" >> /tmp/beads-remediation-evidence.txt
+
+echo "--- agent-skills bd status ---" >> /tmp/beads-remediation-evidence.txt
+cd ~/agent-skills && bd status 2>&1 >> /tmp/beads-remediation-evidence.txt
+echo "" >> /tmp/beads-remediation-evidence.txt
+
+echo "--- agent-skills bd show (first issue) ---" >> /tmp/beads-remediation-evidence.txt
+cd ~/agent-skills && bd status --json 2>/dev/null | jq -r '.issues[0].id' | head -1 | xargs -I{} bd show {} 2>&1 >> /tmp/beads-remediation-evidence.txt || echo "No issues found" >> /tmp/beads-remediation-evidence.txt
+echo "" >> /tmp/beads-remediation-evidence.txt
+
+echo "--- prime-radiant-ai bd status ---" >> /tmp/beads-remediation-evidence.txt
+cd ~/prime-radiant-ai && bd status 2>&1 >> /tmp/beads-remediation-evidence.txt
+
+# Display evidence
+cat /tmp/beads-remediation-evidence.txt
+```
+
+### Expected Successful Output
+
+After remediation, `bd status` should show output like:
+```
+Project: agent-skills
+Status: connected
+Issues: 42 open
+```
+
+NOT:
+```
+DATABASE MISMATCH DETECTED
+Database repo ID: 08f75540
+Current repo ID: fbeba79b
+```
+
 ## Prevention
 
 1. **Never copy `.beads` directories** between VMs/repos

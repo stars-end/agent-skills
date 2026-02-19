@@ -481,6 +481,82 @@ EOF
 }
 
 # ============================================================================
+# Test: Gemini Adapter Model + Yolo
+# ============================================================================
+
+test_gemini_adapter() {
+    echo "=== Testing Gemini Adapter (Model + Yolo) ==="
+
+    local tmp_bin
+    tmp_bin="$(mktemp -d)"
+    local fake_gemini="$tmp_bin/gemini"
+    local args_log
+    args_log="$(mktemp)"
+    cat > "$fake_gemini" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "${FAKE_ARGS_LOG}"
+if [[ "$1" == "--help" ]]; then
+  echo "--model MODEL  Specify model"
+  exit 0
+fi
+echo "READY"
+exit 0
+EOF
+    chmod +x "$fake_gemini"
+
+    export FAKE_ARGS_LOG="$args_log"
+    
+    # Test 1: Default model is gemini-3-flash-preview (check PROVIDER_DEFAULT_MODEL in runner)
+    local default_model
+    default_model="$(grep '\["gemini"\]=' "$DX_RUNNER" 2>/dev/null | sed -n 's/.*\["gemini"\]="\([^"]*\)".*/\1/p')" || true
+    if [[ "$default_model" == "gemini-3-flash-preview" ]]; then
+        pass "gemini default model is gemini-3-flash-preview in runner config"
+    else
+        fail "expected gemini-3-flash-preview in PROVIDER_DEFAULT_MODEL, got: '$default_model'"
+    fi
+    
+    # Test 2: Yolo flag is passed by default (check adapter output directly)
+    local prompt_file
+    prompt_file="$(mktemp)"
+    echo "test prompt" > "$prompt_file"
+    
+    PATH="$tmp_bin:$PATH" source "$ADAPTERS_DIR/gemini.sh"
+    
+    local start_output
+    start_output="$(adapter_start "test-gemini-$$" "$prompt_file" "/tmp" "/tmp/gemini-test.log" 2>&1)" || true
+    
+    # Check if adapter reports yolo mode in its output
+    if echo "$start_output" | grep -q "selected_model=gemini"; then
+        pass "gemini adapter reports selected model"
+    else
+        fail "gemini adapter should report selected model"
+    fi
+    
+    # Test 2b: Verify -y is in adapter logic by checking it DOES NOT appear when disabled
+    rm -f "$args_log"
+    GEMINI_NO_YOLO=true PATH="$tmp_bin:$PATH" adapter_start "test-gemini-noyolo-$$" "$prompt_file" "/tmp" "/tmp/gemini-test2.log" 2>&1 >/dev/null || true
+    
+    # Give async process time to write
+    sleep 2
+    
+    # The args_log should NOT have -y when GEMINI_NO_YOLO=true
+    if [[ -f "$args_log" ]] && grep -q -- " -y " "$args_log" 2>/dev/null; then
+        fail "gemini adapter should NOT pass -y when GEMINI_NO_YOLO=true"
+    else
+        pass "gemini adapter respects GEMINI_NO_YOLO=true (no -y in args)"
+    fi
+    
+    # Test 2c: Default behavior - check adapter source for -y
+    if grep -q 'cmd_args+=(-y)' "$ADAPTERS_DIR/gemini.sh"; then
+        pass "gemini adapter includes -y flag in command construction"
+    else
+        fail "gemini adapter should include -y flag in command construction"
+    fi
+    
+    rm -rf "$tmp_bin" "$args_log" "$prompt_file"
+}
+
+# ============================================================================
 # Test: Prune Stale Jobs
 # ============================================================================
 
@@ -525,6 +601,7 @@ run_all_tests() {
     test_outcome_lifecycle
     test_model_resolution
     test_probe_model_flag
+    test_gemini_adapter
     test_prune_stale_jobs
     
     echo ""

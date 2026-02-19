@@ -265,10 +265,19 @@ write_mutation_marker() {
     provider="$(find_provider_for_beads "$beads")"
     job_paths "$beads" "$provider"
 
+    local first_checked_at=""
+    if [[ -f "$MUTATION_FILE" ]]; then
+        first_checked_at="$(meta_get "$MUTATION_FILE" "first_checked_at" 2>/dev/null || true)"
+    fi
+    if [[ -z "$first_checked_at" ]]; then
+        first_checked_at="$(now_utc)"
+    fi
+
     cat > "$MUTATION_FILE" <<EOF
 beads=$beads
 mutation_count=$count
-checked_at=$(now_utc)
+first_checked_at=$first_checked_at
+last_checked_at=$(now_utc)
 EOF
 }
 
@@ -1061,12 +1070,14 @@ check_timeout_conditions() {
     
     local mutation_count
     mutation_count="$(check_mutations "$beads")"
-    local last_mutation_at now last_mut_epoch no_mut_sec
-    last_mutation_at="$(meta_get "$MUTATION_FILE" "checked_at" 2>/dev/null || true)"
+    write_mutation_marker "$beads" "$mutation_count"
     
-    if [[ "$mutation_count" -eq 0 && -n "$last_mutation_at" ]]; then
-        last_mut_epoch="$(parse_utc_epoch "${last_mutation_at}" 2>/dev/null || echo "$now_epoch")"
-        no_mut_sec=$((now_epoch - last_mut_epoch))
+    local first_mutation_check first_check_epoch no_mut_sec
+    first_mutation_check="$(meta_get "$MUTATION_FILE" "first_checked_at" 2>/dev/null || true)"
+    
+    if [[ "$mutation_count" -eq 0 && -n "$first_mutation_check" ]]; then
+        first_check_epoch="$(parse_utc_epoch "${first_mutation_check}" 2>/dev/null || echo "$now_epoch")"
+        no_mut_sec=$((now_epoch - first_check_epoch))
         local no_mut_timeout_sec=$((NO_MUTATION_TIMEOUT_MINUTES * 60))
         if [[ "$no_mut_sec" -gt "$no_mut_timeout_sec" ]]; then
             echo "no_mutation_timeout|${no_mut_sec}|${no_mut_timeout_sec}"
@@ -1206,6 +1217,8 @@ REPORT_FORMAT="json"
 MODEL_ID=""
 RECENT_COUNT=0
 COMPACT_LOGS=false
+REASON_CODE=""
+EXIT_CODE=""
 
 MAX_RUNTIME_MINUTES="${DX_RUNNER_MAX_RUNTIME_MINUTES:-120}"
 NO_MUTATION_TIMEOUT_MINUTES="${DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES:-30}"
@@ -1313,6 +1326,14 @@ parse_common_args() {
                 NO_MUTATION_TIMEOUT_MINUTES="${2:-30}"
                 shift 2
                 ;;
+            --reason)
+                REASON_CODE="${2:-forced_finalization}"
+                shift 2
+                ;;
+            --exit-code)
+                EXIT_CODE="${2:-1}"
+                shift 2
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -1346,7 +1367,7 @@ Usage:
   dx-runner baseline-gate [--beads <id> | --worktree <path>] --required-baseline <sha>
   dx-runner integrity-gate [--beads <id> | --worktree <path>] --reported-commit <sha>
   dx-runner feature-key-gate [--beads <id> | --worktree <path>] --feature-key <bd-id>
-  dx-runner finalize --beads <id> [--reason <code>]
+  dx-runner finalize --beads <id> [--reason <code>] [--exit-code <n>]
 
 Providers:
   cc-glm    Claude via Z.ai (reliability backstop)
@@ -1580,46 +1601,73 @@ status_line() {
 status_cmd() {
     parse_common_args "$@"
     
-    if [[ "$OUTPUT_JSON" == "true" ]]; then
-        local rows=()
-        if [[ -n "$BEADS" ]]; then
-            rows+=("$(status_line "$BEADS")")
-        else
-            shopt -s nullglob
-            for dir in /tmp/dx-runner/*/; do
-                [[ -d "$dir" ]] || continue
-                for pidf in "$dir"/*.pid; do
-                    local beads
-                    beads="$(basename "$pidf" .pid)"
-                    [[ "$beads" == *.monitor ]] && continue
-                    rows+=("$(status_line "$beads")")
-                done
+    local active_rows=()
+    local recent_rows=()
+    
+    shopt -s nullglob
+    
+    # Collect active jobs
+    for dir in /tmp/dx-runner/*/; do
+        [[ -d "$dir" ]] || continue
+        for pidf in "$dir"/*.pid; do
+            local beads
+            beads="$(basename "$pidf" .pid)"
+            [[ "$beads" == *.monitor ]] && continue
+            active_rows+=("$(status_line "$beads")")
+        done
+    done
+    for pidf in /tmp/dx-runner/*.pid; do
+        local beads
+        beads="$(basename "$pidf" .pid)"
+        [[ "$beads" == *.monitor ]] && continue
+        active_rows+=("$(status_line "$beads")")
+    done
+    
+    # Collect and sort recent jobs by completion time
+    if [[ "$RECENT_COUNT" -gt 0 ]]; then
+        local recent_with_mtime=()
+        for dir in /tmp/dx-runner/*/; do
+            [[ -d "$dir" ]] || continue
+            for outcomef in "$dir"/*.outcome; do
+                local beads mtime
+                beads="$(basename "$outcomef" .outcome)"
+                [[ -f "${dir}${beads}.pid" ]] && continue
+                mtime="$(file_mtime_epoch "$outcomef" 2>/dev/null || echo "0")"
+                recent_with_mtime+=("${mtime}|${beads}")
             done
-            for pidf in /tmp/dx-runner/*.pid; do
-                local beads
-                beads="$(basename "$pidf" .pid)"
-                [[ "$beads" == *.monitor ]] && continue
-                rows+=("$(status_line "$beads")")
+        done
+        for outcomef in /tmp/dx-runner/*.outcome; do
+            local beads mtime already_seen
+            beads="$(basename "$outcomef" .outcome)"
+            [[ -f "/tmp/dx-runner/${beads}.pid" ]] && continue
+            already_seen=0
+            for entry in "${recent_with_mtime[@]}"; do
+                [[ "${entry##*|}" == "$beads" ]] && already_seen=1 && break
             done
-            if [[ "$RECENT_COUNT" -gt 0 ]]; then
-                for dir in /tmp/dx-runner/*/; do
-                    [[ -d "$dir" ]] || continue
-                    for outcomef in "$dir"/*.outcome; do
-                        local beads
-                        beads="$(basename "$outcomef" .outcome)"
-                        [[ -f "${dir}${beads}.pid" ]] && continue
-                        rows+=("$(status_line "$beads")")
-                    done
-                done
-                for outcomef in /tmp/dx-runner/*.outcome; do
-                    local beads
-                    beads="$(basename "$outcomef" .outcome)"
-                    [[ -f "/tmp/dx-runner/${beads}.pid" ]] && continue
-                    rows+=("$(status_line "$beads")")
-                done
-            fi
+            [[ "$already_seen" -eq 1 ]] && continue
+            mtime="$(file_mtime_epoch "$outcomef" 2>/dev/null || echo "0")"
+            recent_with_mtime+=("${mtime}|${beads}")
+        done
+        
+        # Sort by mtime descending (newest first) and take top N
+        local sorted_recent
+        if [[ ${#recent_with_mtime[@]} -gt 0 ]]; then
+            mapfile -t sorted_recent < <(printf '%s\n' "${recent_with_mtime[@]}" | sort -t'|' -k1 -rn | head -n "$RECENT_COUNT")
+            for entry in "${sorted_recent[@]}"; do
+                local beads="${entry##*|}"
+                recent_rows+=("$(status_line "$beads")")
+            done
         fi
-        printf '{"generated_at":"%s","jobs":[%s]}\n' "$(now_utc)" "$(join_by "," "${rows[@]}")"
+    fi
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        if [[ -n "$BEADS" ]]; then
+            printf '{"generated_at":"%s","jobs":[%s]}\n' "$(now_utc)" "$(status_line "$BEADS")"
+            return 0
+        fi
+        local all_rows=("${active_rows[@]}")
+        all_rows+=("${recent_rows[@]}")
+        printf '{"generated_at":"%s","jobs":[%s]}\n' "$(now_utc)" "$(join_by "," "${all_rows[@]}")"
         return 0
     fi
     
@@ -1631,68 +1679,19 @@ status_cmd() {
         return 0
     fi
     
-    shopt -s nullglob
-    local found=0
-    local active_jobs=()
-    local recent_jobs=()
-    
-    for dir in /tmp/dx-runner/*/; do
-        [[ -d "$dir" ]] || continue
-        for pidf in "$dir"/*.pid; do
-            found=1
-            local beads
-            beads="$(basename "$pidf" .pid)"
-            [[ "$beads" == *.monitor ]] && continue
-            active_jobs+=("$beads")
-        done
+    for row in "${active_rows[@]}"; do
+        echo "$row"
     done
     
-    for pidf in /tmp/dx-runner/*.pid; do
-        found=1
-        local beads
-        beads="$(basename "$pidf" .pid)"
-        [[ "$beads" == *.monitor ]] && continue
-        active_jobs+=("$beads")
-    done
-    
-    for beads in "${active_jobs[@]}"; do
-        status_line "$beads"
-    done
-    
-    if [[ "$RECENT_COUNT" -gt 0 ]]; then
-        for dir in /tmp/dx-runner/*/; do
-            [[ -d "$dir" ]] || continue
-            for outcomef in "$dir"/*.outcome; do
-                local beads
-                beads="$(basename "$outcomef" .outcome)"
-                [[ -f "${dir}${beads}.pid" ]] && continue
-                recent_jobs+=("$beads")
-            done
+    if [[ ${#recent_rows[@]} -gt 0 ]]; then
+        echo ""
+        echo "=== Recently Completed (last $RECENT_COUNT) ==="
+        for row in "${recent_rows[@]}"; do
+            echo "$row"
         done
-        for outcomef in /tmp/dx-runner/*.outcome; do
-            local beads
-            beads="$(basename "$outcomef" .outcome)"
-            [[ -f "/tmp/dx-runner/${beads}.pid" ]] && continue
-            local already_seen=0
-            for r in "${recent_jobs[@]}"; do
-                [[ "$r" == "$beads" ]] && already_seen=1 && break
-            done
-            [[ "$already_seen" -eq 0 ]] && recent_jobs+=("$beads")
-        done
-        
-        if [[ ${#recent_jobs[@]} -gt 0 ]]; then
-            echo ""
-            echo "=== Recently Completed (last $RECENT_COUNT) ==="
-            local count=0
-            for beads in "${recent_jobs[@]}"; do
-                [[ "$count" -lt "$RECENT_COUNT" ]] || break
-                status_line "$beads"
-                count=$((count + 1))
-            done
-        fi
     fi
     
-    if [[ "$found" -eq 0 && ${#recent_jobs[@]} -eq 0 ]]; then
+    if [[ ${#active_rows[@]} -eq 0 && ${#recent_rows[@]} -eq 0 ]]; then
         echo "(no jobs found in /tmp/dx-runner)"
     fi
 }
