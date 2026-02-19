@@ -2221,8 +2221,19 @@ finalize_cmd() {
     [[ -n "$BEADS" ]] || { echo "finalize requires --beads" >&2; exit 2; }
     
     local provider
-    provider="$(find_provider_for_beads "$BEADS")"
+    provider="$(find_provider_for_beads "$BEADS")" || true
+    
+    if [[ -z "$provider" ]]; then
+        echo "finalize failed: no job metadata found for beads=$BEADS" >&2
+        exit 1
+    fi
+    
     job_paths "$BEADS" "$provider"
+    
+    if [[ ! -f "$META_FILE" ]]; then
+        echo "finalize failed: no metadata file for beads=$BEADS provider=$provider" >&2
+        exit 1
+    fi
     
     local reason_code="${REASON_CODE:-forced_finalization}"
     local exit_code="${EXIT_CODE:-1}"
