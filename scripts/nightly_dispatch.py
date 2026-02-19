@@ -22,7 +22,7 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -226,12 +226,18 @@ class NightlyDispatcher:
         self.github_token = os.environ.get("GITHUB_TOKEN")
 
     def run_preflight(self, provider: str, model: str) -> PreflightResult:
-        """Run preflight check for a provider."""
+        """Run preflight check for a provider with strict model gating."""
         logger.info(f"Running preflight for {provider} with model {model}")
 
         try:
+            # Include --model flag to enforce strict model gating
             result = subprocess.run(
-                [str(self.dx_runner_path), "preflight", f"--provider={provider}"],
+                [
+                    str(self.dx_runner_path),
+                    "preflight",
+                    f"--provider={provider}",
+                    f"--model={model}",
+                ],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -378,7 +384,7 @@ class NightlyDispatcher:
             # Cleanup on failure
             try:
                 os.unlink(path_str)
-            except:
+            except OSError:
                 pass
             raise
 
@@ -428,18 +434,20 @@ class NightlyDispatcher:
             return False
 
     def dispatch_with_runner(
-        self, beads_id: str, provider: str, prompt_file: Path
+        self, beads_id: str, provider: str, model: str, prompt_file: Path
     ) -> bool:
-        """Dispatch a job using dx-runner."""
-        logger.info(f"Dispatching {beads_id} via {provider}")
+        """Dispatch a job using dx-runner with strict model gating."""
+        logger.info(f"Dispatching {beads_id} via {provider} with model {model}")
 
         try:
+            # Include --model flag to enforce strict model gating
             result = subprocess.run(
                 [
                     str(self.dx_runner_path),
                     "start",
                     f"--beads={beads_id}",
                     f"--provider={provider}",
+                    f"--model={model}",
                     f"--prompt-file={prompt_file}",
                 ],
                 capture_output=True,
@@ -495,7 +503,7 @@ class NightlyDispatcher:
 
         try:
             result = subprocess.run(
-                ["bd", "list", "--status=open", "--type=bug"],
+                ["bd", "list", "--status=open", "--type=bug", "--json"],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -508,8 +516,8 @@ class NightlyDispatcher:
             # Parse JSON output
             bugs = json.loads(result.stdout) if result.stdout else []
 
-            # Filter for P0/P1 priority
-            critical_bugs = [b for b in bugs if b.get("priority") in ["P0", "P1"]]
+            # Filter for P0/P1 priority (Beads uses numeric: 0=P0, 1=P1, 2=P2, etc.)
+            critical_bugs = [b for b in bugs if b.get("priority") in [0, 1]]
 
             logger.info(f"Found {len(critical_bugs)} P0/P1 bugs")
             return critical_bugs
@@ -602,19 +610,20 @@ Steps:
                 logger.info(f"  - {bug.get('id')}: {bug.get('title')}")
             return
 
-        # Process dispatches
-        for bug in dispatches_to_run:
+        # Process dispatches concurrently with max_parallel limit
+        def process_bug(bug: Dict[str, Any]) -> None:
+            """Process a single bug dispatch."""
             beads_id = bug.get("id")
             if not beads_id:
                 logger.warning(f"Bug missing ID, skipping: {bug}")
-                continue
+                return
 
             logger.info(f"Processing {beads_id}")
 
             # Claim issue
             if not self.claim_issue(beads_id):
                 logger.info(f"Skipping {beads_id} - already claimed")
-                continue
+                return
 
             # Build prompt
             prompt = self.build_fix_prompt(bug)
@@ -627,8 +636,10 @@ Steps:
                 # Select provider (may have changed since health check)
                 provider, model, _ = self.select_provider()
 
-                # Dispatch
-                success = self.dispatch_with_runner(beads_id, provider, prompt_file)
+                # Dispatch with model enforcement
+                success = self.dispatch_with_runner(
+                    beads_id, provider, model, prompt_file
+                )
 
                 if success:
                     self.alerter.alert_dispatch_complete(beads_id, provider, True)
@@ -641,6 +652,18 @@ Steps:
             finally:
                 if prompt_file:
                     self.cleanup_prompt_file(prompt_file)
+
+        # Use ThreadPoolExecutor for concurrent processing with max_parallel limit
+        with ThreadPoolExecutor(max_workers=max_parallel) as executor:
+            futures = {
+                executor.submit(process_bug, bug): bug for bug in dispatches_to_run
+            }
+            for future in as_completed(futures):
+                bug = futures[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    logger.error(f"Bug {bug.get('id')} generated an exception: {e}")
 
         logger.info("🌙 Nightly Dispatch complete")
 

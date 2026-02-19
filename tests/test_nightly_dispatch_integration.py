@@ -81,8 +81,10 @@ def test_dx_runner_workflow_smoke():
         if not provider:
             pytest.skip("No providers available for testing")
 
-        # Test start with --prompt-file
-        success = dispatcher.dispatch_with_runner(beads_id, provider, prompt_file)
+        # Test start with --prompt-file and model
+        success = dispatcher.dispatch_with_runner(
+            beads_id, provider, "test-model", prompt_file
+        )
 
         if success:
             # Test check on the session
@@ -95,7 +97,7 @@ def test_dx_runner_workflow_smoke():
         # Cleanup temp prompt file
         try:
             prompt_file.unlink()
-        except:
+        except OSError:
             pass
 
 
