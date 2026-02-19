@@ -335,8 +335,38 @@ check_heartbeat_age() {
 }
 
 # ============================================================================
-# PROCESS STATE
+# PROCESS CONTROL
 # ============================================================================
+
+stop_job_internal() {
+    local beads="$1"
+    local provider="${2:-}"
+    [[ -n "$provider" ]] || provider="$(find_provider_for_beads "$beads")"
+    job_paths "$beads" "$provider"
+    
+    local pid=""
+    if [[ -f "$PID_FILE" ]]; then
+        pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    fi
+    
+    if [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]] && ps -p "$pid" >/dev/null 2>&1; then
+        kill "$pid" 2>/dev/null || true
+        sleep 1
+        if ps -p "$pid" >/dev/null 2>&1; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    fi
+    
+    if [[ -f "$MONITOR_PID_FILE" ]]; then
+        local mpid
+        mpid="$(cat "$MONITOR_PID_FILE" 2>/dev/null || true)"
+        if [[ "$mpid" =~ ^[0-9]+$ ]] && ps -p "$mpid" >/dev/null 2>&1; then
+            kill "$mpid" 2>/dev/null || true
+        fi
+    fi
+    
+    rm -f "$PID_FILE" "$MONITOR_PID_FILE"
+}
 
 process_state() {
     local pid="$1"
@@ -1459,6 +1489,12 @@ start_cmd() {
         exit 1
     fi
     
+    # Preflight gate
+    if ! unified_preflight "$PROVIDER"; then
+        echo "preflight gate failed for provider $PROVIDER" >&2
+        exit 21
+    fi
+
     # Permission gate (bd-cbsb.16)
     if [[ -n "$WORKTREE" ]]; then
         local perm_result
@@ -1774,7 +1810,8 @@ check_cmd() {
     fi
     
     case "$state" in
-        stalled|no_op) exit 2 ;;
+        stalled) exit 2 ;;
+        no_op) exit 23 ;;
         exited_err) exit 3 ;;
         blocked) exit 3 ;;
         exited_ok) exit 0 ;;
@@ -1790,34 +1827,14 @@ stop_cmd() {
     provider="$(find_provider_for_beads "$BEADS")"
     job_paths "$BEADS" "$provider"
     
-    if [[ ! -f "$PID_FILE" ]]; then
-        echo "job $BEADS has no PID file"
+    if [[ ! -f "$PID_FILE" && ! -f "$MONITOR_PID_FILE" ]]; then
+        echo "job $BEADS has no active process or monitor"
         exit 1
     fi
     
-    local pid
-    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-    
-    if [[ -n "$pid" ]] && ps -p "$pid" >/dev/null 2>&1; then
-        kill "$pid" 2>/dev/null || true
-        sleep 1
-        if ps -p "$pid" >/dev/null 2>&1; then
-            kill -9 "$pid" 2>/dev/null || true
-        fi
-        persist_outcome "$BEADS" 137 "$OUTCOME_FILE" "$META_FILE" "manual_stop"
-        echo "stopped beads=$BEADS pid=$pid"
-    else
-        echo "job $BEADS already stopped"
-    fi
-    
-    if [[ -f "$MONITOR_PID_FILE" ]]; then
-        local mpid
-        mpid="$(cat "$MONITOR_PID_FILE" 2>/dev/null || true)"
-        if [[ "$mpid" =~ ^[0-9]+$ ]] && ps -p "$mpid" >/dev/null 2>&1; then
-            kill "$mpid" 2>/dev/null || true
-        fi
-    fi
-    rm -f "$PID_FILE" "$MONITOR_PID_FILE"
+    stop_job_internal "$BEADS" "$provider"
+    persist_outcome "$BEADS" 137 "$OUTCOME_FILE" "$META_FILE" "manual_stop"
+    echo "stopped beads=$BEADS"
 }
 
 compact_log_filter() {
@@ -1928,15 +1945,7 @@ restart_cmd() {
     meta_set "$META_FILE" "retries" "$retries"
     
     # Stop existing
-    if [[ -f "$PID_FILE" ]]; then
-        local pid
-        pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-        if [[ -n "$pid" ]] && ps -p "$pid" >/dev/null 2>&1; then
-            kill "$pid" 2>/dev/null || true
-            sleep 1
-        fi
-        rm -f "$PID_FILE"
-    fi
+    stop_job_internal "$BEADS" "$provider"
     
     # Rotate logs
     rotate_log "$LOG_FILE"
@@ -2124,56 +2133,57 @@ watchdog_cmd() {
     while true; do
         shopt -s nullglob
         
-        for dir in /tmp/dx-runner/*/; do
-            [[ -d "$dir" ]] || continue
-            for pidf in "$dir"/*.pid; do
-                local beads provider
-                beads="$(basename "$pidf" .pid)"
-                [[ "$beads" == *.monitor ]] && continue
-                provider="$(meta_get "${dir}${beads}.meta" "provider" 2>/dev/null || true)"
+        for pidf in /tmp/dx-runner/*.pid /tmp/dx-runner/*/*.pid; do
+            [[ -f "$pidf" ]] || continue
+            local beads
+            beads="$(basename "$pidf" .pid)"
+            [[ "$beads" == *.monitor ]] && continue
+            
+            local provider
+            provider="$(find_provider_for_beads "$beads")"
+            job_paths "$beads" "$provider"
+            
+            local detail state reason
+            detail="$(job_health_detail "$beads" "$((STALL_MINUTES * 60))")"
+            IFS='|' read -r state reason _ _ _ _ _ <<< "$detail"
+            
+            echo "$(now_utc) [$beads] $state ($reason)"
+            
+            local timeout_result=""
+            timeout_result="$(check_timeout_conditions "$beads" 2>/dev/null)" || true
+            if [[ -n "$timeout_result" ]]; then
+                local timeout_type timeout_val timeout_thresh
+                IFS='|' read -r timeout_type timeout_val timeout_thresh <<< "$timeout_result"
+                echo "$(now_utc) [$beads] TIMEOUT: $timeout_type (${timeout_val}s > ${timeout_thresh}s)"
                 
-                local detail state reason
-                detail="$(job_health_detail "$beads" "$((STALL_MINUTES * 60))")"
-                IFS='|' read -r state reason _ _ _ _ _ <<< "$detail"
+                local retries
+                retries="$(meta_get "$META_FILE" "retries")"
+                retries="${retries:-0}"
                 
-                echo "$(now_utc) [$beads] $state ($reason)"
-                
-                local timeout_result=""
-                timeout_result="$(check_timeout_conditions "$beads" 2>/dev/null)" || true
-                if [[ -n "$timeout_result" ]]; then
-                    local timeout_type timeout_val timeout_thresh
-                    IFS='|' read -r timeout_type timeout_val timeout_thresh <<< "$timeout_result"
-                    echo "$(now_utc) [$beads] TIMEOUT: $timeout_type (${timeout_val}s > ${timeout_thresh}s)"
-                    
-                    local retries
-                    retries="$(meta_get "${dir}${beads}.meta" "retries")"
-                    retries="${retries:-0}"
-                    
-                    if [[ "$retries" -lt "$WATCHDOG_MAX_RETRIES" ]]; then
-                        echo "$(now_utc) [$beads] force finalizing due to $timeout_type"
-                        force_finalize_job "$beads" "$provider" "$timeout_type" 124
-                    else
-                        echo "$(now_utc) [$beads] marking as blocked (max retries reached)"
-                        meta_set "${dir}${beads}.meta" "blocked" "true"
-                        force_finalize_job "$beads" "$provider" "blocked_${timeout_type}" 1
-                    fi
-                    continue
+                if [[ "$retries" -lt "$WATCHDOG_MAX_RETRIES" ]]; then
+                    echo "$(now_utc) [$beads] force finalizing due to $timeout_type"
+                    force_finalize_job "$beads" "$provider" "$timeout_type" 124
+                else
+                    echo "$(now_utc) [$beads] marking as blocked (max retries reached)"
+                    meta_set "$META_FILE" "blocked" "true"
+                    force_finalize_job "$beads" "$provider" "blocked_${timeout_type}" 1
                 fi
+                continue
+            fi
+            
+            if [[ "$state" == "stalled" || "$state" == "no_op" ]]; then
+                local retries
+                retries="$(meta_get "$META_FILE" "retries")"
+                retries="${retries:-0}"
                 
-                if [[ "$state" == "stalled" || "$state" == "no_op" ]]; then
-                    local retries
-                    retries="$(meta_get "${dir}${beads}.meta" "retries")"
-                    retries="${retries:-0}"
-                    
-                    if [[ "$retries" -lt "$WATCHDOG_MAX_RETRIES" ]]; then
-                        echo "$(now_utc) [$beads] restarting (retry $((retries + 1))/$WATCHDOG_MAX_RETRIES)"
-                        BEADS="$beads" restart_cmd
-                    else
-                        echo "$(now_utc) [$beads] marking as blocked (max retries reached)"
-                        meta_set "${dir}${beads}.meta" "blocked" "true"
-                    fi
+                if [[ "$retries" -lt "$WATCHDOG_MAX_RETRIES" ]]; then
+                    echo "$(now_utc) [$beads] restarting (retry $((retries + 1))/$WATCHDOG_MAX_RETRIES)"
+                    BEADS="$beads" restart_cmd
+                else
+                    echo "$(now_utc) [$beads] marking as blocked (max retries reached)"
+                    meta_set "$META_FILE" "blocked" "true"
                 fi
-            done
+            fi
         done
         
         sleep "$WATCHDOG_INTERVAL"
