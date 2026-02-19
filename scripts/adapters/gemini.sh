@@ -44,13 +44,24 @@ adapter_preflight() {
         errors=$((errors + 1))
     fi
     
-    # Check 2: API key
-    echo -n "api key: "
+    # Check 2: Authentication
+    echo -n "authentication: "
+    local auth_ok=0
     if [[ -n "${GEMINI_API_KEY:-}" || -n "${GOOGLE_API_KEY:-}" ]]; then
-        echo "OK (env var set)"
-    else
-        echo "MISSING"
-        echo "  ERROR: GEMINI_API_KEY or GOOGLE_API_KEY not set"
+        echo "OK (env key mode)"
+        auth_ok=1
+    elif [[ -n "$gemini_bin" ]]; then
+        # CLI-auth probe: use a non-interactive command that requires auth
+        if "$gemini_bin" --list-sessions >/dev/null 2>&1; then
+            echo "OK (cli-auth mode)"
+            auth_ok=1
+        fi
+    fi
+
+    if [[ "$auth_ok" -eq 0 ]]; then
+        echo "FAILED"
+        echo "  ERROR: GEMINI_API_KEY/GOOGLE_API_KEY not set and CLI-auth probe failed"
+        echo "  Action: Set API key or run 'gemini login'"
         errors=$((errors + 1))
     fi
     
@@ -100,6 +111,9 @@ adapter_start() {
         cmd_args+=(--model "$model")
     fi
     
+    # Use explicit headless prompt mode (-p)
+    cmd_args+=(-p "$prompt")
+    
     local rc_file="${DX_RUNNER_RC_FILE:-/tmp/dx-runner/gemini/${beads}.rc}"
     mkdir -p "$(dirname "$rc_file")"
     rm -f "$rc_file"
@@ -113,13 +127,10 @@ adapter_start() {
         worktree_arg="cd $(printf '%q' "$worktree") && "
     fi
 
-    local prompt_escaped
-    printf -v prompt_escaped '%q' "$prompt"
-    
     cat > "$launcher" <<EOF
 #!/usr/bin/env bash
 set +e
-${worktree_arg}${cmd_args[@]@Q} $prompt_escaped >> $(printf '%q' "$log_file") 2>&1
+${worktree_arg}${cmd_args[@]@Q} >> $(printf '%q' "$log_file") 2>&1
 rc=\$?
 echo "\$rc" > $(printf '%q' "$rc_file")
 rm -f $(printf '%q' "$launcher")
