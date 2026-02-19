@@ -261,6 +261,48 @@ Notes:
 
 ---
 
+## Product Repo Integration
+
+agent-skills provides **global workflow skills**. Product repos have **repo-specific context skills**.
+
+### Architecture
+
+```
+~/.agent/skills (symlink) → ~/agent-skills
+├── core/           → Workflow skills (beads, sync, PR)
+├── dispatch/       → Cross-VM dispatch
+├── health/         → Diagnostics
+└── ...
+
+~/prime-radiant-ai/.claude/skills/
+├── context-prime-radiant-db/  → Repo-specific
+└── ...
+
+~/affordabot/.claude/skills/
+├── context-affordabot-db/     → Repo-specific
+├── backend-engineer/          → Repo-specific
+└── ...
+```
+
+### Repo Summary
+
+| Repo | Context Location | Skills | Auto-Update |
+|------|-----------------|--------|-------------|
+| prime-radiant-ai | `.claude/skills/context-*/` | varies | GitHub Actions |
+| affordabot | `.claude/skills/context-*/` | varies | GitHub Actions |
+| llm-common | `.claude/skills/context-*/` | varies | GitHub Actions |
+
+### Creating New Context Skills
+
+Use `skill-creator` skill to generate new context skills:
+
+```
+/skill skill-creator
+```
+
+This analyzes codebase areas and generates SKILL.md files with proper structure.
+
+---
 
 ## Skill Discovery
 **Auto-loaded from:** `~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md`

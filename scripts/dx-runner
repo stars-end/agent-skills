@@ -895,14 +895,17 @@ persist_outcome() {
 
     local run_id
     run_id="$(date +%Y%m%d%H%M%S)"
-    local selected_model fallback_reason
+    local selected_model fallback_reason provider
     selected_model="$(meta_get "$meta_file" "selected_model" 2>/dev/null || true)"
     fallback_reason="$(meta_get "$meta_file" "fallback_reason" 2>/dev/null || true)"
+    provider="$(meta_get "$meta_file" "provider" 2>/dev/null || true)"
     selected_model="${selected_model:-unknown}"
     fallback_reason="${fallback_reason:-none}"
+    provider="${provider:-unknown}"
 
     cat > "$outcome_file" <<EOF
 beads=$beads
+provider=$provider
 run_id=$run_id
 exit_code=$exit_code
 state=$state
@@ -1219,6 +1222,8 @@ RECENT_COUNT=0
 COMPACT_LOGS=false
 REASON_CODE=""
 EXIT_CODE=""
+PROBE_ID=""
+WRITE_PROBE=false
 
 MAX_RUNTIME_MINUTES="${DX_RUNNER_MAX_RUNTIME_MINUTES:-120}"
 NO_MUTATION_TIMEOUT_MINUTES="${DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES:-30}"
@@ -1334,6 +1339,14 @@ parse_common_args() {
                 EXIT_CODE="${2:-1}"
                 shift 2
                 ;;
+            --probe-id)
+                PROBE_ID="${2:-}"
+                shift 2
+                ;;
+            --write-probe)
+                WRITE_PROBE=true
+                shift
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -1349,7 +1362,7 @@ parse_common_args() {
 
 usage() {
     cat <<'EOF'
-dx-runner (V1.0 - Unified Multi-Provider Dispatch Runner)
+dx-runner (V1.2 - Unified Multi-Provider Dispatch Runner)
 
 Usage:
   dx-runner start --beads <id> --provider <name> --prompt-file <path> [options]
@@ -1364,6 +1377,7 @@ Usage:
   dx-runner report --beads <id> [--format json|markdown]
   dx-runner preflight [--provider <name>]
   dx-runner probe --provider <name> --model <id>
+  dx-runner beads-gate [--repo <path>] [--probe-id <id>] [--write-probe]
   dx-runner baseline-gate [--beads <id> | --worktree <path>] --required-baseline <sha>
   dx-runner integrity-gate [--beads <id> | --worktree <path>] --reported-commit <sha>
   dx-runner feature-key-gate [--beads <id> | --worktree <path>] --feature-key <bd-id>
@@ -1371,8 +1385,8 @@ Usage:
 
 Providers:
   cc-glm    Claude via Z.ai (reliability backstop)
-  opencode  OpenCode headless (primary throughput)
-  gemini    Gemini CLI (future capacity)
+  opencode  OpenCode headless (primary throughput, GLM-5 strict)
+  gemini    Gemini CLI (parallel capacity)
 
 Commands:
   start        Launch a job with specified provider
@@ -1386,9 +1400,11 @@ Commands:
   report       Generate job report
   preflight    Verify prerequisites
   probe        Test provider/model availability
+  beads-gate   Verify Beads DB connectivity and repo binding
   baseline-gate Verify runtime commit meets baseline
   integrity-gate Verify reported commit exists
   feature-key-gate Verify Feature-Key trailers
+  finalize     Force finalize a stuck job
 
 Exit Codes:
   0  Success
@@ -1401,6 +1417,18 @@ Exit Codes:
   21 Preflight failed
   22 Permission denied (non-worktree path)
   23 No-op detected
+  24 Beads gate failed
+  25 Model unavailable
+
+Beads Gate Reason Codes:
+  beads_ok              Gate passed
+  beads_unavailable     bd CLI not found or not executable
+  beads_external_repo_missing External Beads repo missing (expected: ~/bd)
+  beads_external_remote_mismatch External Beads remote mismatch (expected substring: stars-end/bd)
+  beads_db_error        bd status failed (DB connectivity issue)
+  beads_repo_mismatch   Repo-id in Beads DB doesn't match current repo
+  beads_write_blocked   Write probe failed (permissions/DB issue)
+  beads_probe_not_found Probe ID specified but not found in DB
 
 Health States:
   launching, waiting_first_output, silent_mutation, stalled,
@@ -1479,7 +1507,19 @@ EOF
     local launch_output_file
     launch_output_file="$(mktemp)"
     if ! DX_RUNNER_RC_FILE="$RC_FILE" adapter_start "$BEADS" "$PROMPT_FILE" "$WORKTREE" "$LOG_FILE" >"$launch_output_file"; then
+        local adapter_rc
+        adapter_rc=$?
+        local start_reason=""
+        start_reason="$(awk -F= '/^reason_code=/{v=$2} END{print v}' "$launch_output_file" 2>/dev/null || true)"
+        [[ -z "$start_reason" && "$PROVIDER" == "opencode" && "$adapter_rc" -eq 25 ]] && start_reason="opencode_model_unavailable"
         rm -f "$launch_output_file"
+
+        if [[ -n "$start_reason" ]]; then
+            persist_outcome "$BEADS" "$adapter_rc" "$OUTCOME_FILE" "$META_FILE" "$start_reason"
+            echo "provider start failed for $BEADS/$PROVIDER (reason_code=$start_reason)" >&2
+            [[ "$start_reason" == "opencode_model_unavailable" ]] && exit 25
+        fi
+
         echo "provider start failed for $BEADS/$PROVIDER" >&2
         exit 1
     fi
@@ -2242,6 +2282,127 @@ finalize_cmd() {
 }
 
 # ============================================================================
+# BEADS INTEGRITY GATE (bd-dxhardening)
+# ============================================================================
+
+beads_gate_eval() {
+    local repo_path="${1:-$(pwd)}"
+    local probe_id="${2:-}"
+    local do_write_probe="${3:-false}"
+    
+    local passed=false
+    local reason_code="unknown"
+    local details=""
+    local db_status=""
+    local repo_id_db=""
+    local repo_id_local=""
+    local external_beads_repo="${BEADS_REPO_PATH:-$HOME/bd}"
+    local external_beads_remote_expected="${BEADS_REPO_REMOTE_SUBSTR:-stars-end/bd}"
+    local external_beads_remote_actual=""
+    
+    if ! command -v bd >/dev/null 2>&1; then
+        reason_code="beads_unavailable"
+        details="bd CLI not found in PATH"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "" "" "" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+        return 1
+    fi
+
+    if [[ ! -d "$external_beads_repo/.git" ]]; then
+        reason_code="beads_external_repo_missing"
+        details="External Beads repo not found at $external_beads_repo"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "" "" "" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+        return 1
+    fi
+
+    external_beads_remote_actual="$(git -C "$external_beads_repo" remote get-url origin 2>/dev/null || true)"
+    if [[ -z "$external_beads_remote_actual" || "$external_beads_remote_actual" != *"$external_beads_remote_expected"* ]]; then
+        reason_code="beads_external_remote_mismatch"
+        details="External Beads remote mismatch: expected '$external_beads_remote_expected', got '${external_beads_remote_actual:-<none>}'"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "" "" "" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+        return 1
+    fi
+    
+    local status_output
+    if ! status_output="$(cd "$repo_path" && bd status 2>&1)"; then
+        reason_code="beads_db_error"
+        details="bd status failed: ${status_output:-no output}"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "" "" "" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+        return 1
+    fi
+    db_status="connected"
+    
+    local beads_config="$repo_path/.beads/config"
+    if [[ -f "$beads_config" ]]; then
+        repo_id_local="$(grep -E "^repo_id=" "$beads_config" 2>/dev/null | cut -d= -f2 || true)"
+    fi
+    
+    if [[ -n "$probe_id" ]]; then
+        local show_output
+        if show_output="$(cd "$repo_path" && bd show "$probe_id" 2>&1)"; then
+            repo_id_db="$(echo "$show_output" | grep -oE 'repo[-_]?id[=:][[:space:]]*[a-zA-Z0-9_-]+' | head -1 | sed 's/.*[=:][[:space:]]*//' || true)"
+        else
+            reason_code="beads_probe_not_found"
+            details="Probe ID $probe_id not found in Beads DB"
+            printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "" "" "$probe_id" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+            return 1
+        fi
+    fi
+    
+    if [[ -n "$repo_id_local" && -n "$repo_id_db" && "$repo_id_local" != "$repo_id_db" ]]; then
+        reason_code="beads_repo_mismatch"
+        details="Local repo_id=$repo_id_local does not match DB repo_id=$repo_id_db"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+        return 1
+    fi
+    
+    if [[ "$do_write_probe" == "true" && -n "$probe_id" ]]; then
+        local write_ts write_result
+        write_ts="gate-test-$(date +%Y%m%d%H%M%S)"
+        if ! write_result="$(cd "$repo_path" && bd comments add "$probe_id" "$write_ts" 2>&1)"; then
+            reason_code="beads_write_blocked"
+            details="Write probe failed: ${write_result:-no output}"
+            printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+            return 1
+        fi
+        details="Write probe successful: $write_ts"
+    else
+        details="DB connectivity verified"
+    fi
+    
+    passed=true
+    reason_code="beads_ok"
+    printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+    return 0
+}
+
+beads_gate_cmd() {
+    parse_common_args "$@"
+    
+    local repo_path="${REPO:-$(pwd)}"
+    
+    local result gate_pass gate_reason gate_db_status gate_repo_local gate_repo_db gate_details gate_external_repo gate_external_remote
+    result="$(beads_gate_eval "$repo_path" "$PROBE_ID" "$WRITE_PROBE")" || true
+    IFS='|' read -r gate_pass gate_reason gate_db_status gate_repo_local gate_repo_db gate_details gate_external_repo gate_external_remote <<< "$result"
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        printf '{"passed":%s,"reason_code":"%s","db_status":"%s","repo_id_local":"%s","repo_id_db":"%s","external_repo":"%s","external_remote":"%s","details":"%s"}\n' \
+            "$gate_pass" "$gate_reason" "$gate_db_status" "$gate_repo_local" "$gate_repo_db" "$(json_escape "$gate_external_repo")" "$(json_escape "$gate_external_remote")" "$(json_escape "$gate_details")"
+    else
+        echo "Beads Gate: $gate_pass ($gate_reason)"
+        echo "  DB Status: $gate_db_status"
+        echo "  Local Repo ID: ${gate_repo_local:-<not detected>}"
+        echo "  DB Repo ID: ${gate_repo_db:-<not checked>}"
+        echo "  External Repo: ${gate_external_repo:-<not checked>}"
+        echo "  External Remote: ${gate_external_remote:-<not checked>}"
+        echo "  Details: $gate_details"
+    fi
+    
+    if [[ "$gate_pass" != "true" ]]; then
+        exit 24
+    fi
+}
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
@@ -2259,6 +2420,7 @@ case "$CMD" in
     probe) probe_cmd "$@" ;;
     watchdog) watchdog_cmd "$@" ;;
     finalize) finalize_cmd "$@" ;;
+    beads-gate) beads_gate_cmd "$@" ;;
     baseline-gate) baseline_gate_cmd "$@" ;;
     integrity-gate) integrity_gate_cmd "$@" ;;
     feature-key-gate) feature_key_gate_cmd "$@" ;;
