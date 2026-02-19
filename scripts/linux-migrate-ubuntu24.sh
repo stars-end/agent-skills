@@ -1,3 +1,9 @@
+#!/bin/bash
+# ============================================================
+# HISTORICAL - Migration complete 2026-02-18
+# Do not use. Kept for migration record only.
+# ============================================================
+
 #!/usr/bin/env bash
 # linux-migrate-ubuntu24.sh
 # Comprehensive backup/restore for migrating Debian 12 → Ubuntu 24.04

@@ -1,4 +1,10 @@
 #!/bin/bash
+# ============================================================
+# HISTORICAL - Migration complete 2026-02-18
+# Do not use. Kept for migration record only.
+# ============================================================
+
+#!/bin/bash
 # migrate-to-external-beads.sh
 # Production-grade migration to external beads database.
 #
