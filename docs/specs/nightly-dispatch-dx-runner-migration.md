@@ -359,7 +359,7 @@ jobs:
       
       - name: Setup dx-runner
         # P1: Install pinned dx-runner version with SHA256 verification
-        # NOTE: Replace VERSION and SHA256 with actual values from release notes
+        # Values configured via GitHub Actions secrets
         env:
           DX_RUNNER_VERSION: "${{ secrets.DX_RUNNER_VERSION }}"  # e.g., "1.2.3"
           DX_RUNNER_SHA256: "${{ secrets.DX_RUNNER_SHA256 }}"      # e.g., "abc123..."
