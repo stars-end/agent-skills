@@ -358,17 +358,27 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Setup dx-runner
-        # P1 FIXED: Use concrete pinned version from verified release
+        # P1: Install pinned dx-runner version with SHA256 verification
+        # NOTE: Replace VERSION and SHA256 with actual values from release notes
+        env:
+          DX_RUNNER_VERSION: "${{ secrets.DX_RUNNER_VERSION }}"  # e.g., "1.2.3"
+          DX_RUNNER_SHA256: "${{ secrets.DX_RUNNER_SHA256 }}"      # e.g., "abc123..."
         run: |
-          # Install dx-runner v1.2.3 from verified GitHub release (pinned SHA256)
-          DX_RUNNER_VERSION="1.2.3"
-          DX_RUNNER_SHA256="a1b2c3d4e5f6..."
+          if [ -z "$DX_RUNNER_VERSION" ] || [ -z "$DX_RUNNER_SHA256" ]; then
+            echo "ERROR: DX_RUNNER_VERSION and DX_RUNNER_SHA256 must be set"
+            exit 1
+          fi
           
-          curl -fsSL "https://github.com/stars-end/dx-runner/releases/download/v${DX_RUNNER_VERSION}/dx-runner-linux-amd64" \
+          echo "Installing dx-runner v${DX_RUNNER_VERSION}"
+          curl -fsSL \
+            "https://github.com/stars-end/dx-runner/releases/download/v${DX_RUNNER_VERSION}/dx-runner-linux-amd64" \
             -o /tmp/dx-runner
           
-          # Verify checksum
-          echo "${DX_RUNNER_SHA256}  /tmp/dx-runner" | sha256sum -c -
+          # Verify checksum before install
+          echo "${DX_RUNNER_SHA256}  /tmp/dx-runner" | sha256sum -c - || {
+            echo "ERROR: SHA256 verification failed"
+            exit 1
+          }
           
           chmod +x /tmp/dx-runner
           sudo mv /tmp/dx-runner /usr/local/bin/
