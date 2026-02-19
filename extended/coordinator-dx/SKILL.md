@@ -8,8 +8,8 @@ description: Coordinator playbook for multi-repo, multi-VM parallel execution wi
 Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists.
 
 Lane defaults:
-- Throughput lane: OpenCode (`opencode run` / `opencode serve`)
-- Backstop lane: cc-glm (`cc-glm-job.sh`) only when policy/gates require fallback
+- Throughput lane: OpenCode via `dx-runner --provider opencode` (direct `opencode run/serve` optional)
+- Backstop lane: cc-glm via `dx-runner --provider cc-glm` when policy/gates require fallback
 
 Key conventions:
 - Each VM/agent sets `AGENT_NAME=<vm>-<tool>` (e.g. `macmini-codex`, `epyc6-claude-code`, `homedesktop-wsl-gemini`)

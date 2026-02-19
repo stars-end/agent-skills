@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 55d3e6c18ebb94c446ee8066a27340d697562c63 -->
-<!-- Last updated: 2026-02-18 10:02:41 UTC -->
+<!-- Source SHA: e993c99234ca4d713eaa5a9f715a5820d363bc8a -->
+<!-- Last updated: 2026-02-18 21:09:07 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -77,7 +77,18 @@ cd /tmp/agents/bd-xxxx/repo-name
 
 ### Dispatch Method
 
-**Primary: OpenCode (headless + server)**
+**Canonical: dx-runner (governed multi-provider runner)**
+
+```bash
+# OpenCode throughput lane
+dx-runner start --provider opencode --beads bd-xxx --prompt-file /tmp/p.prompt
+
+# Shared monitoring/reporting
+dx-runner status --json
+dx-runner check --beads bd-xxx --json
+```
+
+**Direct OpenCode lane (advanced, non-governed)**
 
 ```bash
 # Headless single-run lane
@@ -88,15 +99,15 @@ opencode serve --hostname 127.0.0.1 --port 4096
 opencode run --attach http://127.0.0.1:4096 -m zai-coding-plan/glm-5 "Implement task T2 from plan.md"
 ```
 
-**Reliability backstop: cc-glm-job.sh (governed fallback lane)**
+**Reliability backstop: cc-glm via dx-runner**
 
 ```bash
-# Start a governed fallback job
-CC_GLM_MODEL=glm-5 cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
+# Start governed fallback job
+dx-runner start --provider cc-glm --beads bd-xxx --prompt-file /tmp/p.prompt
 
 # Monitor fallback jobs
-cc-glm-job.sh status --json
-cc-glm-job.sh check --beads bd-xxx --json
+dx-runner status --json
+dx-runner check --beads bd-xxx --json
 ```
 
 **Optional: Task tool (Codex runtime only)**
@@ -119,7 +130,7 @@ Task:
   run_in_background: true
 ```
 
-**Cross-VM: dx-dispatch** (for remote execution only)
+**Cross-VM: dx-dispatch** (compat wrapper to `dx-runner` for remote execution)
 
 ### Monitoring (Simplified)
 
@@ -155,6 +166,7 @@ References:
 - `~/agent-skills/docs/ENV_SOURCES_CONTRACT.md`
 - `~/agent-skills/docs/SECRET_MANAGEMENT.md`
 - `~/agent-skills/scripts/benchmarks/opencode_cc_glm/README.md`
+- `~/agent-skills/extended/dx-runner/SKILL.md`
 - `~/agent-skills/extended/cc-glm/SKILL.md`
 
 Notes:
@@ -186,14 +198,15 @@ Notes:
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban views, dependency graphs, and the robot-plan API for auto-selecting next tasks. Keywords: beads, viewer, kanban, dependency graph, robot-plan, task selection, bottleneck | `bd show "$NEXT_TASK"` | workflow, beads, visualization, task-selection |
-| **cc-glm** | Use cc-glm as the reliability/quality backstop lane for batched delegation with plan-first execution. Batch by outcome (not file). Primary dispatch is OpenCode; cc-glm-job.sh is governed fallback for critical waves and OpenCode failures. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-dispatch macmini "cd ~/repo && make test"` | workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode |
+| **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode |
 | **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
 | **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with OpenCode as primary dispatch service and governed cc-glm fallback. | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | `bd sync` |  |
+| **dx-runner** | Canonical unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, or gemini providers with unified preflight, gates, and failure taxonomy. Use when dispatching agent tasks, running headless jobs, or managing parallel agent sessions. | `dx-runner start --beads bd-xxx --provider cc-glm --prompt-fi` | workflow, dispatch, governance, multi-provider, automation |
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |
 | **jules-dispatch** | Dispatches work to Jules agents via the CLI. Automatically generates context-rich prompts from Beads issues and spawns async sessions. Use when user says "send to jules", "assign to jules", "dispatch task", or "run in cloud". | — | workflow, jules, cloud, automation, dx |
 | **lint-check** | Run quick linting checks on changed files. MUST BE USED when user wants to check code quality. Fast validation (<5s) following V3 trust-environments philosophy. Use when user says "lint my code", "check formatting", or "run linters", or when user mentions uncommitted changes, pre-commit state, formatting issues, code quality, style checks, validation, prettier, eslint, pylint, or ruff. | — | workflow, quality, linting, validation |
-| **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | — | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |
+| **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | `dx-runner start --provider opencode --beads bd-xxx --prompt-` | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |
 | **parallelize-cloud-work** | Delegate independent work to Claude Code Web cloud sessions for parallel execution. Generates comprehensive session prompts with context exploration guidance, verifies Beads state, provides tracking commands. Use when user says "parallelize work to cloud", "start cloud sessions", or needs to execute multiple independent tasks simultaneously, or when user mentions cloud sessions, cloud prompts, delegate to cloud, Claude Code Web, generate session prompts, parallel execution, or asks "how do I use cloud sessions". | `bd show <issue-id>` | workflow, cloud, parallelization, dx |
 | **plan-refine** | Iteratively refine implementation plans using the "Convexity" pattern. Simulates a multi-round architectural critique to converge on a secure, robust specification. Use when you have a draft plan that needs deep architectural review or "APR" style optimization. | — | architecture, planning, review, refinement, apr |
 | **prompt-writing** | Drafts robust, low-cognitive-load prompts for other agents that enforce the DX invariants: worktree-first, no canonical writes, and a "done gate" (dx-verify-cle | — |  |
@@ -225,10 +238,10 @@ Notes:
 | **canonical-targets** | Single source of truth for canonical VMs, canonical IDEs, and canonical trunk branch. Use this to keep dx-status, mcp-doctor, and setup scripts aligned across machines. | — | dx, ide, vm, canonical, targets |
 | **devops-dx** | GitHub/Railway housekeeping for CI env/secret management and DX maintenance. Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, or fixing CI failures due to missing env. | — | devops, github, auth, env, secrets, ci, railway |
 | **dx-alerts** | Lightweight “news wire” for DX changes and breakages, posted to Slack (no MCP required). | — |  |
-| **fleet-deploy** | Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12). MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs. Uses configs/fleet_hosts.yaml as authoritative source for SSH targets. | `dx-dispatch epyc6 "cd ~/agent-skills && git pull && make ins` | fleet, deploy, vm, canonical, dx-dispatch, ssh, infrastructure |
+| **fleet-deploy** | Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12). MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs. Uses configs/fleet_hosts.yaml as authoritative source for SSH targets, with dx-runner governance and dx-dispatch compatibility transport for remote fanout. | `dx-dispatch epyc6 "cd ~/agent-skills && git pull && make ins` | fleet, deploy, vm, canonical, dx-runner, dx-dispatch, ssh, infrastructure |
 | **github-runner-setup** | GitHub Actions self-hosted runner setup and maintenance. Use when setting up dedicated runner users, migrating runners from personal accounts, troubleshooting runner issues, or implementing runner isolation. Covers systemd services, environment isolation, and skills plane integration. | — | github-actions, devops, runner, systemd, infrastructure |
 | **vm-bootstrap** | Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment. Supports modes: check (warn-only), install (operator-confirmed), strict (CI-ready). Enforces Linux-only  mise as canonical; honors preference brew→npm (with apt fallback). Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, op, bd, dcg, ru, tmux, rg. Handles optional tools as warnings: tailscale, playwright, docker, bv. Never prints/seeds secrets; never stores tokens in repo/YAML; Railway vars only for app runtime env. Safe on dirty repos (refuses and points to dirty-repo-bootstrap skill, or snapshots WIP branch). Keywords: vm, bootstrap, setup, mise, toolchain, linux, environment, provision, verify, new vm | — | dx, tooling, setup, linux |
-| **multi-agent-dispatch** | Cross-VM task dispatch with OpenCode as the primary service and dx-dispatch as transport/orchestration. Supports OpenCode run/serve flows on canonical VMs, Jules Cloud dispatch for async work, and fleet orchestration. EPYC6 is currently disabled - see enablement gate. | `dx-dispatch epyc12 "Run make test in ~/affordabot"` |  |
+| **multi-agent-dispatch** | Cross-VM task dispatch with dx-runner as canonical governance runner and OpenCode as primary execution lane. Use dx-dispatch as compatibility transport/orchestration for remote fanout, Jules Cloud, and fleet workflows. EPYC6 is currently disabled - see enablement gate. | `dx-runner start --provider opencode --beads bd-123 --prompt-` |  |
 
 
 ## Railway Deployment

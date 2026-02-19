@@ -1,8 +1,8 @@
 ---
 name: cc-glm
 description: |
-  Use cc-glm as the reliability/quality backstop lane for batched delegation with plan-first execution.
-  Batch by outcome (not file). Primary dispatch is OpenCode; cc-glm-job.sh is governed fallback for critical waves and OpenCode failures.
+  Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution.
+  Batch by outcome (not file). Primary dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures.
   Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution.
 tags: [workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode]
 allowed-tools:
@@ -19,8 +19,14 @@ allowed-tools:
 ## Lane Positioning
 
 - Primary throughput lane: OpenCode (`opencode run` / `opencode serve`)
-- Reliability backstop lane: cc-glm (`cc-glm-job.sh`) with baseline/integrity/feature-key gates
+- Reliability backstop lane: cc-glm via `dx-runner --provider cc-glm` with baseline/integrity/feature-key gates
 - Use cc-glm when OpenCode misses SLOs, fails governance gates, or the wave is marked critical
+
+Legacy direct controls (`cc-glm-job.sh`) are still available for low-level troubleshooting, but orchestration defaults to `dx-runner`.
+
+```bash
+dx-runner start --provider cc-glm --beads bd-xxx --prompt-file /tmp/p.prompt
+```
 
 ## When To Use
 
@@ -97,47 +103,42 @@ Put mini-plan in Beads notes instead of file:
 
 **Rule**: 1 agent per repo or coherent change set, NOT 1 agent per file.
 
-### Step 3: Execute with cc-glm-job.sh (Backstop Lane)
+### Step 3: Execute with dx-runner (cc-glm Backstop Provider)
 
-**Local headless execution is the governed fallback method:**
+**Governed fallback execution uses dx-runner with provider `cc-glm`:**
 
 ```bash
-# Start a background job with PTY for reliable output capture
-cc-glm-job.sh start \
+# Start a background job with cc-glm provider
+dx-runner start \
+  --provider cc-glm \
   --beads bd-xxx \
   --prompt-file /tmp/prompts/task.prompt \
   --repo my-repo \
-  --worktree /tmp/agents/bd-xxx/my-repo \
-  --pty
+  --worktree /tmp/agents/bd-xxx/my-repo
 
 # Check status of all jobs
-cc-glm-job.sh status
+dx-runner status
 
-# Check single job health (V3.0: progress-aware)
-cc-glm-job.sh check --beads bd-xxx
+# Check single job health
+dx-runner check --beads bd-xxx
 
 # View detailed health state
-cc-glm-job.sh health --beads bd-xxx
-
-# View log tail with optional ANSI stripping
-cc-glm-job.sh tail --beads bd-xxx --lines 50 --no-ansi
+dx-runner health --beads bd-xxx
 
 # Restart a stalled job
-cc-glm-job.sh restart --beads bd-xxx --pty
+dx-runner restart --beads bd-xxx
 
 # Stop a running job (records outcome)
-cc-glm-job.sh stop --beads bd-xxx
+dx-runner stop --beads bd-xxx
 
-# Run watchdog with observe-only mode (V3.0)
-cc-glm-job.sh watchdog --beads bd-xxx --once --observe-only
-
-# Run watchdog with no-auto-restart (V3.0)
-cc-glm-job.sh watchdog --beads bd-xxx --no-auto-restart --once
+# Generate report artifacts
+dx-runner report --beads bd-xxx --format json
+dx-runner report --beads bd-xxx --format markdown
 ```
 
-**Job artifacts location (V3.0):**
+**Job artifacts location:**
 ```bash
-/tmp/cc-glm-jobs/
+/tmp/dx-runner/cc-glm/
 ├── bd-xxx.pid         # Process ID
 ├── bd-xxx.log         # Current output log
 ├── bd-xxx.log.1       # Rotated log (preserved on restart)
@@ -150,11 +151,11 @@ cc-glm-job.sh watchdog --beads bd-xxx --no-auto-restart --once
 **Model selection (glm-5 recommended for complex tasks):**
 ```bash
 # Pin to glm-5 for better reasoning
-CC_GLM_MODEL=glm-5 cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
+CC_GLM_MODEL=glm-5 dx-runner start --provider cc-glm --beads bd-xxx --prompt-file /tmp/p.prompt
 
 # Or export for session
 export CC_GLM_MODEL=glm-5
-cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
+dx-runner start --provider cc-glm --beads bd-xxx --prompt-file /tmp/p.prompt
 ```
 
 ### Step 4: Monitor (V3.0 - Progress-Aware)
@@ -172,17 +173,17 @@ cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt --pty
 | `missing` | No job metadata found | Investigate |
 
 **Check signals:**
-1. **Process progress**: `cc-glm-job.sh check --beads bd-xxx`
-2. **Log growth**: `cc-glm-job.sh tail --beads bd-xxx`
+1. **Process progress**: `dx-runner check --beads bd-xxx`
+2. **Log growth**: `dx-runner status --beads bd-xxx`
 
 **Restart policy**: 1 restart max, then escalate.
 
 ```bash
 # Quick status check
-cc-glm-job.sh status
+dx-runner status
 
 # View health with outcomes
-cc-glm-job.sh health
+dx-runner health
 ```
 
 ### Step 5: Review, Push, PR
@@ -238,7 +239,7 @@ Task:
   subagent_type: general-purpose
 ```
 
-### Option B: Cross-VM Dispatch (dx-dispatch)
+### Option B: Cross-VM Dispatch (dx-dispatch compatibility wrapper)
 
 For work that must run on a different VM:
 
@@ -265,7 +266,7 @@ tailscale ssh fengning@macmini "command"
 - Remote environment has required secrets/tools
 
 **When NOT to use dx-dispatch:**
-- Local execution works (default to cc-glm-job.sh)
+- Local execution works (default to `dx-runner`)
 - No cross-VM requirement specified
 
 **EPYC6 Enablement Gate:**

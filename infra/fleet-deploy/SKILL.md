@@ -3,8 +3,8 @@ name: fleet-deploy
 description: |
   Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12).
   MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs.
-  Uses configs/fleet_hosts.yaml as authoritative source for SSH targets.
-tags: [fleet, deploy, vm, canonical, dx-dispatch, ssh, infrastructure]
+  Uses configs/fleet_hosts.yaml as authoritative source for SSH targets, with dx-runner governance and dx-dispatch compatibility transport for remote fanout.
+tags: [fleet, deploy, vm, canonical, dx-runner, dx-dispatch, ssh, infrastructure]
 allowed-tools:
   - Read
   - Bash(ssh:*)
@@ -91,7 +91,7 @@ for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
 PY
 ```
 
-**Option B: dx-dispatch (for complex operations)**
+**Option B: dx-dispatch (compat wrapper -> dx-runner, for complex remote operations)**
 ```bash
 dx-dispatch epyc6 "cd ~/agent-skills && git pull && make install"
 dx-dispatch homedesktop-wsl "cd ~/agent-skills && git pull"
@@ -171,7 +171,7 @@ for name, h in sorted(hosts.items()):
 PY
 ```
 
-### Parallel deploy with dx-dispatch
+### Parallel deploy with dx-dispatch compatibility wrapper
 ```bash
 dx-dispatch epyc6 "cd ~/agent-skills && git pull" &
 dx-dispatch homedesktop-wsl "cd ~/agent-skills && git pull" &
@@ -195,8 +195,12 @@ for entry in "${CANONICAL_VMS[@]}"; do
 done
 ```
 
-### With dx-dispatch
+### With dx-runner/dx-dispatch
 ```bash
+# Canonical local/governed execution
+dx-runner start --provider opencode --beads bd-xyz --prompt-file /tmp/prompt.md
+
+# Remote fanout compatibility surface
 dx-dispatch --list  # Shows available VMs
 dx-dispatch epyc6 "command"  # Dispatch to specific VM
 ```
@@ -288,7 +292,7 @@ PY
 
 ## Related Skills
 
-- **multi-agent-dispatch**: Full dx-dispatch capabilities for async/parallel dispatch
+- **multi-agent-dispatch**: dx-runner canonical workflow + dx-dispatch compatibility for async/parallel dispatch
 - **canonical-targets**: Shell exports for CANONICAL_VMS array (no PyYAML dependency)
 - **vm-bootstrap**: Setting up new VMs with required tooling
 
