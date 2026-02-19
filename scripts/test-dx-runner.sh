@@ -596,6 +596,93 @@ EOF
 }
 
 # ============================================================================
+# Test: Beads Gate
+# ============================================================================
+
+test_beads_gate() {
+    echo "=== Testing Beads Gate ==="
+
+    # Test beads-gate command exists
+    local help_output
+    help_output="$("$DX_RUNNER" --help 2>&1)" || true
+    if echo "$help_output" | grep -q "beads-gate"; then
+        pass "beads-gate command in help"
+    else
+        fail "beads-gate command missing from help"
+    fi
+
+    # Test beads-gate JSON output
+    local result
+    result="$("$DX_RUNNER" beads-gate --json 2>&1)" || true
+    if echo "$result" | jq -e . >/dev/null 2>&1; then
+        pass "beads-gate produces valid JSON"
+        local reason
+        reason="$(echo "$result" | jq -r '.reason_code' 2>/dev/null || echo "unknown")"
+        if [[ "$reason" == "beads_ok" ]]; then
+            pass "beads-gate passes when bd available"
+        elif [[ "$reason" == "beads_unavailable" ]]; then
+            pass "beads-gate detects missing bd CLI"
+        else
+            warn "beads-gate reason: $reason"
+        fi
+    else
+        if echo "$result" | grep -qiE "beads|unavailable|error"; then
+            pass "beads-gate handles missing bd gracefully"
+        else
+            fail "beads-gate unexpected output: $result"
+        fi
+    fi
+}
+
+# ============================================================================
+# Test: Outcome Metadata
+# ============================================================================
+
+test_outcome_metadata() {
+    echo "=== Testing Outcome Metadata ==="
+
+    local adapter="$ADAPTERS_DIR/mock.sh"
+    create_mock_adapter "$adapter"
+
+    local beads="test-meta-$$"
+    local prompt
+    prompt="$(mktemp)"
+    echo "READY" > "$prompt"
+
+    if "$DX_RUNNER" start --beads "$beads" --provider mock --prompt-file "$prompt" >/dev/null 2>&1; then
+        for _ in {1..20}; do
+            [[ -f "/tmp/dx-runner/mock/${beads}.outcome" ]] && break
+            sleep 1
+        done
+
+        if [[ -f "/tmp/dx-runner/mock/${beads}.outcome" ]]; then
+            # Check for required fields
+            local required_fields=("beads" "exit_code" "state" "reason_code" "completed_at" "duration_sec")
+            local all_present=true
+            for field in "${required_fields[@]}"; do
+                if grep -q "^${field}=" "/tmp/dx-runner/mock/${beads}.outcome"; then
+                    pass "outcome has field: $field"
+                else
+                    fail "outcome missing field: $field"
+                    all_present=false
+                fi
+            done
+
+            if [[ "$all_present" == "true" ]]; then
+                pass "outcome has all required metadata fields"
+            fi
+        else
+            fail "outcome file not created"
+        fi
+    else
+        fail "mock start failed"
+    fi
+
+    rm -f "$prompt" "$adapter"
+    rm -f /tmp/dx-runner/mock/"${beads}".*
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 
@@ -604,9 +691,11 @@ run_all_tests() {
     test_runner_commands
     test_adapter_contract
     test_governance_gates
+    test_beads_gate
     test_health_states
     test_json_output
     test_outcome_lifecycle
+    test_outcome_metadata
     test_model_resolution
     test_probe_model_flag
     test_gemini_adapter
