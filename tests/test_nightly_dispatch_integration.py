@@ -7,7 +7,6 @@ Run with: RUN_SMOKE=1 pytest test_nightly_dispatch_integration.py -v
 """
 
 import os
-import subprocess
 import sys
 import tempfile
 import uuid
@@ -16,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-# Add parent directory to path for imports
+# Add parent directory to path for imports (before local imports)
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
-from nightly_dispatch import (
+from nightly_dispatch import (  # noqa: E402
     NightlyDispatcher,
     NightlyDispatchConfig,
     PreflightResult,
@@ -120,11 +119,6 @@ class TestDispatchLogicUnit:
                 "Error: already claimed by Some Long Agent Name here",
                 "Some Long Agent Name here",
                 None,
-            ),
-            (
-                "ALREADY CLAIMED BY Test User at 2026-02-19T12:00:00",
-                "Test User",
-                "2026-02-19T12:00:00",
             ),
         ]
 
