@@ -2293,24 +2293,40 @@ beads_gate_eval() {
     local passed=false
     local reason_code="unknown"
     local details=""
-    local db_status=""
-    local repo_id_db=""
-    local repo_id_local=""
+    local db_status="unknown"
+    local repo_id_db="unavailable:not_checked"
+    local repo_id_local="unavailable:not_checked"
     local external_beads_repo="${BEADS_REPO_PATH:-$HOME/bd}"
     local external_beads_remote_expected="${BEADS_REPO_REMOTE_SUBSTR:-stars-end/bd}"
     local external_beads_remote_actual=""
+
+    # 1. Local Repo ID discovery (doesn't require bd CLI)
+    local beads_config="$repo_path/.beads/config"
+    if [[ -f "$beads_config" ]]; then
+        repo_id_local="$(grep -E "^repo_id=" "$beads_config" 2>/dev/null | cut -d= -f2 || true)"
+        if [[ -z "$repo_id_local" ]]; then
+            repo_id_local="unavailable:field_missing"
+        fi
+    else
+        repo_id_local="unavailable:config_missing"
+    fi
     
+    # 2. Basic environment checks
     if ! command -v bd >/dev/null 2>&1; then
         reason_code="beads_unavailable"
         details="bd CLI not found in PATH"
-        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "" "" "" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+        db_status="unavailable"
+        repo_id_db="unavailable:beads_missing"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
         return 1
     fi
 
     if [[ ! -d "$external_beads_repo/.git" ]]; then
         reason_code="beads_external_repo_missing"
         details="External Beads repo not found at $external_beads_repo"
-        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "" "" "" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+        db_status="unavailable"
+        repo_id_db="unavailable:beads_repo_missing"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
         return 1
     fi
 
@@ -2318,43 +2334,53 @@ beads_gate_eval() {
     if [[ -z "$external_beads_remote_actual" || "$external_beads_remote_actual" != *"$external_beads_remote_expected"* ]]; then
         reason_code="beads_external_remote_mismatch"
         details="External Beads remote mismatch: expected '$external_beads_remote_expected', got '${external_beads_remote_actual:-<none>}'"
-        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "" "" "" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+        db_status="error"
+        repo_id_db="unavailable:remote_mismatch"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
         return 1
     fi
     
+    # 3. DB connectivity check
     local status_output
     if ! status_output="$(cd "$repo_path" && bd status 2>&1)"; then
         reason_code="beads_db_error"
         details="bd status failed: ${status_output:-no output}"
-        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "" "" "" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+        db_status="error"
+        repo_id_db="unavailable:db_error"
+        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
         return 1
     fi
     db_status="connected"
     
-    local beads_config="$repo_path/.beads/config"
-    if [[ -f "$beads_config" ]]; then
-        repo_id_local="$(grep -E "^repo_id=" "$beads_config" 2>/dev/null | cut -d= -f2 || true)"
-    fi
-    
+    # 4. DB Repo ID discovery
     if [[ -n "$probe_id" ]]; then
+        repo_id_db="unavailable:probe_pending"
         local show_output
         if show_output="$(cd "$repo_path" && bd show "$probe_id" 2>&1)"; then
             repo_id_db="$(echo "$show_output" | grep -oE 'repo[-_]?id[=:][[:space:]]*[a-zA-Z0-9_-]+' | head -1 | sed 's/.*[=:][[:space:]]*//' || true)"
+            if [[ -z "$repo_id_db" ]]; then
+                repo_id_db="unavailable:field_missing"
+            fi
         else
             reason_code="beads_probe_not_found"
             details="Probe ID $probe_id not found in Beads DB"
-            printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "" "" "$probe_id" "$details" "$external_beads_repo" "$external_beads_remote_actual"
+            repo_id_db="unavailable:probe_failed"
+            printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
             return 1
         fi
+    else
+        repo_id_db="unavailable:no_probe"
     fi
     
-    if [[ -n "$repo_id_local" && -n "$repo_id_db" && "$repo_id_local" != "$repo_id_db" ]]; then
+    # 5. Consistency check
+    if [[ "$repo_id_local" != "unavailable:"* && "$repo_id_db" != "unavailable:"* && "$repo_id_local" != "$repo_id_db" ]]; then
         reason_code="beads_repo_mismatch"
         details="Local repo_id=$repo_id_local does not match DB repo_id=$repo_id_db"
         printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
         return 1
     fi
     
+    # 6. Optional write probe
     if [[ "$do_write_probe" == "true" && -n "$probe_id" ]]; then
         local write_ts write_result
         write_ts="gate-test-$(date +%Y%m%d%H%M%S)"

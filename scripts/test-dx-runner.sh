@@ -662,6 +662,54 @@ test_beads_gate() {
     fi
 }
 
+test_beads_gate_json_schema() {
+    echo "=== Testing Beads Gate JSON Schema ==="
+
+    local temp_repo
+    temp_repo="$(mktemp -d)"
+    mkdir -p "$temp_repo/.beads"
+    echo "repo_id=test-repo-123" > "$temp_repo/.beads/config"
+
+    # Test 1: Deterministic IDs even when bd is missing
+    local result
+    result="$(BEADS_REPO_PATH="/tmp/nonexistent-bd-$$" "$DX_RUNNER" beads-gate --repo "$temp_repo" --json 2>&1)" || true
+    
+    local repo_id_local reason_code repo_id_db
+    repo_id_local="$(echo "$result" | jq -r '.repo_id_local')"
+    repo_id_db="$(echo "$result" | jq -r '.repo_id_db')"
+    reason_code="$(echo "$result" | jq -r '.reason_code')"
+
+    if [[ "$repo_id_local" == "test-repo-123" ]]; then
+        pass "JSON reports local repo ID from config"
+    else
+        fail "JSON failed to report local repo ID (got: $repo_id_local)"
+    fi
+
+    if [[ "$repo_id_db" == "unavailable:beads_missing" || "$repo_id_db" == "unavailable:beads_repo_missing" ]]; then
+        pass "JSON reports deterministic sentinel for missing DB ID"
+    else
+        fail "JSON missing deterministic sentinel for DB ID (got: $repo_id_db)"
+    fi
+
+    if [[ "$reason_code" == "beads_external_repo_missing" || "$reason_code" == "beads_unavailable" ]]; then
+        pass "JSON reports correct failure reason code"
+    else
+        fail "JSON reports unexpected reason code: $reason_code"
+    fi
+
+    # Test 2: Field missing in config
+    echo "something_else=v" > "$temp_repo/.beads/config"
+    result="$(BEADS_REPO_PATH="/tmp/nonexistent-bd-$$" "$DX_RUNNER" beads-gate --repo "$temp_repo" --json 2>&1)" || true
+    repo_id_local="$(echo "$result" | jq -r '.repo_id_local')"
+    if [[ "$repo_id_local" == "unavailable:field_missing" ]]; then
+        pass "JSON reports sentinel for missing field in config"
+    else
+        fail "JSON failed to report sentinel for missing field (got: $repo_id_local)"
+    fi
+
+    rm -rf "$temp_repo"
+}
+
 # ============================================================================
 # Test: Outcome Metadata
 # ============================================================================
@@ -720,6 +768,7 @@ run_all_tests() {
     test_adapter_contract
     test_governance_gates
     test_beads_gate
+    test_beads_gate_json_schema
     test_health_states
     test_json_output
     test_outcome_lifecycle
