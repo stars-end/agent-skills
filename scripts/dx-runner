@@ -53,7 +53,7 @@ LOG_DIR="/tmp/dx-runner"
 declare -A PROVIDER_DEFAULT_MODEL=(
     ["cc-glm"]="glm-5"
     ["opencode"]="zhipuai-coding-plan/glm-5"
-    ["gemini"]="gemini-2.0-flash"
+    ["gemini"]="gemini-3-flash-preview"
 )
 
 declare -A PROVIDER_FALLBACK_CHAIN=(
@@ -992,6 +992,99 @@ finalize_exited_job() {
     rm -f "$PID_FILE" "$MONITOR_PID_FILE"
 }
 
+force_finalize_job() {
+    local beads="$1"
+    local provider="$2"
+    local reason_code="${3:-forced_finalization}"
+    local exit_code="${4:-1}"
+    
+    job_paths "$beads" "$provider"
+    
+    local pid=""
+    if [[ -f "$PID_FILE" ]]; then
+        pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    fi
+    
+    if [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]] && ps -p "$pid" >/dev/null 2>&1; then
+        kill -TERM "$pid" 2>/dev/null || true
+        sleep 2
+        if ps -p "$pid" >/dev/null 2>&1; then
+            kill -KILL "$pid" 2>/dev/null || true
+        fi
+    fi
+    
+    if [[ ! -f "$OUTCOME_FILE" ]]; then
+        persist_outcome "$beads" "$exit_code" "$OUTCOME_FILE" "$META_FILE" "$reason_code"
+    fi
+    
+    echo "${exit_code}" > "$RC_FILE" 2>/dev/null || true
+    
+    rm -f "$PID_FILE" "$MONITOR_PID_FILE"
+    
+    echo "force_finalized beads=$beads reason=$reason_code exit_code=$exit_code"
+}
+
+check_timeout_conditions() {
+    local beads="$1"
+    local provider
+    provider="$(find_provider_for_beads "$beads")"
+    job_paths "$beads" "$provider"
+    
+    if [[ ! -f "$META_FILE" || ! -f "$PID_FILE" ]]; then
+        return 1
+    fi
+    
+    local pid started_at now_epoch start_epoch runtime_sec
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    
+    if [[ ! "$pid" =~ ^[0-9]+$ ]] || ! ps -p "$pid" >/dev/null 2>&1; then
+        return 1
+    fi
+    
+    started_at="$(meta_get "$META_FILE" "started_at" 2>/dev/null || true)"
+    now_epoch="$(date +%s)"
+    
+    if [[ -n "$started_at" ]]; then
+        start_epoch="$(parse_utc_epoch "${started_at}" 2>/dev/null || echo "$now_epoch")"
+        runtime_sec=$((now_epoch - start_epoch))
+    else
+        local pid_mtime
+        pid_mtime="$(file_mtime_epoch "$PID_FILE" 2>/dev/null || echo "$now_epoch")"
+        runtime_sec=$((now_epoch - pid_mtime))
+    fi
+    
+    local max_runtime_sec=$((MAX_RUNTIME_MINUTES * 60))
+    if [[ "$runtime_sec" -gt "$max_runtime_sec" ]]; then
+        echo "max_runtime_exceeded|${runtime_sec}|${max_runtime_sec}"
+        return 0
+    fi
+    
+    local mutation_count
+    mutation_count="$(check_mutations "$beads")"
+    local last_mutation_at now last_mut_epoch no_mut_sec
+    last_mutation_at="$(meta_get "$MUTATION_FILE" "checked_at" 2>/dev/null || true)"
+    
+    if [[ "$mutation_count" -eq 0 && -n "$last_mutation_at" ]]; then
+        last_mut_epoch="$(parse_utc_epoch "${last_mutation_at}" 2>/dev/null || echo "$now_epoch")"
+        no_mut_sec=$((now_epoch - last_mut_epoch))
+        local no_mut_timeout_sec=$((NO_MUTATION_TIMEOUT_MINUTES * 60))
+        if [[ "$no_mut_sec" -gt "$no_mut_timeout_sec" ]]; then
+            echo "no_mutation_timeout|${no_mut_sec}|${no_mut_timeout_sec}"
+            return 0
+        fi
+    fi
+    
+    local heartbeat_age
+    heartbeat_age="$(check_heartbeat_age "$beads")"
+    local extended_stall_sec=$((STALL_MINUTES * 60 * 2))
+    if [[ "$heartbeat_age" -gt "$extended_stall_sec" && "$mutation_count" -eq 0 ]]; then
+        echo "extended_stall|${heartbeat_age}|${extended_stall_sec}"
+        return 0
+    fi
+    
+    return 1
+}
+
 prune_job() {
     local beads="$1"
     local provider="$2"
@@ -1111,6 +1204,11 @@ TAIL_LINES=20
 SHOW_MUTATIONS=false
 REPORT_FORMAT="json"
 MODEL_ID=""
+RECENT_COUNT=0
+COMPACT_LOGS=false
+
+MAX_RUNTIME_MINUTES="${DX_RUNNER_MAX_RUNTIME_MINUTES:-120}"
+NO_MUTATION_TIMEOUT_MINUTES="${DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES:-30}"
 
 parse_common_args() {
     while [[ $# -gt 0 ]]; do
@@ -1199,6 +1297,22 @@ parse_common_args() {
                 MODEL_ID="${2:-}"
                 shift 2
                 ;;
+            --recent)
+                RECENT_COUNT="${2:-5}"
+                shift 2
+                ;;
+            --compact)
+                COMPACT_LOGS=true
+                shift
+                ;;
+            --max-runtime)
+                MAX_RUNTIME_MINUTES="${2:-120}"
+                shift 2
+                ;;
+            --no-mutation-timeout)
+                NO_MUTATION_TIMEOUT_MINUTES="${2:-30}"
+                shift 2
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -1218,9 +1332,10 @@ dx-runner (V1.0 - Unified Multi-Provider Dispatch Runner)
 
 Usage:
   dx-runner start --beads <id> --provider <name> --prompt-file <path> [options]
-  dx-runner status [--beads <id>] [--json]
+  dx-runner status [--beads <id>] [--recent <n>] [--json]
   dx-runner check --beads <id> [--stall-minutes <n>] [--json]
   dx-runner health [--beads <id>] [--json]
+  dx-runner logs --beads <id> [--lines <n>] [--compact]
   dx-runner restart --beads <id>
   dx-runner stop --beads <id>
   dx-runner prune [--beads <id>] [--json]
@@ -1231,6 +1346,7 @@ Usage:
   dx-runner baseline-gate [--beads <id> | --worktree <path>] --required-baseline <sha>
   dx-runner integrity-gate [--beads <id> | --worktree <path>] --reported-commit <sha>
   dx-runner feature-key-gate [--beads <id> | --worktree <path>] --feature-key <bd-id>
+  dx-runner finalize --beads <id> [--reason <code>]
 
 Providers:
   cc-glm    Claude via Z.ai (reliability backstop)
@@ -1479,14 +1595,29 @@ status_cmd() {
                     rows+=("$(status_line "$beads")")
                 done
             done
-            # Also check non-provider dir
-            shopt -s nullglob
             for pidf in /tmp/dx-runner/*.pid; do
                 local beads
                 beads="$(basename "$pidf" .pid)"
                 [[ "$beads" == *.monitor ]] && continue
                 rows+=("$(status_line "$beads")")
             done
+            if [[ "$RECENT_COUNT" -gt 0 ]]; then
+                for dir in /tmp/dx-runner/*/; do
+                    [[ -d "$dir" ]] || continue
+                    for outcomef in "$dir"/*.outcome; do
+                        local beads
+                        beads="$(basename "$outcomef" .outcome)"
+                        [[ -f "${dir}${beads}.pid" ]] && continue
+                        rows+=("$(status_line "$beads")")
+                    done
+                done
+                for outcomef in /tmp/dx-runner/*.outcome; do
+                    local beads
+                    beads="$(basename "$outcomef" .outcome)"
+                    [[ -f "/tmp/dx-runner/${beads}.pid" ]] && continue
+                    rows+=("$(status_line "$beads")")
+                done
+            fi
         fi
         printf '{"generated_at":"%s","jobs":[%s]}\n' "$(now_utc)" "$(join_by "," "${rows[@]}")"
         return 0
@@ -1502,6 +1633,8 @@ status_cmd() {
     
     shopt -s nullglob
     local found=0
+    local active_jobs=()
+    local recent_jobs=()
     
     for dir in /tmp/dx-runner/*/; do
         [[ -d "$dir" ]] || continue
@@ -1510,20 +1643,56 @@ status_cmd() {
             local beads
             beads="$(basename "$pidf" .pid)"
             [[ "$beads" == *.monitor ]] && continue
-            status_line "$beads"
+            active_jobs+=("$beads")
         done
     done
     
-    shopt -s nullglob
     for pidf in /tmp/dx-runner/*.pid; do
         found=1
         local beads
         beads="$(basename "$pidf" .pid)"
         [[ "$beads" == *.monitor ]] && continue
+        active_jobs+=("$beads")
+    done
+    
+    for beads in "${active_jobs[@]}"; do
         status_line "$beads"
     done
     
-    if [[ "$found" -eq 0 ]]; then
+    if [[ "$RECENT_COUNT" -gt 0 ]]; then
+        for dir in /tmp/dx-runner/*/; do
+            [[ -d "$dir" ]] || continue
+            for outcomef in "$dir"/*.outcome; do
+                local beads
+                beads="$(basename "$outcomef" .outcome)"
+                [[ -f "${dir}${beads}.pid" ]] && continue
+                recent_jobs+=("$beads")
+            done
+        done
+        for outcomef in /tmp/dx-runner/*.outcome; do
+            local beads
+            beads="$(basename "$outcomef" .outcome)"
+            [[ -f "/tmp/dx-runner/${beads}.pid" ]] && continue
+            local already_seen=0
+            for r in "${recent_jobs[@]}"; do
+                [[ "$r" == "$beads" ]] && already_seen=1 && break
+            done
+            [[ "$already_seen" -eq 0 ]] && recent_jobs+=("$beads")
+        done
+        
+        if [[ ${#recent_jobs[@]} -gt 0 ]]; then
+            echo ""
+            echo "=== Recently Completed (last $RECENT_COUNT) ==="
+            local count=0
+            for beads in "${recent_jobs[@]}"; do
+                [[ "$count" -lt "$RECENT_COUNT" ]] || break
+                status_line "$beads"
+                count=$((count + 1))
+            done
+        fi
+    fi
+    
+    if [[ "$found" -eq 0 && ${#recent_jobs[@]} -eq 0 ]]; then
         echo "(no jobs found in /tmp/dx-runner)"
     fi
 }
@@ -1610,6 +1779,60 @@ stop_cmd() {
         fi
     fi
     rm -f "$PID_FILE" "$MONITOR_PID_FILE"
+}
+
+compact_log_filter() {
+    local filter_json_payloads="${1:-true}"
+    
+    while IFS= read -r line; do
+        if [[ "$filter_json_payloads" == "true" ]] && [[ "$line" =~ ^\{.*\}$ ]] && [[ ${#line} -gt 500 ]]; then
+            local msg_type=""
+            msg_type="$(echo "$line" | jq -r '.type // .kind // "unknown"' 2>/dev/null || echo "unknown")"
+            case "$msg_type" in
+                assistant|user|system)
+                    local content_preview
+                    content_preview="$(echo "$line" | jq -r '.content // .message // .text // ""' 2>/dev/null | head -c 100)"
+                    echo "[${msg_type}] ${content_preview}... (truncated ${#line} bytes)"
+                    ;;
+                tool_use|tool_result)
+                    local tool_name
+                    tool_name="$(echo "$line" | jq -r '.name // .tool_name // "unknown"' 2>/dev/null)"
+                    echo "[tool:${tool_name}] (truncated ${#line} bytes)"
+                    ;;
+                error|ERROR)
+                    echo "$line"
+                    ;;
+                *)
+                    echo "[json:${msg_type}] (${#line} bytes)"
+                    ;;
+            esac
+        else
+            echo "$line"
+        fi
+    done
+}
+
+logs_cmd() {
+    parse_common_args "$@"
+    [[ -n "$BEADS" ]] || { echo "logs requires --beads" >&2; exit 2; }
+    
+    local provider
+    provider="$(find_provider_for_beads "$BEADS")"
+    job_paths "$BEADS" "$provider"
+    
+    if [[ ! -f "$LOG_FILE" ]]; then
+        echo "no log file for $BEADS"
+        exit 1
+    fi
+    
+    local lines="${TAIL_LINES:-50}"
+    local compact="${COMPACT_LOGS:-false}"
+    
+    if [[ "$compact" == "true" ]]; then
+        tail -n "$lines" "$LOG_FILE" | compact_log_filter "true"
+    else
+        tail -n "$lines" "$LOG_FILE"
+    fi
 }
 
 prune_cmd() {
@@ -1857,7 +2080,7 @@ probe_cmd() {
 watchdog_cmd() {
     parse_common_args "$@"
     
-    echo "Starting watchdog (interval=${WATCHDOG_INTERVAL}s, max_retries=${WATCHDOG_MAX_RETRIES})..."
+    echo "Starting watchdog (interval=${WATCHDOG_INTERVAL}s, max_retries=${WATCHDOG_MAX_RETRIES}, max_runtime=${MAX_RUNTIME_MINUTES}m, no_mut_timeout=${NO_MUTATION_TIMEOUT_MINUTES}m)..."
     
     while true; do
         shopt -s nullglob
@@ -1875,6 +2098,28 @@ watchdog_cmd() {
                 IFS='|' read -r state reason _ _ _ _ _ <<< "$detail"
                 
                 echo "$(now_utc) [$beads] $state ($reason)"
+                
+                local timeout_result=""
+                timeout_result="$(check_timeout_conditions "$beads" 2>/dev/null)" || true
+                if [[ -n "$timeout_result" ]]; then
+                    local timeout_type timeout_val timeout_thresh
+                    IFS='|' read -r timeout_type timeout_val timeout_thresh <<< "$timeout_result"
+                    echo "$(now_utc) [$beads] TIMEOUT: $timeout_type (${timeout_val}s > ${timeout_thresh}s)"
+                    
+                    local retries
+                    retries="$(meta_get "${dir}${beads}.meta" "retries")"
+                    retries="${retries:-0}"
+                    
+                    if [[ "$retries" -lt "$WATCHDOG_MAX_RETRIES" ]]; then
+                        echo "$(now_utc) [$beads] force finalizing due to $timeout_type"
+                        force_finalize_job "$beads" "$provider" "$timeout_type" 124
+                    else
+                        echo "$(now_utc) [$beads] marking as blocked (max retries reached)"
+                        meta_set "${dir}${beads}.meta" "blocked" "true"
+                        force_finalize_job "$beads" "$provider" "blocked_${timeout_type}" 1
+                    fi
+                    continue
+                fi
                 
                 if [[ "$state" == "stalled" || "$state" == "no_op" ]]; then
                     local retries
@@ -1972,6 +2217,20 @@ feature_key_gate_cmd() {
     [[ "$gate_pass" == "true" ]] || exit 1
 }
 
+finalize_cmd() {
+    parse_common_args "$@"
+    [[ -n "$BEADS" ]] || { echo "finalize requires --beads" >&2; exit 2; }
+    
+    local provider
+    provider="$(find_provider_for_beads "$BEADS")"
+    job_paths "$BEADS" "$provider"
+    
+    local reason_code="${REASON_CODE:-forced_finalization}"
+    local exit_code="${EXIT_CODE:-1}"
+    
+    force_finalize_job "$BEADS" "$provider" "$reason_code" "$exit_code"
+}
+
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -1981,6 +2240,7 @@ case "$CMD" in
     status) status_cmd "$@" ;;
     check) check_cmd "$@" ;;
     health) status_cmd "$@" ;;  # Alias
+    logs) logs_cmd "$@" ;;
     stop) stop_cmd "$@" ;;
     restart) restart_cmd "$@" ;;
     prune) prune_cmd "$@" ;;
@@ -1988,6 +2248,7 @@ case "$CMD" in
     preflight) preflight_cmd "$@" ;;
     probe) probe_cmd "$@" ;;
     watchdog) watchdog_cmd "$@" ;;
+    finalize) finalize_cmd "$@" ;;
     baseline-gate) baseline_gate_cmd "$@" ;;
     integrity-gate) integrity_gate_cmd "$@" ;;
     feature-key-gate) feature_key_gate_cmd "$@" ;;
