@@ -17,14 +17,15 @@
 #   adapter_list_models  - List available models
 
 # Model fallback chains per host (bd-cbsb.15)
+# Updated: zai-coding-plan not zhipuai-coding-plan
 declare -A HOST_FALLBACK_CHAINS=(
-    ["epyc12"]="zhipuai-coding-plan/glm-5:zai/glm-5:opencode/glm-5-free"
-    ["epyc6"]="zhipuai-coding-plan/glm-5:zai/glm-5:opencode/glm-5-free"
-    ["macmini"]="zhipuai-coding-plan/glm-5:zai/glm-5:opencode/glm-5-free"
-    ["homedesktop-wsl"]="zhipuai-coding-plan/glm-5:zai/glm-5:opencode/glm-5-free"
+    ["epyc12"]="zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
+    ["epyc6"]="zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
+    ["macmini"]="zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
+    ["homedesktop-wsl"]="zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
 )
 
-DEFAULT_FALLBACK="zhipuai-coding-plan/glm-5:zai/glm-5:opencode/glm-5-free"
+DEFAULT_FALLBACK="zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
 
 adapter_find_opencode() {
     for candidate in "opencode" "/home/linuxbrew/.linuxbrew/bin/opencode" "/opt/homebrew/bin/opencode"; do
@@ -38,6 +39,7 @@ adapter_find_opencode() {
 
 adapter_preflight() {
     local errors=0
+    local warnings=0
     
     # Check 1: OpenCode binary (bd-cbsb.15)
     echo -n "opencode binary: "
@@ -49,32 +51,68 @@ adapter_preflight() {
         echo "MISSING"
         echo "  ERROR: opencode CLI not found"
         errors=$((errors + 1))
+        # Can't continue without binary
+        return $errors
     fi
     
     # Check 2: Model availability with fallback (bd-cbsb.15)
     echo -n "model availability: "
-    if [[ -n "$opencode_bin" ]]; then
-        local models
-        models=$("$opencode_bin" models 2>/dev/null | grep -E "^[a-z]" | head -5) || true
-        if [[ -n "$models" ]]; then
-            echo "OK ($(echo "$models" | wc -l | tr -d ' ') providers)"
+    local models
+    models=$("$opencode_bin" models 2>/dev/null) || true
+    local model_count
+    model_count="$(echo "$models" | grep -cE "^[a-z]+/.+" || echo "0")"
+    if [[ "$model_count" -gt 0 ]]; then
+        echo "OK ($model_count models)"
+    else
+        echo "NO_MODELS"
+        echo "  ERROR: No models available"
+        errors=$((errors + 1))
+    fi
+    
+    # Check 3: Preferred model probe with auth/quota (bd-cbsb.15 - strict blocking)
+    echo -n "preferred model probe: "
+    local preferred_model="${OPENCODE_MODEL:-zai-coding-plan/glm-5}"
+    if echo "$models" | grep -qF "$preferred_model"; then
+        # Probe the model with timeout
+        local probe_output
+        probe_output="$(timeout 30 "$opencode_bin" run --model "$preferred_model" --format json "Say READY" 2>&1)" || true
+        if echo "$probe_output" | grep -qi "READY"; then
+            echo "OK ($preferred_model)"
+        elif echo "$probe_output" | grep -qiE "unauthorized|forbidden|insufficient.*balance|quota|rate.?limit|429"; then
+            echo "BLOCKED (auth/quota)"
+            echo "  ERROR: Model $preferred_model available but auth/quota check failed"
+            errors=$((errors + 1))
         else
-            echo "NO_MODELS"
-            echo "  ERROR: No models available"
+            echo "TIMEOUT ($preferred_model)"
+            echo "  WARN: Model probe timed out (non-blocking)"
+            warnings=$((warnings + 1))
+        fi
+    else
+        # Try fallback
+        local fb_model
+        fb_model="$(echo "$models" | grep -E "glm-5|glm5" | head -1)" || true
+        if [[ -n "$fb_model" ]]; then
+            echo "FALLBACK ($fb_model)"
+            echo "  WARN: Preferred $preferred_model not found, using $fb_model"
+            warnings=$((warnings + 1))
+        else
+            echo "NO_MATCH"
+            echo "  ERROR: No glm-5 compatible model found"
             errors=$((errors + 1))
         fi
     fi
     
-    # Check 3: beads-mcp availability (bd-cbsb.18)
+    # Check 4: beads-mcp availability (bd-cbsb.18)
     echo -n "beads-mcp binary: "
     if command -v beads-mcp >/dev/null 2>&1; then
         echo "OK ($(command -v beads-mcp))"
     else
-        echo "MISSING (optional - Beads context degraded)"
-        echo "  WARN: beads-mcp not found, headless context will be limited"
+        echo "MISSING"
+        echo "  WARN: beads-mcp not found, Beads context will be limited"
+        warnings=$((warnings + 1))
     fi
     
-    # Check 4: mise trust state (bd-cbsb.17 - for validation steps)
+    # Check 5: mise trust state (bd-cbsb.17 - for validation steps)
     echo -n "mise trust: "
     if command -v mise >/dev/null 2>&1; then
         local trust_state
@@ -84,10 +122,21 @@ adapter_preflight() {
         else
             echo "UNTRUSTED"
             echo "  WARN: Run 'mise trust' in worktree before dispatch"
+            warnings=$((warnings + 1))
         fi
     else
         echo "NOT_INSTALLED"
         echo "  WARN: mise not found"
+        warnings=$((warnings + 1))
+    fi
+    
+    echo ""
+    if [[ $errors -gt 0 ]]; then
+        echo "=== Preflight FAILED ($errors error(s), $warnings warning(s)) ==="
+    elif [[ $warnings -gt 0 ]]; then
+        echo "=== Preflight PASSED with warnings ($warnings warning(s)) ==="
+    else
+        echo "=== Preflight PASSED ==="
     fi
     
     return $errors
@@ -99,13 +148,9 @@ adapter_resolve_model() {
     local opencode_bin
     opencode_bin="$(adapter_find_opencode)" || return 1
     
-    # Get available models
-    local available_models
-    available_models=$("$opencode_bin" models 2>/dev/null | grep -E "^- " | sed 's/^- //' | tr '\n' ' ') || true
-    
-    # Check preferred first
+    # Check preferred first (direct grep, no string truncation)
     if [[ -n "$preferred" ]]; then
-        if echo "$available_models" | grep -q "$preferred"; then
+        if "$opencode_bin" models 2>/dev/null | grep -qxF "$preferred"; then
             echo "$preferred|preferred|"
             return 0
         fi
@@ -116,7 +161,7 @@ adapter_resolve_model() {
     IFS=':' read -ra fallbacks <<< "$chain"
     
     for fb in "${fallbacks[@]}"; do
-        if echo "$available_models" | grep -q "$fb"; then
+        if "$opencode_bin" models 2>/dev/null | grep -qxF "$fb"; then
             local reason=""
             [[ -n "$preferred" ]] && reason="preferred $preferred not available, using fallback"
             echo "$fb|fallback|$reason"
@@ -142,7 +187,7 @@ adapter_start() {
     }
     
     # Resolve model with fallback (bd-cbsb.15)
-    local preferred_model="${OPENCODE_MODEL:-zhipuai-coding-plan/glm-5}"
+    local preferred_model="${OPENCODE_MODEL:-zai-coding-plan/glm-5}"
     local model_result model selection_reason fallback_reason
     model_result="$(adapter_resolve_model "$preferred_model")"
     IFS='|' read -r model selection_reason fallback_reason <<< "$model_result"
@@ -164,9 +209,9 @@ adapter_start() {
         --format json
     )
     
-    # Add worktree as working directory if specified
+    # Add worktree as working directory if specified (P0 fix: --dir not --cwd)
     if [[ -n "$worktree" && -d "$worktree" ]]; then
-        cmd_args+=(--cwd "$worktree")
+        cmd_args+=(--dir "$worktree")
     fi
     
     # Read prompt from file
@@ -190,12 +235,12 @@ adapter_start() {
 }
 
 adapter_probe_model() {
-    local model="${1:-zhipuai-coding-plan/glm-5}"
+    local model="${1:-zai-coding-plan/glm-5}"
     local opencode_bin
     opencode_bin="$(adapter_find_opencode)" || return 1
     
     # Quick probe with timeout (bd-cbsb.15)
-    timeout 45 "$opencode_bin" run --model "$model" --format json "Return only READY" 2>/dev/null | grep -q "READY" || return 1
+    timeout 45 "$opencode_bin" run --model "$model" --format json "Return only READY" 2>/dev/null | grep -qi "READY" || return 1
     
     return 0
 }
@@ -204,15 +249,19 @@ adapter_list_models() {
     local opencode_bin
     opencode_bin="$(adapter_find_opencode)" || return 1
     
-    "$opencode_bin" models 2>/dev/null | grep -E "^- " | sed 's/^- //' || true
+    # Parse plain provider/model lines (P0 fix)
+    "$opencode_bin" models 2>/dev/null | grep -E "^[a-z]+/.+" || true
 }
 
 adapter_stop() {
     local pid="$1"
     if [[ -n "$pid" ]] && ps -p "$pid" >/dev/null 2>&1; then
         kill "$pid" 2>/dev/null || true
-        # Clean up any orphaned opencode processes (bd-cbsb.15 evidence)
-        sleep 1
-        pkill -f "opencode.*--model" 2>/dev/null || true
+        # Wait for graceful shutdown
+        sleep 2
+        if ps -p "$pid" >/dev/null 2>&1; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
     fi
+    # P2 fix: Removed overly broad pkill - it can kill unrelated sessions
 }

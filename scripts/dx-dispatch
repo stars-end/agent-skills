@@ -1,6 +1,9 @@
 #!/bin/bash
-# dx-dispatch - Dispatch tasks to remote OpenCode agents
+# dx-dispatch - Dispatch tasks via dx-runner (canonical) or legacy Python path
 # Part of agent-skills dx-* workflow
+#
+# Migration note: This script now prefers dx-runner. Set DX_DISPATCH_LEGACY=1
+# to use the old Python path (dx-dispatch.py).
 #
 # Usage:
 #   dx-dispatch <vm> "task description" [options]
@@ -8,13 +11,20 @@
 #   dx-dispatch --help
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DX_RUNNER="${SCRIPT_DIR}/dx-runner"
 PYTHON_SCRIPT="${SCRIPT_DIR}/dx-dispatch.py"
 
-# Check if Python script exists
-if [[ ! -f "$PYTHON_SCRIPT" ]]; then
-    echo "❌ dx-dispatch.py not found at $PYTHON_SCRIPT"
-    exit 1
+# Prefer dx-runner unless explicitly requested legacy mode
+if [[ "${DX_DISPATCH_LEGACY:-0}" != "1" && -x "$DX_RUNNER" ]]; then
+    # Forward to dx-dispatch-v2 compat shim which translates to dx-runner
+    exec "${SCRIPT_DIR}/dx-dispatch-v2" "$@"
 fi
 
-# Run Python script with all arguments
-python "$PYTHON_SCRIPT" "$@"
+# Fallback to legacy Python path
+if [[ -f "$PYTHON_SCRIPT" ]]; then
+    echo "[WARN] Using legacy Python dispatch path. Set DX_DISPATCH_LEGACY=0 to suppress." >&2
+    python "$PYTHON_SCRIPT" "$@"
+else
+    echo "ERROR: Neither dx-runner nor dx-dispatch.py found" >&2
+    exit 1
+fi

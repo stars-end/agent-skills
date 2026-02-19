@@ -157,11 +157,10 @@ job_paths() {
     if [[ -n "$provider" ]]; then
         LOG_DIR="/tmp/dx-runner/${provider}"
     else
-        # Try to detect provider from meta
-        local meta="/tmp/dx-runner/${beads}.meta"
-        if [[ -f "$meta" ]]; then
-            provider="$(meta_get "$meta" "provider")"
-            LOG_DIR="/tmp/dx-runner/${provider:-unknown}"
+        # Try to detect provider from meta (search all provider dirs)
+        provider="$(find_provider_for_beads "$beads")"
+        if [[ -n "$provider" ]]; then
+            LOG_DIR="/tmp/dx-runner/${provider}"
         else
             LOG_DIR="/tmp/dx-runner"
         fi
@@ -178,13 +177,38 @@ job_paths() {
     HEARTBEAT_FILE="${LOG_DIR}/${beads}.heartbeat"
 }
 
+# P1 fix: Search all provider directories to find beads metadata
+find_provider_for_beads() {
+    local beads="$1"
+    
+    # First check root dir
+    if [[ -f "/tmp/dx-runner/${beads}.meta" ]]; then
+        meta_get "/tmp/dx-runner/${beads}.meta" "provider" 2>/dev/null || true
+        return 0
+    fi
+    
+    # Then search provider subdirectories
+    shopt -s nullglob
+    for dir in /tmp/dx-runner/*/; do
+        [[ -d "$dir" ]] || continue
+        if [[ -f "${dir}${beads}.meta" ]]; then
+            local provider
+            provider="$(basename "$dir")"
+            printf '%s' "$provider"
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
 resolve_worktree() {
     local beads="$1"
     local from_flag="${2:-}"
     local resolved="$from_flag"
     if [[ -z "$resolved" && -n "$beads" ]]; then
         local provider
-        provider="$(meta_get "/tmp/dx-runner/${beads}.meta" "provider" 2>/dev/null || true)"
+        provider="$(find_provider_for_beads "$beads")"
         job_paths "$beads" "$provider"
         resolved="$(meta_get "$META_FILE" "worktree" 2>/dev/null || true)"
     fi
@@ -201,7 +225,7 @@ resolve_worktree() {
 check_mutations() {
     local beads="$1"
     local provider
-    provider="$(meta_get "/tmp/dx-runner/${beads}.meta" "provider" 2>/dev/null || true)"
+    provider="$(find_provider_for_beads "$beads")"
     job_paths "$beads" "$provider"
 
     local worktree
@@ -228,7 +252,7 @@ write_mutation_marker() {
     local beads="$1"
     local count="$2"
     local provider
-    provider="$(meta_get "/tmp/dx-runner/${beads}.meta" "provider" 2>/dev/null || true)"
+    provider="$(find_provider_for_beads "$beads")"
     job_paths "$beads" "$provider"
 
     cat > "$MUTATION_FILE" <<EOF
@@ -269,7 +293,7 @@ EOF
 check_heartbeat_age() {
     local beads="$1"
     local provider
-    provider="$(meta_get "/tmp/dx-runner/${beads}.meta" "provider" 2>/dev/null || true)"
+    provider="$(find_provider_for_beads "$beads")"
     job_paths "$beads" "$provider"
     
     if [[ ! -f "$HEARTBEAT_FILE" ]]; then
@@ -601,7 +625,7 @@ unified_preflight() {
 job_health_detail() {
     local beads="$1"
     local provider
-    provider="$(meta_get "/tmp/dx-runner/${beads}.meta" "provider" 2>/dev/null || true)"
+    provider="$(find_provider_for_beads "$beads")"
     
     # If no provider found, search across provider directories
     if [[ -z "$provider" ]]; then
@@ -1173,7 +1197,7 @@ EOF
 status_line() {
     local beads="$1"
     local provider
-    provider="$(meta_get "/tmp/dx-runner/${beads}.meta" "provider" 2>/dev/null || true)"
+    provider="$(find_provider_for_beads "$beads")"
     job_paths "$beads" "$provider"
     
     local pid="" state="missing" reason="-" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-" mutations="-"
@@ -1309,7 +1333,7 @@ check_cmd() {
     [[ -n "$BEADS" ]] || { echo "check requires --beads" >&2; exit 2; }
     
     local provider
-    provider="$(meta_get "/tmp/dx-runner/${BEADS}.meta" "provider" 2>/dev/null || true)"
+    provider="$(find_provider_for_beads "$BEADS")"
     
     # If no provider found, search across provider directories
     if [[ -z "$provider" ]]; then
@@ -1354,7 +1378,7 @@ stop_cmd() {
     [[ -n "$BEADS" ]] || { echo "stop requires --beads" >&2; exit 2; }
     
     local provider
-    provider="$(meta_get "/tmp/dx-runner/${BEADS}.meta" "provider" 2>/dev/null || true)"
+    provider="$(find_provider_for_beads "$BEADS")"
     job_paths "$BEADS" "$provider"
     
     if [[ ! -f "$PID_FILE" ]]; then
@@ -1385,7 +1409,7 @@ restart_cmd() {
     [[ -n "$BEADS" ]] || { echo "restart requires --beads" >&2; exit 2; }
     
     local provider worktree prompt_file
-    provider="$(meta_get "/tmp/dx-runner/${BEADS}.meta" "provider" 2>/dev/null || true)"
+    provider="$(find_provider_for_beads "$BEADS")"
     job_paths "$BEADS" "$provider"
     
     if [[ ! -f "$META_FILE" ]]; then
@@ -1443,7 +1467,7 @@ report_cmd() {
     [[ -n "$BEADS" ]] || { echo "report requires --beads" >&2; exit 2; }
     
     local provider
-    provider="$(meta_get "/tmp/dx-runner/${BEADS}.meta" "provider" 2>/dev/null || true)"
+    provider="$(find_provider_for_beads "$BEADS")"
     job_paths "$BEADS" "$provider"
     
     local detail state reason mutations log_bytes cpu_time pid_age log_age
