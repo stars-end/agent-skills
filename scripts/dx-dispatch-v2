@@ -24,8 +24,8 @@ deprecation_warn() {
 
 handle_session() {
     local session_id="${1:-}"
+    local task="${2:-Continue}"  # P1 fix: read task BEFORE shifting
     shift 2 || true
-    local task="${1:-Continue}"
     
     # Look up session in state store
     local state_file="$HOME/.cache/dx-dispatch/fleet-state.json"

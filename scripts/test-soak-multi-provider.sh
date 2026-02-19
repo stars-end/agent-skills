@@ -78,8 +78,9 @@ for provider in cc-glm opencode gemini; do
     fi
 done
 
-# Preflight can fail for missing auth, but runner should still work
-if [[ $preflight_errors -lt 3 ]]; then
+# P1 fix: ALL providers must pass for preflight_ok (not just < 3)
+# Exception: if provider wasn't tested (binary missing), don't count as failure
+if [[ $preflight_errors -eq 0 ]]; then
     ACCEPTANCE["preflight_ok"]=true
 fi
 echo ""
@@ -134,7 +135,11 @@ echo ""
 echo "=== Individual Job Checks ==="
 for job in "${!PROVIDER_JOBS[@]}"; do
     echo "Checking: $job"
-    if "$DX_RUNNER" check --beads "$job" --json > "${RESULTS_DIR}/${job}-check.json" 2>&1; then
+    # P1 fix: check exits non-zero for error states, but JSON is still valid
+    # Run check, capture exit code, then read JSON regardless of exit code
+    "$DX_RUNNER" check --beads "$job" --json > "${RESULTS_DIR}/${job}-check.json" 2>&1 || true
+    # Always try to read state from JSON (file exists even on non-zero exit)
+    if [[ -f "${RESULTS_DIR}/${job}-check.json" ]] && jq -e . "${RESULTS_DIR}/${job}-check.json" >/dev/null 2>&1; then
         JOB_STATUS[$job]="$(jq -r '.state // "unknown"' "${RESULTS_DIR}/${job}-check.json" 2>/dev/null)" || JOB_STATUS[$job]="parse_error"
     else
         JOB_STATUS[$job]="check_failed"
