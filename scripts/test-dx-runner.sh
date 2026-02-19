@@ -269,6 +269,47 @@ EOF
     else
         fail "health --json invalid JSON"
     fi
+
+    # Test no_op state
+    # To simulate no_op, we need a heartbeat file that is old
+    local hb_file="/tmp/dx-runner/$provider/${beads}.heartbeat"
+    local old_date
+    old_date="$(date -u -d "10 minutes ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-10M +"%Y-%m-%dT%H:%M:%SZ")"
+    cat > "$hb_file" <<EOF
+beads=$beads
+provider=$provider
+count=1
+last_at=$old_date
+EOF
+    # We also need a running process with no mutations and no log bytes
+    local fake_pid
+    sleep 60 &
+    fake_pid="$!"
+    echo "$fake_pid" > "$log_dir/${beads}.pid"
+    # Ensure log file exists but is empty
+    : > "$log_dir/${beads}.log"
+    # Ensure meta file exists and worktree is set to an empty dir
+    local empty_worktree
+    empty_worktree="$(mktemp -d)"
+    cat > "$log_dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+worktree=$empty_worktree
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+EOF
+
+    set +e
+    "$DX_RUNNER" check --beads "$beads" >/dev/null 2>&1
+    local rc=$?
+    set -e
+    if [[ "$rc" -eq 23 ]]; then
+        pass "health detects no_op and returns exit 23"
+    else
+        fail "expected exit 23 for no_op, got $rc"
+    fi
+    kill "$fake_pid" 2>/dev/null || true
+    rm -rf "$empty_worktree"
     
     # Cleanup
     rm -f "$log_dir/${beads}".*
@@ -841,17 +882,115 @@ test_outcome_metadata() {
 # Main
 # ============================================================================
 
+# ============================================================================
+# Test: Restart Lifecycle
+# ============================================================================
+
+test_restart_lifecycle() {
+    echo "=== Testing Restart Lifecycle ==="
+
+    local adapter="$ADAPTERS_DIR/mock.sh"
+    create_mock_adapter "$adapter"
+
+    local beads="test-restart-$$"
+    local prompt
+    prompt="$(mktemp)"
+    echo "READY" > "$prompt"
+
+    # Start first time
+    if "$DX_RUNNER" start --beads "$beads" --provider mock --prompt-file "$prompt" >/dev/null 2>&1; then
+        local pid1
+        pid1="$(cat "/tmp/dx-runner/mock/${beads}.pid" 2>/dev/null || true)"
+        [[ -n "$pid1" ]] || fail "missing pid1"
+
+        # Restart
+        if "$DX_RUNNER" restart --beads "$beads" >/dev/null 2>&1; then
+            # Verify pid1 is gone
+            if ps -p "$pid1" >/dev/null 2>&1; then
+                fail "pid1 should be stopped after restart"
+            else
+                pass "pid1 stopped correctly"
+            fi
+
+            local pid2
+            pid2="$(cat "/tmp/dx-runner/mock/${beads}.pid" 2>/dev/null || true)"
+            [[ -n "$pid2" && "$pid1" != "$pid2" ]] || fail "missing or duplicate pid2"
+
+            # Verify retries incremented
+            local retries
+            retries="$(awk -F= '$1=="retries"{print $2; exit}' "/tmp/dx-runner/mock/${beads}.meta" 2>/dev/null || echo "0")"
+            if [[ "$retries" == "1" ]]; then
+                pass "retry count incremented to 1"
+            else
+                fail "expected retry count 1, got $retries"
+            fi
+        else
+            fail "restart command failed"
+        fi
+    else
+        fail "start command failed"
+    fi
+
+    rm -f "$prompt" "$adapter"
+    rm -f /tmp/dx-runner/mock/"${beads}".*
+}
+
+# ============================================================================
+# Test: Start Preflight Gate
+# ============================================================================
+
+test_start_preflight() {
+    echo "=== Testing Start Preflight Gate ==="
+
+    local adapter="$ADAPTERS_DIR/preflight-fail.sh"
+    cat > "$adapter" <<'EOF'
+#!/usr/bin/env bash
+adapter_preflight() { return 1; }
+adapter_probe_model() { return 0; }
+adapter_list_models() { echo "mock"; }
+adapter_stop() { return 0; }
+adapter_start() { return 0; }
+EOF
+    chmod +x "$adapter"
+
+    local beads="test-preflight-fail-$$"
+    local prompt
+    prompt="$(mktemp)"
+    echo "READY" > "$prompt"
+
+    set +e
+    "$DX_RUNNER" start --beads "$beads" --provider preflight-fail --prompt-file "$prompt" >/tmp/preflight-test.out 2>&1
+    local rc=$?
+    set -e
+
+    if [[ "$rc" -eq 21 ]]; then
+        pass "start fails with exit 21 when preflight fails"
+    else
+        fail "expected exit 21 for preflight failure, got $rc"
+    fi
+
+    if grep -q "preflight gate failed" /tmp/preflight-test.out; then
+        pass "start shows preflight failure message"
+    else
+        fail "start missing preflight failure message"
+    fi
+
+    rm -f "$prompt" "$adapter" /tmp/preflight-test.out
+}
+
 run_all_tests() {
     test_bash_syntax
     test_runner_commands
     test_adapter_contract
     test_governance_gates
+    test_start_preflight
     test_beads_gate
     test_beads_gate_json_schema
     test_health_states
     test_json_output
     test_outcome_lifecycle
     test_outcome_metadata
+    test_restart_lifecycle
     test_model_resolution
     test_probe_model_flag
     test_gemini_adapter
