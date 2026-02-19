@@ -27,7 +27,7 @@ This infrastructure uses 1Password Service Accounts to provide secure, non-inter
 - **Vault List**: ~60 requests/minute
 
 **Optimization Strategy**:
-- **Cache IDs**: `setup-env-from-1password.sh` caches Vault/Item IDs to avoid `op item list` calls.
+- **Cache IDs**: Cache Vault/Item IDs in env files to avoid `op item list` calls.
 - **Batch Access**: Use `op run --` to inject multiple secrets in a single authentication session.
 
 ## Setup & Rotation
