@@ -51,10 +51,22 @@ adapter_preflight() {
         echo "OK (env key mode)"
         auth_ok=1
     elif [[ -n "$gemini_bin" ]]; then
-        # CLI-auth probe: use a non-interactive command that requires auth
+        # CLI-auth probe: check cached auth state
         if "$gemini_bin" --list-sessions >/dev/null 2>&1; then
             echo "OK (cli-auth mode)"
             auth_ok=1
+        else
+            # OAuth mode probe: execute a short non-interactive request.
+            local probe_model="${GEMINI_MODEL:-$GEMINI_CANONICAL_MODEL}"
+            local probe_output=""
+            probe_output="$(timeout "${GEMINI_AUTH_PROBE_TIMEOUT_SEC:-25}" "$gemini_bin" -y --model "$probe_model" -p "Return exactly READY" 2>&1)" || true
+            if echo "$probe_output" | grep -qi "READY"; then
+                echo "OK (oauth cached credentials)"
+                auth_ok=1
+            elif echo "$probe_output" | grep -qiE "loaded cached credentials|logged in with google"; then
+                echo "OK (oauth session)"
+                auth_ok=1
+            fi
         fi
     fi
 
@@ -106,10 +118,8 @@ adapter_start() {
         cmd_args+=(-y)
     fi
     
-    # Add model flag if supported
-    if "$gemini_bin" --help 2>/dev/null | grep -q -- "--model"; then
-        cmd_args+=(--model "$model")
-    fi
+    # Current Gemini CLI supports --model; avoid --help probe in hot path.
+    cmd_args+=(--model "$model")
     
     # Use explicit headless prompt mode (-p)
     cmd_args+=(-p "$prompt")
@@ -156,7 +166,7 @@ adapter_probe_model() {
     gemini_bin="$(adapter_find_gemini)" || return 1
     
     # Quick probe
-    timeout 30 "$gemini_bin" -y --model "$model" "Return READY" 2>/dev/null | grep -q "READY" || return 1
+    timeout 30 "$gemini_bin" -y --model "$model" -p "Return READY" 2>/dev/null | grep -q "READY" || return 1
     
     return 0
 }

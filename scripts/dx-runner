@@ -565,8 +565,18 @@ validate_worktree_path() {
     local allowed_prefixes=(
         "/tmp/agents"
         "/tmp/dx-runner"
+        "/tmp/dxbench"
+        "/tmp/dxbench_epyc6"
         "$HOME/agent-skills"
     )
+    local extra_prefixes="${DX_RUNNER_EXTRA_ALLOWED_PREFIXES:-}"
+    if [[ -n "$extra_prefixes" ]]; then
+        local extra
+        IFS=',' read -r -a extra <<< "$extra_prefixes"
+        for prefix in "${extra[@]}"; do
+            [[ -n "$prefix" ]] && allowed_prefixes+=("$prefix")
+        done
+    fi
     
     # Check if path starts with any allowed prefix
     for prefix in "${allowed_prefixes[@]}"; do

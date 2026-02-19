@@ -11,7 +11,7 @@
 #   test_health_states       - Test health state classification
 #   test_json_output         - Verify JSON output is deterministic
 #   test_outcome_lifecycle   - Outcome persistence + launcher capture
-#   test_model_resolution    - Canonical strict model resolution
+#   test_model_resolution    - Canonical + allowed fallback model resolution
 #   test_probe_model_flag    - Probe command honors --model
 #   test_prune_stale_jobs    - Stale PID transitions and pruning
 
@@ -388,11 +388,11 @@ test_outcome_lifecycle() {
 }
 
 # ============================================================================
-# Test: OpenCode Model Resolution (Strict Canonical)
+# Test: OpenCode Model Resolution (Canonical + Allowed Fallback)
 # ============================================================================
 
 test_model_resolution() {
-    echo "=== Testing Model Resolution (Strict Canonical) ==="
+    echo "=== Testing Model Resolution (Canonical + Allowed Fallback) ==="
 
     local tmp_bin
     tmp_bin="$(mktemp -d)"
@@ -414,6 +414,8 @@ EOF
     local models_file
     models_file="$(mktemp)"
     PATH="$tmp_bin:$PATH"
+    export OPENCODE_MODELS_CACHE_TTL_SEC=0
+    rm -f /tmp/dx-runner/opencode/.models_cache
 
     # shellcheck disable=SC1091
     source "$ADAPTERS_DIR/opencode.sh"
@@ -432,30 +434,33 @@ EOF
 zai-coding-plan/glm-5
 opencode/glm-5-free
 EOF
+    rm -f /tmp/dx-runner/opencode/.models_cache
     local r2
     r2="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12" || true)"
-    [[ "$r2" == "|unavailable|"* ]] && pass "model resolution fails when canonical model is missing" || fail "expected unavailable when canonical missing: $r2"
+    [[ "$r2" == zai-coding-plan/glm-5* ]] && pass "model resolution falls back to allowlisted zai model when canonical is missing" || fail "expected zai fallback when canonical missing: $r2"
 
     local r3
     r3="$(adapter_resolve_model "zai-coding-plan/glm-5" "epyc12" || true)"
-    [[ "$r3" == "|unavailable|"* ]] && pass "model resolution rejects non-canonical requested models" || fail "expected non-canonical rejection: $r3"
+    [[ "$r3" == zai-coding-plan/glm-5* ]] && pass "model resolution accepts allowlisted non-canonical requested models" || fail "expected allowlisted requested model acceptance: $r3"
 
-    # Start should fail with deterministic rc=25 and reason_code when canonical is unavailable
+    # Start should fail with deterministic rc=25 and reason_code when allowed list is canonical-only
     local prompt_file log_file start_out rc
     prompt_file="$(mktemp)"
     log_file="$(mktemp)"
     echo "READY" > "$prompt_file"
     set +e
-    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "/tmp" "$log_file" 2>/dev/null)"
+    rm -f /tmp/dx-runner/opencode/.models_cache
+    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" OPENCODE_ALLOWED_MODELS="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "/tmp" "$log_file" 2>/dev/null)"
     rc=$?
     set -e
     if [[ "$rc" -eq 25 ]] && echo "$start_out" | grep -q "reason_code=opencode_model_unavailable"; then
-        pass "opencode start returns rc=25 with opencode_model_unavailable when canonical model is missing"
+        pass "opencode start returns rc=25 with opencode_model_unavailable when canonical-only policy cannot be satisfied"
     else
-        fail "expected rc=25 + reason_code for unavailable canonical model (rc=$rc, out=$start_out)"
+        fail "expected rc=25 + reason_code for unavailable canonical-only model policy (rc=$rc, out=$start_out)"
     fi
 
     rm -rf "$tmp_bin" "$models_file" "$prompt_file" "$log_file"
+    unset OPENCODE_MODELS_CACHE_TTL_SEC
 }
 
 # ============================================================================
@@ -611,6 +616,14 @@ if [[ "$1" == "--list-sessions" ]]; then
   echo "Session 1"
   exit 0
 fi
+if [[ "$1" == "-y" ]]; then
+  if [[ "${MOCK_OAUTH_FAIL:-}" == "true" ]]; then
+    echo "oauth probe failed" >&2
+    exit 1
+  fi
+  echo "READY"
+  exit 0
+fi
 exit 0
 FAKEEOF
     chmod +x "$fake_gemini"
@@ -621,10 +634,11 @@ FAKEEOF
     unset GEMINI_API_KEY
     unset GOOGLE_API_KEY
     
-    # Test 1: Fail when both key and CLI-auth fail
+    # Test 1: Fail when env key, CLI-auth, and OAuth probe all fail
     (
         export PATH="$tmp_bin:$PATH"
         export MOCK_AUTH_FAIL=true
+        export MOCK_OAUTH_FAIL=true
         source "$ADAPTERS_DIR/gemini.sh"
         set +e
         adapter_preflight > /dev/null
@@ -634,7 +648,7 @@ FAKEEOF
         else
             exit 1
         fi
-    ) && pass "preflight fails when both env key and CLI auth are missing" || fail "preflight should fail when both env key and CLI auth are missing"
+    ) && pass "preflight fails when env key, CLI auth, and OAuth probe are all unavailable" || fail "preflight should fail when env key, CLI auth, and OAuth probe are all unavailable"
 
     # Test 2: Pass via env key
     (
@@ -648,9 +662,19 @@ FAKEEOF
     (
         export PATH="$tmp_bin:$PATH"
         export MOCK_AUTH_FAIL=false
+        export MOCK_OAUTH_FAIL=true
         source "$ADAPTERS_DIR/gemini.sh"
         adapter_preflight > /dev/null
     ) && pass "preflight passes via CLI auth probe" || fail "preflight should pass via CLI auth probe"
+
+    # Test 4: Pass via OAuth probe when --list-sessions fails
+    (
+        export PATH="$tmp_bin:$PATH"
+        export MOCK_AUTH_FAIL=true
+        export MOCK_OAUTH_FAIL=false
+        source "$ADAPTERS_DIR/gemini.sh"
+        adapter_preflight > /dev/null
+    ) && pass "preflight passes via OAuth probe when CLI session listing fails" || fail "preflight should pass via OAuth probe"
 
     # Restore keys
     [[ -n "$orig_gemini_key" ]] && export GEMINI_API_KEY="$orig_gemini_key"
