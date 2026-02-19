@@ -104,13 +104,13 @@ DX_CONTROLLER=1
   ~/agent-skills/scripts/queue-hygiene-enforcer.sh >> ~/logs/dx/queue-enforcer.log 2>&1
 
 # System Cron Workaround (OpenClaw native cron broken)
-# These use ~/bd/scripts/*-cron.sh wrappers that call openclaw CLI directly
+# These use ~/agent-skills/scripts/*-cron.sh wrappers that call openclaw CLI directly
 
 # Founder briefing (M-F 6am PT)
-0 6 * * 1-5 ~/bd/scripts/founder-briefing-cron.sh
+0 6 * * 1-5 ~/agent-skills/scripts/founder-briefing-cron.sh
 
 # Weekly V8 invariant audit (Sunday 7am PT)
-0 7 * * 0 ~/bd/scripts/dx-audit-cron.sh
+0 7 * * 0 ~/agent-skills/scripts/dx-audit-cron.sh
 ```
 
 ## Alerting
@@ -148,7 +148,7 @@ The following V5-V7 components are removed in V8:
 4. **OpenClaw native cron broken:** Two bugs prevent native OpenClaw cron:
    - Isolated sessions can't reach LLM providers (launchd sandbox)
    - Main sessions ignore job prompts, run heartbeat instead
-   **Workaround:** Use `~/bd/scripts/*-cron.sh` wrappers via system cron.
+   **Workaround:** Use `~/agent-skills/scripts/*-cron.sh` wrappers via system cron.
    These call `openclaw message send` CLI which inherits full shell env.
 
 ## Implementation Record
