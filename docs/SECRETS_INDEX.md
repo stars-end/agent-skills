@@ -13,7 +13,7 @@
 | Backend URL | Railway | `$RAILWAY_SERVICE_BACKEND_URL` |
 | API keys | 1Password | `op://dev/Agent-Secrets-Production/<FIELD>` |
 | Railway CLI token | 1Password | `op://dev/Railway-Delivery/token` |
-| GitHub token | 1Password | `op://dev/GitHub-Delivery/gh_token` |
+| GitHub token | 1Password | `op://dev/Agent-Secrets-Production/GITHUB_TOKEN` |
 | Anthropic token | 1Password | `op://dev/Anthropic-Config/ANTHROPIC_AUTH_TOKEN` |
 | Slack bot tokens | 1Password | `op://dev/Slack-Coordinator-Secrets/SLACK_BOT_TOKEN` |
 
@@ -32,7 +32,6 @@ The goal is to move to scoped per-service 1Password items:
 - `Slack-Coordinator-Secrets` - Slack bot tokens for coordination service
 - `Slack-MCP-Secrets` - Slack tokens for MCP server (IDEs)
 - `Railway-Delivery` - Railway deployment tokens
-- `GitHub-Delivery` - GitHub automation tokens
 - `OpenCode-Config` - OpenCode IDE configuration
 
 ### Field Listing (Agent-Secrets-Production)
@@ -155,7 +154,7 @@ op item list --vault dev
 |---------|----------------|-------------|
 | opencode.service | Anthropic-Config, Slack-MCP-Secrets, OpenCode-Config | ANTHROPIC_AUTH_TOKEN, SLACK_APP_TOKEN |
 | slack-coordinator.service | Anthropic-Config, Slack-Coordinator-Secrets | ANTHROPIC_AUTH_TOKEN, SLACK_BOT_TOKEN, SLACK_APP_TOKEN |
-| CI/CD pipelines | Railway-Delivery, GitHub-Delivery | token, gh_token |
+| CI/CD pipelines | Railway-Delivery, Agent-Secrets-Production | token, GITHUB_TOKEN |
 
 ---
 
