@@ -175,7 +175,7 @@ dx-runner start --beads bd-xxx --provider cc-glm --prompt-file /tmp/task.prompt
 ### opencode (Primary Throughput)
 
 OpenCode headless. Includes reliability fixes for:
-- **bd-cbsb.15**: Capability preflight with model fallback
+- **bd-cbsb.15**: Capability preflight with strict canonical model enforcement
 - **bd-cbsb.16**: Permission handling (worktree-only)
 - **bd-cbsb.17**: No-op detection
 - **bd-cbsb.18**: beads-mcp dependency check
@@ -184,9 +184,9 @@ OpenCode headless. Includes reliability fixes for:
 dx-runner start --beads bd-xxx --provider opencode --prompt-file /tmp/task.prompt
 ```
 
-**Model fallback chain:**
-- Preferred: `zhipuai-coding-plan/glm-5`
-- Fallback: `zai/glm-5` → `opencode/glm-5-free`
+**Model policy:**
+- Required: `zhipuai-coding-plan/glm-5`
+- If unavailable: fail fast and dispatch via `cc-glm` or `gemini`
 
 ### gemini (Future Capacity)
 
@@ -251,7 +251,7 @@ Tracks heartbeat (tool invocations, mutations, log output). If no heartbeat for 
 OpenCode adapter:
 1. Checks preferred model availability
 2. Falls back through chain if unavailable
-3. Records selection_reason and fallback_reason
+3. Records selected model and failure reason
 4. Probes model health with timeout
 
 ### beads-mcp Check (bd-cbsb.18)

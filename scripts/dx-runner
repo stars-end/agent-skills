@@ -57,7 +57,7 @@ declare -A PROVIDER_DEFAULT_MODEL=(
 )
 
 declare -A PROVIDER_FALLBACK_CHAIN=(
-    ["opencode"]="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:opencode/glm-5-free"
+    ["opencode"]="zhipuai-coding-plan/glm-5"
 )
 
 CMD="${1:-}"

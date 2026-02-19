@@ -11,7 +11,7 @@
 #   test_health_states       - Test health state classification
 #   test_json_output         - Verify JSON output is deterministic
 #   test_outcome_lifecycle   - Outcome persistence + launcher capture
-#   test_model_resolution    - Canonical/fallback model resolution order
+#   test_model_resolution    - Canonical strict model resolution
 #   test_probe_model_flag    - Probe command honors --model
 #   test_prune_stale_jobs    - Stale PID transitions and pruning
 
@@ -388,11 +388,11 @@ test_outcome_lifecycle() {
 }
 
 # ============================================================================
-# Test: OpenCode Model Resolution Order
+# Test: OpenCode Model Resolution (Strict Canonical)
 # ============================================================================
 
 test_model_resolution() {
-    echo "=== Testing Model Resolution Order ==="
+    echo "=== Testing Model Resolution (Strict Canonical) ==="
 
     local tmp_bin
     tmp_bin="$(mktemp -d)"
@@ -426,22 +426,19 @@ EOF
     export FAKE_MODELS_FILE="$models_file"
     local r1
     r1="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12")"
-    [[ "$r1" == zhipuai-coding-plan/glm-5* ]] && pass "model resolution prefers canonical zhipuai model" || fail "canonical preference failed: $r1"
+    [[ "$r1" == zhipuai-coding-plan/glm-5* ]] && pass "model resolution accepts canonical zhipuai model" || fail "canonical resolution failed: $r1"
 
     cat > "$models_file" <<'EOF'
 zai-coding-plan/glm-5
 opencode/glm-5-free
 EOF
     local r2
-    r2="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12")"
-    [[ "$r2" == zai-coding-plan/glm-5* ]] && pass "model resolution falls back to zai when zhipuai missing" || fail "zai fallback failed: $r2"
+    r2="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12" || true)"
+    [[ "$r2" == "|unavailable|"* ]] && pass "model resolution fails when canonical model is missing" || fail "expected unavailable when canonical missing: $r2"
 
-    cat > "$models_file" <<'EOF'
-opencode/glm-5-free
-EOF
     local r3
-    r3="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12")"
-    [[ "$r3" == opencode/glm-5-free* ]] && pass "model resolution falls back to controlled chain" || fail "controlled fallback failed: $r3"
+    r3="$(adapter_resolve_model "zai-coding-plan/glm-5" "epyc12" || true)"
+    [[ "$r3" == "|unavailable|"* ]] && pass "model resolution rejects non-canonical requested models" || fail "expected non-canonical rejection: $r3"
 
     rm -rf "$tmp_bin" "$models_file"
 }

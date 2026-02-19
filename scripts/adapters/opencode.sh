@@ -3,7 +3,7 @@
 #
 # Implements the adapter contract for OpenCode headless
 # Includes reliability fixes for bd-cbsb.15-.18:
-#   - Capability preflight with model fallback (bd-cbsb.15)
+#   - Capability preflight with strict canonical model enforcement (bd-cbsb.15)
 #   - Permission handling (bd-cbsb.16)
 #   - No-op detection (bd-cbsb.17)
 #   - beads-mcp dependency check (bd-cbsb.18)
@@ -16,15 +16,7 @@
 #   adapter_probe_model  - Test model availability
 #   adapter_list_models  - List available models
 
-# Model fallback chains per host (bd-cbsb.15)
-declare -A HOST_FALLBACK_CHAINS=(
-    ["epyc12"]="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
-    ["epyc6"]="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
-    ["macmini"]="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
-    ["homedesktop-wsl"]="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
-)
-
-DEFAULT_FALLBACK="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
+CANONICAL_MODEL="zhipuai-coding-plan/glm-5"
 
 adapter_find_opencode() {
     for candidate in "opencode" "/home/linuxbrew/.linuxbrew/bin/opencode" "/opt/homebrew/bin/opencode"; do
@@ -54,7 +46,7 @@ adapter_preflight() {
         return $errors
     fi
     
-    # Check 2: Model availability with fallback (bd-cbsb.15)
+    # Check 2: Model availability
     echo -n "model availability: "
     local models
     models=$("$opencode_bin" models 2>/dev/null) || true
@@ -68,15 +60,17 @@ adapter_preflight() {
         errors=$((errors + 1))
     fi
     
-    # Check 3: Preferred model probe with auth/quota (bd-cbsb.15 - strict blocking)
-    echo -n "preferred model probe: "
-    local preferred_model="${OPENCODE_MODEL:-zhipuai-coding-plan/glm-5}"
-    local model_result probe_model selection_reason fallback_reason
-    model_result="$(adapter_resolve_model "$preferred_model")"
-    IFS='|' read -r probe_model selection_reason fallback_reason <<< "$model_result"
+    # Check 3: Canonical model probe with auth/quota (strict blocking)
+    echo -n "canonical model probe: "
+    local model_result probe_model selection_reason resolve_reason
+    model_result="$(adapter_resolve_model "${OPENCODE_MODEL:-$CANONICAL_MODEL}")"
+    IFS='|' read -r probe_model selection_reason resolve_reason <<< "$model_result"
 
-    if [[ -n "$probe_model" ]]; then
-        # Probe the model with timeout
+    if [[ -z "$probe_model" ]]; then
+        echo "MISSING ($CANONICAL_MODEL)"
+        echo "  ERROR: $resolve_reason"
+        errors=$((errors + 1))
+    else
         local probe_output
         probe_output="$(timeout 30 "$opencode_bin" run --model "$probe_model" --format json "Say READY" 2>&1)" || true
         if echo "$probe_output" | grep -qi "READY"; then
@@ -90,10 +84,6 @@ adapter_preflight() {
             echo "  WARN: Model probe timed out (non-blocking)"
             warnings=$((warnings + 1))
         fi
-    else
-        echo "NO_MATCH"
-        echo "  ERROR: No glm-5 compatible model found"
-        errors=$((errors + 1))
     fi
     
     # Check 4: beads-mcp availability (bd-cbsb.18)
@@ -138,33 +128,20 @@ adapter_preflight() {
 
 adapter_resolve_model() {
     local preferred="$1"
-    local host="${2:-$(hostname 2>/dev/null | cut -d. -f1)}"
     local opencode_bin
     opencode_bin="$(adapter_find_opencode)" || return 1
-    
-    # Check preferred first (direct grep, no string truncation)
-    if [[ -n "$preferred" ]]; then
-        if "$opencode_bin" models 2>/dev/null | grep -qxF "$preferred"; then
-            echo "$preferred|preferred|"
-            return 0
-        fi
+
+    local required="${preferred:-$CANONICAL_MODEL}"
+    if [[ "$required" != "$CANONICAL_MODEL" ]]; then
+        echo "|unavailable|unsupported opencode model '$required'; only '$CANONICAL_MODEL' is allowed"
+        return 1
     fi
-    
-    # Use fallback chain
-    local chain="${HOST_FALLBACK_CHAINS[$host]:-$DEFAULT_FALLBACK}"
-    IFS=':' read -ra fallbacks <<< "$chain"
-    
-    for fb in "${fallbacks[@]}"; do
-        if "$opencode_bin" models 2>/dev/null | grep -qxF "$fb"; then
-            local reason=""
-            [[ -n "$preferred" ]] && reason="preferred $preferred not available, using fallback"
-            echo "$fb|fallback|$reason"
-            return 0
-        fi
-    done
-    
-    # No model found
-    echo "|unavailable|no models in fallback chain available"
+    if "$opencode_bin" models 2>/dev/null | grep -qxF "$CANONICAL_MODEL"; then
+        echo "$CANONICAL_MODEL|canonical|"
+        return 0
+    fi
+
+    echo "|unavailable|canonical model '$CANONICAL_MODEL' unavailable; use cc-glm or gemini"
     return 1
 }
 
@@ -180,15 +157,16 @@ adapter_start() {
         return 1
     }
     
-    # Resolve model with fallback (bd-cbsb.15)
-    local preferred_model="${OPENCODE_MODEL:-zhipuai-coding-plan/glm-5}"
+    # Resolve strict canonical model (bd-cbsb.15)
+    local preferred_model="${OPENCODE_MODEL:-$CANONICAL_MODEL}"
     local model_result model selection_reason fallback_reason
     model_result="$(adapter_resolve_model "$preferred_model")"
     IFS='|' read -r model selection_reason fallback_reason <<< "$model_result"
     
     if [[ -z "$model" ]]; then
-        echo "ERROR: No available model found. Tried: $preferred_model" >&2
+        echo "ERROR: OpenCode dispatch blocked. Required model: $CANONICAL_MODEL" >&2
         echo "ERROR: $fallback_reason" >&2
+        echo "ERROR: Use provider cc-glm or gemini for this wave." >&2
         return 1
     fi
     
@@ -255,9 +233,11 @@ adapter_start() {
 }
 
 adapter_probe_model() {
-    local model="${1:-zhipuai-coding-plan/glm-5}"
+    local model="${1:-$CANONICAL_MODEL}"
     local opencode_bin
     opencode_bin="$(adapter_find_opencode)" || return 1
+
+    [[ "$model" == "$CANONICAL_MODEL" ]] || return 1
     
     # Quick probe with timeout (bd-cbsb.15)
     timeout 45 "$opencode_bin" run --model "$model" --format json "Return only READY" 2>/dev/null | grep -qi "READY" || return 1
