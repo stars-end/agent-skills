@@ -1305,10 +1305,124 @@ EOF
     rm -f "$prompt" "$adapter" /tmp/preflight-test.out
 }
 
+# ============================================================================
+# Test: Adapter Contract Parity (bd-xga8.14.3)
+# ============================================================================
+
+test_adapter_parity() {
+    echo "=== Testing Adapter Contract Parity ==="
+    
+    local parity_functions=(
+        "adapter_start"
+        "adapter_preflight"
+        "adapter_probe_model"
+        "adapter_list_models"
+        "adapter_stop"
+        "adapter_resolve_model"
+    )
+    
+    local finder_functions=(
+        "cc-glm:adapter_find_cc_glm"
+        "opencode:adapter_find_opencode"
+        "gemini:adapter_find_gemini"
+    )
+    
+    # Test parity functions exist in all adapters
+    for adapter in "$ADAPTERS_DIR"/*.sh; do
+        local name
+        name="$(basename "$adapter" .sh)"
+        
+        source "$adapter"
+        
+        for func in "${parity_functions[@]}"; do
+            if declare -f "$func" >/dev/null 2>&1; then
+                pass "$name: $func parity OK"
+            else
+                fail "$name: $func parity MISSING"
+            fi
+        done
+    done
+    
+    # Test finder functions exist
+    for entry in "${finder_functions[@]}"; do
+        local adapter_name="${entry%%:*}"
+        local func_name="${entry##*:}"
+        local adapter="$ADAPTERS_DIR/${adapter_name}.sh"
+        
+        if [[ -f "$adapter" ]]; then
+            source "$adapter"
+            if declare -f "$func_name" >/dev/null 2>&1; then
+                pass "$adapter_name: $func_name finder OK"
+            else
+                fail "$adapter_name: $func_name finder MISSING"
+            fi
+        fi
+    done
+}
+
+test_adapter_resolve_model_parity() {
+    echo "=== Testing adapter_resolve_model Parity ==="
+    
+    # Test cc-glm resolve_model
+    source "$ADAPTERS_DIR/cc-glm.sh"
+    local cc_glm_result
+    cc_glm_result="$(adapter_resolve_model "glm-5")" || true
+    if [[ "$cc_glm_result" == "glm-5|"* ]]; then
+        pass "cc-glm adapter_resolve_model returns correct format"
+    else
+        fail "cc-glm adapter_resolve_model format wrong: $cc_glm_result"
+    fi
+    
+    local cc_glm_fallback
+    cc_glm_fallback="$(adapter_resolve_model "nonexistent-model")" || true
+    if [[ "$cc_glm_fallback" == *"|fallback|"* ]]; then
+        pass "cc-glm adapter_resolve_model returns fallback for unknown model"
+    else
+        fail "cc-glm adapter_resolve_model should fallback: $cc_glm_fallback"
+    fi
+    
+    # Test gemini resolve_model
+    source "$ADAPTERS_DIR/gemini.sh"
+    local gemini_result
+    gemini_result="$(adapter_resolve_model "gemini-3-flash-preview")" || true
+    if [[ "$gemini_result" == "gemini-3-flash-preview|"* ]]; then
+        pass "gemini adapter_resolve_model returns correct format"
+    else
+        fail "gemini adapter_resolve_model format wrong: $gemini_result"
+    fi
+    
+    local gemini_fallback
+    gemini_fallback="$(adapter_resolve_model "nonexistent-model")" || true
+    if [[ "$gemini_fallback" == *"|fallback|"* ]]; then
+        pass "gemini adapter_resolve_model returns fallback for unknown model"
+    else
+        fail "gemini adapter_resolve_model should fallback: $gemini_fallback"
+    fi
+}
+
+test_adapter_stop_parity() {
+    echo "=== Testing adapter_stop Parity ==="
+    
+    # All adapters should have graceful shutdown (sleep after kill)
+    for adapter in "$ADAPTERS_DIR"/*.sh; do
+        local name
+        name="$(basename "$adapter" .sh)"
+        
+        if grep -q 'sleep [0-9]' "$adapter" && grep -q 'kill -9' "$adapter"; then
+            pass "$name: adapter_stop has graceful shutdown + force kill"
+        else
+            fail "$name: adapter_stop missing graceful shutdown or force kill"
+        fi
+    done
+}
+
 run_all_tests() {
     test_bash_syntax
     test_runner_commands
     test_adapter_contract
+    test_adapter_parity
+    test_adapter_resolve_model_parity
+    test_adapter_stop_parity
     test_governance_gates
     test_start_preflight
     test_beads_gate

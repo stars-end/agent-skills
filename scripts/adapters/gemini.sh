@@ -15,6 +15,8 @@
 #   adapter_preflight    - Provider-specific preflight
 #   adapter_probe_model  - Test model availability
 #   adapter_list_models  - List available models
+#   adapter_resolve_model - Resolve model with fallback (parity)
+#   adapter_find_gemini  - Find Gemini binary (parity)
 
 GEMINI_CANONICAL_MODEL="gemini-3-flash-preview"
 
@@ -26,6 +28,32 @@ adapter_find_gemini() {
         fi
     done
     return 1
+}
+
+adapter_resolve_model() {
+    local preferred="$1"
+    local available_models
+    available_models=(
+        "gemini-1.5-flash"
+        "gemini-1.5-pro"
+        "gemini-2.0-flash"
+        "gemini-2.0-pro"
+        "gemini-3-flash-preview"
+        "gemini-3-pro-preview"
+    )
+    
+    local required="${preferred:-$GEMINI_CANONICAL_MODEL}"
+    
+    for m in "${available_models[@]}"; do
+        if [[ "$m" == "$required" ]]; then
+            echo "$required|available|"
+            return 0
+        fi
+    done
+    
+    local fallback="$GEMINI_CANONICAL_MODEL"
+    echo "$fallback|fallback|preferred model '$required' not available, using canonical"
+    return 0
 }
 
 adapter_preflight() {
