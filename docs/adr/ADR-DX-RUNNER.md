@@ -1,7 +1,7 @@
 # ADR: Unified Runner (dx-runner)
 
 ## Status
-ACCEPTED - 2026-02-18
+SUPERSEDED by [ADR-DX-V8-UNIFIED-DISPATCH.md](ADR-DX-V8-UNIFIED-DISPATCH.md) - 2026-02-19
 
 ## Context
 
