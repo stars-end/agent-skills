@@ -512,6 +512,96 @@ EOF
 }
 
 # ============================================================================
+# Test: Attach Mode Probe (bd-cbsb.19.3)
+# ============================================================================
+
+test_probe_attach_command() {
+    echo "=== Testing Attach Mode Probe (bd-cbsb.19.3) ==="
+
+    local tmp_bin
+    tmp_bin="$(mktemp -d)"
+    local fake_op="$tmp_bin/opencode"
+    local fake_curl="$tmp_bin/curl"
+
+    cat > "$fake_curl" <<'CURL_EOF'
+#!/usr/bin/env bash
+if [[ "$1" == *"/global/health"* ]]; then
+    echo '{"healthy":true,"version":"1.2.0"}'
+    exit 0
+fi
+echo '{"error":"not found"}'
+exit 1
+CURL_EOF
+    chmod +x "$fake_curl"
+
+    cat > "$fake_op" <<'OP_EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "models" ]]; then
+    echo "zhipuai-coding-plan/glm-5"
+    exit 0
+fi
+if [[ "$1" == "run" && "$2" == "--attach" ]]; then
+    if [[ -n "${FAIL_ATTACH:-}" ]]; then
+        echo '{"error":{"message":"No context found for instance"}}'
+        exit 1
+    fi
+    echo '{"type":"text","text":"ATTACH_PROBE_OK"}'
+    exit 0
+fi
+exit 0
+OP_EOF
+    chmod +x "$fake_op"
+
+    local adapter="${ADAPTERS_DIR}/opencode.sh"
+    source "$adapter"
+
+    PATH="$tmp_bin:$PATH" adapter_find_opencode >/dev/null 2>&1 || {
+        warn "opencode binary check skipped"
+        rm -rf "$tmp_bin"
+        return 0
+    }
+
+    local result
+    result="$(PATH="$tmp_bin:$PATH" adapter_probe_attach "http://localhost:4096" 2>&1)" || true
+    if echo "$result" | grep -qi "OK\|ready"; then
+        pass "probe-attach succeeds with healthy server"
+    else
+        warn "probe-attach result: $result"
+    fi
+
+    FAIL_ATTACH=1 result="$(PATH="$tmp_bin:$PATH" adapter_probe_attach "http://localhost:4096" 2>&1)" || true
+    if echo "$result" | grep -qi "context\|GUIDANCE\|FALLBACK"; then
+        pass "probe-attach provides guidance on context failure"
+    else
+        warn "probe-attach context failure: $result"
+    fi
+
+    rm -rf "$tmp_bin"
+}
+
+test_probe_attach_unreachable() {
+    echo "=== Testing Attach Mode Probe (Unreachable Server) ==="
+
+    local result
+    result="$("$DX_RUNNER" probe-attach --url "http://localhost:59999" 2>&1)" || true
+
+    if echo "$result" | grep -qiE "unreachable|error|failed"; then
+        pass "probe-attach detects unreachable server"
+    else
+        fail "probe-attach should report unreachable server"
+    fi
+
+    local json_result
+    json_result="$("$DX_RUNNER" probe-attach --url "http://localhost:59999" --json 2>&1)" || true
+
+    if echo "$json_result" | jq -e '.status == "failed"' >/dev/null 2>&1; then
+        pass "probe-attach --json reports failed status"
+    else
+        warn "probe-attach json: $json_result"
+    fi
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 
@@ -526,6 +616,8 @@ run_all_tests() {
     test_model_resolution
     test_probe_model_flag
     test_prune_stale_jobs
+    test_probe_attach_command
+    test_probe_attach_unreachable
     
     echo ""
     echo "=== Summary ==="

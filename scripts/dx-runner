@@ -1111,6 +1111,7 @@ TAIL_LINES=20
 SHOW_MUTATIONS=false
 REPORT_FORMAT="json"
 MODEL_ID=""
+PROBE_ATTACH_URL=""
 
 parse_common_args() {
     while [[ $# -gt 0 ]]; do
@@ -1133,6 +1134,10 @@ parse_common_args() {
                 ;;
             --worktree)
                 WORKTREE="${2:-}"
+                shift 2
+                ;;
+            --url)
+                PROBE_ATTACH_URL="${2:-}"
                 shift 2
                 ;;
             --stall-minutes)
@@ -1228,6 +1233,7 @@ Usage:
   dx-runner report --beads <id> [--format json|markdown]
   dx-runner preflight [--provider <name>]
   dx-runner probe --provider <name> --model <id>
+  dx-runner probe-attach --url <server_url> [--json]
   dx-runner baseline-gate [--beads <id> | --worktree <path>] --required-baseline <sha>
   dx-runner integrity-gate [--beads <id> | --worktree <path>] --reported-commit <sha>
   dx-runner feature-key-gate [--beads <id> | --worktree <path>] --feature-key <bd-id>
@@ -1249,6 +1255,7 @@ Commands:
   report       Generate job report
   preflight    Verify prerequisites
   probe        Test provider/model availability
+  probe-attach Test OpenCode attach mode compatibility (bd-cbsb.19.3)
   baseline-gate Verify runtime commit meets baseline
   integrity-gate Verify reported commit exists
   feature-key-gate Verify Feature-Key trailers
@@ -1264,10 +1271,17 @@ Exit Codes:
   21 Preflight failed
   22 Permission denied (non-worktree path)
   23 No-op detected
+  24 Attach mode incompatible (bd-cbsb.19.3)
 
 Health States:
   launching, waiting_first_output, silent_mutation, stalled,
   healthy, exited_ok, exited_err, blocked, missing, no_op
+
+Attach Mode (bd-cbsb.19.3):
+  The probe-attach command verifies OpenCode server attach compatibility.
+  It checks: 1) Server reachability, 2) Health endpoint, 3) Context availability.
+  Exit code 24 indicates server is healthy but lacks execution context.
+  Fallback: Use headless mode without --attach flag.
 EOF
 }
 
@@ -1854,6 +1868,48 @@ probe_cmd() {
     fi
 }
 
+PROBE_ATTACH_URL=""
+
+probe_attach_cmd() {
+    parse_common_args "$@"
+    [[ -n "$PROBE_ATTACH_URL" ]] || { echo "probe-attach requires --url" >&2; exit 2; }
+    
+    local adapter="${ADAPTERS_DIR}/opencode.sh"
+    if [[ ! -f "$adapter" ]]; then
+        echo "opencode adapter not found: $adapter" >&2
+        exit 20
+    fi
+    
+    source "$adapter"
+    
+    if ! declare -f adapter_probe_attach >/dev/null 2>&1; then
+        echo "adapter_probe_attach not implemented" >&2
+        exit 1
+    fi
+    
+    if [[ "$OUTPUT_JSON" != "true" ]]; then
+        echo "Probing attach mode at $PROBE_ATTACH_URL..."
+    fi
+    local probe_output
+    local probe_rc=0
+    probe_output="$(adapter_probe_attach "$PROBE_ATTACH_URL" 2>&1)" || probe_rc=$?
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        local status="ok"
+        local error=""
+        if [[ $probe_rc -ne 0 ]]; then
+            status="failed"
+            error="$probe_output"
+        fi
+        printf '{"url":"%s","status":"%s","exit_code":%s,"output":"%s"}\n' \
+            "$(json_escape "$PROBE_ATTACH_URL")" "$status" "$probe_rc" "$(json_escape "$probe_output")"
+    else
+        echo "$probe_output"
+    fi
+    
+    exit $probe_rc
+}
+
 watchdog_cmd() {
     parse_common_args "$@"
     
@@ -1987,6 +2043,7 @@ case "$CMD" in
     report) report_cmd "$@" ;;
     preflight) preflight_cmd "$@" ;;
     probe) probe_cmd "$@" ;;
+    probe-attach) probe_attach_cmd "$@" ;;
     watchdog) watchdog_cmd "$@" ;;
     baseline-gate) baseline_gate_cmd "$@" ;;
     integrity-gate) integrity_gate_cmd "$@" ;;

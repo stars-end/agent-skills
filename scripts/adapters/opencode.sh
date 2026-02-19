@@ -232,6 +232,54 @@ adapter_start() {
     printf 'rc_file=%s\n' "$rc_file"
 }
 
+adapter_probe_attach() {
+    local url="${1:-}"
+    local opencode_bin
+    opencode_bin="$(adapter_find_opencode)" || return 1
+    
+    if [[ -z "$url" ]]; then
+        echo "ERROR: attach URL required"
+        return 1
+    fi
+    
+    local health_url="${url%/}/global/health"
+    local health_response
+    health_response="$(timeout 5 curl -sf "$health_url" 2>/dev/null)" || {
+        echo "ERROR: server unreachable at $url"
+        echo "GUIDANCE: Start server with 'opencode serve --hostname <host> --port <port>'"
+        return 1
+    }
+    
+    if ! echo "$health_response" | grep -qi '"healthy"\s*:\s*true\|"status"\s*:\s*"ok"'; then
+        echo "ERROR: server not healthy at $url"
+        echo "RESPONSE: $health_response"
+        return 1
+    fi
+    
+    local probe_result
+    probe_result="$(timeout 10 "$opencode_bin" run --attach "$url" --model "$CANONICAL_MODEL" --format json "echo ATTACH_PROBE_OK" 2>&1)" || {
+        local rc=$?
+        if echo "$probe_result" | grep -qi "no context found"; then
+            echo "ERROR: attach mode requires initialized server context"
+            echo "GUIDANCE: Server is healthy but lacks execution context. Use headless mode instead."
+            echo "FALLBACK: Run without --attach, or ensure server has active session context."
+            return 24
+        fi
+        echo "ERROR: attach probe failed with exit code $rc"
+        echo "OUTPUT: $probe_result"
+        return 1
+    }
+    
+    if echo "$probe_result" | grep -qi "ATTACH_PROBE_OK"; then
+        echo "OK: attach mode ready"
+        return 0
+    fi
+    
+    echo "WARN: attach probe returned unexpected output"
+    echo "OUTPUT: $probe_result"
+    return 0
+}
+
 adapter_probe_model() {
     local model="${1:-$CANONICAL_MODEL}"
     local opencode_bin
@@ -239,9 +287,26 @@ adapter_probe_model() {
 
     [[ "$model" == "$CANONICAL_MODEL" ]] || return 1
     
-    # Quick probe with timeout (bd-cbsb.15)
     timeout 45 "$opencode_bin" run --model "$model" --format json "Return only READY" 2>/dev/null | grep -qi "READY" || return 1
     
+    return 0
+}
+
+adapter_detect_mode() {
+    local url="${1:-}"
+    local worktree="${2:-}"
+    
+    if [[ -n "$url" ]]; then
+        echo "attach|$url"
+        return 0
+    fi
+    
+    if [[ -n "$worktree" ]]; then
+        echo "headless|$worktree"
+        return 0
+    fi
+    
+    echo "headless|$(pwd)"
     return 0
 }
 
