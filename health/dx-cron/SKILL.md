@@ -36,7 +36,7 @@ crontab -l | grep -E "dx-|ru sync|founder-briefing|heartbeat|audit"
 Verify scripts exist and check last run status from logs.
 ```bash
 # Check script status
-for f in ~/bd/scripts/*.sh; do [ -x "$f" ] && echo "✅ $f" || echo "❌ $f (check bits)"; done
+for f in ~/agent-skills/scripts/dx-*.sh; do [ -x "$f" ] && echo "✅ $f" || echo "❌ $f (check bits)"; done
 
 # Check last run times of logs
 ls -lhrt ~/logs/*.log ~/logs/dx/*.log | tail -5
