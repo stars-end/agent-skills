@@ -299,6 +299,46 @@ resolve_worktree() {
   printf '%s' "$resolved"
 }
 
+# V8: Target identity validation for stop/check/restart
+# Ensures current directory or --worktree flag matches job's recorded worktree.
+# Prevents mis-targeting when multiple worktrees share the same beads ID.
+ensure_target_identity() {
+  local beads="$1"
+  local cmd="$2"
+  local provided_worktree="${3:-}"
+
+  job_paths "$beads"
+  if [[ ! -f "$META_FILE" ]]; then
+    return 0  # No job metadata yet, nothing to validate against
+  fi
+
+  local meta_worktree
+  meta_worktree="$(meta_get "$META_FILE" "worktree" 2>/dev/null || true)"
+
+  # If job was started with no worktree, we can't validate identity.
+  [[ -n "$meta_worktree" ]] || return 0
+
+  local canonical_meta
+  canonical_meta="$(cd "$meta_worktree" 2>/dev/null && pwd -P || echo "$meta_worktree")"
+
+  local target
+  if [[ -n "$provided_worktree" ]]; then
+    target="$(cd "$provided_worktree" 2>/dev/null && pwd -P || echo "$provided_worktree")"
+  else
+    target="$(pwd -P)"
+  fi
+
+  # Exact match or subdirectory (for convenience when running from within worktree)
+  if [[ "$target" != "$canonical_meta" && "$target" != "$canonical_meta"/* ]]; then
+    echo "ERROR: Target identity mismatch for job $beads ($cmd)" >&2
+    echo "  Job worktree:    $canonical_meta" >&2
+    echo "  Target worktree: $target" >&2
+    echo "  Aborting to prevent side effects on unintended worktree." >&2
+    echo "  Hint: cd to the correct worktree or use --worktree <path>" >&2
+    exit 1
+  fi
+}
+
 # V3.3: Mutation detection
 # Checks worktree for file changes and writes mutation marker
 # Returns: number of changed files (0 if none or no worktree)
@@ -1539,6 +1579,7 @@ check_cmd() {
   parse_common_args "$@"
   [[ -n "$BEADS" ]] || { echo "check requires --beads" >&2; exit 2; }
   job_paths "$BEADS"
+  ensure_target_identity "$BEADS" "check" "$WORKTREE"
 
   if [[ ! -f "$META_FILE" ]]; then
     echo "job $BEADS has no metadata file"
@@ -1627,6 +1668,7 @@ stop_cmd() {
   parse_common_args "$@"
   [[ -n "$BEADS" ]] || { echo "stop requires --beads" >&2; exit 2; }
   job_paths "$BEADS"
+  ensure_target_identity "$BEADS" "stop" "$WORKTREE"
 
   local pid
   pid="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -1812,6 +1854,7 @@ restart_cmd() {
   parse_common_args "$@"
   [[ -n "$BEADS" ]] || { echo "restart requires --beads" >&2; exit 2; }
   job_paths "$BEADS"
+  ensure_target_identity "$BEADS" "restart" "$WORKTREE"
 
   if [[ ! -f "$META_FILE" ]]; then
     echo "no metadata file for $BEADS: $META_FILE" >&2
@@ -1908,6 +1951,7 @@ tail_cmd() {
   parse_common_args "$@"
   [[ -n "$BEADS" ]] || { echo "tail requires --beads" >&2; exit 2; }
   job_paths "$BEADS"
+  ensure_target_identity "$BEADS" "tail" "$WORKTREE"
 
   if [[ ! -f "$LOG_FILE" ]]; then
     echo "no log file for $BEADS: $LOG_FILE" >&2
@@ -1942,6 +1986,7 @@ set_override_cmd() {
   parse_common_args "$@"
   [[ -n "$BEADS" ]] || { echo "set-override requires --beads" >&2; exit 2; }
   job_paths "$BEADS"
+  ensure_target_identity "$BEADS" "set-override" "$WORKTREE"
 
   if [[ ! -f "$META_FILE" ]]; then
     echo "no metadata file for $BEADS: $META_FILE" >&2
@@ -2143,6 +2188,7 @@ mutations_cmd() {
   [[ -n "$BEADS" ]] || { echo "mutations requires --beads" >&2; exit 2; }
 
   job_paths "$BEADS"
+  ensure_target_identity "$BEADS" "mutations" "$WORKTREE"
 
   if [[ ! -f "$META_FILE" ]]; then
     echo "no metadata file for $BEADS" >&2
@@ -2187,6 +2233,7 @@ mutations_cmd() {
 
 baseline_gate_cmd() {
   parse_common_args "$@"
+  [[ -n "$BEADS" ]] && ensure_target_identity "$BEADS" "baseline-gate" "$WORKTREE"
   [[ -n "$REQUIRED_BASELINE" ]] || { echo "baseline-gate requires --required-baseline" >&2; exit 2; }
 
   local worktree
@@ -2223,6 +2270,7 @@ baseline_gate_cmd() {
 
 integrity_gate_cmd() {
   parse_common_args "$@"
+  [[ -n "$BEADS" ]] && ensure_target_identity "$BEADS" "integrity-gate" "$WORKTREE"
   [[ -n "$REPORTED_COMMIT" ]] || { echo "integrity-gate requires --reported-commit" >&2; exit 2; }
 
   local worktree
@@ -2260,6 +2308,7 @@ integrity_gate_cmd() {
 
 feature_key_gate_cmd() {
   parse_common_args "$@"
+  [[ -n "$BEADS" ]] && ensure_target_identity "$BEADS" "feature-key-gate" "$WORKTREE"
   [[ -n "$FEATURE_KEY" ]] || { echo "feature-key-gate requires --feature-key" >&2; exit 2; }
 
   local worktree

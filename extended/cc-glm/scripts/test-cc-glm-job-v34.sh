@@ -105,7 +105,7 @@ EOF
   echo "$pid" > "$LOG_DIR/${TEST_BEADS}.pid"
 
   local check_json
-  check_json="$("$JOB_SCRIPT" check --beads "$TEST_BEADS" --log-dir "$LOG_DIR" --stall-minutes 1 --json 2>/dev/null || true)"
+  check_json="$("$JOB_SCRIPT" check --beads "$TEST_BEADS" --log-dir "$LOG_DIR" --worktree "$worktree" --stall-minutes 1 --json 2>/dev/null || true)"
   if echo "$check_json" | grep -q '"health":"silent_mutation"'; then
     pass "check classifies silent_mutation when mutations exist and log is empty"
   else
