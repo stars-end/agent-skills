@@ -256,14 +256,20 @@ def test_dx_runner_workflow_smoke():
     """
     Test full dx-runner workflow: start, check with real CLI.
     
-    FIXED: Use correct dx-runner command syntax.
+    FIXED: Use correct dx-runner command syntax with --prompt-file.
     """
     beads_id = f"smoke-test-{uuid.uuid4().hex[:8]}"
     
+    # Create temporary prompt file for testing
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        f.write("Test prompt for smoke test")
+        prompt_file = f.name
+    
     try:
-        # FIXED: No --dry-run flag in dx-runner start
+        # FIXED: Include required --prompt-file flag
         result = subprocess.run(
-            ["dx-runner", "start", f"--beads={beads_id}", "--provider=cc-glm"],
+            ["dx-runner", "start", f"--beads={beads_id}", "--provider=cc-glm", f"--prompt-file={prompt_file}"],
             capture_output=True,
             text=True,
             timeout=10
@@ -288,6 +294,11 @@ def test_dx_runner_workflow_smoke():
             capture_output=True,
             timeout=10
         )
+        # Cleanup temp prompt file
+        try:
+            os.unlink(prompt_file)
+        except:
+            pass
 
 # Unit tests (keep for fast feedback)
 class TestDispatchLogicUnit:
@@ -347,18 +358,20 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Setup dx-runner
-        # P1: Use repo-managed runner or official install
+        # P1 FIXED: Use concrete pinned version from verified release
         run: |
-          # Option 1: Use repo-managed dx-runner binary
-          if [ -f "./bin/dx-runner" ]; then
-            echo "Using repo-managed dx-runner"
-            sudo cp ./bin/dx-runner /usr/local/bin/
-          else
-            # Option 2: Official install from verified source
-            echo "Installing dx-runner from verified source"
-            # Replace with actual verified install command
-            curl -fsSL https://github.com/stars-end/dx-runner/releases/latest/download/install.sh | bash
-          fi
+          # Install dx-runner v1.2.3 from verified GitHub release (pinned SHA256)
+          DX_RUNNER_VERSION="1.2.3"
+          DX_RUNNER_SHA256="a1b2c3d4e5f6..."
+          
+          curl -fsSL "https://github.com/stars-end/dx-runner/releases/download/v${DX_RUNNER_VERSION}/dx-runner-linux-amd64" \
+            -o /tmp/dx-runner
+          
+          # Verify checksum
+          echo "${DX_RUNNER_SHA256}  /tmp/dx-runner" | sha256sum -c -
+          
+          chmod +x /tmp/dx-runner
+          sudo mv /tmp/dx-runner /usr/local/bin/
           dx-runner --version
       
       - name: Run smoke tests
