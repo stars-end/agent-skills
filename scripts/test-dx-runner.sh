@@ -444,6 +444,92 @@ EOF
 }
 
 # ============================================================================
+# Test: Gemini Rate Limit Detection
+# ============================================================================
+
+test_gemini_rate_limit() {
+    echo "=== Testing Gemini Rate Limit Detection ==="
+    
+    # Mock gemini binary
+    local tmp_bin
+    tmp_bin="$(mktemp -d)"
+    cat > "$tmp_bin/gemini" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == *"RATE_LIMIT"* ]]; then
+  echo "Error: 429 Too Many Requests. Quota exceeded." >&2
+  exit 1
+fi
+echo "READY"
+EOF
+    chmod +x "$tmp_bin/gemini"
+    PATH="$tmp_bin:$PATH"
+    
+    # Source adapter
+    source "$ADAPTERS_DIR/gemini.sh"
+    
+    local beads="test-gemini-limit-$$"
+    local prompt_file
+    prompt_file="$(mktemp)"
+    echo "RATE_LIMIT" > "$prompt_file"
+    
+    local log_file="/tmp/dx-runner/gemini/${beads}.log"
+    mkdir -p "$(dirname "$log_file")"
+    
+    # We need to set DX_RUNNER_RC_FILE as dx-runner would
+    export DX_RUNNER_RC_FILE="/tmp/dx-runner/gemini/${beads}.rc"
+    
+    adapter_start "$beads" "$prompt_file" "" "$log_file" >/dev/null
+    
+    # Wait for completion
+    for _ in {1..10}; do
+        [[ -f "$DX_RUNNER_RC_FILE" ]] && break
+        sleep 0.5
+    done
+    
+    if [[ -f "$DX_RUNNER_RC_FILE" ]]; then
+        local rc
+        rc="$(cat "$DX_RUNNER_RC_FILE")"
+        if [[ "$rc" == "12" ]]; then
+            pass "gemini adapter detects rate limit and returns 12"
+        else
+            fail "gemini adapter failed to detect rate limit (rc=$rc)"
+        fi
+    else
+        fail "gemini adapter did not produce rc file"
+    fi
+    
+    # Test health reporting in dx-runner
+    # Create meta file so dx-runner can find it
+    cat > "/tmp/dx-runner/gemini/${beads}.meta" <<EOF
+beads=$beads
+provider=gemini
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF
+    
+    # Persist outcome as dx-runner monitor would
+    # (Actually we want to test dx-runner's logic for this)
+    # If we run 'dx-runner check', it should see it.
+    
+    # We need to simulate the job having finished with rc 12
+    # dx-runner check calls job_health_detail which calls finalize_exited_job if PID file exists but process is gone.
+    # So we need a PID file.
+    echo "9999999" > "/tmp/dx-runner/gemini/${beads}.pid"
+    
+    # And it needs the RC_FILE we already have.
+    
+    local check_result
+    check_result="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null)"
+    if echo "$check_result" | grep -q "rate_limited"; then
+        pass "dx-runner check reports rate_limited state"
+    else
+        fail "dx-runner check failed to report rate_limited (result=$check_result)"
+    fi
+    
+    rm -rf "$tmp_bin" "$prompt_file"
+    rm -f "/tmp/dx-runner/gemini/${beads}".*
+}
+
+# ============================================================================
 # Test: Probe Model Flag
 # ============================================================================
 
@@ -526,6 +612,7 @@ run_all_tests() {
     test_model_resolution
     test_probe_model_flag
     test_prune_stale_jobs
+    test_gemini_rate_limit
     
     echo ""
     echo "=== Summary ==="

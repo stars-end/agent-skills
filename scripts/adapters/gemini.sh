@@ -24,6 +24,7 @@ adapter_find_gemini() {
 
 adapter_preflight() {
     local errors=0
+    local warnings=0
     
     # Check 1: Gemini binary
     echo -n "gemini binary: "
@@ -34,7 +35,7 @@ adapter_preflight() {
     else
         echo "MISSING"
         echo "  ERROR: gemini CLI not found"
-        echo "  Install: npm install -g @anthropic/gemini-cli (or equivalent)"
+        echo "  Install: npm install -g @google/gemini-cli (or equivalent)"
         errors=$((errors + 1))
     fi
     
@@ -47,8 +48,23 @@ adapter_preflight() {
         echo "  ERROR: GEMINI_API_KEY or GOOGLE_API_KEY not set"
         errors=$((errors + 1))
     fi
+
+    # Check 3: Basic model availability (non-blocking warning)
+    if [[ $errors -eq 0 ]]; then
+        echo -n "quota check (probe): "
+        if adapter_probe_model "gemini-1.5-flash" >/dev/null 2>&1; then
+            echo "OK"
+        else
+            echo "FAILED/LIMITED"
+            echo "  WARN: Basic probe failed. Quota may be exhausted or model unavailable."
+            warnings=$((warnings + 1))
+        fi
+    fi
     
-    return $errors
+    if [[ $errors -gt 0 ]]; then
+        return 1
+    fi
+    return 0
 }
 
 adapter_start() {
@@ -98,7 +114,12 @@ adapter_start() {
 set +e
 $run_q >> $(printf '%q' "$log_file") 2>&1
 rc=\$?
-echo "\$rc" > $(printf '%q' "$rc_file")
+# Detect rate limit in log (Common Google API errors)
+if grep -qiE "429|Too Many Requests|Quota exceeded|Resource has been exhausted" $(printf '%q' "$log_file"); then
+  echo "12" > $(printf '%q' "$rc_file")
+else
+  echo "\$rc" > $(printf '%q' "$rc_file")
+fi
 rm -f $(printf '%q' "$launcher")
 EOF
     if command -v setsid >/dev/null 2>&1; then

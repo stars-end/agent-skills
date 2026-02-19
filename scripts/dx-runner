@@ -37,6 +37,7 @@ set -euo pipefail
 #   3  - Job exited with error
 #   10 - Auth resolution failed
 #   11 - Token file error
+#   12 - Rate limited (Quota exceeded)
 #   20 - Provider not found
 #   21 - Preflight failed
 #   22 - Permission denied (non-worktree path)
@@ -662,11 +663,14 @@ job_health_detail() {
 
     if [[ ! -f "$PID_FILE" ]]; then
         if [[ -f "$OUTCOME_FILE" ]]; then
-            local oc_exit
+            local oc_exit oc_state
             oc_exit="$(meta_get "$OUTCOME_FILE" "exit_code")"
+            oc_state="$(meta_get "$OUTCOME_FILE" "state")"
             oc_exit="${oc_exit:-1}"
             if [[ "$oc_exit" -eq 0 ]]; then
                 printf "exited_ok|outcome_exit_0|0|0|0|0|0\n"
+            elif [[ "$oc_state" == "rate_limited" || "$oc_exit" -eq 12 ]]; then
+                printf "rate_limited|outcome_rate_limit|0|0|0|0|0\n"
             else
                 printf "exited_err|outcome_exit_nonzero|0|0|0|0|0\n"
             fi
@@ -722,11 +726,14 @@ job_health_detail() {
     if ! ps -p "$pid" >/dev/null 2>&1; then
         finalize_exited_job "$beads" "$provider"
         if [[ -f "$OUTCOME_FILE" ]]; then
-            local exit_code
+            local exit_code oc_state
             exit_code="$(meta_get "$OUTCOME_FILE" "exit_code")"
+            oc_state="$(meta_get "$OUTCOME_FILE" "state")"
             exit_code="${exit_code:-1}"
             if [[ "$exit_code" -eq 0 ]]; then
                 printf "exited_ok|outcome_exit_0|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
+            elif [[ "$oc_state" == "rate_limited" || "$exit_code" -eq 12 ]]; then
+                printf "rate_limited|outcome_rate_limit|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
             else
                 printf "exited_err|outcome_exit_nonzero|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
             fi
@@ -859,6 +866,8 @@ persist_outcome() {
         state="killed"
     elif [[ "$exit_code" -eq 23 ]]; then
         state="no_op"
+    elif [[ "$exit_code" -eq 12 ]]; then
+        state="rate_limited"
     fi
 
     local duration_sec="-"
@@ -1260,6 +1269,7 @@ Exit Codes:
   3  Job exited with error
   10 Auth resolution failed
   11 Token file error
+  12 Rate limited (Quota exceeded)
   20 Provider not found
   21 Preflight failed
   22 Permission denied (non-worktree path)
@@ -1267,7 +1277,8 @@ Exit Codes:
 
 Health States:
   launching, waiting_first_output, silent_mutation, stalled,
-  healthy, exited_ok, exited_err, blocked, missing, no_op
+  healthy, exited_ok, exited_err, blocked, missing, no_op,
+  rate_limited
 EOF
 }
 

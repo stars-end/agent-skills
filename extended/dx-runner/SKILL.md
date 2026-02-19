@@ -190,11 +190,17 @@ dx-runner start --beads bd-xxx --provider opencode --prompt-file /tmp/task.promp
 
 ### gemini (Future Capacity)
 
-Google Gemini CLI. Basic implementation.
+Google Gemini CLI. Basic implementation with quota/rate-limit governance.
 
 ```bash
 dx-runner start --beads bd-xxx --provider gemini --prompt-file /tmp/task.prompt
 ```
+
+**Quota Governance (bd-cbsb.11):**
+- **Rate-limit detection**: Automatically detects 429 errors and quota exhaustion in logs.
+- **State mapping**: Reports `rate_limited` health state.
+- **Exit code**: Returns `12` when rate-limited.
+- **Preflight probe**: Warns if basic probe fails due to quota exhaustion.
 
 ## Health States
 
@@ -208,6 +214,7 @@ dx-runner start --beads bd-xxx --provider gemini --prompt-file /tmp/task.prompt
 | `no_op` | No heartbeat/mutation (bd-cbsb.17) | Investigate |
 | `exited_ok` | Exited with code 0 | Review output |
 | `exited_err` | Exited with non-zero | Check logs |
+| `rate_limited` | API quota or rate-limit hit (bd-cbsb.11) | Wait or switch provider |
 | `blocked` | Max retries exhausted | Manual intervention |
 | `missing` | No metadata found | Investigate |
 
@@ -326,6 +333,7 @@ beads-mcp binary: MISSING (optional - Beads context degraded)
 | 3 | Job exited with error | Check logs |
 | 10 | Auth resolution failed | Configure auth |
 | 11 | Token file error | Fix token file |
+| 12 | Rate limited (Quota exceeded) | Wait or switch provider |
 | 20 | Provider not found | Check adapter |
 | 21 | Preflight failed | Fix preflight issues |
 | 22 | Permission denied | Use worktree path |
