@@ -164,10 +164,11 @@ adapter_start() {
     IFS='|' read -r model selection_reason fallback_reason <<< "$model_result"
     
     if [[ -z "$model" ]]; then
+        echo "reason_code=opencode_model_unavailable"
         echo "ERROR: OpenCode dispatch blocked. Required model: $CANONICAL_MODEL" >&2
         echo "ERROR: $fallback_reason" >&2
         echo "ERROR: Use provider cc-glm or gemini for this wave." >&2
-        return 1
+        return 25
     fi
     
     # Log model selection for telemetry

@@ -440,7 +440,22 @@ EOF
     r3="$(adapter_resolve_model "zai-coding-plan/glm-5" "epyc12" || true)"
     [[ "$r3" == "|unavailable|"* ]] && pass "model resolution rejects non-canonical requested models" || fail "expected non-canonical rejection: $r3"
 
-    rm -rf "$tmp_bin" "$models_file"
+    # Start should fail with deterministic rc=25 and reason_code when canonical is unavailable
+    local prompt_file log_file start_out rc
+    prompt_file="$(mktemp)"
+    log_file="$(mktemp)"
+    echo "READY" > "$prompt_file"
+    set +e
+    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "/tmp" "$log_file" 2>/dev/null)"
+    rc=$?
+    set -e
+    if [[ "$rc" -eq 25 ]] && echo "$start_out" | grep -q "reason_code=opencode_model_unavailable"; then
+        pass "opencode start returns rc=25 with opencode_model_unavailable when canonical model is missing"
+    else
+        fail "expected rc=25 + reason_code for unavailable canonical model (rc=$rc, out=$start_out)"
+    fi
+
+    rm -rf "$tmp_bin" "$models_file" "$prompt_file" "$log_file"
 }
 
 # ============================================================================
@@ -632,6 +647,19 @@ test_beads_gate() {
             fail "beads-gate unexpected output: $result"
         fi
     fi
+
+    # Enforce external beads repo validation (~/bd by default) with deterministic failure
+    local missing_ext_result missing_ext_rc missing_ext_reason
+    set +e
+    missing_ext_result="$(BEADS_REPO_PATH="/tmp/nonexistent-bd-$$" "$DX_RUNNER" beads-gate --json 2>&1)"
+    missing_ext_rc=$?
+    set -e
+    missing_ext_reason="$(echo "$missing_ext_result" | jq -r '.reason_code' 2>/dev/null || echo "unknown")"
+    if [[ "$missing_ext_rc" -eq 24 && "$missing_ext_reason" == "beads_external_repo_missing" ]]; then
+        pass "beads-gate enforces external beads repo path and returns exit 24"
+    else
+        fail "beads-gate external repo enforcement failed (rc=$missing_ext_rc reason=$missing_ext_reason)"
+    fi
 }
 
 # ============================================================================
@@ -657,7 +685,7 @@ test_outcome_metadata() {
 
         if [[ -f "/tmp/dx-runner/mock/${beads}.outcome" ]]; then
             # Check for required fields
-            local required_fields=("beads" "exit_code" "state" "reason_code" "completed_at" "duration_sec")
+            local required_fields=("beads" "provider" "exit_code" "state" "reason_code" "completed_at" "duration_sec")
             local all_present=true
             for field in "${required_fields[@]}"; do
                 if grep -q "^${field}=" "/tmp/dx-runner/mock/${beads}.outcome"; then

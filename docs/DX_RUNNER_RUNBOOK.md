@@ -61,6 +61,10 @@ dx-runner beads-gate --repo /path/to/worktree --probe-id bd-xxx
 dx-runner beads-gate --repo /path/to/worktree --probe-id bd-xxx --write-probe
 ```
 
+By default, the gate also enforces external Beads repo governance:
+- Repo path: `~/bd` (override with `BEADS_REPO_PATH`)
+- Origin remote contains: `stars-end/bd` (override with `BEADS_REPO_REMOTE_SUBSTR`)
+
 **Exit code 24** = Beads gate failed. See reason_code in output.
 
 ### Beads Gate Reason Codes
@@ -69,6 +73,8 @@ dx-runner beads-gate --repo /path/to/worktree --probe-id bd-xxx --write-probe
 |------|---------|--------|
 | `beads_ok` | Gate passed | Proceed with dispatch |
 | `beads_unavailable` | `bd` CLI not found | Install beads CLI |
+| `beads_external_repo_missing` | External repo missing at `~/bd` | Clone/sync `~/bd` |
+| `beads_external_remote_mismatch` | External repo origin is not `stars-end/bd` | Fix `~/bd` origin URL |
 | `beads_db_error` | DB connectivity failed | Check DB URL, network |
 | `beads_repo_mismatch` | Repo ID mismatch | Reinitialize repo binding |
 | `beads_write_blocked` | Write probe failed | Check DB permissions |
@@ -143,6 +149,7 @@ Every terminated job has an outcome file at `/tmp/dx-runner/<provider>/<beads>.o
 
 ```
 beads=bd-xxx
+provider=opencode
 run_id=20260219120000
 exit_code=0
 state=success
@@ -234,6 +241,8 @@ export DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES=30
 | `GOOGLE_API_KEY` | gemini | Alternative API key |
 | `DX_RUNNER_MAX_RUNTIME_MINUTES` | all | Max job runtime before force-finalize |
 | `DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES` | all | No-mutation timeout |
+| `BEADS_REPO_PATH` | all | External Beads repo path (default: `~/bd`) |
+| `BEADS_REPO_REMOTE_SUBSTR` | all | Expected external repo origin substring (default: `stars-end/bd`) |
 
 ## Exit Codes
 
