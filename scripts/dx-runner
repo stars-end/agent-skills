@@ -57,7 +57,7 @@ declare -A PROVIDER_DEFAULT_MODEL=(
 )
 
 declare -A PROVIDER_FALLBACK_CHAIN=(
-    ["opencode"]="zai/glm-5:opencode/glm-5-free"
+    ["opencode"]="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:opencode/glm-5-free"
 )
 
 CMD="${1:-}"
@@ -69,6 +69,14 @@ shift || true
 
 now_utc() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+parse_utc_epoch() {
+    local ts="${1:-}"
+    [[ -n "$ts" ]] || return 1
+    date -d "$ts" +%s 2>/dev/null \
+        || date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null \
+        || return 1
 }
 
 file_mtime_epoch() {
@@ -172,9 +180,11 @@ job_paths() {
     LOG_FILE="${LOG_DIR}/${beads}.log"
     META_FILE="${LOG_DIR}/${beads}.meta"
     OUTCOME_FILE="${LOG_DIR}/${beads}.outcome"
+    RC_FILE="${LOG_DIR}/${beads}.rc"
     CONTRACT_FILE="${LOG_DIR}/${beads}.contract"
     MUTATION_FILE="${LOG_DIR}/${beads}.mutation"
     HEARTBEAT_FILE="${LOG_DIR}/${beads}.heartbeat"
+    MONITOR_PID_FILE="${LOG_DIR}/${beads}.monitor.pid"
 }
 
 # P1 fix: Search all provider directories to find beads metadata
@@ -310,7 +320,7 @@ check_heartbeat_age() {
     fi
     
     now_epoch="$(date +%s)"
-    last_epoch="$(date -d "${last_at}" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "${last_at}" +%s 2>/dev/null || echo "$now_epoch")"
+    last_epoch="$(parse_utc_epoch "${last_at}" 2>/dev/null || echo "$now_epoch")"
     
     echo $((now_epoch - last_epoch))
 }
@@ -651,13 +661,36 @@ job_health_detail() {
     local log_age=0
 
     if [[ ! -f "$PID_FILE" ]]; then
+        if [[ -f "$OUTCOME_FILE" ]]; then
+            local oc_exit
+            oc_exit="$(meta_get "$OUTCOME_FILE" "exit_code")"
+            oc_exit="${oc_exit:-1}"
+            if [[ "$oc_exit" -eq 0 ]]; then
+                printf "exited_ok|outcome_exit_0|0|0|0|0|0\n"
+            else
+                printf "exited_err|outcome_exit_nonzero|0|0|0|0|0\n"
+            fi
+            return 0
+        fi
         printf "%s|%s|%s|%s|%s|%s|%s\n" "$state" "$reason_code" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
         return 0
     fi
 
     local pid
     pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-    if [[ -z "$pid" ]]; then
+    if [[ -z "$pid" || ! "$pid" =~ ^[0-9]+$ ]]; then
+        rm -f "$PID_FILE"
+        if [[ -f "$OUTCOME_FILE" ]]; then
+            local oc_exit2
+            oc_exit2="$(meta_get "$OUTCOME_FILE" "exit_code")"
+            oc_exit2="${oc_exit2:-1}"
+            if [[ "$oc_exit2" -eq 0 ]]; then
+                printf "exited_ok|outcome_exit_0|0|0|0|0|0\n"
+            else
+                printf "exited_err|outcome_exit_nonzero|0|0|0|0|0\n"
+            fi
+            return 0
+        fi
         printf "missing|pid_empty|0|0|0|0|0\n"
         return 0
     fi
@@ -687,6 +720,7 @@ job_health_detail() {
     fi
 
     if ! ps -p "$pid" >/dev/null 2>&1; then
+        finalize_exited_job "$beads" "$provider"
         if [[ -f "$OUTCOME_FILE" ]]; then
             local exit_code
             exit_code="$(meta_get "$OUTCOME_FILE" "exit_code")"
@@ -816,6 +850,7 @@ persist_outcome() {
     local exit_code="$2"
     local outcome_file="$3"
     local meta_file="$4"
+    local reason_code="${5:-process_exit}"
 
     local state="failed"
     if [[ "$exit_code" -eq 0 ]]; then
@@ -833,9 +868,12 @@ persist_outcome() {
         if [[ -n "$started_at" ]]; then
             local now_epoch start_epoch
             now_epoch="$(date +%s)"
-            start_epoch="$(date -d "${started_at}" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "${started_at}" +%s 2>/dev/null || echo "")"
+            start_epoch="$(parse_utc_epoch "${started_at}" 2>/dev/null || echo "")"
             if [[ -n "$start_epoch" ]]; then
                 duration_sec=$((now_epoch - start_epoch))
+                if [[ "$duration_sec" -lt 0 ]]; then
+                    duration_sec=0
+                fi
             fi
         fi
     fi
@@ -848,16 +886,130 @@ persist_outcome() {
 
     local run_id
     run_id="$(date +%Y%m%d%H%M%S)"
+    local selected_model fallback_reason
+    selected_model="$(meta_get "$meta_file" "selected_model" 2>/dev/null || true)"
+    fallback_reason="$(meta_get "$meta_file" "fallback_reason" 2>/dev/null || true)"
+    selected_model="${selected_model:-unknown}"
+    fallback_reason="${fallback_reason:-none}"
 
     cat > "$outcome_file" <<EOF
 beads=$beads
 run_id=$run_id
 exit_code=$exit_code
 state=$state
+reason_code=$reason_code
 completed_at=$(now_utc)
 duration_sec=$duration_sec
 retries=$final_retries
+selected_model=$selected_model
+fallback_reason=$fallback_reason
 EOF
+}
+
+start_completion_monitor() {
+    local beads="$1"
+    local provider="$2"
+    local pid="$3"
+    local meta_file="$4"
+    local outcome_file="$5"
+    local rc_file="$6"
+    local pid_file="$7"
+    local log_file="$8"
+
+    (
+        local prev_log_bytes=0
+        local prev_cpu=0
+        local last_mutation_check=0
+        while ps -p "$pid" >/dev/null 2>&1; do
+            if [[ -f "$log_file" ]]; then
+                local log_bytes
+                log_bytes="$(wc -c < "$log_file" | tr -d ' ')" || log_bytes=0
+                if [[ "$log_bytes" -gt "$prev_log_bytes" ]]; then
+                    write_heartbeat "$beads" "$provider" "log_output" "bytes=$log_bytes"
+                    prev_log_bytes="$log_bytes"
+                fi
+            fi
+            local cpu_now
+            cpu_now="$(process_cpu_time "$pid")"
+            if [[ "$cpu_now" -gt "$prev_cpu" ]]; then
+                write_heartbeat "$beads" "$provider" "cpu_progress" "cpu=$cpu_now"
+                prev_cpu="$cpu_now"
+            fi
+            local now_epoch
+            now_epoch="$(date +%s)"
+            if [[ -f "$meta_file" && $((now_epoch - last_mutation_check)) -ge 10 ]]; then
+                local mutations
+                mutations="$(check_mutations "$beads")"
+                if [[ "${mutations:-0}" -gt 0 ]]; then
+                    write_heartbeat "$beads" "$provider" "mutation" "count=$mutations"
+                fi
+                last_mutation_check="$now_epoch"
+            fi
+            sleep 2
+        done
+
+        local exit_code=1
+        local reason_code="monitor_no_rc_file"
+        if [[ -f "$rc_file" ]]; then
+            exit_code="$(cat "$rc_file" 2>/dev/null || echo "1")"
+            reason_code="process_exit_with_rc"
+        fi
+        if [[ ! -f "$outcome_file" ]]; then
+            persist_outcome "$beads" "$exit_code" "$outcome_file" "$meta_file" "$reason_code"
+        fi
+        write_heartbeat "$beads" "$provider" "completed" "exit_code=$exit_code"
+        rm -f "$pid_file" "$MONITOR_PID_FILE"
+    ) &
+    local monitor_pid="$!"
+    disown "$monitor_pid" 2>/dev/null || true
+    echo "$monitor_pid" > "$MONITOR_PID_FILE"
+    meta_set "$meta_file" "monitor_pid" "$monitor_pid"
+}
+
+finalize_exited_job() {
+    local beads="$1"
+    local provider="$2"
+    job_paths "$beads" "$provider"
+    [[ -f "$PID_FILE" ]] || return 0
+    local pid
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    [[ "$pid" =~ ^[0-9]+$ ]] || {
+        rm -f "$PID_FILE"
+        return 0
+    }
+    if ps -p "$pid" >/dev/null 2>&1; then
+        return 0
+    fi
+    if [[ ! -f "$OUTCOME_FILE" ]]; then
+        local rc=1
+        local reason="late_finalize_no_rc"
+        if [[ -f "$RC_FILE" ]]; then
+            rc="$(cat "$RC_FILE" 2>/dev/null || echo "1")"
+            reason="late_finalize_from_rc_file"
+        fi
+        persist_outcome "$beads" "$rc" "$OUTCOME_FILE" "$META_FILE" "$reason"
+    fi
+    rm -f "$PID_FILE" "$MONITOR_PID_FILE"
+}
+
+prune_job() {
+    local beads="$1"
+    local provider="$2"
+    job_paths "$beads" "$provider"
+    local pruned=0
+
+    if [[ -f "$PID_FILE" ]]; then
+        local pid
+        pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+        if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
+            rm -f "$PID_FILE"
+            pruned=1
+        elif ! ps -p "$pid" >/dev/null 2>&1; then
+            finalize_exited_job "$beads" "$provider"
+            pruned=1
+        fi
+    fi
+    echo "$pruned"
 }
 
 persist_contract() {
@@ -958,6 +1110,7 @@ BASE_BRANCH="master"
 TAIL_LINES=20
 SHOW_MUTATIONS=false
 REPORT_FORMAT="json"
+MODEL_ID=""
 
 parse_common_args() {
     while [[ $# -gt 0 ]]; do
@@ -1042,6 +1195,10 @@ parse_common_args() {
                 REPORT_FORMAT="${2:-json}"
                 shift 2
                 ;;
+            --model)
+                MODEL_ID="${2:-}"
+                shift 2
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -1066,6 +1223,7 @@ Usage:
   dx-runner health [--beads <id>] [--json]
   dx-runner restart --beads <id>
   dx-runner stop --beads <id>
+  dx-runner prune [--beads <id>] [--json]
   dx-runner watchdog [--interval <sec>] [--max-retries <n>]
   dx-runner report --beads <id> [--format json|markdown]
   dx-runner preflight [--provider <name>]
@@ -1086,6 +1244,7 @@ Commands:
   health       Show detailed health state
   restart      Restart a job (preserves metadata)
   stop         Stop a running job
+  prune        Cleanup stale/ghost job records
   watchdog     Run watchdog loop
   report       Generate job report
   preflight    Verify prerequisites
@@ -1180,16 +1339,52 @@ EOF
         exit 20
     fi
     
-    local pid
-    pid=$(adapter_start "$BEADS" "$PROMPT_FILE" "$WORKTREE" "$LOG_FILE")
+    local launch_output_file
+    launch_output_file="$(mktemp)"
+    if ! DX_RUNNER_RC_FILE="$RC_FILE" adapter_start "$BEADS" "$PROMPT_FILE" "$WORKTREE" "$LOG_FILE" >"$launch_output_file"; then
+        rm -f "$launch_output_file"
+        echo "provider start failed for $BEADS/$PROVIDER" >&2
+        exit 1
+    fi
+    local pid="" selected_model="" fallback_reason="" launch_mode="" adapter_rc_file=""
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^pid= ]]; then
+            pid="${line#pid=}"
+        elif [[ "$line" =~ ^selected_model= ]]; then
+            selected_model="${line#selected_model=}"
+        elif [[ "$line" =~ ^fallback_reason= ]]; then
+            fallback_reason="${line#fallback_reason=}"
+        elif [[ "$line" =~ ^launch_mode= ]]; then
+            launch_mode="${line#launch_mode=}"
+        elif [[ "$line" =~ ^rc_file= ]]; then
+            adapter_rc_file="${line#rc_file=}"
+        elif [[ "$line" =~ ^[0-9]+$ ]]; then
+            pid="$line"
+        fi
+    done < "$launch_output_file"
+    rm -f "$launch_output_file"
+    [[ -n "$pid" ]] || { echo "adapter did not return pid" >&2; exit 1; }
+    disown "$pid" 2>/dev/null || true
     
     echo "$pid" > "$PID_FILE"
     meta_set "$META_FILE" "pid" "$pid"
+    selected_model="${selected_model:-${PROVIDER_DEFAULT_MODEL[$PROVIDER]:-unknown}}"
+    meta_set "$META_FILE" "selected_model" "$selected_model"
+    meta_set "$META_FILE" "model" "$selected_model"
+    meta_set "$META_FILE" "fallback_reason" "${fallback_reason:-none}"
+    if [[ -n "$launch_mode" ]]; then
+        meta_set "$META_FILE" "launch_mode" "$launch_mode"
+    fi
+    if [[ -n "$adapter_rc_file" ]]; then
+        RC_FILE="$adapter_rc_file"
+        meta_set "$META_FILE" "rc_file" "$adapter_rc_file"
+    fi
     
     persist_contract "$BEADS" "$PROVIDER" "$CONTRACT_FILE"
     
     # Initial heartbeat
     write_heartbeat "$BEADS" "$PROVIDER" "start" "job launched"
+    start_completion_monitor "$BEADS" "$PROVIDER" "$pid" "$META_FILE" "$OUTCOME_FILE" "$RC_FILE" "$PID_FILE" "$LOG_FILE"
     
     echo "started beads=$BEADS provider=$PROVIDER pid=$pid log=$LOG_FILE"
 }
@@ -1199,6 +1394,7 @@ status_line() {
     local provider
     provider="$(find_provider_for_beads "$beads")"
     job_paths "$beads" "$provider"
+    prune_job "$beads" "$provider" >/dev/null
     
     local pid="" state="missing" reason="-" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-" mutations="-"
     
@@ -1279,6 +1475,7 @@ status_cmd() {
                 for pidf in "$dir"/*.pid; do
                     local beads
                     beads="$(basename "$pidf" .pid)"
+                    [[ "$beads" == *.monitor ]] && continue
                     rows+=("$(status_line "$beads")")
                 done
             done
@@ -1287,6 +1484,7 @@ status_cmd() {
             for pidf in /tmp/dx-runner/*.pid; do
                 local beads
                 beads="$(basename "$pidf" .pid)"
+                [[ "$beads" == *.monitor ]] && continue
                 rows+=("$(status_line "$beads")")
             done
         fi
@@ -1311,6 +1509,7 @@ status_cmd() {
             found=1
             local beads
             beads="$(basename "$pidf" .pid)"
+            [[ "$beads" == *.monitor ]] && continue
             status_line "$beads"
         done
     done
@@ -1320,6 +1519,7 @@ status_cmd() {
         found=1
         local beads
         beads="$(basename "$pidf" .pid)"
+        [[ "$beads" == *.monitor ]] && continue
         status_line "$beads"
     done
     
@@ -1347,6 +1547,7 @@ check_cmd() {
     fi
     
     job_paths "$BEADS" "$provider"
+    prune_job "$BEADS" "$provider" >/dev/null
     
     if [[ ! -f "$META_FILE" ]]; then
         echo "job $BEADS has no metadata file"
@@ -1395,13 +1596,50 @@ stop_cmd() {
         if ps -p "$pid" >/dev/null 2>&1; then
             kill -9 "$pid" 2>/dev/null || true
         fi
-        persist_outcome "$BEADS" 137 "$OUTCOME_FILE" "$META_FILE"
+        persist_outcome "$BEADS" 137 "$OUTCOME_FILE" "$META_FILE" "manual_stop"
         echo "stopped beads=$BEADS pid=$pid"
     else
         echo "job $BEADS already stopped"
     fi
     
-    rm -f "$PID_FILE"
+    if [[ -f "$MONITOR_PID_FILE" ]]; then
+        local mpid
+        mpid="$(cat "$MONITOR_PID_FILE" 2>/dev/null || true)"
+        if [[ "$mpid" =~ ^[0-9]+$ ]] && ps -p "$mpid" >/dev/null 2>&1; then
+            kill "$mpid" 2>/dev/null || true
+        fi
+    fi
+    rm -f "$PID_FILE" "$MONITOR_PID_FILE"
+}
+
+prune_cmd() {
+    parse_common_args "$@"
+    local checked=0
+    local pruned=0
+
+    if [[ -n "$BEADS" ]]; then
+        local provider
+        provider="$(find_provider_for_beads "$BEADS")"
+        checked=1
+        pruned="$((pruned + $(prune_job "$BEADS" "$provider")))"
+    else
+        shopt -s nullglob
+        for pidf in /tmp/dx-runner/*/*.pid /tmp/dx-runner/*.pid; do
+            [[ -f "$pidf" ]] || continue
+            local beads provider
+            beads="$(basename "$pidf" .pid)"
+            [[ "$beads" == *.monitor ]] && continue
+            provider="$(find_provider_for_beads "$beads")"
+            checked=$((checked + 1))
+            pruned="$((pruned + $(prune_job "$beads" "$provider")))"
+        done
+    fi
+
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        printf '{"checked":%s,"pruned":%s}\n' "$checked" "$pruned"
+    else
+        echo "prune: checked=$checked pruned=$pruned"
+    fi
 }
 
 restart_cmd() {
@@ -1451,13 +1689,49 @@ restart_cmd() {
     
     source "$adapter"
     
-    local pid
-    pid=$(adapter_start "$BEADS" "$prompt_file" "$worktree" "$LOG_FILE")
-    
+    local launch_output_file
+    launch_output_file="$(mktemp)"
+    if ! DX_RUNNER_RC_FILE="$RC_FILE" adapter_start "$BEADS" "$prompt_file" "$worktree" "$LOG_FILE" >"$launch_output_file"; then
+        rm -f "$launch_output_file"
+        echo "provider restart failed for $BEADS/$provider" >&2
+        exit 1
+    fi
+    local pid="" selected_model="" fallback_reason="" launch_mode="" adapter_rc_file=""
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^pid= ]]; then
+            pid="${line#pid=}"
+        elif [[ "$line" =~ ^selected_model= ]]; then
+            selected_model="${line#selected_model=}"
+        elif [[ "$line" =~ ^fallback_reason= ]]; then
+            fallback_reason="${line#fallback_reason=}"
+        elif [[ "$line" =~ ^launch_mode= ]]; then
+            launch_mode="${line#launch_mode=}"
+        elif [[ "$line" =~ ^rc_file= ]]; then
+            adapter_rc_file="${line#rc_file=}"
+        elif [[ "$line" =~ ^[0-9]+$ ]]; then
+            pid="$line"
+        fi
+    done < "$launch_output_file"
+    rm -f "$launch_output_file"
+    [[ -n "$pid" ]] || { echo "adapter did not return pid on restart" >&2; exit 1; }
+    disown "$pid" 2>/dev/null || true
+
     echo "$pid" > "$PID_FILE"
     meta_set "$META_FILE" "pid" "$pid"
+    selected_model="${selected_model:-${PROVIDER_DEFAULT_MODEL[$provider]:-unknown}}"
+    meta_set "$META_FILE" "selected_model" "$selected_model"
+    meta_set "$META_FILE" "model" "$selected_model"
+    meta_set "$META_FILE" "fallback_reason" "${fallback_reason:-none}"
+    if [[ -n "$launch_mode" ]]; then
+        meta_set "$META_FILE" "launch_mode" "$launch_mode"
+    fi
+    if [[ -n "$adapter_rc_file" ]]; then
+        RC_FILE="$adapter_rc_file"
+        meta_set "$META_FILE" "rc_file" "$adapter_rc_file"
+    fi
     
     write_heartbeat "$BEADS" "$provider" "restart" "job restarted (retry $retries)"
+    start_completion_monitor "$BEADS" "$provider" "$pid" "$META_FILE" "$OUTCOME_FILE" "$RC_FILE" "$PID_FILE" "$LOG_FILE"
     
     echo "restarted beads=$BEADS provider=$provider pid=$pid retry=$retries"
 }
@@ -1474,19 +1748,24 @@ report_cmd() {
     detail="$(job_health_detail "$BEADS")"
     IFS='|' read -r state reason mutations log_bytes cpu_time pid_age log_age <<< "$detail"
     
-    local retries="0" started_at="-" worktree="-" prompt_file="-" exit_code="-" duration="-" outcome_state="-"
+    local retries="0" started_at="-" worktree="-" prompt_file="-" exit_code="-" duration="-" outcome_state="-" outcome_reason="-" selected_model="-" fallback_reason="-"
     
     if [[ -f "$META_FILE" ]]; then
         retries="$(meta_get "$META_FILE" "retries")"
         started_at="$(meta_get "$META_FILE" "started_at")"
         worktree="$(meta_get "$META_FILE" "worktree")"
         prompt_file="$(meta_get "$META_FILE" "prompt_file")"
+        selected_model="$(meta_get "$META_FILE" "selected_model")"
+        fallback_reason="$(meta_get "$META_FILE" "fallback_reason")"
     fi
     
     if [[ -f "$OUTCOME_FILE" ]]; then
         exit_code="$(meta_get "$OUTCOME_FILE" "exit_code")"
         duration="$(meta_get "$OUTCOME_FILE" "duration_sec")"
         outcome_state="$(meta_get "$OUTCOME_FILE" "state")"
+        outcome_reason="$(meta_get "$OUTCOME_FILE" "reason_code")"
+        selected_model="$(meta_get "$OUTCOME_FILE" "selected_model")"
+        fallback_reason="$(meta_get "$OUTCOME_FILE" "fallback_reason")"
     fi
     
     if [[ "$REPORT_FORMAT" == "json" || "$OUTPUT_JSON" == "true" ]]; then
@@ -1501,6 +1780,9 @@ report_cmd() {
   "retries": $retries,
   "exit_code": "${exit_code:--}",
   "outcome_state": "${outcome_state:--}",
+  "outcome_reason_code": "${outcome_reason:--}",
+  "selected_model": "${selected_model:--}",
+  "fallback_reason": "${fallback_reason:--}",
   "worktree": "${worktree:--}",
   "mutations": $mutations,
   "log_bytes": $log_bytes,
@@ -1523,6 +1805,9 @@ EOF
 ## Outcome
 - Exit Code: ${exit_code:--}
 - State: ${outcome_state:--}
+- Reason: ${outcome_reason:--}
+- Selected Model: ${selected_model:--}
+- Fallback Reason: ${fallback_reason:--}
 
 ## Metrics
 - Worktree: ${worktree:--}
@@ -1557,7 +1842,7 @@ probe_cmd() {
         exit 1
     fi
     
-    local model="${FEATURE_KEY:-${PROVIDER_DEFAULT_MODEL[$PROVIDER]:-}}"
+    local model="${MODEL_ID:-${PROVIDER_DEFAULT_MODEL[$PROVIDER]:-}}"
     
     echo "Probing $PROVIDER with model $model..."
     if adapter_probe_model "$model"; then
@@ -1582,6 +1867,7 @@ watchdog_cmd() {
             for pidf in "$dir"/*.pid; do
                 local beads provider
                 beads="$(basename "$pidf" .pid)"
+                [[ "$beads" == *.monitor ]] && continue
                 provider="$(meta_get "${dir}${beads}.meta" "provider" 2>/dev/null || true)"
                 
                 local detail state reason
@@ -1697,6 +1983,7 @@ case "$CMD" in
     health) status_cmd "$@" ;;  # Alias
     stop) stop_cmd "$@" ;;
     restart) restart_cmd "$@" ;;
+    prune) prune_cmd "$@" ;;
     report) report_cmd "$@" ;;
     preflight) preflight_cmd "$@" ;;
     probe) probe_cmd "$@" ;;

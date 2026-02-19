@@ -10,6 +10,10 @@
 #   test_governance_gates    - Test baseline/integrity/feature-key gates
 #   test_health_states       - Test health state classification
 #   test_json_output         - Verify JSON output is deterministic
+#   test_outcome_lifecycle   - Outcome persistence + launcher capture
+#   test_model_resolution    - Canonical/fallback model resolution order
+#   test_probe_model_flag    - Probe command honors --model
+#   test_prune_stale_jobs    - Stale PID transitions and pruning
 
 set -euo pipefail
 
@@ -38,6 +42,43 @@ fail() {
 
 warn() {
     echo -e "${YELLOW}!${NC} $1"
+}
+
+create_mock_adapter() {
+    local adapter_path="$1"
+    cat > "$adapter_path" <<'EOF'
+#!/usr/bin/env bash
+adapter_preflight() { return 0; }
+adapter_probe_model() { [[ "${1:-}" == "mock-model" ]]; }
+adapter_list_models() { echo "mock-model"; }
+adapter_stop() {
+  local pid="$1"
+  [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
+}
+adapter_start() {
+  local beads="$1"
+  local prompt_file="$2"
+  local worktree="$3"
+  local log_file="$4"
+  local rc_file="${DX_RUNNER_RC_FILE:-/tmp/dx-runner/mock/${beads}.rc}"
+  local exit_code="${MOCK_ADAPTER_EXIT_CODE:-0}"
+  mkdir -p "$(dirname "$rc_file")"
+  (
+    echo "READY_STDOUT for $beads"
+    echo "READY_STDERR for $beads" >&2
+    sleep 1
+    echo "$exit_code" > "$rc_file"
+    exit "$exit_code"
+  ) >> "$log_file" 2>&1 &
+  local pid="$!"
+  printf 'pid=%s\n' "$pid"
+  printf 'selected_model=%s\n' "mock-model"
+  printf 'fallback_reason=%s\n' "none"
+  printf 'launch_mode=%s\n' "detached"
+  printf 'rc_file=%s\n' "$rc_file"
+}
+EOF
+    chmod +x "$adapter_path"
 }
 
 # ============================================================================
@@ -282,6 +323,198 @@ EOF
 }
 
 # ============================================================================
+# Test: Outcome Lifecycle + Launcher Behavior
+# ============================================================================
+
+test_outcome_lifecycle() {
+    echo "=== Testing Outcome Lifecycle ==="
+
+    local adapter="$ADAPTERS_DIR/mock.sh"
+    create_mock_adapter "$adapter"
+
+    local beads_ok="test-outcome-ok-$$"
+    local prompt_ok
+    prompt_ok="$(mktemp)"
+    echo "READY" > "$prompt_ok"
+    if "$DX_RUNNER" start --beads "$beads_ok" --provider mock --prompt-file "$prompt_ok" >/dev/null 2>&1; then
+        for _ in {1..20}; do
+            [[ -f "/tmp/dx-runner/mock/${beads_ok}.outcome" ]] && break
+            sleep 1
+        done
+        if [[ -f "/tmp/dx-runner/mock/${beads_ok}.outcome" ]]; then
+            pass "outcome file written for successful completion"
+        else
+            fail "missing outcome file for successful completion"
+        fi
+        local state_ok
+        state_ok="$("$DX_RUNNER" check --beads "$beads_ok" --json 2>/dev/null | jq -r '.state')" || state_ok=""
+        if [[ "$state_ok" == "exited_ok" ]]; then
+            pass "no false process_exited_without_outcome on success"
+        else
+            fail "expected exited_ok for success, got $state_ok"
+        fi
+        local log_ok="/tmp/dx-runner/mock/${beads_ok}.log"
+        if [[ -f "$log_ok" ]] && grep -q "READY_STDOUT" "$log_ok" && grep -q "READY_STDERR" "$log_ok"; then
+            pass "detached launcher captured stdout/stderr"
+        else
+            fail "detached launcher did not capture stdout/stderr"
+        fi
+    else
+        fail "mock success start failed"
+    fi
+
+    local beads_fail="test-outcome-fail-$$"
+    local prompt_fail
+    prompt_fail="$(mktemp)"
+    echo "FAIL" > "$prompt_fail"
+    if MOCK_ADAPTER_EXIT_CODE=7 "$DX_RUNNER" start --beads "$beads_fail" --provider mock --prompt-file "$prompt_fail" >/dev/null 2>&1; then
+        for _ in {1..20}; do
+            [[ -f "/tmp/dx-runner/mock/${beads_fail}.outcome" ]] && break
+            sleep 1
+        done
+        local exit_fail
+        exit_fail="$(awk -F= '$1=="exit_code"{print $2; exit}' "/tmp/dx-runner/mock/${beads_fail}.outcome" 2>/dev/null || true)"
+        if [[ "$exit_fail" == "7" ]]; then
+            pass "outcome file written for nonzero provider completion"
+        else
+            fail "expected nonzero exit_code in outcome, got ${exit_fail:-missing}"
+        fi
+    else
+        fail "mock failure start failed"
+    fi
+
+    rm -f "$prompt_ok" "$prompt_fail" "$adapter"
+    rm -f /tmp/dx-runner/mock/"${beads_ok}".* /tmp/dx-runner/mock/"${beads_fail}".*
+}
+
+# ============================================================================
+# Test: OpenCode Model Resolution Order
+# ============================================================================
+
+test_model_resolution() {
+    echo "=== Testing Model Resolution Order ==="
+
+    local tmp_bin
+    tmp_bin="$(mktemp -d)"
+    local fake_op="$tmp_bin/opencode"
+    cat > "$fake_op" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "models" ]]; then
+  cat "${FAKE_MODELS_FILE}"
+  exit 0
+fi
+if [[ "$1" == "run" ]]; then
+  echo '{"type":"assistant","content":"READY"}'
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$fake_op"
+
+    local models_file
+    models_file="$(mktemp)"
+    PATH="$tmp_bin:$PATH"
+
+    # shellcheck disable=SC1091
+    source "$ADAPTERS_DIR/opencode.sh"
+
+    cat > "$models_file" <<'EOF'
+zhipuai-coding-plan/glm-5
+zai-coding-plan/glm-5
+opencode/glm-5-free
+EOF
+    export FAKE_MODELS_FILE="$models_file"
+    local r1
+    r1="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12")"
+    [[ "$r1" == zhipuai-coding-plan/glm-5* ]] && pass "model resolution prefers canonical zhipuai model" || fail "canonical preference failed: $r1"
+
+    cat > "$models_file" <<'EOF'
+zai-coding-plan/glm-5
+opencode/glm-5-free
+EOF
+    local r2
+    r2="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12")"
+    [[ "$r2" == zai-coding-plan/glm-5* ]] && pass "model resolution falls back to zai when zhipuai missing" || fail "zai fallback failed: $r2"
+
+    cat > "$models_file" <<'EOF'
+opencode/glm-5-free
+EOF
+    local r3
+    r3="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12")"
+    [[ "$r3" == opencode/glm-5-free* ]] && pass "model resolution falls back to controlled chain" || fail "controlled fallback failed: $r3"
+
+    rm -rf "$tmp_bin" "$models_file"
+}
+
+# ============================================================================
+# Test: Probe Model Flag
+# ============================================================================
+
+test_probe_model_flag() {
+    echo "=== Testing Probe Model Flag ==="
+
+    local tmp_bin
+    tmp_bin="$(mktemp -d)"
+    local fake_op="$tmp_bin/opencode"
+    local args_log
+    args_log="$(mktemp)"
+    cat > "$fake_op" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "${FAKE_ARGS_LOG}"
+if [[ "$1" == "run" ]]; then
+  echo '{"type":"assistant","content":"READY"}'
+  exit 0
+fi
+if [[ "$1" == "models" ]]; then
+  echo "zhipuai-coding-plan/glm-5"
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$fake_op"
+
+    export FAKE_ARGS_LOG="$args_log"
+    PATH="$tmp_bin:$PATH" "$DX_RUNNER" probe --provider opencode --model zhipuai-coding-plan/glm-5 >/dev/null 2>&1 || true
+    if grep -q -- "--model zhipuai-coding-plan/glm-5" "$args_log"; then
+        pass "probe uses --model flag correctly"
+    else
+        fail "probe did not pass --model correctly"
+    fi
+    rm -rf "$tmp_bin" "$args_log"
+}
+
+# ============================================================================
+# Test: Prune Stale Jobs
+# ============================================================================
+
+test_prune_stale_jobs() {
+    echo "=== Testing Stale Job Pruning ==="
+
+    local provider="mock-prune"
+    local beads="test-prune-$$"
+    local dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+EOF
+    echo "not-a-pid" > "$dir/${beads}.pid"
+
+    local prune_json
+    prune_json="$("$DX_RUNNER" prune --beads "$beads" --json 2>/dev/null || true)"
+    if echo "$prune_json" | jq -e '.pruned >= 1' >/dev/null 2>&1 && [[ ! -f "$dir/${beads}.pid" ]]; then
+        pass "stale invalid pid state is prunable"
+    else
+        fail "stale invalid pid was not pruned"
+    fi
+
+    rm -f "$dir/${beads}".*
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 
@@ -292,6 +525,10 @@ run_all_tests() {
     test_governance_gates
     test_health_states
     test_json_output
+    test_outcome_lifecycle
+    test_model_resolution
+    test_probe_model_flag
+    test_prune_stale_jobs
     
     echo ""
     echo "=== Summary ==="

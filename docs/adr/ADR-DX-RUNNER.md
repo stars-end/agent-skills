@@ -115,3 +115,5 @@ dx-runner probe --provider <name> --model <id>
 ## Related
 - bd-xga8.14: Epic for unified runner implementation
 - bd-cbsb.14-.18: Bugs this architecture resolves
+- OpenCode CLI: https://opencode.ai/docs/cli/
+- OpenCode server: https://opencode.ai/docs/server/

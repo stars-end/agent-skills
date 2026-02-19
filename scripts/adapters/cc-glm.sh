@@ -120,19 +120,47 @@ adapter_start() {
     # Write startup heartbeat
     echo "[cc-glm-adapter] START beads=$beads model=$model" >> "$log_file"
     
-    # Launch with nohup or PTY
+    local rc_file="${DX_RUNNER_RC_FILE:-/tmp/dx-runner/cc-glm/${beads}.rc}"
+    mkdir -p "$(dirname "$rc_file")"
+    rm -f "$rc_file"
+    local launch_mode="detached-script"
+    local launcher
+    launcher="$(mktemp "/tmp/ccglm-launcher-${beads}.XXXXXX.sh")"
+    chmod +x "$launcher"
+
+    local run_q=""
     if [[ "${USE_PTY:-false}" == "true" && -x "$pty_run" ]]; then
-        nohup "$pty_run" --output "$log_file" -- \
-            env CC_GLM_MODEL="$model" CC_GLM_BASE_URL="$base_url" \
-            "$headless" --prompt-file "$prompt_file" \
-            2>> "$log_file" &
+        launch_mode="pty-detached-script"
+        printf -v run_q '%q ' "$pty_run" --output "$log_file" -- env CC_GLM_MODEL="$model" CC_GLM_BASE_URL="$base_url" "$headless" --prompt-file "$prompt_file"
+        run_q="${run_q% }"
     else
-        nohup env CC_GLM_MODEL="$model" CC_GLM_BASE_URL="$base_url" \
-            "$headless" --prompt-file "$prompt_file" \
-            >> "$log_file" 2>&1 &
+        printf -v run_q '%q ' env CC_GLM_MODEL="$model" CC_GLM_BASE_URL="$base_url" "$headless" --prompt-file "$prompt_file"
+        run_q="${run_q% }"
     fi
-    
-    echo $!
+
+    cat > "$launcher" <<EOF
+#!/usr/bin/env bash
+set +e
+$run_q >> $(printf '%q' "$log_file") 2>&1
+rc=\$?
+echo "\$rc" > $(printf '%q' "$rc_file")
+rm -f $(printf '%q' "$launcher")
+EOF
+
+    if command -v setsid >/dev/null 2>&1; then
+        launch_mode="${launch_mode}+setsid"
+        setsid "$launcher" >/dev/null 2>&1 < /dev/null &
+    else
+        launch_mode="${launch_mode}+nohup"
+        nohup "$launcher" >/dev/null 2>&1 < /dev/null &
+    fi
+
+    local pid="$!"
+    printf 'pid=%s\n' "$pid"
+    printf 'selected_model=%s\n' "$model"
+    printf 'fallback_reason=%s\n' "none"
+    printf 'launch_mode=%s\n' "$launch_mode"
+    printf 'rc_file=%s\n' "$rc_file"
 }
 
 adapter_probe_model() {

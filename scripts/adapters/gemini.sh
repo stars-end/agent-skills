@@ -82,8 +82,38 @@ adapter_start() {
         cmd_args+=(--cwd "$worktree")
     fi
     
-    nohup "${cmd_args[@]}" "$prompt" >> "$log_file" 2>&1 &
-    echo $!
+    local rc_file="${DX_RUNNER_RC_FILE:-/tmp/dx-runner/gemini/${beads}.rc}"
+    mkdir -p "$(dirname "$rc_file")"
+    rm -f "$rc_file"
+    local launch_mode="detached-script"
+    local launcher
+    launcher="$(mktemp "/tmp/gemini-launcher-${beads}.XXXXXX.sh")"
+    chmod +x "$launcher"
+
+    local run_q
+    printf -v run_q '%q ' "${cmd_args[@]}" "$prompt"
+    run_q="${run_q% }"
+    cat > "$launcher" <<EOF
+#!/usr/bin/env bash
+set +e
+$run_q >> $(printf '%q' "$log_file") 2>&1
+rc=\$?
+echo "\$rc" > $(printf '%q' "$rc_file")
+rm -f $(printf '%q' "$launcher")
+EOF
+    if command -v setsid >/dev/null 2>&1; then
+        launch_mode="${launch_mode}+setsid"
+        setsid "$launcher" >/dev/null 2>&1 < /dev/null &
+    else
+        launch_mode="${launch_mode}+nohup"
+        nohup "$launcher" >/dev/null 2>&1 < /dev/null &
+    fi
+    local pid="$!"
+    printf 'pid=%s\n' "$pid"
+    printf 'selected_model=%s\n' "$model"
+    printf 'fallback_reason=%s\n' "none"
+    printf 'launch_mode=%s\n' "$launch_mode"
+    printf 'rc_file=%s\n' "$rc_file"
 }
 
 adapter_probe_model() {

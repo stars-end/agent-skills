@@ -17,15 +17,14 @@
 #   adapter_list_models  - List available models
 
 # Model fallback chains per host (bd-cbsb.15)
-# Updated: zai-coding-plan not zhipuai-coding-plan
 declare -A HOST_FALLBACK_CHAINS=(
-    ["epyc12"]="zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
-    ["epyc6"]="zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
-    ["macmini"]="zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
-    ["homedesktop-wsl"]="zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
+    ["epyc12"]="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
+    ["epyc6"]="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
+    ["macmini"]="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
+    ["homedesktop-wsl"]="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
 )
 
-DEFAULT_FALLBACK="zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
+DEFAULT_FALLBACK="zhipuai-coding-plan/glm-5:zai-coding-plan/glm-5:nvidia/z-ai/glm5:opencode/glm-5-free"
 
 adapter_find_opencode() {
     for candidate in "opencode" "/home/linuxbrew/.linuxbrew/bin/opencode" "/opt/homebrew/bin/opencode"; do
@@ -71,35 +70,30 @@ adapter_preflight() {
     
     # Check 3: Preferred model probe with auth/quota (bd-cbsb.15 - strict blocking)
     echo -n "preferred model probe: "
-    local preferred_model="${OPENCODE_MODEL:-zai-coding-plan/glm-5}"
-    if echo "$models" | grep -qF "$preferred_model"; then
+    local preferred_model="${OPENCODE_MODEL:-zhipuai-coding-plan/glm-5}"
+    local model_result probe_model selection_reason fallback_reason
+    model_result="$(adapter_resolve_model "$preferred_model")"
+    IFS='|' read -r probe_model selection_reason fallback_reason <<< "$model_result"
+
+    if [[ -n "$probe_model" ]]; then
         # Probe the model with timeout
         local probe_output
-        probe_output="$(timeout 30 "$opencode_bin" run --model "$preferred_model" --format json "Say READY" 2>&1)" || true
+        probe_output="$(timeout 30 "$opencode_bin" run --model "$probe_model" --format json "Say READY" 2>&1)" || true
         if echo "$probe_output" | grep -qi "READY"; then
-            echo "OK ($preferred_model)"
+            echo "OK ($probe_model)"
         elif echo "$probe_output" | grep -qiE "unauthorized|forbidden|insufficient.*balance|quota|rate.?limit|429"; then
             echo "BLOCKED (auth/quota)"
-            echo "  ERROR: Model $preferred_model available but auth/quota check failed"
+            echo "  ERROR: Model $probe_model available but auth/quota check failed"
             errors=$((errors + 1))
         else
-            echo "TIMEOUT ($preferred_model)"
+            echo "TIMEOUT ($probe_model)"
             echo "  WARN: Model probe timed out (non-blocking)"
             warnings=$((warnings + 1))
         fi
     else
-        # Try fallback
-        local fb_model
-        fb_model="$(echo "$models" | grep -E "glm-5|glm5" | head -1)" || true
-        if [[ -n "$fb_model" ]]; then
-            echo "FALLBACK ($fb_model)"
-            echo "  WARN: Preferred $preferred_model not found, using $fb_model"
-            warnings=$((warnings + 1))
-        else
-            echo "NO_MATCH"
-            echo "  ERROR: No glm-5 compatible model found"
-            errors=$((errors + 1))
-        fi
+        echo "NO_MATCH"
+        echo "  ERROR: No glm-5 compatible model found"
+        errors=$((errors + 1))
     fi
     
     # Check 4: beads-mcp availability (bd-cbsb.18)
@@ -187,7 +181,7 @@ adapter_start() {
     }
     
     # Resolve model with fallback (bd-cbsb.15)
-    local preferred_model="${OPENCODE_MODEL:-zai-coding-plan/glm-5}"
+    local preferred_model="${OPENCODE_MODEL:-zhipuai-coding-plan/glm-5}"
     local model_result model selection_reason fallback_reason
     model_result="$(adapter_resolve_model "$preferred_model")"
     IFS='|' read -r model selection_reason fallback_reason <<< "$model_result"
@@ -218,24 +212,50 @@ adapter_start() {
     local prompt
     prompt="$(cat "$prompt_file")"
     
-    # Launch with nohup
+    local rc_file="${DX_RUNNER_RC_FILE:-/tmp/dx-runner/opencode/${beads}.rc}"
+    mkdir -p "$(dirname "$rc_file")"
+    rm -f "$rc_file"
+    local launch_mode="detached"
+
     if [[ "${USE_PTY:-false}" == "true" ]]; then
         local pty_run
         pty_run="$(dirname "$opencode_bin")/../libexec/opencode/pty-run" 2>/dev/null || true
         if [[ -x "$pty_run" ]]; then
-            nohup "$pty_run" --output "$log_file" -- \
-                "${cmd_args[@]}" "$prompt" 2>> "$log_file" &
-            echo $!
+            launch_mode="pty-detached"
+            (
+                set +e
+                "$pty_run" --output "$log_file" -- "${cmd_args[@]}" "$prompt" 2>> "$log_file"
+                rc=$?
+                set -e
+                echo "$rc" > "$rc_file"
+            ) &
+            local pid="$!"
+            printf 'pid=%s\n' "$pid"
+            printf 'selected_model=%s\n' "$model"
+            printf 'fallback_reason=%s\n' "${fallback_reason:-none}"
+            printf 'launch_mode=%s\n' "$launch_mode"
+            printf 'rc_file=%s\n' "$rc_file"
             return 0
         fi
     fi
-    
-    nohup "${cmd_args[@]}" "$prompt" >> "$log_file" 2>&1 &
-    echo $!
+
+    (
+        set +e
+        "${cmd_args[@]}" "$prompt" >> "$log_file" 2>&1
+        rc=$?
+        set -e
+        echo "$rc" > "$rc_file"
+    ) &
+    local pid="$!"
+    printf 'pid=%s\n' "$pid"
+    printf 'selected_model=%s\n' "$model"
+    printf 'fallback_reason=%s\n' "${fallback_reason:-none}"
+    printf 'launch_mode=%s\n' "$launch_mode"
+    printf 'rc_file=%s\n' "$rc_file"
 }
 
 adapter_probe_model() {
-    local model="${1:-zai-coding-plan/glm-5}"
+    local model="${1:-zhipuai-coding-plan/glm-5}"
     local opencode_bin
     opencode_bin="$(adapter_find_opencode)" || return 1
     

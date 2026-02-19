@@ -20,6 +20,11 @@ allowed-tools:
 - **Unified governance**: preflight, permission gates, no-op detection, baseline/integrity/feature-key gates
 - **Deterministic outputs**: Machine-readable JSON with stable schemas
 
+OpenCode behavior in this skill is grounded in official docs and live CLI help:
+- [OpenCode CLI docs](https://opencode.ai/docs/cli/)
+- [OpenCode server docs](https://opencode.ai/docs/server/)
+- `opencode run --help` on the target host (for exact supported flags)
+
 ## When To Use
 
 - Dispatching any agent task (replaces cc-glm-job.sh, dx-dispatch)
@@ -66,6 +71,14 @@ Show status of jobs:
 
 ```bash
 dx-runner status [--beads <id>] [--json]
+```
+
+### prune
+
+Prune stale/ghost PID records (including invalid/dead PIDs):
+
+```bash
+dx-runner prune [--beads <id>] [--json]
 ```
 
 ### check
@@ -207,9 +220,11 @@ dx-runner start --beads bd-xxx --provider gemini --prompt-file /tmp/task.prompt
 ├── <beads>.log.<n>     # Rotated logs
 ├── <beads>.meta        # Metadata (provider, worktree, retries)
 ├── <beads>.outcome     # Final outcome
+├── <beads>.rc          # Captured provider exit code
 ├── <beads>.contract    # Runtime contract
 ├── <beads>.mutation    # Mutation marker
-└── <beads>.heartbeat   # Heartbeat tracking
+├── <beads>.heartbeat   # Heartbeat tracking
+└── <beads>.monitor.pid # Completion monitor PID
 ```
 
 ## Governance Features
