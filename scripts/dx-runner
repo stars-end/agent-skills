@@ -1,0 +1,1709 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# dx-runner (V1.0 - Unified Multi-Provider Dispatch Runner)
+#
+# Canonical entrypoint for all agent dispatch with unified governance:
+#   - Preflight checks (auth, model, backend)
+#   - Permission gates (worktree-only policy)
+#   - No-op heartbeat detection
+#   - Baseline/integrity/feature-key gates
+#   - Failure taxonomy with deterministic codes
+#
+# Providers:
+#   cc-glm    - Claude via Z.ai (reliability backstop)
+#   opencode  - OpenCode headless (primary throughput)
+#   gemini    - Gemini CLI (future capacity)
+#
+# Commands:
+#   start        --beads <id> --provider <name> --prompt-file <path> [options]
+#   status       [--beads <id>] [--json]
+#   check        --beads <id> [--stall-minutes <n>] [--json]
+#   health       [--beads <id>] [--json]
+#   restart      --beads <id>
+#   stop         --beads <id>
+#   watchdog     [--interval <sec>] [--max-retries <n>]
+#   report       --beads <id> [--format json|markdown]
+#   preflight    [--provider <name>]
+#   probe        --provider <name> --model <id>
+#   baseline-gate [--beads <id> | --worktree <path>] --required-baseline <sha>
+#   integrity-gate [--beads <id> | --worktree <path>] --reported-commit <sha>
+#   feature-key-gate [--beads <id> | --worktree <path>] --feature-key <bd-id>
+#
+# Exit Codes:
+#   0  - Success
+#   1  - General error
+#   2  - Job stalled
+#   3  - Job exited with error
+#   10 - Auth resolution failed
+#   11 - Token file error
+#   20 - Provider not found
+#   21 - Preflight failed
+#   22 - Permission denied (non-worktree path)
+#   23 - No-op detected
+
+RUNNER_VERSION="1.0.0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ADAPTERS_DIR="${SCRIPT_DIR}/adapters"
+
+# Default log directory (provider-specific subdirs)
+LOG_DIR="/tmp/dx-runner"
+
+# Provider configuration
+declare -A PROVIDER_DEFAULT_MODEL=(
+    ["cc-glm"]="glm-5"
+    ["opencode"]="zhipuai-coding-plan/glm-5"
+    ["gemini"]="gemini-2.0-flash"
+)
+
+declare -A PROVIDER_FALLBACK_CHAIN=(
+    ["opencode"]="zai/glm-5:opencode/glm-5-free"
+)
+
+CMD="${1:-}"
+shift || true
+
+# ============================================================================
+# UTILITIES (Proven from cc-glm-job.sh)
+# ============================================================================
+
+now_utc() {
+    date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+file_mtime_epoch() {
+    local f="$1"
+    if stat -f "%m" "$f" >/dev/null 2>&1; then
+        stat -f "%m" "$f"
+        return 0
+    fi
+    stat -c "%Y" "$f"
+}
+
+format_elapsed() {
+    local sec="$1"
+    if [[ "$sec" -lt 60 ]]; then
+        printf "%ss" "$sec"
+        return 0
+    fi
+    local min=$((sec / 60))
+    local rem=$((sec % 60))
+    if [[ "$min" -lt 60 ]]; then
+        printf "%sm%ss" "$min" "$rem"
+        return 0
+    fi
+    local hr=$((min / 60))
+    local min_rem=$((min % 60))
+    printf "%sh%sm" "$hr" "$min_rem"
+}
+
+json_escape() {
+    local s="${1:-}"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+join_by() {
+    local delim="$1"
+    shift || true
+    local out="" first=true
+    local item
+    for item in "$@"; do
+        if [[ "$first" == "true" ]]; then
+            out="$item"
+            first=false
+        else
+            out="${out}${delim}${item}"
+        fi
+    done
+    printf '%s' "$out"
+}
+
+strip_ansi() {
+    sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' 2>/dev/null || cat
+}
+
+meta_get() {
+    local meta="$1"
+    local key="$2"
+    awk -F= -v key="$key" '$1==key {print substr($0, length(key)+2); exit}' "$meta" 2>/dev/null || true
+}
+
+meta_set() {
+    local meta="$1"
+    local key="$2"
+    local val="$3"
+    local tmp
+    tmp="$(mktemp)"
+    if [[ -f "$meta" ]]; then
+        awk -F= -v key="$key" '$1!=key {print $0}' "$meta" > "$tmp"
+    fi
+    printf "%s=%s\n" "$key" "$val" >> "$tmp"
+    mv "$tmp" "$meta"
+}
+
+# ============================================================================
+# JOB PATHS (Provider-aware)
+# ============================================================================
+
+job_paths() {
+    local beads="$1"
+    local provider="${2:-}"
+    
+    if [[ -n "$provider" ]]; then
+        LOG_DIR="/tmp/dx-runner/${provider}"
+    else
+        # Try to detect provider from meta (search all provider dirs)
+        provider="$(find_provider_for_beads "$beads")"
+        if [[ -n "$provider" ]]; then
+            LOG_DIR="/tmp/dx-runner/${provider}"
+        else
+            LOG_DIR="/tmp/dx-runner"
+        fi
+    fi
+    
+    mkdir -p "$LOG_DIR"
+    
+    PID_FILE="${LOG_DIR}/${beads}.pid"
+    LOG_FILE="${LOG_DIR}/${beads}.log"
+    META_FILE="${LOG_DIR}/${beads}.meta"
+    OUTCOME_FILE="${LOG_DIR}/${beads}.outcome"
+    CONTRACT_FILE="${LOG_DIR}/${beads}.contract"
+    MUTATION_FILE="${LOG_DIR}/${beads}.mutation"
+    HEARTBEAT_FILE="${LOG_DIR}/${beads}.heartbeat"
+}
+
+# P1 fix: Search all provider directories to find beads metadata
+find_provider_for_beads() {
+    local beads="$1"
+    
+    # First check root dir
+    if [[ -f "/tmp/dx-runner/${beads}.meta" ]]; then
+        meta_get "/tmp/dx-runner/${beads}.meta" "provider" 2>/dev/null || true
+        return 0
+    fi
+    
+    # Then search provider subdirectories
+    shopt -s nullglob
+    for dir in /tmp/dx-runner/*/; do
+        [[ -d "$dir" ]] || continue
+        if [[ -f "${dir}${beads}.meta" ]]; then
+            local provider
+            provider="$(basename "$dir")"
+            printf '%s' "$provider"
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
+resolve_worktree() {
+    local beads="$1"
+    local from_flag="${2:-}"
+    local resolved="$from_flag"
+    if [[ -z "$resolved" && -n "$beads" ]]; then
+        local provider
+        provider="$(find_provider_for_beads "$beads")"
+        job_paths "$beads" "$provider"
+        resolved="$(meta_get "$META_FILE" "worktree" 2>/dev/null || true)"
+    fi
+    if [[ -z "$resolved" ]]; then
+        resolved="$(pwd)"
+    fi
+    printf '%s' "$resolved"
+}
+
+# ============================================================================
+# MUTATION DETECTION (V3.3 proven)
+# ============================================================================
+
+check_mutations() {
+    local beads="$1"
+    local provider
+    provider="$(find_provider_for_beads "$beads")"
+    job_paths "$beads" "$provider"
+
+    local worktree
+    worktree="$(meta_get "$META_FILE" "worktree" 2>/dev/null || true)"
+
+    if [[ -z "$worktree" || ! -d "$worktree" ]]; then
+        echo 0
+        return 0
+    fi
+
+    local changed=0
+    if [[ -d "$worktree/.git" ]]; then
+        changed="$(cd "$worktree" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+    else
+        local threshold_epoch
+        threshold_epoch="$(date -d "$(meta_get "$META_FILE" "started_at" 2>/dev/null || date -u -Iseconds)" +%s 2>/dev/null || date +%s)"
+        changed="$(find "$worktree" -type f -newer "$META_FILE" 2>/dev/null | wc -l | tr -d ' ')"
+    fi
+
+    echo "${changed:-0}"
+}
+
+write_mutation_marker() {
+    local beads="$1"
+    local count="$2"
+    local provider
+    provider="$(find_provider_for_beads "$beads")"
+    job_paths "$beads" "$provider"
+
+    cat > "$MUTATION_FILE" <<EOF
+beads=$beads
+mutation_count=$count
+checked_at=$(now_utc)
+EOF
+}
+
+# ============================================================================
+# HEARTBEAT TRACKING (No-op Detection - bd-cbsb.17)
+# ============================================================================
+
+write_heartbeat() {
+    local beads="$1"
+    local provider="$2"
+    local type="$3"  # tool_invocation, mutation, log_output
+    local detail="${4:-}"
+    
+    job_paths "$beads" "$provider"
+    
+    local count=0
+    if [[ -f "$HEARTBEAT_FILE" ]]; then
+        count="$(meta_get "$HEARTBEAT_FILE" "count" 2>/dev/null || echo "0")"
+    fi
+    count=$((count + 1))
+    
+    cat > "$HEARTBEAT_FILE" <<EOF
+beads=$beads
+provider=$provider
+count=$count
+last_type=$type
+last_detail=$detail
+last_at=$(now_utc)
+EOF
+}
+
+check_heartbeat_age() {
+    local beads="$1"
+    local provider
+    provider="$(find_provider_for_beads "$beads")"
+    job_paths "$beads" "$provider"
+    
+    if [[ ! -f "$HEARTBEAT_FILE" ]]; then
+        echo -1  # No heartbeat yet
+        return 0
+    fi
+    
+    local last_at now_epoch last_epoch
+    last_at="$(meta_get "$HEARTBEAT_FILE" "last_at" 2>/dev/null || true)"
+    
+    if [[ -z "$last_at" ]]; then
+        echo -1
+        return 0
+    fi
+    
+    now_epoch="$(date +%s)"
+    last_epoch="$(date -d "${last_at}" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "${last_at}" +%s 2>/dev/null || echo "$now_epoch")"
+    
+    echo $((now_epoch - last_epoch))
+}
+
+# ============================================================================
+# PROCESS STATE
+# ============================================================================
+
+process_state() {
+    local pid="$1"
+    if [[ -z "$pid" ]]; then
+        printf "missing"
+        return 0
+    fi
+    if ps -p "$pid" >/dev/null 2>&1; then
+        printf "running"
+        return 0
+    fi
+    printf "exited"
+}
+
+job_state() {
+    local pid_file="$1"
+    if [[ ! -f "$pid_file" ]]; then
+        printf "missing"
+        return 0
+    fi
+    local pid
+    pid="$(cat "$pid_file" 2>/dev/null || true)"
+    process_state "$pid"
+}
+
+parse_decimal_component() {
+    local raw="$1"
+    local normalized="${raw%.*}"
+    if [[ -z "$normalized" ]]; then
+        echo 0
+        return 0
+    fi
+    if [[ "$normalized" =~ ^[0-9]+$ ]]; then
+        echo $((10#$normalized))
+        return 0
+    fi
+    echo 0
+}
+
+process_cpu_time() {
+    local pid="$1"
+    if [[ -z "$pid" ]]; then
+        echo 0
+        return 0
+    fi
+    local time_str
+    time_str="$(ps -o time= -p "$pid" 2>/dev/null | tr -d ' ')" || { echo 0; return 0; }
+    if [[ -z "$time_str" ]]; then
+        echo 0
+        return 0
+    fi
+    local parts seconds
+    IFS=':' read -ra parts <<< "$time_str"
+    case "${#parts[@]}" in
+        2)
+            seconds=$(( $(parse_decimal_component "${parts[0]}") * 60 + $(parse_decimal_component "${parts[1]}") ))
+            ;;
+        3)
+            seconds=$(( $(parse_decimal_component "${parts[0]}") * 3600 + $(parse_decimal_component "${parts[1]}") * 60 + $(parse_decimal_component "${parts[2]}") ))
+            ;;
+        *)
+            seconds=0
+            ;;
+    esac
+    echo "$seconds"
+}
+
+# ============================================================================
+# GOVERNANCE GATES (Proven from cc-glm-job.sh V3.4)
+# ============================================================================
+
+baseline_gate_eval() {
+    local worktree="$1"
+    local required="$2"
+
+    local runtime_commit=""
+    local passed=false
+    local reason_code="unknown"
+    local details=""
+
+    if [[ -z "$required" ]]; then
+        reason_code="required_baseline_missing"
+        details="required baseline is empty"
+    elif [[ ! -d "$worktree" ]]; then
+        reason_code="worktree_missing"
+        details="worktree not found: $worktree"
+    elif ! git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
+        reason_code="not_a_git_repo"
+        details="not a git worktree: $worktree"
+    else
+        runtime_commit="$(git -C "$worktree" rev-parse HEAD 2>/dev/null || true)"
+        if [[ -z "$runtime_commit" ]]; then
+            reason_code="runtime_commit_missing"
+            details="failed to resolve runtime HEAD commit"
+        elif ! git -C "$worktree" cat-file -e "${required}^{commit}" >/dev/null 2>&1; then
+            reason_code="required_commit_missing"
+            details="required commit not found in repo"
+        elif git -C "$worktree" merge-base --is-ancestor "$required" "$runtime_commit" >/dev/null 2>&1; then
+            passed=true
+            reason_code="baseline_ok"
+            details="runtime commit meets required baseline"
+        else
+            reason_code="baseline_not_met"
+            details="runtime commit is behind required baseline"
+        fi
+    fi
+
+    printf '%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$runtime_commit" "$required" "$details"
+}
+
+integrity_gate_eval() {
+    local worktree="$1"
+    local reported_commit="$2"
+    local branch_name="${3:-}"
+
+    local passed=false
+    local reason_code="unknown"
+    local details=""
+    local branch_head=""
+
+    if [[ -z "$reported_commit" ]]; then
+        reason_code="reported_commit_missing"
+        details="reported commit not provided"
+    elif [[ ! -d "$worktree" ]]; then
+        reason_code="worktree_missing"
+        details="worktree not found: $worktree"
+    elif ! git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
+        reason_code="not_a_git_repo"
+        details="not a git worktree: $worktree"
+    else
+        if [[ -z "$branch_name" ]]; then
+            branch_name="$(git -C "$worktree" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+        fi
+        if [[ -z "$branch_name" ]]; then
+            reason_code="branch_missing"
+            details="could not resolve branch name"
+        elif ! branch_head="$(git -C "$worktree" rev-parse "$branch_name" 2>/dev/null)"; then
+            reason_code="branch_head_missing"
+            details="branch not found: $branch_name"
+            branch_head=""
+        elif ! git -C "$worktree" cat-file -e "${reported_commit}^{commit}" >/dev/null 2>&1; then
+            reason_code="reported_commit_not_found"
+            details="reported commit does not exist"
+        elif git -C "$worktree" merge-base --is-ancestor "$reported_commit" "$branch_head" >/dev/null 2>&1; then
+            passed=true
+            reason_code="integrity_ok"
+            details="reported commit is ancestor of branch head"
+        else
+            reason_code="reported_not_ancestor"
+            details="reported commit is not ancestor of branch head"
+        fi
+    fi
+
+    printf '%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$branch_name" "$branch_head" "$reported_commit" "$details"
+}
+
+feature_key_gate_eval() {
+    local worktree="$1"
+    local feature_key="$2"
+    local branch_name="${3:-}"
+    local base_branch="${4:-master}"
+
+    local passed=false
+    local reason_code="unknown"
+    local details=""
+    local checked_commits=0
+    local missing_commits=0
+
+    if [[ -z "$feature_key" ]]; then
+        reason_code="feature_key_missing"
+        details="feature key is required"
+    elif [[ ! -d "$worktree" ]]; then
+        reason_code="worktree_missing"
+        details="worktree not found: $worktree"
+    elif ! git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
+        reason_code="not_a_git_repo"
+        details="not a git worktree: $worktree"
+    else
+        if [[ -z "$branch_name" ]]; then
+            branch_name="$(git -C "$worktree" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+        fi
+        if [[ -z "$branch_name" ]]; then
+            reason_code="branch_missing"
+            details="could not resolve branch name"
+        elif ! git -C "$worktree" rev-parse "$branch_name" >/dev/null 2>&1; then
+            reason_code="branch_head_missing"
+            details="branch not found: $branch_name"
+        elif ! git -C "$worktree" rev-parse "$base_branch" >/dev/null 2>&1; then
+            reason_code="base_branch_missing"
+            details="base branch not found: $base_branch"
+        else
+            local commit
+            while IFS= read -r commit; do
+                [[ -n "$commit" ]] || continue
+                checked_commits=$((checked_commits + 1))
+                local body
+                body="$(git -C "$worktree" show -s --format=%B "$commit" 2>/dev/null || true)"
+                if ! printf '%s\n' "$body" | grep -q "^Feature-Key: ${feature_key}$"; then
+                    missing_commits=$((missing_commits + 1))
+                fi
+            done < <(git -C "$worktree" rev-list "${base_branch}..${branch_name}" 2>/dev/null || true)
+
+            if [[ "$checked_commits" -eq 0 ]]; then
+                reason_code="no_commits_in_range"
+                details="no commits in range ${base_branch}..${branch_name}"
+            elif [[ "$missing_commits" -eq 0 ]]; then
+                passed=true
+                reason_code="feature_key_ok"
+                details="all ${checked_commits} commits include Feature-Key: ${feature_key}"
+            else
+                reason_code="feature_key_missing_in_commits"
+                details="${missing_commits}/${checked_commits} commits missing Feature-Key: ${feature_key}"
+            fi
+        fi
+    fi
+
+    printf '%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$branch_name" "$base_branch" "$feature_key" "$checked_commits" "$details"
+}
+
+# ============================================================================
+# PERMISSION GATE (Worktree-only - bd-cbsb.16)
+# ============================================================================
+
+validate_worktree_path() {
+    local path="$1"
+    local allowed_prefixes=(
+        "/tmp/agents"
+        "/tmp/dx-runner"
+        "$HOME/agent-skills"
+    )
+    
+    # Check if path starts with any allowed prefix
+    for prefix in "${allowed_prefixes[@]}"; do
+        if [[ "$path" == "$prefix"* ]]; then
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
+check_permission_gate() {
+    local beads="$1"
+    local worktree="$2"
+    
+    if ! validate_worktree_path "$worktree"; then
+        echo "DENIED:non_worktree_path:$worktree"
+        return 1
+    fi
+    
+    echo "OK:worktree_valid:$worktree"
+    return 0
+}
+
+# ============================================================================
+# UNIFIED PREFLIGHT (Provider-agnostic core)
+# ============================================================================
+
+unified_preflight() {
+    local provider="${1:-}"
+    local errors=0
+    
+    echo "=== Unified Preflight Check ==="
+    echo "timestamp: $(now_utc)"
+    [[ -n "$provider" ]] && echo "provider: $provider"
+    
+    # Check 1: Provider adapter exists
+    if [[ -n "$provider" ]]; then
+        echo -n "provider adapter: "
+        local adapter="${ADAPTERS_DIR}/${provider}.sh"
+        if [[ -f "$adapter" && -r "$adapter" ]]; then
+            echo "OK ($adapter)"
+        else
+            echo "MISSING"
+            echo "  ERROR: Adapter not found: $adapter"
+            errors=$((errors + 1))
+        fi
+    fi
+    
+    # Provider-specific preflight
+    if [[ -n "$provider" && -f "${ADAPTERS_DIR}/${provider}.sh" ]]; then
+        source "${ADAPTERS_DIR}/${provider}.sh"
+        if declare -f adapter_preflight >/dev/null 2>&1; then
+            echo "--- Provider-specific: $provider ---"
+            if ! adapter_preflight; then
+                errors=$((errors + 1))
+            fi
+        fi
+    fi
+    
+    echo ""
+    if [[ $errors -eq 0 ]]; then
+        echo "=== Preflight PASSED ==="
+        return 0
+    else
+        echo "=== Preflight FAILED ($errors error(s)) ==="
+        return 1
+    fi
+}
+
+# ============================================================================
+# HEALTH DETECTION (Deterministic substates)
+# ============================================================================
+
+job_health_detail() {
+    local beads="$1"
+    local provider
+    provider="$(find_provider_for_beads "$beads")"
+    
+    # If no provider found, search across provider directories
+    if [[ -z "$provider" ]]; then
+        for dir in /tmp/dx-runner/*/; do
+            [[ -d "$dir" ]] || continue
+            if [[ -f "${dir}${beads}.meta" ]]; then
+                provider="$(basename "$dir")"
+                break
+            fi
+        done
+    fi
+    
+    job_paths "$beads" "$provider"
+    
+    local stall_threshold="${2:-$((STALL_MINUTES * 60))}"
+
+    local state="missing"
+    local reason_code="pid_file_missing"
+    local mutation_count=0
+    local log_bytes=0
+    local cpu_time=0
+    local pid_age=0
+    local log_age=0
+
+    if [[ ! -f "$PID_FILE" ]]; then
+        printf "%s|%s|%s|%s|%s|%s|%s\n" "$state" "$reason_code" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+        return 0
+    fi
+
+    local pid
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [[ -z "$pid" ]]; then
+        printf "missing|pid_empty|0|0|0|0|0\n"
+        return 0
+    fi
+
+    if [[ -f "$PID_FILE" ]]; then
+        local pid_mtime now
+        pid_mtime="$(file_mtime_epoch "$PID_FILE" 2>/dev/null || echo "")"
+        now="$(date +%s)"
+        if [[ -n "$pid_mtime" ]]; then
+            pid_age=$((now - pid_mtime))
+        fi
+    fi
+
+    if [[ -f "$META_FILE" ]]; then
+        mutation_count="$(check_mutations "$beads")"
+        write_mutation_marker "$beads" "$mutation_count"
+    fi
+
+    if [[ -f "$LOG_FILE" ]]; then
+        log_bytes="$(wc -c < "$LOG_FILE" | tr -d ' ')"
+        local log_mtime now
+        log_mtime="$(file_mtime_epoch "$LOG_FILE" 2>/dev/null || echo "")"
+        now="$(date +%s)"
+        if [[ -n "$log_mtime" ]]; then
+            log_age=$((now - log_mtime))
+        fi
+    fi
+
+    if ! ps -p "$pid" >/dev/null 2>&1; then
+        if [[ -f "$OUTCOME_FILE" ]]; then
+            local exit_code
+            exit_code="$(meta_get "$OUTCOME_FILE" "exit_code")"
+            exit_code="${exit_code:-1}"
+            if [[ "$exit_code" -eq 0 ]]; then
+                printf "exited_ok|outcome_exit_0|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
+            else
+                printf "exited_err|outcome_exit_nonzero|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
+            fi
+            return 0
+        fi
+        if [[ "$log_bytes" -eq 0 ]]; then
+            printf "stalled|process_exited_no_output|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
+            return 0
+        fi
+        printf "exited_err|process_exited_without_outcome|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
+        return 0
+    fi
+
+    if [[ -f "$META_FILE" ]]; then
+        local blocked
+        blocked="$(meta_get "$META_FILE" "blocked")"
+        if [[ "$blocked" == "true" ]]; then
+            printf "blocked|blocked_flag_set|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
+            return 0
+        fi
+    fi
+
+    cpu_time="$(process_cpu_time "$pid")"
+
+    # Check for no-op (bd-cbsb.17)
+    local heartbeat_age
+    heartbeat_age="$(check_heartbeat_age "$beads")"
+    local noop_threshold=300  # 5 minutes without heartbeat
+    
+    if [[ "$heartbeat_age" -gt "$noop_threshold" && "$mutation_count" -eq 0 && "$log_bytes" -eq 0 ]]; then
+        printf "no_op|no_heartbeat_no_mutation|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+        return 0
+    fi
+
+    if [[ "$log_bytes" -eq 0 ]]; then
+        if [[ "$mutation_count" -gt 0 ]]; then
+            printf "silent_mutation|worktree_changed_no_output|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+            return 0
+        fi
+        if [[ "$cpu_time" -gt 0 ]]; then
+            if [[ "$pid_age" -gt "$stall_threshold" ]]; then
+                printf "waiting_first_output|cpu_progress_no_output_past_threshold|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+            else
+                printf "launching|cpu_progress_no_output|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+            fi
+            return 0
+        fi
+        if [[ "$pid_age" -gt "$stall_threshold" ]]; then
+            printf "stalled|no_output_no_progress_after_threshold|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+        else
+            printf "launching|no_output_within_grace|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+        fi
+        return 0
+    fi
+
+    if [[ -f "$META_FILE" ]]; then
+        local prev_cpu
+        prev_cpu="$(meta_get "$META_FILE" "last_cpu_time")"
+        prev_cpu="${prev_cpu:-0}"
+        meta_set "$META_FILE" "last_cpu_time" "$cpu_time"
+        if [[ "$cpu_time" -gt "$prev_cpu" ]]; then
+            printf "healthy|cpu_progress|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+            return 0
+        fi
+    fi
+
+    if [[ "$log_age" -gt "$stall_threshold" ]]; then
+        printf "stalled|stale_log_and_no_cpu_progress|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+        return 0
+    fi
+
+    printf "healthy|recent_log_activity|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+}
+
+# ============================================================================
+# LOG/OUTCOME ROTATION
+# ============================================================================
+
+rotate_log() {
+    local log_file="$1"
+    if [[ ! -f "$log_file" ]]; then
+        return 0
+    fi
+
+    local log_bytes
+    log_bytes="$(wc -c < "$log_file" | tr -d ' ')"
+    if [[ "$log_bytes" -eq 0 ]]; then
+        rm -f "$log_file"
+        return 0
+    fi
+
+    local base_dir base_name n=1
+    base_dir="$(dirname "$log_file")"
+    base_name="$(basename "$log_file" .log)"
+    while [[ -f "${base_dir}/${base_name}.log.${n}" ]]; do
+        n=$((n + 1))
+    done
+
+    mv "$log_file" "${base_dir}/${base_name}.log.${n}"
+}
+
+rotate_outcome() {
+    local outcome_file="$1"
+    if [[ ! -f "$outcome_file" ]]; then
+        return 0
+    fi
+
+    local base_dir base_name n=1
+    base_dir="$(dirname "$outcome_file")"
+    base_name="$(basename "$outcome_file" .outcome)"
+
+    while [[ -f "${base_dir}/${base_name}.outcome.${n}" ]]; do
+        n=$((n + 1))
+    done
+
+    mv "$outcome_file" "${base_dir}/${base_name}.outcome.${n}"
+}
+
+persist_outcome() {
+    local beads="$1"
+    local exit_code="$2"
+    local outcome_file="$3"
+    local meta_file="$4"
+
+    local state="failed"
+    if [[ "$exit_code" -eq 0 ]]; then
+        state="success"
+    elif [[ "$exit_code" -eq 137 ]]; then
+        state="killed"
+    elif [[ "$exit_code" -eq 23 ]]; then
+        state="no_op"
+    fi
+
+    local duration_sec="-"
+    local started_at=""
+    if [[ -f "$meta_file" ]]; then
+        started_at="$(meta_get "$meta_file" "started_at")"
+        if [[ -n "$started_at" ]]; then
+            local now_epoch start_epoch
+            now_epoch="$(date +%s)"
+            start_epoch="$(date -d "${started_at}" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "${started_at}" +%s 2>/dev/null || echo "")"
+            if [[ -n "$start_epoch" ]]; then
+                duration_sec=$((now_epoch - start_epoch))
+            fi
+        fi
+    fi
+
+    local final_retries="0"
+    if [[ -f "$meta_file" ]]; then
+        final_retries="$(meta_get "$meta_file" "retries")"
+        final_retries="${final_retries:-0}"
+    fi
+
+    local run_id
+    run_id="$(date +%Y%m%d%H%M%S)"
+
+    cat > "$outcome_file" <<EOF
+beads=$beads
+run_id=$run_id
+exit_code=$exit_code
+state=$state
+completed_at=$(now_utc)
+duration_sec=$duration_sec
+retries=$final_retries
+EOF
+}
+
+persist_contract() {
+    local beads="$1"
+    local provider="$2"
+    local contract_file="$3"
+    
+    job_paths "$beads" "$provider"
+    
+    local auth_source model base_url
+    auth_source="$(meta_get "$META_FILE" "auth_source" 2>/dev/null || echo "unknown")"
+    model="$(meta_get "$META_FILE" "model" 2>/dev/null || echo "${PROVIDER_DEFAULT_MODEL[$provider]:-unknown}")"
+    base_url="$(meta_get "$META_FILE" "base_url" 2>/dev/null || echo "default")"
+
+    cat > "$contract_file" <<EOF
+# Runtime contract for $beads (generated $(now_utc))
+provider=$provider
+auth_source=${auth_source}
+model=${model}
+base_url=${base_url}
+EOF
+}
+
+# ============================================================================
+# MODEL RESOLUTION (OpenCode capability - bd-cbsb.15)
+# ============================================================================
+
+resolve_model() {
+    local provider="$1"
+    local preferred="$2"
+    local host="${3:-$(hostname 2>/dev/null | cut -d. -f1)}"
+    
+    # Get available models from provider
+    local available_models=()
+    if [[ -f "${ADAPTERS_DIR}/${provider}.sh" ]]; then
+        source "${ADAPTERS_DIR}/${provider}.sh"
+        if declare -f adapter_list_models >/dev/null 2>&1; then
+            mapfile -t available_models < <(adapter_list_models)
+        fi
+    fi
+    
+    # Check if preferred is available
+    if [[ -n "$preferred" ]]; then
+        for m in "${available_models[@]}"; do
+            if [[ "$m" == "$preferred" ]]; then
+                echo "$preferred|preferred|"
+                return 0
+            fi
+        done
+    fi
+    
+    # Use fallback chain
+    local fallback_chain="${PROVIDER_FALLBACK_CHAIN[$provider]:-}"
+    if [[ -n "$fallback_chain" ]]; then
+        IFS=':' read -ra fallbacks <<< "$fallback_chain"
+        for fb in "${fallbacks[@]}"; do
+            for m in "${available_models[@]}"; do
+                if [[ "$m" == "$fb" ]]; then
+                    echo "$fb|fallback|preferred $preferred not available"
+                    return 0
+                fi
+            done
+        done
+    fi
+    
+    # Use provider default
+    local default="${PROVIDER_DEFAULT_MODEL[$provider]:-}"
+    if [[ -n "$default" ]]; then
+        echo "$default|default|no preferred model available"
+        return 0
+    fi
+    
+    echo "|unavailable|no models found for provider $provider"
+    return 1
+}
+
+# ============================================================================
+# ARGUMENT PARSING
+# ============================================================================
+
+STALL_MINUTES=20
+WATCHDOG_INTERVAL=60
+WATCHDOG_MAX_RETRIES=1
+OUTPUT_JSON=false
+NO_ANSI=false
+USE_PTY=false
+PRESERVE_CONTRACT=false
+PROVIDER=""
+BEADS=""
+PROMPT_FILE=""
+WORKTREE=""
+REPO=""
+REQUIRED_BASELINE=""
+REPORTED_COMMIT=""
+BRANCH_NAME=""
+FEATURE_KEY=""
+BASE_BRANCH="master"
+TAIL_LINES=20
+SHOW_MUTATIONS=false
+REPORT_FORMAT="json"
+
+parse_common_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --beads)
+                BEADS="${2:-}"
+                shift 2
+                ;;
+            --provider)
+                PROVIDER="${2:-}"
+                shift 2
+                ;;
+            --prompt-file)
+                PROMPT_FILE="${2:-}"
+                shift 2
+                ;;
+            --repo)
+                REPO="${2:-}"
+                shift 2
+                ;;
+            --worktree)
+                WORKTREE="${2:-}"
+                shift 2
+                ;;
+            --stall-minutes)
+                STALL_MINUTES="${2:-20}"
+                shift 2
+                ;;
+            --interval)
+                WATCHDOG_INTERVAL="${2:-60}"
+                shift 2
+                ;;
+            --max-retries)
+                WATCHDOG_MAX_RETRIES="${2:-1}"
+                shift 2
+                ;;
+            --pty)
+                USE_PTY=true
+                shift
+                ;;
+            --no-ansi)
+                NO_ANSI=true
+                shift
+                ;;
+            --preserve-contract)
+                PRESERVE_CONTRACT=true
+                shift
+                ;;
+            --json)
+                OUTPUT_JSON=true
+                shift
+                ;;
+            --mutations)
+                SHOW_MUTATIONS=true
+                shift
+                ;;
+            --required-baseline)
+                REQUIRED_BASELINE="${2:-}"
+                shift 2
+                ;;
+            --reported-commit)
+                REPORTED_COMMIT="${2:-}"
+                shift 2
+                ;;
+            --branch)
+                BRANCH_NAME="${2:-}"
+                shift 2
+                ;;
+            --feature-key)
+                FEATURE_KEY="${2:-}"
+                shift 2
+                ;;
+            --base-branch)
+                BASE_BRANCH="${2:-}"
+                shift 2
+                ;;
+            --lines)
+                TAIL_LINES="${2:-20}"
+                shift 2
+                ;;
+            --format)
+                REPORT_FORMAT="${2:-json}"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo "Unknown arg: $1" >&2
+                usage
+                exit 2
+                ;;
+        esac
+    done
+}
+
+usage() {
+    cat <<'EOF'
+dx-runner (V1.0 - Unified Multi-Provider Dispatch Runner)
+
+Usage:
+  dx-runner start --beads <id> --provider <name> --prompt-file <path> [options]
+  dx-runner status [--beads <id>] [--json]
+  dx-runner check --beads <id> [--stall-minutes <n>] [--json]
+  dx-runner health [--beads <id>] [--json]
+  dx-runner restart --beads <id>
+  dx-runner stop --beads <id>
+  dx-runner watchdog [--interval <sec>] [--max-retries <n>]
+  dx-runner report --beads <id> [--format json|markdown]
+  dx-runner preflight [--provider <name>]
+  dx-runner probe --provider <name> --model <id>
+  dx-runner baseline-gate [--beads <id> | --worktree <path>] --required-baseline <sha>
+  dx-runner integrity-gate [--beads <id> | --worktree <path>] --reported-commit <sha>
+  dx-runner feature-key-gate [--beads <id> | --worktree <path>] --feature-key <bd-id>
+
+Providers:
+  cc-glm    Claude via Z.ai (reliability backstop)
+  opencode  OpenCode headless (primary throughput)
+  gemini    Gemini CLI (future capacity)
+
+Commands:
+  start        Launch a job with specified provider
+  status       Show status table of jobs
+  check        Check single job health (exit 2 if stalled, 3 if error)
+  health       Show detailed health state
+  restart      Restart a job (preserves metadata)
+  stop         Stop a running job
+  watchdog     Run watchdog loop
+  report       Generate job report
+  preflight    Verify prerequisites
+  probe        Test provider/model availability
+  baseline-gate Verify runtime commit meets baseline
+  integrity-gate Verify reported commit exists
+  feature-key-gate Verify Feature-Key trailers
+
+Exit Codes:
+  0  Success
+  1  General error
+  2  Job stalled
+  3  Job exited with error
+  10 Auth resolution failed
+  11 Token file error
+  20 Provider not found
+  21 Preflight failed
+  22 Permission denied (non-worktree path)
+  23 No-op detected
+
+Health States:
+  launching, waiting_first_output, silent_mutation, stalled,
+  healthy, exited_ok, exited_err, blocked, missing, no_op
+EOF
+}
+
+# ============================================================================
+# COMMAND IMPLEMENTATIONS
+# ============================================================================
+
+start_cmd() {
+    parse_common_args "$@"
+    [[ -n "$BEADS" ]] || { echo "start requires --beads" >&2; exit 2; }
+    [[ -n "$PROVIDER" ]] || { echo "start requires --provider" >&2; exit 2; }
+    [[ -n "$PROMPT_FILE" ]] || { echo "start requires --prompt-file" >&2; exit 2; }
+    [[ -f "$PROMPT_FILE" ]] || { echo "prompt file not found: $PROMPT_FILE" >&2; exit 1; }
+    
+    local adapter="${ADAPTERS_DIR}/${PROVIDER}.sh"
+    [[ -f "$adapter" ]] || { echo "provider adapter not found: $adapter" >&2; exit 20; }
+    
+    job_paths "$BEADS" "$PROVIDER"
+    
+    local state
+    state="$(job_state "$PID_FILE")"
+    if [[ "$state" == "running" ]]; then
+        echo "job $BEADS already running (pid=$(cat "$PID_FILE"))" >&2
+        exit 1
+    fi
+    
+    # Permission gate (bd-cbsb.16)
+    if [[ -n "$WORKTREE" ]]; then
+        local perm_result
+        perm_result="$(check_permission_gate "$BEADS" "$WORKTREE")"
+        if [[ "$perm_result" != OK* ]]; then
+            echo "permission gate failed: $perm_result" >&2
+            exit 22
+        fi
+    fi
+    
+    # Baseline gate (optional)
+    if [[ -n "$REQUIRED_BASELINE" ]]; then
+        local gate_worktree gate_result gate_pass
+        gate_worktree="$(resolve_worktree "$BEADS" "$WORKTREE")"
+        gate_result="$(baseline_gate_eval "$gate_worktree" "$REQUIRED_BASELINE")"
+        IFS='|' read -r gate_pass _ _ _ _ <<< "$gate_result"
+        if [[ "$gate_pass" != "true" ]]; then
+            echo "baseline gate failed: $gate_result" >&2
+            exit 1
+        fi
+    fi
+    
+    rotate_log "$LOG_FILE"
+    rotate_outcome "$OUTCOME_FILE"
+    
+    cat > "$META_FILE" <<EOF
+beads=$BEADS
+provider=$PROVIDER
+repo=$REPO
+worktree=$WORKTREE
+prompt_file=$PROMPT_FILE
+started_at=$(now_utc)
+retries=0
+use_pty=$USE_PTY
+version=$RUNNER_VERSION
+EOF
+    
+    # Source adapter and run
+    source "$adapter"
+    
+    if ! declare -f adapter_start >/dev/null 2>&1; then
+        echo "adapter_start not found in $adapter" >&2
+        exit 20
+    fi
+    
+    local pid
+    pid=$(adapter_start "$BEADS" "$PROMPT_FILE" "$WORKTREE" "$LOG_FILE")
+    
+    echo "$pid" > "$PID_FILE"
+    meta_set "$META_FILE" "pid" "$pid"
+    
+    persist_contract "$BEADS" "$PROVIDER" "$CONTRACT_FILE"
+    
+    # Initial heartbeat
+    write_heartbeat "$BEADS" "$PROVIDER" "start" "job launched"
+    
+    echo "started beads=$BEADS provider=$PROVIDER pid=$pid log=$LOG_FILE"
+}
+
+status_line() {
+    local beads="$1"
+    local provider
+    provider="$(find_provider_for_beads "$beads")"
+    job_paths "$beads" "$provider"
+    
+    local pid="" state="missing" reason="-" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-" mutations="-"
+    
+    if [[ -f "$PID_FILE" ]]; then
+        pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    fi
+    
+    local detail
+    detail="$(job_health_detail "$beads" "$((STALL_MINUTES * 60))")"
+    IFS='|' read -r state reason mutations log_bytes _cpu _pid_age _log_age <<< "$detail"
+    
+    if [[ -f "$OUTCOME_FILE" ]]; then
+        local outcome_state outcome_exit outcome_duration
+        outcome_state="$(meta_get "$OUTCOME_FILE" "state")"
+        outcome_exit="$(meta_get "$OUTCOME_FILE" "exit_code")"
+        outcome_duration="$(meta_get "$OUTCOME_FILE" "duration_sec")"
+        outcome="${outcome_state:-completed}:${outcome_exit:-?}"
+        if [[ -n "$outcome_duration" && "$outcome_duration" != "-" ]]; then
+            outcome="${outcome} (${outcome_duration}s)"
+        fi
+    fi
+    
+    if [[ -f "$LOG_FILE" ]]; then
+        local mtime now age
+        mtime="$(file_mtime_epoch "$LOG_FILE" 2>/dev/null || echo "")"
+        if [[ -n "$mtime" ]]; then
+            now="$(date +%s)"
+            age=$((now - mtime))
+            last_update="$(format_elapsed "$age") ago"
+        fi
+    fi
+    
+    if [[ -f "$META_FILE" ]]; then
+        retries="$(meta_get "$META_FILE" "retries")"
+        [[ -n "$retries" ]] || retries="0"
+    fi
+    
+    if [[ -f "$PID_FILE" ]]; then
+        local pid_mtime now
+        pid_mtime="$(file_mtime_epoch "$PID_FILE" 2>/dev/null || echo "")"
+        if [[ -n "$pid_mtime" ]]; then
+            now="$(date +%s)"
+            elapsed="$(format_elapsed "$((now - pid_mtime))")"
+        fi
+    fi
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        printf '{'
+        printf '"beads":"%s",' "$(json_escape "$beads")"
+        printf '"provider":"%s",' "$(json_escape "${provider:-unknown}")"
+        printf '"pid":"%s",' "$(json_escape "${pid:--}")"
+        printf '"state":"%s",' "$(json_escape "$state")"
+        printf '"reason_code":"%s",' "$(json_escape "$reason")"
+        printf '"elapsed":"%s",' "$(json_escape "$elapsed")"
+        printf '"log_bytes":%s,' "${log_bytes:-0}"
+        printf '"mutation_count":%s,' "${mutations:-0}"
+        printf '"retry_count":%s,' "${retries:-0}"
+        printf '"outcome":"%s"' "$(json_escape "$outcome")"
+        printf '}\n'
+        return 0
+    fi
+    
+    printf "%-14s %-10s %-8s %-14s %-12s %-9s %-6s %s\n" \
+        "$beads" "${provider:-?}" "${pid:--}" "$state" "$elapsed" "$log_bytes" "$retries" "$outcome"
+}
+
+status_cmd() {
+    parse_common_args "$@"
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        local rows=()
+        if [[ -n "$BEADS" ]]; then
+            rows+=("$(status_line "$BEADS")")
+        else
+            shopt -s nullglob
+            for dir in /tmp/dx-runner/*/; do
+                [[ -d "$dir" ]] || continue
+                for pidf in "$dir"/*.pid; do
+                    local beads
+                    beads="$(basename "$pidf" .pid)"
+                    rows+=("$(status_line "$beads")")
+                done
+            done
+            # Also check non-provider dir
+            shopt -s nullglob
+            for pidf in /tmp/dx-runner/*.pid; do
+                local beads
+                beads="$(basename "$pidf" .pid)"
+                rows+=("$(status_line "$beads")")
+            done
+        fi
+        printf '{"generated_at":"%s","jobs":[%s]}\n' "$(now_utc)" "$(join_by "," "${rows[@]}")"
+        return 0
+    fi
+    
+    printf "%-14s %-10s %-8s %-14s %-12s %-9s %-6s %s\n" \
+        "bead" "provider" "pid" "state" "elapsed" "bytes" "retry" "outcome"
+    
+    if [[ -n "$BEADS" ]]; then
+        status_line "$BEADS"
+        return 0
+    fi
+    
+    shopt -s nullglob
+    local found=0
+    
+    for dir in /tmp/dx-runner/*/; do
+        [[ -d "$dir" ]] || continue
+        for pidf in "$dir"/*.pid; do
+            found=1
+            local beads
+            beads="$(basename "$pidf" .pid)"
+            status_line "$beads"
+        done
+    done
+    
+    shopt -s nullglob
+    for pidf in /tmp/dx-runner/*.pid; do
+        found=1
+        local beads
+        beads="$(basename "$pidf" .pid)"
+        status_line "$beads"
+    done
+    
+    if [[ "$found" -eq 0 ]]; then
+        echo "(no jobs found in /tmp/dx-runner)"
+    fi
+}
+
+check_cmd() {
+    parse_common_args "$@"
+    [[ -n "$BEADS" ]] || { echo "check requires --beads" >&2; exit 2; }
+    
+    local provider
+    provider="$(find_provider_for_beads "$BEADS")"
+    
+    # If no provider found, search across provider directories
+    if [[ -z "$provider" ]]; then
+        for dir in /tmp/dx-runner/*/; do
+            [[ -d "$dir" ]] || continue
+            if [[ -f "${dir}${BEADS}.meta" ]]; then
+                provider="$(basename "$dir")"
+                break
+            fi
+        done
+    fi
+    
+    job_paths "$BEADS" "$provider"
+    
+    if [[ ! -f "$META_FILE" ]]; then
+        echo "job $BEADS has no metadata file"
+        [[ "$OUTPUT_JSON" == "true" ]] && printf '{"beads":"%s","state":"missing","reason_code":"no_meta"}\n' "$BEADS"
+        exit 1
+    fi
+    
+    local detail state reason
+    detail="$(job_health_detail "$BEADS" "$((STALL_MINUTES * 60))")"
+    IFS='|' read -r state reason _ _ _ _ _ <<< "$detail"
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        printf '{"beads":"%s","state":"%s","reason_code":"%s"}\n' "$BEADS" "$state" "$reason"
+    else
+        echo "$BEADS: $state ($reason)"
+    fi
+    
+    case "$state" in
+        stalled|no_op) exit 2 ;;
+        exited_err) exit 3 ;;
+        blocked) exit 3 ;;
+        exited_ok) exit 0 ;;
+        *) exit 0 ;;
+    esac
+}
+
+stop_cmd() {
+    parse_common_args "$@"
+    [[ -n "$BEADS" ]] || { echo "stop requires --beads" >&2; exit 2; }
+    
+    local provider
+    provider="$(find_provider_for_beads "$BEADS")"
+    job_paths "$BEADS" "$provider"
+    
+    if [[ ! -f "$PID_FILE" ]]; then
+        echo "job $BEADS has no PID file"
+        exit 1
+    fi
+    
+    local pid
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    
+    if [[ -n "$pid" ]] && ps -p "$pid" >/dev/null 2>&1; then
+        kill "$pid" 2>/dev/null || true
+        sleep 1
+        if ps -p "$pid" >/dev/null 2>&1; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+        persist_outcome "$BEADS" 137 "$OUTCOME_FILE" "$META_FILE"
+        echo "stopped beads=$BEADS pid=$pid"
+    else
+        echo "job $BEADS already stopped"
+    fi
+    
+    rm -f "$PID_FILE"
+}
+
+restart_cmd() {
+    parse_common_args "$@"
+    [[ -n "$BEADS" ]] || { echo "restart requires --beads" >&2; exit 2; }
+    
+    local provider worktree prompt_file
+    provider="$(find_provider_for_beads "$BEADS")"
+    job_paths "$BEADS" "$provider"
+    
+    if [[ ! -f "$META_FILE" ]]; then
+        echo "job $BEADS has no metadata file"
+        exit 1
+    fi
+    
+    worktree="$(meta_get "$META_FILE" "worktree")"
+    prompt_file="$(meta_get "$META_FILE" "prompt_file")"
+    
+    # Increment retry count
+    local retries
+    retries="$(meta_get "$META_FILE" "retries")"
+    retries="${retries:-0}"
+    retries=$((retries + 1))
+    meta_set "$META_FILE" "retries" "$retries"
+    
+    # Stop existing
+    if [[ -f "$PID_FILE" ]]; then
+        local pid
+        pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+        if [[ -n "$pid" ]] && ps -p "$pid" >/dev/null 2>&1; then
+            kill "$pid" 2>/dev/null || true
+            sleep 1
+        fi
+        rm -f "$PID_FILE"
+    fi
+    
+    # Rotate logs
+    rotate_log "$LOG_FILE"
+    rotate_outcome "$OUTCOME_FILE"
+    
+    # Source adapter and restart
+    local adapter="${ADAPTERS_DIR}/${provider}.sh"
+    if [[ ! -f "$adapter" ]]; then
+        echo "provider adapter not found: $adapter" >&2
+        exit 20
+    fi
+    
+    source "$adapter"
+    
+    local pid
+    pid=$(adapter_start "$BEADS" "$prompt_file" "$worktree" "$LOG_FILE")
+    
+    echo "$pid" > "$PID_FILE"
+    meta_set "$META_FILE" "pid" "$pid"
+    
+    write_heartbeat "$BEADS" "$provider" "restart" "job restarted (retry $retries)"
+    
+    echo "restarted beads=$BEADS provider=$provider pid=$pid retry=$retries"
+}
+
+report_cmd() {
+    parse_common_args "$@"
+    [[ -n "$BEADS" ]] || { echo "report requires --beads" >&2; exit 2; }
+    
+    local provider
+    provider="$(find_provider_for_beads "$BEADS")"
+    job_paths "$BEADS" "$provider"
+    
+    local detail state reason mutations log_bytes cpu_time pid_age log_age
+    detail="$(job_health_detail "$BEADS")"
+    IFS='|' read -r state reason mutations log_bytes cpu_time pid_age log_age <<< "$detail"
+    
+    local retries="0" started_at="-" worktree="-" prompt_file="-" exit_code="-" duration="-" outcome_state="-"
+    
+    if [[ -f "$META_FILE" ]]; then
+        retries="$(meta_get "$META_FILE" "retries")"
+        started_at="$(meta_get "$META_FILE" "started_at")"
+        worktree="$(meta_get "$META_FILE" "worktree")"
+        prompt_file="$(meta_get "$META_FILE" "prompt_file")"
+    fi
+    
+    if [[ -f "$OUTCOME_FILE" ]]; then
+        exit_code="$(meta_get "$OUTCOME_FILE" "exit_code")"
+        duration="$(meta_get "$OUTCOME_FILE" "duration_sec")"
+        outcome_state="$(meta_get "$OUTCOME_FILE" "state")"
+    fi
+    
+    if [[ "$REPORT_FORMAT" == "json" || "$OUTPUT_JSON" == "true" ]]; then
+        cat <<EOF
+{
+  "beads": "$BEADS",
+  "provider": "${provider:-unknown}",
+  "state": "$state",
+  "reason_code": "$reason",
+  "started_at": "$started_at",
+  "duration_sec": "$duration",
+  "retries": $retries,
+  "exit_code": "${exit_code:--}",
+  "outcome_state": "${outcome_state:--}",
+  "worktree": "${worktree:--}",
+  "mutations": $mutations,
+  "log_bytes": $log_bytes,
+  "cpu_time_sec": $cpu_time,
+  "pid_age_sec": $pid_age
+}
+EOF
+    else
+        cat <<EOF
+# Report: $BEADS
+
+## Summary
+- Provider: ${provider:-unknown}
+- State: $state
+- Reason: $reason
+- Started: $started_at
+- Duration: ${duration}s
+- Retries: $retries
+
+## Outcome
+- Exit Code: ${exit_code:--}
+- State: ${outcome_state:--}
+
+## Metrics
+- Worktree: ${worktree:--}
+- Mutations: $mutations
+- Log Size: $log_bytes bytes
+- CPU Time: ${cpu_time}s
+- PID Age: ${pid_age}s
+EOF
+    fi
+}
+
+preflight_cmd() {
+    parse_common_args "$@"
+    unified_preflight "$PROVIDER"
+    exit $?
+}
+
+probe_cmd() {
+    parse_common_args "$@"
+    [[ -n "$PROVIDER" ]] || { echo "probe requires --provider" >&2; exit 2; }
+    
+    local adapter="${ADAPTERS_DIR}/${PROVIDER}.sh"
+    if [[ ! -f "$adapter" ]]; then
+        echo "provider adapter not found: $adapter" >&2
+        exit 20
+    fi
+    
+    source "$adapter"
+    
+    if ! declare -f adapter_probe_model >/dev/null 2>&1; then
+        echo "adapter_probe_model not implemented for $PROVIDER" >&2
+        exit 1
+    fi
+    
+    local model="${FEATURE_KEY:-${PROVIDER_DEFAULT_MODEL[$PROVIDER]:-}}"
+    
+    echo "Probing $PROVIDER with model $model..."
+    if adapter_probe_model "$model"; then
+        echo "OK: $PROVIDER/$model is healthy"
+        exit 0
+    else
+        echo "FAILED: $PROVIDER/$model is not responding"
+        exit 1
+    fi
+}
+
+watchdog_cmd() {
+    parse_common_args "$@"
+    
+    echo "Starting watchdog (interval=${WATCHDOG_INTERVAL}s, max_retries=${WATCHDOG_MAX_RETRIES})..."
+    
+    while true; do
+        shopt -s nullglob
+        
+        for dir in /tmp/dx-runner/*/; do
+            [[ -d "$dir" ]] || continue
+            for pidf in "$dir"/*.pid; do
+                local beads provider
+                beads="$(basename "$pidf" .pid)"
+                provider="$(meta_get "${dir}${beads}.meta" "provider" 2>/dev/null || true)"
+                
+                local detail state reason
+                detail="$(job_health_detail "$beads" "$((STALL_MINUTES * 60))")"
+                IFS='|' read -r state reason _ _ _ _ _ <<< "$detail"
+                
+                echo "$(now_utc) [$beads] $state ($reason)"
+                
+                if [[ "$state" == "stalled" || "$state" == "no_op" ]]; then
+                    local retries
+                    retries="$(meta_get "${dir}${beads}.meta" "retries")"
+                    retries="${retries:-0}"
+                    
+                    if [[ "$retries" -lt "$WATCHDOG_MAX_RETRIES" ]]; then
+                        echo "$(now_utc) [$beads] restarting (retry $((retries + 1))/$WATCHDOG_MAX_RETRIES)"
+                        BEADS="$beads" restart_cmd
+                    else
+                        echo "$(now_utc) [$beads] marking as blocked (max retries reached)"
+                        meta_set "${dir}${beads}.meta" "blocked" "true"
+                    fi
+                fi
+            done
+        done
+        
+        sleep "$WATCHDOG_INTERVAL"
+    done
+}
+
+# Gate commands
+baseline_gate_cmd() {
+    parse_common_args "$@"
+    local worktree
+    worktree="$(resolve_worktree "$BEADS" "$WORKTREE")"
+    
+    [[ -n "$REQUIRED_BASELINE" ]] || { echo "baseline-gate requires --required-baseline" >&2; exit 2; }
+    
+    local result gate_pass gate_reason gate_runtime gate_required gate_details
+    result="$(baseline_gate_eval "$worktree" "$REQUIRED_BASELINE")"
+    IFS='|' read -r gate_pass gate_reason gate_runtime gate_required gate_details <<< "$result"
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        printf '{"passed":%s,"reason_code":"%s","runtime":"%s","required":"%s","details":"%s"}\n' \
+            "$gate_pass" "$gate_reason" "$gate_runtime" "$gate_required" "$(json_escape "$gate_details")"
+    else
+        echo "Baseline Gate: $gate_pass ($gate_reason)"
+        echo "  Runtime: $gate_runtime"
+        echo "  Required: $gate_required"
+        echo "  Details: $gate_details"
+    fi
+    
+    [[ "$gate_pass" == "true" ]] || exit 1
+}
+
+integrity_gate_cmd() {
+    parse_common_args "$@"
+    local worktree
+    worktree="$(resolve_worktree "$BEADS" "$WORKTREE")"
+    
+    [[ -n "$REPORTED_COMMIT" ]] || { echo "integrity-gate requires --reported-commit" >&2; exit 2; }
+    
+    local result gate_pass gate_reason gate_branch gate_head gate_reported gate_details
+    result="$(integrity_gate_eval "$worktree" "$REPORTED_COMMIT" "$BRANCH_NAME")"
+    IFS='|' read -r gate_pass gate_reason gate_branch gate_head gate_reported gate_details <<< "$result"
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        printf '{"passed":%s,"reason_code":"%s","branch":"%s","head":"%s","reported":"%s","details":"%s"}\n' \
+            "$gate_pass" "$gate_reason" "$gate_branch" "$gate_head" "$gate_reported" "$(json_escape "$gate_details")"
+    else
+        echo "Integrity Gate: $gate_pass ($gate_reason)"
+        echo "  Branch: $gate_branch"
+        echo "  Head: $gate_head"
+        echo "  Reported: $gate_reported"
+        echo "  Details: $gate_details"
+    fi
+    
+    [[ "$gate_pass" == "true" ]] || exit 1
+}
+
+feature_key_gate_cmd() {
+    parse_common_args "$@"
+    local worktree
+    worktree="$(resolve_worktree "$BEADS" "$WORKTREE")"
+    
+    [[ -n "$FEATURE_KEY" ]] || { echo "feature-key-gate requires --feature-key" >&2; exit 2; }
+    
+    local result gate_pass gate_reason gate_branch gate_base gate_fk gate_checked gate_details
+    result="$(feature_key_gate_eval "$worktree" "$FEATURE_KEY" "$BRANCH_NAME" "$BASE_BRANCH")"
+    IFS='|' read -r gate_pass gate_reason gate_branch gate_base gate_fk gate_checked gate_details <<< "$result"
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        printf '{"passed":%s,"reason_code":"%s","branch":"%s","base":"%s","feature_key":"%s","checked_commits":%s,"details":"%s"}\n' \
+            "$gate_pass" "$gate_reason" "$gate_branch" "$gate_base" "$gate_fk" "$gate_checked" "$(json_escape "$gate_details")"
+    else
+        echo "Feature-Key Gate: $gate_pass ($gate_reason)"
+        echo "  Branch: $gate_branch"
+        echo "  Base: $gate_base"
+        echo "  Feature-Key: $gate_fk"
+        echo "  Checked: $gate_checked commits"
+        echo "  Details: $gate_details"
+    fi
+    
+    [[ "$gate_pass" == "true" ]] || exit 1
+}
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+case "$CMD" in
+    start) start_cmd "$@" ;;
+    status) status_cmd "$@" ;;
+    check) check_cmd "$@" ;;
+    health) status_cmd "$@" ;;  # Alias
+    stop) stop_cmd "$@" ;;
+    restart) restart_cmd "$@" ;;
+    report) report_cmd "$@" ;;
+    preflight) preflight_cmd "$@" ;;
+    probe) probe_cmd "$@" ;;
+    watchdog) watchdog_cmd "$@" ;;
+    baseline-gate) baseline_gate_cmd "$@" ;;
+    integrity-gate) integrity_gate_cmd "$@" ;;
+    feature-key-gate) feature_key_gate_cmd "$@" ;;
+    -h|--help|help) usage; exit 0 ;;
+    *) echo "Unknown command: $CMD" >&2; usage; exit 2 ;;
+esac
