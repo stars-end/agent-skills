@@ -77,7 +77,7 @@ test_preflight_output_format() {
   setup
 
   local output
-  output=$("$JOB_SCRIPT" preflight --log-dir "$LOG_DIR" 2>&1) || true
+  output=$(ZAI_API_KEY="test" "$JOB_SCRIPT" preflight --log-dir "$LOG_DIR" 2>&1) || true
 
   if echo "$output" | grep -q "claude binary:"; then
     pass "Preflight includes claude binary check"
@@ -175,7 +175,7 @@ EOF
 
   # Check mutation detection
   local output
-  output=$("$JOB_SCRIPT" mutations --beads "$TEST_BEADS" --log-dir "$LOG_DIR" 2>&1) || true
+  output=$("$JOB_SCRIPT" mutations --beads "$TEST_BEADS" --log-dir "$LOG_DIR" --worktree "$worktree" 2>&1) || true
 
   if echo "$output" | grep -q "mutation_count:"; then
     pass "Mutation detection returns count"
@@ -308,7 +308,7 @@ EOF
   echo "12345" > "$LOG_DIR/${TEST_BEADS}.pid"
 
   # Run mutations command
-  "$JOB_SCRIPT" mutations --beads "$TEST_BEADS" --log-dir "$LOG_DIR" >/dev/null 2>&1 || true
+  "$JOB_SCRIPT" mutations --beads "$TEST_BEADS" --log-dir "$LOG_DIR" --worktree "$worktree" >/dev/null 2>&1 || true
 
   # Check mutation marker file
   if [[ -f "$LOG_DIR/${TEST_BEADS}.mutation" ]]; then
