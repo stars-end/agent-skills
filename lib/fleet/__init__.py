@@ -1,7 +1,30 @@
 """
 Fleet Dispatch - Unified dispatch library for OpenCode and Jules backends.
 
-Usage:
+================================================================================
+COMPATIBILITY LAYER (bd-xga8.14.8)
+================================================================================
+
+This module is a COMPATIBILITY LAYER for the deprecated dx-dispatch.py shim.
+
+**For canonical dispatch, use dx-runner directly:**
+    dx-runner start --provider opencode --beads bd-xxx --prompt-file /tmp/p.prompt
+
+**Break-glass only:** Use dx-dispatch (shell shim) or dx-dispatch.py when
+dx-runner direct dispatch is unavailable.
+
+This library remains for:
+  - SSH fanout utilities (lib.fleet.ssh_fanout)
+  - OpenCode preflight (lib.fleet.opencode_preflight)
+  - No-op detection (lib.fleet.noop_gate)
+
+The FleetDispatcher class is DEPRECATED. Use dx-runner for all dispatch.
+
+Archive target: T+72h after dx-runner migration validation (see docs/specs/).
+
+================================================================================
+
+Legacy Usage (deprecated):
     from lib.fleet import FleetDispatcher, DispatchResult
 
     dispatcher = FleetDispatcher()
@@ -12,7 +35,7 @@ Usage:
         mode="real"
     )
 
-SSH Fanout (hardened):
+SSH Fanout (hardened - still valid):
     from lib.fleet import fanout_ssh, run_preflight_checks
 
     # Run preflight checks first

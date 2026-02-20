@@ -39,9 +39,19 @@ dx-check
 
 ## Phase 1: Dispatch Consolidation
 
-**Goal**: `dx-dispatch` becomes THE canonical dispatch tool with modes for SSH, Jules, and Fleet.
+> **MIGRATION COMPLETE (bd-xga8.14.8 - 2026-02-20)**
+>
+> The canonical dispatch surface is now `dx-runner`:
+>   - **Primary**: `dx-runner start --provider opencode --beads <id> --prompt-file <path>`
+>   - **Reliability backstop**: `dx-runner start --provider cc-glm --beads <id> --prompt-file <path>`
+>   - **Break-glass only**: `dx-dispatch` (shell shim) or `dx-dispatch.py` (Python shim)
+>
+> See `docs/specs/dispatch-closeout-report.md` for complete migration details.
+> Tasks 1.1-1.4 below are preserved for historical reference.
 
-### Task 1.1: Evaluate lib/fleet Usage (scu.19)
+**Goal**: ~~`dx-dispatch` becomes THE canonical dispatch tool~~ → **`dx-runner` is THE canonical dispatch tool** with multi-provider support (opencode, cc-glm, gemini).
+
+### Historical Reference: Task 1.1: Evaluate lib/fleet Usage (scu.19)
 
 **Check if lib/fleet is actively used:**
 
