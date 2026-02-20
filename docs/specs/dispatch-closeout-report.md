@@ -33,7 +33,7 @@ dx-runner check --beads bd-xxx
 | File | Status | Purpose |
 |------|--------|---------|
 | `scripts/dx-dispatch` | **BREAK-GLASS** | Shell shim forwarding to dx-runner |
-| `scripts/dx-dispatch.py` | **BREAK-GLASH** | Python shim with legacy interface |
+| `scripts/dx-dispatch.py` | **BREAK-GLASS** | Python shim with legacy interface |
 
 **Usage (emergency only):**
 ```bash
