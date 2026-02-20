@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: e993c99234ca4d713eaa5a9f715a5820d363bc8a -->
-<!-- Last updated: 2026-02-18 21:09:07 UTC -->
+<!-- Source SHA: eedddf5739ec3994c451ba90d31dccd31fc6bdaa -->
+<!-- Last updated: 2026-02-20 02:19:16 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -200,7 +200,7 @@ Notes:
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban views, dependency graphs, and the robot-plan API for auto-selecting next tasks. Keywords: beads, viewer, kanban, dependency graph, robot-plan, task selection, bottleneck | `bd show "$NEXT_TASK"` | workflow, beads, visualization, task-selection |
 | **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode |
 | **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
-| **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with OpenCode as primary dispatch service and governed cc-glm fallback. | — |  |
+| **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with dx-runner as canonical governance surface, OpenCode as primary execution lane, and cc-glm as reliability backstop. dx-dispatch is break-glass only. | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | `bd sync` |  |
 | **dx-runner** | Canonical unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, or gemini providers with unified preflight, gates, and failure taxonomy. Use when dispatching agent tasks, running headless jobs, or managing parallel agent sessions. | `dx-runner start --beads bd-xxx --provider cc-glm --prompt-fi` | workflow, dispatch, governance, multi-provider, automation |
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |
@@ -221,7 +221,7 @@ Notes:
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
 | **bd-doctor** | Check and fix common Beads workflow issues across all repos. | `bd export --force` |  |
-| **dx-cron** | Monitor and manage dx-* system cron jobs and their logs.  MUST BE USED when user asks "is the cron running", "show me cron logs", or "status of dx jobs". | — | health, auth, audit, cron, monitoring |
+| **dx-cron** | Monitor and manage dx-* system cron jobs and their logs. MUST BE USED when user asks "is the cron running", "show me cron logs", or "status of dx jobs". | — | health, auth, audit, cron, monitoring |
 | **lockfile-doctor** | Check and fix lockfile drift across Poetry (Python) and pnpm (Node.js) projects. | — |  |
 | **mcp-doctor** | Warn-only health check for canonical MCP configuration and related DX tooling. Strict mode is opt-in via MCP_DOCTOR_STRICT=1. | — | dx, mcp, health, verification |
 | **railway-doctor** | Pre-flight checks for Railway deployments to catch failures BEFORE deploying. Use when about to deploy, running verify-* commands, or debugging Railway issues. | — | railway, deployment, validation, pre-flight |
@@ -238,10 +238,10 @@ Notes:
 | **canonical-targets** | Single source of truth for canonical VMs, canonical IDEs, and canonical trunk branch. Use this to keep dx-status, mcp-doctor, and setup scripts aligned across machines. | — | dx, ide, vm, canonical, targets |
 | **devops-dx** | GitHub/Railway housekeeping for CI env/secret management and DX maintenance. Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, or fixing CI failures due to missing env. | — | devops, github, auth, env, secrets, ci, railway |
 | **dx-alerts** | Lightweight “news wire” for DX changes and breakages, posted to Slack (no MCP required). | — |  |
-| **fleet-deploy** | Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12). MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs. Uses configs/fleet_hosts.yaml as authoritative source for SSH targets, with dx-runner governance and dx-dispatch compatibility transport for remote fanout. | `dx-dispatch epyc6 "cd ~/agent-skills && git pull && make ins` | fleet, deploy, vm, canonical, dx-runner, dx-dispatch, ssh, infrastructure |
+| **fleet-deploy** | Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12). MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs. Uses configs/fleet_hosts.yaml as authoritative source for SSH targets, with dx-runner governance. | `dx-runner start --provider opencode --beads bd-xyz --prompt-` | fleet, deploy, vm, canonical, dx-runner, ssh, infrastructure |
 | **github-runner-setup** | GitHub Actions self-hosted runner setup and maintenance. Use when setting up dedicated runner users, migrating runners from personal accounts, troubleshooting runner issues, or implementing runner isolation. Covers systemd services, environment isolation, and skills plane integration. | — | github-actions, devops, runner, systemd, infrastructure |
-| **vm-bootstrap** | Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment. Supports modes: check (warn-only), install (operator-confirmed), strict (CI-ready). Enforces Linux-only  mise as canonical; honors preference brew→npm (with apt fallback). Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, op, bd, dcg, ru, tmux, rg. Handles optional tools as warnings: tailscale, playwright, docker, bv. Never prints/seeds secrets; never stores tokens in repo/YAML; Railway vars only for app runtime env. Safe on dirty repos (refuses and points to dirty-repo-bootstrap skill, or snapshots WIP branch). Keywords: vm, bootstrap, setup, mise, toolchain, linux, environment, provision, verify, new vm | — | dx, tooling, setup, linux |
-| **multi-agent-dispatch** | Cross-VM task dispatch with dx-runner as canonical governance runner and OpenCode as primary execution lane. Use dx-dispatch as compatibility transport/orchestration for remote fanout, Jules Cloud, and fleet workflows. EPYC6 is currently disabled - see enablement gate. | `dx-runner start --provider opencode --beads bd-123 --prompt-` |  |
+| **vm-bootstrap** | Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment. Supports modes: check (warn-only), install (operator-confirmed), strict (CI-ready). Enforces Linux-only + mise as canonical; honors preference brew→npm (with apt fallback). Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, op, bd, dcg, ru, tmux, rg. Handles optional tools as warnings: tailscale, playwright, docker, bv. Never prints/seeds secrets; never stores tokens in repo/YAML; Railway vars only for app runtime env. Safe on dirty repos (refuses and points to dirty-repo-bootstrap skill, or snapshots WIP branch). Keywords: vm, bootstrap, setup, mise, toolchain, linux, environment, provision, verify, new vm | — | dx, tooling, setup, linux |
+| **multi-agent-dispatch** | Cross-VM task dispatch with dx-runner as canonical governance runner and OpenCode as primary execution lane. dx-dispatch is a BREAK-GLASS compatibility shim for remote fanout when dx-runner is unavailable. EPYC6 is currently disabled - see enablement gate. | `dx-dispatch is a BREAK-GLASS compatibility shim for remote f` | workflow, dispatch, dx-runner, governance, cross-vm |
 
 
 ## Railway Deployment

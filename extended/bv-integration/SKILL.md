@@ -108,12 +108,14 @@ bv
 | `Enter` | View details |
 | `q` | Quit |
 
-## Integration with lib/fleet
+## Integration with lib/fleet (Compatibility Layer)
+
+> **Note**: `lib/fleet` is a compatibility layer used by the deprecated `dx-dispatch` shim. For canonical dispatch, use `dx-runner` directly.
 
 FleetDispatcher can use BV for smart task selection:
 
 ```python
-from lib.fleet import FleetDispatcher
+from lib.fleet import FleetDispatcher  # Legacy - prefer dx-runner
 
 dispatcher = FleetDispatcher()
 
@@ -122,6 +124,8 @@ next_task = dispatcher.auto_select_task(repo="affordabot")
 if next_task:
     dispatcher.dispatch(beads_id=next_task, ...)
 ```
+
+**Migration**: For new dispatch workflows, use `dx-runner start --provider opencode` instead of `lib/fleet`.
 
 ## When to Use BV vs bd CLI
 
