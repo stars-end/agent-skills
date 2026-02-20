@@ -41,11 +41,17 @@ if [ -z "$BEADS_DIR" ]; then
     exit 0
 fi
 
-# Flush pending changes to JSONL
+# Flush pending changes to JSONL.
+# Default behavior is warn-only to avoid contradictory "commit succeeded + error" UX.
+# Set BEADS_FLUSH_STRICT=1 to make this blocking.
 if ! bd sync --flush-only >/dev/null 2>&1; then
-    echo "Error: Failed to flush bd changes to JSONL" >&2
+    if [[ "${BEADS_FLUSH_STRICT:-0}" == "1" ]]; then
+        echo "Error: Failed to flush bd changes to JSONL (strict mode)" >&2
+        echo "Run 'bd sync --flush-only' manually to diagnose" >&2
+        exit 1
+    fi
+    echo "Warning: Failed to flush bd changes to JSONL (non-blocking)" >&2
     echo "Run 'bd sync --flush-only' manually to diagnose" >&2
-    exit 1
 fi
 
 # If the JSONL file was modified, stage it

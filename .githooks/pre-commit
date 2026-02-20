@@ -41,8 +41,12 @@ fi
 
 # Chain any repo-specific pre-commit behavior (best-effort).
 if [[ -x "$REPO_ROOT/hooks/pre-commit" ]]; then
-  "$REPO_ROOT/hooks/pre-commit" "$@" || true
+  if ! "$REPO_ROOT/hooks/pre-commit" "$@"; then
+    if [[ "${BEADS_FLUSH_STRICT:-0}" == "1" ]]; then
+      exit 1
+    fi
+    echo "Warning: repo pre-commit hook reported non-blocking failure" >&2
+  fi
 fi
 
 exit 0
-

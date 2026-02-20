@@ -42,7 +42,7 @@ set -euo pipefail
 #   22 - Permission denied (non-worktree path)
 #   23 - No-op detected
 
-RUNNER_VERSION="1.2.0"
+RUNNER_VERSION="1.3.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ADAPTERS_DIR="${SCRIPT_DIR}/adapters"
 
@@ -69,6 +69,10 @@ shift || true
 
 now_utc() {
     date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+host_short() {
+    hostname 2>/dev/null | cut -d. -f1
 }
 
 parse_utc_epoch() {
@@ -131,6 +135,11 @@ join_by() {
     printf '%s' "$out"
 }
 
+valid_feature_key() {
+    local fk="$1"
+    [[ "$fk" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]
+}
+
 strip_ansi() {
     sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' 2>/dev/null || cat
 }
@@ -190,26 +199,58 @@ job_paths() {
 # P1 fix: Search all provider directories to find beads metadata
 find_provider_for_beads() {
     local beads="$1"
-    
-    # First check root dir
+
+    # First check root dir metadata for backward compatibility.
     if [[ -f "/tmp/dx-runner/${beads}.meta" ]]; then
         meta_get "/tmp/dx-runner/${beads}.meta" "provider" 2>/dev/null || true
         return 0
     fi
-    
-    # Then search provider subdirectories
+
+    # Resolve to the latest provider instance for this beads id.
+    local latest_provider=""
+    local latest_epoch=0
     shopt -s nullglob
     for dir in /tmp/dx-runner/*/; do
         [[ -d "$dir" ]] || continue
-        if [[ -f "${dir}${beads}.meta" ]]; then
-            local provider
-            provider="$(basename "$dir")"
-            printf '%s' "$provider"
-            return 0
+        local provider meta_file outcome_file pid_file candidate_epoch
+        provider="$(basename "$dir")"
+        meta_file="${dir}${beads}.meta"
+        outcome_file="${dir}${beads}.outcome"
+        pid_file="${dir}${beads}.pid"
+        [[ -f "$meta_file" || -f "$outcome_file" || -f "$pid_file" ]] || continue
+
+        candidate_epoch=0
+        if [[ -f "$meta_file" ]]; then
+            candidate_epoch="$(file_mtime_epoch "$meta_file" 2>/dev/null || echo 0)"
+        elif [[ -f "$outcome_file" ]]; then
+            candidate_epoch="$(file_mtime_epoch "$outcome_file" 2>/dev/null || echo 0)"
+        elif [[ -f "$pid_file" ]]; then
+            candidate_epoch="$(file_mtime_epoch "$pid_file" 2>/dev/null || echo 0)"
+        fi
+
+        if [[ "$candidate_epoch" -ge "$latest_epoch" ]]; then
+            latest_epoch="$candidate_epoch"
+            latest_provider="$provider"
         fi
     done
-    
-    return 1
+
+    [[ -n "$latest_provider" ]] || return 1
+    printf '%s' "$latest_provider"
+}
+
+list_providers_for_beads() {
+    local beads="$1"
+    local -a providers=()
+    shopt -s nullglob
+    for dir in /tmp/dx-runner/*/; do
+        [[ -d "$dir" ]] || continue
+        local provider
+        provider="$(basename "$dir")"
+        if [[ -f "${dir}${beads}.meta" || -f "${dir}${beads}.outcome" || -f "${dir}${beads}.pid" ]]; then
+            providers+=("$provider")
+        fi
+    done
+    printf '%s\n' "${providers[@]}"
 }
 
 resolve_worktree() {
@@ -247,12 +288,11 @@ check_mutations() {
     fi
 
     local changed=0
-    if [[ -d "$worktree/.git" ]]; then
-        changed="$(cd "$worktree" && git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
-    else
-        local threshold_epoch
-        threshold_epoch="$(date -d "$(meta_get "$META_FILE" "started_at" 2>/dev/null || date -u -Iseconds)" +%s 2>/dev/null || date +%s)"
-        changed="$(find "$worktree" -type f -newer "$META_FILE" 2>/dev/null | wc -l | tr -d ' ')"
+    if git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
+        changed="$(cd "$worktree" && git status --porcelain --untracked-files=all 2>/dev/null | wc -l | tr -d ' ')" || changed=0
+    fi
+    if [[ "${changed:-0}" -eq 0 ]]; then
+        changed="$(find "$worktree" -type f -newer "$META_FILE" 2>/dev/null | wc -l | tr -d ' ')" || changed=0
     fi
 
     echo "${changed:-0}"
@@ -434,6 +474,59 @@ process_cpu_time() {
     echo "$seconds"
 }
 
+classify_exit_reason() {
+    local provider="$1"
+    local exit_code="$2"
+    local log_file="$3"
+    local fallback_reason="${4:-process_exit_with_rc}"
+
+    if [[ "$exit_code" -eq 0 ]]; then
+        echo "process_exit_with_rc"
+        return 0
+    fi
+
+    local tail_blob=""
+    if [[ -f "$log_file" ]]; then
+        tail_blob="$(tail -n 120 "$log_file" 2>/dev/null | tr '\n' ' ' || true)"
+    fi
+    local lowered
+    lowered="$(printf '%s' "$tail_blob" | tr '[:upper:]' '[:lower:]')"
+
+    if [[ "$provider" == "gemini" ]]; then
+        if [[ "$lowered" == *"resource_exhausted"* || "$lowered" == *"model_capacity_exhausted"* || "$lowered" == *"429"* ]]; then
+            echo "gemini_capacity_exhausted"
+            return 0
+        fi
+    fi
+
+    if [[ "$provider" == "opencode" ]]; then
+        if [[ "$lowered" == *"429"* || "$lowered" == *"rate limit"* || "$lowered" == *"quota"* ]]; then
+            echo "opencode_rate_limited"
+            return 0
+        fi
+    fi
+
+    echo "$fallback_reason"
+}
+
+next_action_for_reason() {
+    local reason="$1"
+    case "$reason" in
+        gemini_capacity_exhausted)
+            echo "retry_backoff_or_switch_to_opencode_or_cc_glm"
+            ;;
+        opencode_rate_limited)
+            echo "retry_backoff_or_switch_to_gemini_or_cc_glm"
+            ;;
+        opencode_model_unavailable)
+            echo "use_cc_glm_or_gemini"
+            ;;
+        *)
+            echo "-"
+            ;;
+    esac
+}
+
 # ============================================================================
 # GOVERNANCE GATES (Proven from cc-glm-job.sh V3.4)
 # ============================================================================
@@ -538,6 +631,9 @@ feature_key_gate_eval() {
     if [[ -z "$feature_key" ]]; then
         reason_code="feature_key_missing"
         details="feature key is required"
+    elif ! valid_feature_key "$feature_key"; then
+        reason_code="feature_key_invalid_format"
+        details="feature key must match ^bd-[a-z0-9]+(\\.[a-z0-9]+)*$"
     elif [[ ! -d "$worktree" ]]; then
         reason_code="worktree_missing"
         details="worktree not found: $worktree"
@@ -595,8 +691,16 @@ validate_worktree_path() {
     local allowed_prefixes=(
         "/tmp/agents"
         "/tmp/dx-runner"
+        "/tmp/dxbench"
+        "/tmp/dxbench_epyc6"
         "$HOME/agent-skills"
     )
+    local extra_prefixes="${DX_RUNNER_EXTRA_ALLOWED_PREFIXES:-}"
+    if [[ -n "$extra_prefixes" ]]; then
+        local extra
+        IFS=',' read -r -a extra <<< "$extra_prefixes"
+        allowed_prefixes+=("${extra[@]}")
+    fi
     
     # Check if path starts with any allowed prefix
     for prefix in "${allowed_prefixes[@]}"; do
@@ -755,6 +859,19 @@ job_health_detail() {
         now="$(date +%s)"
         if [[ -n "$log_mtime" ]]; then
             log_age=$((now - log_mtime))
+        fi
+    fi
+
+    # Deterministic metric fallback from heartbeat when filesystem sampling lags.
+    if [[ -f "$HEARTBEAT_FILE" ]]; then
+        local hb_type hb_detail
+        hb_type="$(meta_get "$HEARTBEAT_FILE" "last_type" 2>/dev/null || true)"
+        hb_detail="$(meta_get "$HEARTBEAT_FILE" "last_detail" 2>/dev/null || true)"
+        if [[ "$log_bytes" -eq 0 && "$hb_type" == "log_output" && "$hb_detail" =~ bytes=([0-9]+) ]]; then
+            log_bytes="${BASH_REMATCH[1]}"
+        fi
+        if [[ "$mutation_count" -eq 0 && "$hb_type" == "mutation" && "$hb_detail" =~ count=([0-9]+) ]]; then
+            mutation_count="${BASH_REMATCH[1]}"
         fi
     fi
 
@@ -925,13 +1042,21 @@ persist_outcome() {
 
     local run_id
     run_id="$(date +%Y%m%d%H%M%S)"
-    local selected_model fallback_reason provider
+    local selected_model fallback_reason provider run_instance host cwd worktree
     selected_model="$(meta_get "$meta_file" "selected_model" 2>/dev/null || true)"
     fallback_reason="$(meta_get "$meta_file" "fallback_reason" 2>/dev/null || true)"
     provider="$(meta_get "$meta_file" "provider" 2>/dev/null || true)"
+    run_instance="$(meta_get "$meta_file" "run_instance" 2>/dev/null || true)"
+    host="$(meta_get "$meta_file" "host" 2>/dev/null || true)"
+    cwd="$(meta_get "$meta_file" "cwd" 2>/dev/null || true)"
+    worktree="$(meta_get "$meta_file" "worktree" 2>/dev/null || true)"
     selected_model="${selected_model:-unknown}"
     fallback_reason="${fallback_reason:-none}"
     provider="${provider:-unknown}"
+    run_instance="${run_instance:-unknown}"
+    host="${host:-$(host_short)}"
+    cwd="${cwd:-$(pwd)}"
+    worktree="${worktree:--}"
 
     cat > "$outcome_file" <<EOF
 beads=$beads
@@ -945,6 +1070,10 @@ duration_sec=$duration_sec
 retries=$final_retries
 selected_model=$selected_model
 fallback_reason=$fallback_reason
+run_instance=$run_instance
+host=$host
+cwd=$cwd
+worktree=$worktree
 EOF
 }
 
@@ -994,7 +1123,9 @@ start_completion_monitor() {
         local reason_code="monitor_no_rc_file"
         if [[ -f "$rc_file" ]]; then
             exit_code="$(cat "$rc_file" 2>/dev/null || echo "1")"
-            reason_code="process_exit_with_rc"
+            reason_code="$(classify_exit_reason "$provider" "$exit_code" "$log_file" "process_exit_with_rc")"
+        else
+            reason_code="$(classify_exit_reason "$provider" "$exit_code" "$log_file" "monitor_no_rc_file")"
         fi
         if [[ ! -f "$outcome_file" ]]; then
             persist_outcome "$beads" "$exit_code" "$outcome_file" "$meta_file" "$reason_code"
@@ -1027,7 +1158,9 @@ finalize_exited_job() {
         local reason="late_finalize_no_rc"
         if [[ -f "$RC_FILE" ]]; then
             rc="$(cat "$RC_FILE" 2>/dev/null || echo "1")"
-            reason="late_finalize_from_rc_file"
+            reason="$(classify_exit_reason "$provider" "$rc" "$LOG_FILE" "late_finalize_from_rc_file")"
+        else
+            reason="$(classify_exit_reason "$provider" "$rc" "$LOG_FILE" "late_finalize_no_rc")"
         fi
         persist_outcome "$beads" "$rc" "$OUTCOME_FILE" "$META_FILE" "$reason"
     fi
@@ -1392,7 +1525,7 @@ parse_common_args() {
 
 usage() {
     cat <<'EOF'
-dx-runner (V1.2 - Unified Multi-Provider Dispatch Runner)
+dx-runner (V1.3 - Unified Multi-Provider Dispatch Runner)
 
 Usage:
   dx-runner start --beads <id> --provider <name> --prompt-file <path> [options]
@@ -1415,7 +1548,7 @@ Usage:
 
 Providers:
   cc-glm    Claude via Z.ai (reliability backstop)
-  opencode  OpenCode headless (primary throughput, GLM-5 strict)
+  opencode  OpenCode headless (primary throughput, canonical+allowlisted GLM-5)
   gemini    Gemini CLI (parallel capacity)
 
 Commands:
@@ -1516,6 +1649,21 @@ start_cmd() {
             exit 1
         fi
     fi
+
+    local run_instance
+    run_instance="$(date +%Y%m%d%H%M%S)-${PROVIDER}-$$"
+    local host
+    host="$(host_short)"
+    local cwd
+    cwd="$(pwd)"
+    local switched_from=""
+    local existing_provider
+    while IFS= read -r existing_provider; do
+        [[ -n "$existing_provider" ]] || continue
+        if [[ "$existing_provider" != "$PROVIDER" ]]; then
+            switched_from="${switched_from:+$switched_from,}${existing_provider}"
+        fi
+    done < <(list_providers_for_beads "$BEADS" 2>/dev/null || true)
     
     rotate_log "$LOG_FILE"
     rotate_outcome "$OUTCOME_FILE"
@@ -1530,7 +1678,15 @@ started_at=$(now_utc)
 retries=0
 use_pty=$USE_PTY
 version=$RUNNER_VERSION
+run_instance=$run_instance
+host=$host
+cwd=$cwd
+provider_switch_from=${switched_from:-none}
 EOF
+
+    if [[ -n "$switched_from" ]]; then
+        echo "provider switch detected for beads=$BEADS: ${switched_from} -> ${PROVIDER}" >&2
+    fi
     
     # Source adapter and run
     source "$adapter"
@@ -1610,6 +1766,7 @@ status_line() {
     prune_job "$beads" "$provider" >/dev/null
     
     local pid="" state="missing" reason="-" log_bytes="0" last_update="-" retries="0" elapsed="-" outcome="-" duration="-" mutations="-"
+    local host="-" cwd="-" worktree="-" run_instance="-"
     
     if [[ -f "$PID_FILE" ]]; then
         pid="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -1643,6 +1800,10 @@ status_line() {
     if [[ -f "$META_FILE" ]]; then
         retries="$(meta_get "$META_FILE" "retries")"
         [[ -n "$retries" ]] || retries="0"
+        host="$(meta_get "$META_FILE" "host" 2>/dev/null || echo "-")"
+        cwd="$(meta_get "$META_FILE" "cwd" 2>/dev/null || echo "-")"
+        worktree="$(meta_get "$META_FILE" "worktree" 2>/dev/null || echo "-")"
+        run_instance="$(meta_get "$META_FILE" "run_instance" 2>/dev/null || echo "-")"
     fi
     
     if [[ -f "$PID_FILE" ]]; then
@@ -1665,6 +1826,10 @@ status_line() {
         printf '"log_bytes":%s,' "${log_bytes:-0}"
         printf '"mutation_count":%s,' "${mutations:-0}"
         printf '"retry_count":%s,' "${retries:-0}"
+        printf '"host":"%s",' "$(json_escape "$host")"
+        printf '"cwd":"%s",' "$(json_escape "$cwd")"
+        printf '"worktree":"%s",' "$(json_escape "$worktree")"
+        printf '"run_instance":"%s",' "$(json_escape "$run_instance")"
         printf '"outcome":"%s"' "$(json_escape "$outcome")"
         printf '}\n'
         return 0
@@ -1725,10 +1890,15 @@ status_cmd() {
             recent_with_mtime+=("${mtime}|${beads}")
         done
         
-        # Sort by mtime descending (newest first) and take top N
+        # Sort by mtime descending (newest first), then dedupe by beads (keep newest), then take top N.
         local sorted_recent
         if [[ ${#recent_with_mtime[@]} -gt 0 ]]; then
-            mapfile -t sorted_recent < <(printf '%s\n' "${recent_with_mtime[@]}" | sort -t'|' -k1 -rn | head -n "$RECENT_COUNT")
+            mapfile -t sorted_recent < <(
+                printf '%s\n' "${recent_with_mtime[@]}" \
+                    | sort -t'|' -k1 -rn \
+                    | awk -F'|' '!seen[$2]++ {print $0}' \
+                    | head -n "$RECENT_COUNT"
+            )
             for entry in "${sorted_recent[@]}"; do
                 local beads="${entry##*|}"
                 recent_rows+=("$(status_line "$beads")")
@@ -1804,9 +1974,20 @@ check_cmd() {
     IFS='|' read -r state reason _ _ _ _ _ <<< "$detail"
     
     if [[ "$OUTPUT_JSON" == "true" ]]; then
-        printf '{"beads":"%s","state":"%s","reason_code":"%s"}\n' "$BEADS" "$state" "$reason"
+        local j_host j_cwd j_worktree j_run_instance
+        j_host="$(meta_get "$META_FILE" "host" 2>/dev/null || echo "-")"
+        j_cwd="$(meta_get "$META_FILE" "cwd" 2>/dev/null || echo "-")"
+        j_worktree="$(meta_get "$META_FILE" "worktree" 2>/dev/null || echo "-")"
+        j_run_instance="$(meta_get "$META_FILE" "run_instance" 2>/dev/null || echo "-")"
+        printf '{"beads":"%s","provider":"%s","state":"%s","reason_code":"%s","host":"%s","cwd":"%s","worktree":"%s","run_instance":"%s"}\n' \
+            "$BEADS" "${provider:-unknown}" "$state" "$reason" "$(json_escape "$j_host")" "$(json_escape "$j_cwd")" "$(json_escape "$j_worktree")" "$(json_escape "$j_run_instance")"
     else
         echo "$BEADS: $state ($reason)"
+        local action
+        action="$(next_action_for_reason "$reason")"
+        if [[ "$action" != "-" ]]; then
+            echo "next_action=$action"
+        fi
     fi
     
     case "$state" in
@@ -1943,6 +2124,9 @@ restart_cmd() {
     retries="${retries:-0}"
     retries=$((retries + 1))
     meta_set "$META_FILE" "retries" "$retries"
+    meta_set "$META_FILE" "run_instance" "$(date +%Y%m%d%H%M%S)-${provider}-$$"
+    meta_set "$META_FILE" "host" "$(host_short)"
+    meta_set "$META_FILE" "cwd" "$(pwd)"
     
     # Stop existing
     stop_job_internal "$BEADS" "$provider"
@@ -2020,6 +2204,7 @@ report_cmd() {
     IFS='|' read -r state reason mutations log_bytes cpu_time pid_age log_age <<< "$detail"
     
     local retries="0" started_at="-" worktree="-" prompt_file="-" exit_code="-" duration="-" outcome_state="-" outcome_reason="-" selected_model="-" fallback_reason="-"
+    local host="-" cwd="-" run_instance="-" next_action="-"
     
     if [[ -f "$META_FILE" ]]; then
         retries="$(meta_get "$META_FILE" "retries")"
@@ -2028,6 +2213,9 @@ report_cmd() {
         prompt_file="$(meta_get "$META_FILE" "prompt_file")"
         selected_model="$(meta_get "$META_FILE" "selected_model")"
         fallback_reason="$(meta_get "$META_FILE" "fallback_reason")"
+        host="$(meta_get "$META_FILE" "host")"
+        cwd="$(meta_get "$META_FILE" "cwd")"
+        run_instance="$(meta_get "$META_FILE" "run_instance")"
     fi
     
     if [[ -f "$OUTCOME_FILE" ]]; then
@@ -2037,7 +2225,18 @@ report_cmd() {
         outcome_reason="$(meta_get "$OUTCOME_FILE" "reason_code")"
         selected_model="$(meta_get "$OUTCOME_FILE" "selected_model")"
         fallback_reason="$(meta_get "$OUTCOME_FILE" "fallback_reason")"
+        host="$(meta_get "$OUTCOME_FILE" "host")"
+        cwd="$(meta_get "$OUTCOME_FILE" "cwd")"
+        worktree="$(meta_get "$OUTCOME_FILE" "worktree")"
+        run_instance="$(meta_get "$OUTCOME_FILE" "run_instance")"
     fi
+    [[ "$retries" =~ ^[0-9]+$ ]] || retries="0"
+    [[ -n "$duration" ]] || duration="-"
+    [[ -n "$host" ]] || host="-"
+    [[ -n "$cwd" ]] || cwd="-"
+    [[ -n "$worktree" ]] || worktree="-"
+    [[ -n "$run_instance" ]] || run_instance="-"
+    next_action="$(next_action_for_reason "${outcome_reason:-$reason}")"
     
     if [[ "$REPORT_FORMAT" == "json" || "$OUTPUT_JSON" == "true" ]]; then
         cat <<EOF
@@ -2054,6 +2253,10 @@ report_cmd() {
   "outcome_reason_code": "${outcome_reason:--}",
   "selected_model": "${selected_model:--}",
   "fallback_reason": "${fallback_reason:--}",
+  "next_action": "${next_action:--}",
+  "host": "${host:--}",
+  "cwd": "${cwd:--}",
+  "run_instance": "${run_instance:--}",
   "worktree": "${worktree:--}",
   "mutations": $mutations,
   "log_bytes": $log_bytes,
@@ -2079,8 +2282,12 @@ EOF
 - Reason: ${outcome_reason:--}
 - Selected Model: ${selected_model:--}
 - Fallback Reason: ${fallback_reason:--}
+- Next Action: ${next_action:--}
 
 ## Metrics
+- Host: ${host:--}
+- CWD: ${cwd:--}
+- Run Instance: ${run_instance:--}
 - Worktree: ${worktree:--}
 - Mutations: $mutations
 - Log Size: $log_bytes bytes

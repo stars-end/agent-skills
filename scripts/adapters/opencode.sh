@@ -16,7 +16,63 @@
 #   adapter_probe_model  - Test model availability
 #   adapter_list_models  - List available models
 
-CANONICAL_MODEL="zhipuai-coding-plan/glm-5"
+CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zhipuai-coding-plan/glm-5}"
+OPENCODE_ALLOWED_MODELS_DEFAULT="${OPENCODE_ALLOWED_MODELS_DEFAULT:-zhipuai-coding-plan/glm-5,zai-coding-plan/glm-5}"
+
+adapter_allowed_models() {
+    local raw="${OPENCODE_ALLOWED_MODELS:-$OPENCODE_ALLOWED_MODELS_DEFAULT}"
+    local -a out=("$CANONICAL_MODEL")
+    local -a extras
+    IFS=',' read -r -a extras <<< "$raw"
+    local m
+    for m in "${extras[@]}"; do
+        [[ -n "$m" ]] || continue
+        if [[ "$m" != "$CANONICAL_MODEL" ]]; then
+            out+=("$m")
+        fi
+    done
+    printf '%s\n' "${out[@]}"
+}
+
+adapter_models_cache_file() {
+    echo "/tmp/dx-runner/opencode/.models_cache"
+}
+
+adapter_list_models_cached() {
+    local opencode_bin="$1"
+    local cache_file cache_ttl cache_age
+    cache_file="$(adapter_models_cache_file)"
+    cache_ttl="${OPENCODE_MODELS_CACHE_TTL_SEC:-60}"
+    cache_age=-1
+
+    mkdir -p "$(dirname "$cache_file")"
+    if [[ -f "$cache_file" ]]; then
+        if command -v stat >/dev/null 2>&1; then
+            local mtime now
+            mtime="$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)"
+            now="$(date +%s)"
+            cache_age=$((now - mtime))
+        fi
+    fi
+
+    if [[ "$cache_age" -ge 0 && "$cache_age" -lt "$cache_ttl" ]]; then
+        cat "$cache_file"
+        return 0
+    fi
+
+    local models
+    models="$(timeout "${OPENCODE_MODELS_TIMEOUT_SEC:-12}" "$opencode_bin" models 2>/dev/null || true)"
+    if [[ -n "$models" ]]; then
+        printf '%s\n' "$models" > "$cache_file"
+        printf '%s\n' "$models"
+        return 0
+    fi
+    if [[ -f "$cache_file" ]]; then
+        cat "$cache_file"
+        return 0
+    fi
+    return 1
+}
 
 adapter_find_opencode() {
     for candidate in "opencode" "/home/linuxbrew/.linuxbrew/bin/opencode" "/opt/homebrew/bin/opencode"; do
@@ -49,7 +105,7 @@ adapter_preflight() {
     # Check 2: Model availability
     echo -n "model availability: "
     local models
-    models=$("$opencode_bin" models 2>/dev/null) || true
+    models="$(adapter_list_models_cached "$opencode_bin")" || true
     local model_count
     model_count="$(echo "$models" | grep -cE "^[a-z]+/.+" || echo "0")"
     if [[ "$model_count" -gt 0 ]]; then
@@ -78,10 +134,11 @@ adapter_preflight() {
         elif echo "$probe_output" | grep -qiE "unauthorized|forbidden|insufficient.*balance|quota|rate.?limit|429"; then
             echo "BLOCKED (auth/quota)"
             echo "  ERROR: Model $probe_model available but auth/quota check failed"
+            echo "  ERROR_CODE=opencode_auth_or_quota_blocked severity=error action=refresh_auth_or_switch_provider"
             errors=$((errors + 1))
         else
             echo "TIMEOUT ($probe_model)"
-            echo "  WARN: Model probe timed out (non-blocking)"
+            echo "  WARN_CODE=opencode_probe_timeout severity=warn action=retry_or_continue"
             warnings=$((warnings + 1))
         fi
     fi
@@ -92,7 +149,7 @@ adapter_preflight() {
         echo "OK ($(command -v beads-mcp))"
     else
         echo "MISSING"
-        echo "  WARN: beads-mcp not found, Beads context will be limited"
+        echo "  WARN_CODE=opencode_beads_mcp_missing severity=warn action=install_beads_mcp_for_richer_context"
         warnings=$((warnings + 1))
     fi
     
@@ -105,12 +162,12 @@ adapter_preflight() {
             echo "OK"
         else
             echo "UNTRUSTED"
-            echo "  WARN: Run 'mise trust' in worktree before dispatch"
+            echo "  WARN_CODE=opencode_mise_untrusted severity=warn action=run_mise_trust_in_worktree"
             warnings=$((warnings + 1))
         fi
     else
         echo "NOT_INSTALLED"
-        echo "  WARN: mise not found"
+        echo "  WARN_CODE=opencode_mise_missing severity=warn action=install_mise_or_ignore_if_not_required"
         warnings=$((warnings + 1))
     fi
     
@@ -132,16 +189,40 @@ adapter_resolve_model() {
     opencode_bin="$(adapter_find_opencode)" || return 1
 
     local required="${preferred:-$CANONICAL_MODEL}"
-    if [[ "$required" != "$CANONICAL_MODEL" ]]; then
-        echo "|unavailable|unsupported opencode model '$required'; only '$CANONICAL_MODEL' is allowed"
+    local -a allowed
+    mapfile -t allowed < <(adapter_allowed_models)
+    local allowed_joined
+    allowed_joined="$(printf '%s,' "${allowed[@]}")"
+    allowed_joined="${allowed_joined%,}"
+
+    local requested_allowed=false
+    local m
+    for m in "${allowed[@]}"; do
+        if [[ "$required" == "$m" ]]; then
+            requested_allowed=true
+            break
+        fi
+    done
+    if [[ "$requested_allowed" != "true" ]]; then
+        echo "|unavailable|unsupported opencode model '$required'; allowed: $allowed_joined"
         return 1
     fi
-    if "$opencode_bin" models 2>/dev/null | grep -qxF "$CANONICAL_MODEL"; then
-        echo "$CANONICAL_MODEL|canonical|"
+
+    local available_models
+    available_models="$(adapter_list_models_cached "$opencode_bin" || true)"
+    if printf '%s\n' "$available_models" | grep -qxF "$required"; then
+        echo "$required|preferred|"
         return 0
     fi
 
-    echo "|unavailable|canonical model '$CANONICAL_MODEL' unavailable; use cc-glm or gemini"
+    for m in "${allowed[@]}"; do
+        if [[ "$m" != "$required" ]] && printf '%s\n' "$available_models" | grep -qxF "$m"; then
+            echo "$m|fallback|preferred $required unavailable on this host"
+            return 0
+        fi
+    done
+
+    echo "|unavailable|allowed models unavailable ($allowed_joined); use cc-glm or gemini"
     return 1
 }
 
@@ -194,7 +275,7 @@ adapter_start() {
     local rc_file="${DX_RUNNER_RC_FILE:-/tmp/dx-runner/opencode/${beads}.rc}"
     mkdir -p "$(dirname "$rc_file")"
     rm -f "$rc_file"
-    local launch_mode="detached"
+    local launch_mode="detached-script"
 
     if [[ "${USE_PTY:-false}" == "true" ]]; then
         local pty_run
@@ -218,13 +299,30 @@ adapter_start() {
         fi
     fi
 
-    (
-        set +e
-        "${cmd_args[@]}" "$prompt" >> "$log_file" 2>&1
-        rc=$?
-        set -e
-        echo "$rc" > "$rc_file"
-    ) &
+    local launcher
+    launcher="$(mktemp "/tmp/opencode-launcher-${beads}.XXXXXX.sh")"
+    chmod +x "$launcher"
+
+    local worktree_cmd=""
+    if [[ -n "$worktree" && -d "$worktree" ]]; then
+        worktree_cmd="cd $(printf '%q' "$worktree") && "
+    fi
+
+    cat > "$launcher" <<EOF
+#!/usr/bin/env bash
+set +e
+${worktree_cmd}${cmd_args[@]@Q} $(printf '%q' "$prompt") >> $(printf '%q' "$log_file") 2>&1
+rc=\$?
+echo "\$rc" > $(printf '%q' "$rc_file")
+rm -f $(printf '%q' "$launcher")
+EOF
+    if command -v setsid >/dev/null 2>&1; then
+        launch_mode="${launch_mode}+setsid"
+        setsid "$launcher" >/dev/null 2>&1 < /dev/null &
+    else
+        launch_mode="${launch_mode}+nohup"
+        nohup "$launcher" >/dev/null 2>&1 < /dev/null &
+    fi
     local pid="$!"
     printf 'pid=%s\n' "$pid"
     printf 'selected_model=%s\n' "$model"
@@ -238,7 +336,12 @@ adapter_probe_model() {
     local opencode_bin
     opencode_bin="$(adapter_find_opencode)" || return 1
 
-    [[ "$model" == "$CANONICAL_MODEL" ]] || return 1
+    local allowed=false
+    local m
+    while IFS= read -r m; do
+        [[ "$m" == "$model" ]] && allowed=true && break
+    done < <(adapter_allowed_models)
+    [[ "$allowed" == "true" ]] || return 1
     
     # Quick probe with timeout (bd-cbsb.15)
     timeout 45 "$opencode_bin" run --model "$model" --format json "Return only READY" 2>/dev/null | grep -qi "READY" || return 1

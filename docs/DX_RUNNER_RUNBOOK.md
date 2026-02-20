@@ -1,4 +1,4 @@
-# DX Runner Runbook (V1.2)
+# DX Runner Runbook (V1.3)
 
 Wave-based parallel dispatch with OpenCode (GLM-5) + Gemini.
 
@@ -34,7 +34,7 @@ dx-runner finalize --beads bd-xxx --reason stalled --exit-code 1
 Run before wave dispatch to verify provider availability:
 
 ```bash
-# OpenCode (strict GLM-5 only)
+# OpenCode (canonical + allowlisted GLM-5 variants)
 dx-runner preflight --provider opencode
 
 # Gemini
@@ -44,7 +44,7 @@ dx-runner preflight --provider gemini
 **Pass criteria:**
 - Binary found
 - API credentials valid
-- Canonical model available (OpenCode: `zhipuai-coding-plan/glm-5`)
+- Canonical/allowlisted model available (OpenCode defaults: `zhipuai-coding-plan/glm-5`, `zai-coding-plan/glm-5`)
 
 ### 2. Beads Integrity Gate
 
@@ -122,6 +122,7 @@ done
 | `opencode_model_unsupported` | Requested non-canonical model | Must use GLM-5 |
 | `opencode_binary_missing` | CLI not installed | Install opencode |
 | `opencode_auth_blocked` | Auth/quota issue | Check API key, quota |
+| `opencode_rate_limited` | Runtime rate/quota throttling | Backoff retry or switch provider |
 
 ### Gemini Failure Codes
 
@@ -130,6 +131,7 @@ done
 | `gemini_binary_missing` | CLI not installed | Install gemini CLI |
 | `gemini_auth_missing` | No API key set | Set GEMINI_API_KEY |
 | `gemini_auth_blocked` | Invalid API key | Check credentials |
+| `gemini_capacity_exhausted` | Capacity/429 exhaustion | Backoff retry or switch to opencode/cc-glm |
 
 ### Health States
 
@@ -159,6 +161,10 @@ duration_sec=300
 retries=0
 selected_model=zhipuai-coding-plan/glm-5
 fallback_reason=none
+run_instance=20260219120000-opencode-12345
+host=epyc12
+cwd=/tmp/agents/bd-xga8.14.2/agent-skills
+worktree=/tmp/agents/bd-xga8.14.2/prime-radiant-ai
 ```
 
 ### Report Command
@@ -167,6 +173,11 @@ fallback_reason=none
 dx-runner report --beads bd-xxx --format json
 dx-runner report --beads bd-xxx --format markdown
 ```
+
+Provider switch safety:
+- Reusing the same `beads` across providers is supported.
+- Runner resolves `status/check/report` to the latest provider instance for that beads id.
+- Metadata includes `provider_switch_from`, `run_instance`, `host`, `cwd`, and `worktree` for auditability.
 
 ## Force Finalization
 
@@ -236,6 +247,8 @@ export DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES=30
 | Variable | Provider | Description |
 |----------|----------|-------------|
 | `OPENCODE_MODEL` | opencode | Override model (must be GLM-5) |
+| `OPENCODE_CANONICAL_MODEL` | opencode | Canonical model to prefer |
+| `OPENCODE_ALLOWED_MODELS` | opencode | Comma-separated allowed model list |
 | `GEMINI_MODEL` | gemini | Override model (default: gemini-3-flash-preview) |
 | `GEMINI_API_KEY` | gemini | API key |
 | `GOOGLE_API_KEY` | gemini | Alternative API key |
@@ -243,6 +256,7 @@ export DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES=30
 | `DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES` | all | No-mutation timeout |
 | `BEADS_REPO_PATH` | all | External Beads repo path (default: `~/bd`) |
 | `BEADS_REPO_REMOTE_SUBSTR` | all | Expected external repo origin substring (default: `stars-end/bd`) |
+| `BEADS_FLUSH_STRICT` | commit hooks | `1` makes Beads JSONL flush failures blocking |
 
 ## Exit Codes
 
