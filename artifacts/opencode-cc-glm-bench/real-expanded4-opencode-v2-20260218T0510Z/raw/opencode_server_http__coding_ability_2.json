@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "workflow_id": "opencode_server_http",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "coding_ability_2",
+  "prompt_category": "coding_ability",
+  "prompt_title": "Fix and optimize JS transformation",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 0,
+  "first_output_latency_ms": 942,
+  "completion_latency_ms": 31558,
+  "workflow_startup_latency_ms": 777,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": "ses_390d8347bffe1fCPB5BTHagKl6",
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:10:04Z",
+  "job_completed_at": "2026-02-18T05:10:36Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 0,
+      "first_output_latency_ms": 942,
+      "completion_latency_ms": 31558,
+      "stdout": "Given this JavaScript snippet: `function dedupe(items){const out=[];for(const i of items){if(out.indexOf(i)===-1){out.push(i)}}return out}`. Refactor it for linear-time complexity and preserve first-seen order. Include before/after complexity and 5 table-driven tests in plain JS.\n```javascript\n// BEFORE: O(n\u00b2) - indexOf is O(n) per iteration\nfunction dedupe(items) {\n  const out = [];\n  for (const i of items) {\n    if (out.indexOf(i) === -1) {\n      out.push(i);\n    }\n  }\n  return out;\n}\n\n// AFTER: O(n) - Set.has is O(1)\nfunction dedupe(items) {\n  const seen = new Set();\n  const out = [];\n  for (const i of items) {\n    if (!seen.has(i)) {\n      seen.add(i);\n      out.push(i);\n    }\n  }\n  return out;\n}\n\n// Table-driven tests\nconst tests = [\n  { input: [], expected: [] },\n  { input: [1, 2, 3], expected: [1, 2, 3] },\n  { input: [1, 1, 1], expected: [1] },\n  { input: [1, 2, 1, 3, 2], expected: [1, 2, 3] },\n  { input: ['a', 'b', 'a', 'c'], expected: ['a', 'b', 'c'] },\n];\n\nfor (const { input, expected } of tests) {\n  const result = dedupe(input);\n  const pass = JSON.stringify(result) === JSON.stringify(expected);\n  console.log(`${pass ? '\u2713' : '\u2717'} input: ${JSON.stringify(input)} \u2192 ${JSON.stringify(result)}`);\n}\n```",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": "ses_390d8347bffe1fCPB5BTHagKl6",
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:10:04Z",
+      "attempt_completed_at": "2026-02-18T05:10:36Z"
+    }
+  ]
+}

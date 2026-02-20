@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "workflow_id": "opencode_server_attach_run",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 1,
+  "first_output_latency_ms": 7449,
+  "completion_latency_ms": 21796,
+  "workflow_startup_latency_ms": 769,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:10:36Z",
+  "job_completed_at": "2026-02-18T05:10:57Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 1,
+      "first_output_latency_ms": 7449,
+      "completion_latency_ms": 21796,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391443548,\"sessionID\":\"ses_390d7b87affeSMVfEgaEJovXRP\",\"part\":{\"id\":\"prt_c6f2860a20016mslQqJlBBMwIO\",\"sessionID\":\"ses_390d7b87affeSMVfEgaEJovXRP\",\"messageID\":\"msg_c6f284793001QUPwroVzkxDyFv\",\"type\":\"step-start\",\"snapshot\":\"8ca4b9d6c75f482d61c307dd085f83a3e60af50e\"}}\n{\"type\":\"text\",\"timestamp\":1771391457776,\"sessionID\":\"ses_390d7b87affeSMVfEgaEJovXRP\",\"part\":{\"id\":\"prt_c6f287c7d0013Z04H5Zc7qNTrC\",\"sessionID\":\"ses_390d7b87affeSMVfEgaEJovXRP\",\"messageID\":\"msg_c6f284793001QUPwroVzkxDyFv\",\"type\":\"text\",\"text\":\"**(1) Contradictions**\\n- Log A: timeout fires at 30s\\n- Log B: timeout fires at 3s\\n- Config: `request_timeout: 30` with no unit \u2192 could be seconds, milliseconds, or interpreted differently by different components\\n\\n**(2) Assumptions**\\n- The intended timeout is 30 seconds (matching log A)\\n- Log B's 3s may be a default from another config layer or a unit misinterpretation (30 * 100ms?)\\n- YAML parser requires explicit unit suffix for clarity\\n\\n**(3) Minimal Safe Patch**\\n```yaml\\nrequest_timeout: 30s\\n```\\n\\n**(4) Verification Command**\\n```bash\\ngrep -E \\\"request_timeout|timeout\\\" config.yaml && curl -w \\\"%{time_total}\\\\n\\\" -o /dev/null -s http://localhost:8080/health\\n```\",\"time\":{\"start\":1771391457774,\"end\":1771391457774}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391457826,\"sessionID\":\"ses_390d7b87affeSMVfEgaEJovXRP\",\"part\":{\"id\":\"prt_c6f2899ef001fyyIXdkNdqCMvP\",\"sessionID\":\"ses_390d7b87affeSMVfEgaEJovXRP\",\"messageID\":\"msg_c6f284793001QUPwroVzkxDyFv\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"4c3ff5031490e986440d855c4647f7cd2d540bc5\",\"cost\":0,\"tokens\":{\"total\":25217,\"input\":16191,\"output\":386,\"reasoning\":0,\"cache\":{\"read\":8640,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:10:36Z",
+      "attempt_completed_at": "2026-02-18T05:10:57Z"
+    }
+  ]
+}

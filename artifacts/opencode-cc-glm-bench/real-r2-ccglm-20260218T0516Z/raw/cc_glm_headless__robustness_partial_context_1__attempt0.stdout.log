@@ -1,0 +1,46 @@
+## Analysis: Timeout Configuration Issue
+
+### (1) Contradictions Found
+
+| Location | Value | Issue |
+|----------|-------|-------|
+| Log line A | 30s timeout | Matches config value |
+| Log line B | 3s timeout | Contradicts config (10x faster) |
+| Config fragment | `request_timeout: 30` | **Missing units** - ambiguous |
+
+### (2) Assumptions I Must Make
+
+1. **Config expects seconds** (not ms, not minutes)
+2. **Log line B (3s)** is the actual behavior - likely a hardcoded default or runtime override
+3. **Log line A (30s)** may be from a different code path, stale log, or different environment
+4. The framework/library parses bare numbers as **milliseconds** by default (common pattern)
+
+### (3) Minimal Safe Patch in YAML
+
+```yaml
+# Before (ambiguous)
+request_timeout: 30
+
+# After (explicit units)
+request_timeout: 30s
+```
+
+**Alternative if framework requires milliseconds:**
+```yaml
+request_timeout: 30000  # 30 seconds in ms
+```
+
+### (4) Verification Command
+
+```bash
+# Check actual timeout being applied at runtime
+curl -w "Time: %{time_total}s\n" -X POST http://localhost:8080/health \
+  --max-time 35 -H "X-Test-Timeout: true"
+```
+
+Or check config parsing directly:
+```bash
+# If using a framework that validates config
+grep -E "timeout|Timeout" config.yaml && \
+  python -c "import yaml; c=yaml.safe_load(open('config.yaml')); print(f'Parsed: {c.get(\"request_timeout\")}')"
+```

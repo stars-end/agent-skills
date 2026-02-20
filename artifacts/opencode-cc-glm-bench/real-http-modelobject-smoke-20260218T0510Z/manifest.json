@@ -1,0 +1,14 @@
+{
+  "run_id": "real-http-modelobject-smoke-20260218T0510Z",
+  "created_at": "2026-02-18T05:09:49Z",
+  "workflows": [
+    "opencode_server_http"
+  ],
+  "model": "zai-coding-plan/glm-5",
+  "parallel": 1,
+  "max_retries": 0,
+  "timeout_sec": 120.0,
+  "dry_run": false,
+  "cwd": "/private/tmp/agents/bd-opencode-bench/agent-skills",
+  "prompts_file": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/prompt-sets/prompt2.latency_speed_1.json"
+}

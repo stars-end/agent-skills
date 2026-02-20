@@ -1,0 +1,39 @@
+{
+  "run_id": "real-r2-gemini-20260218T0522Z",
+  "generated_at": "2026-02-18T05:31:00Z",
+  "record_count": 3,
+  "workflow_metrics": [
+    {
+      "workflow_id": "gemini_run_headless",
+      "job_count": 3,
+      "success_count": 3,
+      "success_rate": 1.0,
+      "retry_count": 0,
+      "retry_rate": 0.0,
+      "startup_latency_ms_mean": 4.0,
+      "first_output_latency_ms_p50": 6009.0,
+      "first_output_latency_ms_p95": 8352.599999999999,
+      "completion_latency_ms_p50": 31242.0,
+      "completion_latency_ms_p95": 88933.79999999999
+    }
+  ],
+  "system_metrics": [
+    {
+      "system": "gemini",
+      "job_count": 3,
+      "success_count": 3,
+      "success_rate": 1.0,
+      "retry_count": 0,
+      "retry_rate": 0.0,
+      "startup_latency_ms_mean": 4.0,
+      "first_output_latency_ms_p50": 6009.0,
+      "first_output_latency_ms_p95": 8352.599999999999,
+      "completion_latency_ms_p50": 31242.0,
+      "completion_latency_ms_p95": 88933.79999999999
+    }
+  ],
+  "failure_taxonomy": {
+    "category_counts": {},
+    "reason_counts": {}
+  }
+}

@@ -1,0 +1,194 @@
+"""Semantic version comparison following semver.org precedence rules."""
+from __future__ import annotations
+import re
+from typing import Tuple, List, Union
+
+
+def _parse_semver(v: str) -> Tuple[int, int, int, List[Union[int, str]]]:
+    """Parse semver string into (major, minor, patch, prerelease_parts)."""
+    # Handle empty or None
+    if not v:
+        return (0, 0, 0, [])
+    
+    # Normalize: strip whitespace and leading 'v'
+    v = v.strip()
+    if v.startswith('v'):
+        v = v[1:]
+    
+    # Split off prerelease (after first '-')
+    prerelease_str = ""
+    if '-' in v:
+        idx = v.index('-')
+        prerelease_str = v[idx + 1:]
+        v = v[:idx]
+    
+    # Parse major.minor.patch
+    parts = v.split('.')
+    if len(parts) == 0 or (len(parts) == 1 and parts[0] == ''):
+        major, minor, patch = 0, 0, 0
+    elif len(parts) == 1:
+        major = int(parts[0]) if parts[0].isdigit() else 0
+        minor, patch = 0, 0
+    elif len(parts) == 2:
+        major = int(parts[0]) if parts[0].isdigit() else 0
+        minor = int(parts[1]) if parts[1].isdigit() else 0
+        patch = 0
+    else:
+        major = int(parts[0]) if parts[0].isdigit() else 0
+        minor = int(parts[1]) if parts[1].isdigit() else 0
+        patch = int(parts[2]) if parts[2].isdigit() else 0
+    
+    # Parse prerelease identifiers (dot-separated)
+    prerelease_parts: List[Union[int, str]] = []
+    if prerelease_str:
+        for ident in prerelease_str.split('.'):
+            if ident.isdigit():
+                prerelease_parts.append(int(ident))
+            else:
+                prerelease_parts.append(ident)
+    
+    return (major, minor, patch, prerelease_parts)
+
+
+def _compare_prerelease(a_pre: List[Union[int, str]], b_pre: List[Union[int, str]]) -> int:
+    """
+    Compare prerelease identifiers per semver spec.
+    Empty prerelease (stable) > any prerelease.
+    """
+    # No prerelease = stable release, which has higher precedence
+    a_stable = len(a_pre) == 0
+    b_stable = len(b_pre) == 0
+    
+    if a_stable and b_stable:
+        return 0
+    if a_stable:
+        return 1  # a is stable, b is prerelease
+    if b_stable:
+        return -1  # a is prerelease, b is stable
+    
+    # Both have prerelease: compare identifier by identifier
+    for i in range(max(len(a_pre), len(b_pre))):
+        # Shorter prerelease has lower precedence
+        if i >= len(a_pre):
+            return -1
+        if i >= len(b_pre):
+            return 1
+        
+        a_val = a_pre[i]
+        b_val = b_pre[i]
+        
+        # Numeric identifiers have lower precedence than alphanumeric
+        a_is_num = isinstance(a_val, int)
+        b_is_num = isinstance(b_val, int)
+        
+        if a_is_num and not b_is_num:
+            return -1
+        if not a_is_num and b_is_num:
+            return 1
+        
+        # Both same type: compare directly
+        if a_val < b_val:
+            return -1
+        if a_val > b_val:
+            return 1
+    
+    return 0
+
+
+def compare_semver(a: str, b: str) -> int:
+    """
+    Compare two semantic versions.
+    
+    Returns:
+        -1 if a < b
+         0 if a == b
+         1 if a > b
+    
+    Precedence rules (semver.org):
+        1. Major > Minor > Patch comparison
+        2. Stable releases > prereleases
+        3. Prerelease: numeric < alphanumeric, compared left-to-right
+        4. More prerelease identifiers = higher precedence (when equal up to that point)
+    """
+    try:
+        a_major, a_minor, a_patch, a_pre = _parse_semver(a)
+        b_major, b_minor, b_patch, b_pre = _parse_semver(b)
+    except (ValueError, TypeError):
+        # Invalid input: treat as equal to avoid crashes
+        return 0
+    
+    # Compare major.minor.patch
+    if a_major != b_major:
+        return -1 if a_major < b_major else 1
+    if a_minor != b_minor:
+        return -1 if a_minor < b_minor else 1
+    if a_patch != b_patch:
+        return -1 if a_patch < b_patch else 1
+    
+    # Major/minor/patch equal: compare prerelease
+    return _compare_prerelease(a_pre, b_pre)
+
+
+# ============== Tests ==============
+
+import pytest
+
+
+def test_basic_comparison():
+    """Basic major.minor.patch comparison."""
+    assert compare_semver("1.0.0", "2.0.0") == -1
+    assert compare_semver("2.0.0", "1.0.0") == 1
+    assert compare_semver("1.0.0", "1.0.0") == 0
+
+
+def test_minor_and_patch():
+    """Minor and patch level comparison."""
+    assert compare_semver("1.2.0", "1.3.0") == -1
+    assert compare_semver("1.0.5", "1.0.10") == -1
+    assert compare_semver("1.10.0", "1.9.0") == 1
+
+
+def test_prerelease_vs_stable():
+    """Stable releases have higher precedence than prereleases."""
+    assert compare_semver("1.0.0-alpha", "1.0.0") == -1
+    assert compare_semver("1.0.0", "1.0.0-beta") == 1
+    assert compare_semver("1.0.0-rc.1", "1.0.0") == -1
+
+
+def test_prerelease_comparison():
+    """Prerelease identifier comparison."""
+    assert compare_semver("1.0.0-alpha", "1.0.0-beta") == -1
+    assert compare_semver("1.0.0-alpha.1", "1.0.0-alpha.2") == -1
+    assert compare_semver("1.0.0-alpha.beta", "1.0.0-beta") == -1
+
+
+def test_numeric_vs_alphanumeric():
+    """Numeric identifiers have lower precedence than alphanumeric."""
+    assert compare_semver("1.0.0-1", "1.0.0-alpha") == -1
+    assert compare_semver("1.0.0-alpha", "1.0.0-1") == 1
+
+
+def test_prerelease_length():
+    """More prerelease identifiers = higher when equal up to that point."""
+    assert compare_semver("1.0.0-alpha", "1.0.0-alpha.1") == -1
+    assert compare_semver("1.0.0-alpha.1", "1.0.0-alpha.1.1") == -1
+
+
+def test_edge_cases():
+    """Handle edge cases: empty strings, partial versions, v-prefix."""
+    assert compare_semver("", "") == 0
+    assert compare_semver("1", "1.0.0") == 0
+    assert compare_semver("v1.0.0", "1.0.0") == 0
+    assert compare_semver("1.0", "1.0.0") == 0
+
+
+def test_real_world_versions():
+    """Real-world version comparison scenarios."""
+    assert compare_semver("2.1.0-rc.1", "2.1.0") == -1
+    assert compare_semver("2.1.0", "2.1.1") == -1
+    assert compare_semver("2.1.0-beta.2", "2.1.0-beta.10") == -1
+    assert compare_semver("2.1.0-rc.1", "2.1.0-rc.1.build.5") == -1
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

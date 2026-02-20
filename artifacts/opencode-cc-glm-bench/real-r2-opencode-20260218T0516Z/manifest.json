@@ -1,0 +1,14 @@
+{
+  "run_id": "real-r2-opencode-20260218T0516Z",
+  "created_at": "2026-02-18T05:16:50Z",
+  "workflows": [
+    "opencode_run_headless"
+  ],
+  "model": "zai-coding-plan/glm-5",
+  "parallel": 3,
+  "max_retries": 0,
+  "timeout_sec": 180.0,
+  "dry_run": false,
+  "cwd": "/private/tmp/agents/bd-opencode-bench/agent-skills",
+  "prompts_file": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/prompt-sets/trio_robust_speed_code.json"
+}

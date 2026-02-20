@@ -1,0 +1,43 @@
+{
+  "run_id": "real-p1-coding-ability-1c-20260218T0455Z",
+  "workflow_id": "opencode_server_attach_run",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "coding_ability_1",
+  "prompt_category": "coding_ability",
+  "prompt_title": "Implement robust semantic version comparator",
+  "model": "glm-5",
+  "success": false,
+  "retry_count": 0,
+  "startup_latency_ms": 3,
+  "first_output_latency_ms": null,
+  "completion_latency_ms": 1515,
+  "workflow_startup_latency_ms": 1031,
+  "failure_category": "harness",
+  "failure_reason": "empty_or_unknown",
+  "hint_match_ratio": 0.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T04:55:01Z",
+  "job_completed_at": "2026-02-18T04:55:03Z",
+  "attempts": [
+    {
+      "success": false,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 3,
+      "first_output_latency_ms": null,
+      "completion_latency_ms": 1515,
+      "stdout": "",
+      "stderr": "",
+      "failure_category": "harness",
+      "failure_reason": "empty_or_unknown",
+      "hint_match_ratio": 0.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T04:55:01Z",
+      "attempt_completed_at": "2026-02-18T04:55:03Z"
+    }
+  ]
+}

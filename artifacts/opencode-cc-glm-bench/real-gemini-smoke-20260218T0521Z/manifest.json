@@ -1,0 +1,14 @@
+{
+  "run_id": "real-gemini-smoke-20260218T0521Z",
+  "created_at": "2026-02-18T05:28:57Z",
+  "workflows": [
+    "gemini_run_headless"
+  ],
+  "model": "gemini-2.5-pro",
+  "parallel": 1,
+  "max_retries": 0,
+  "timeout_sec": 180.0,
+  "dry_run": false,
+  "cwd": "/private/tmp/agents/bd-opencode-bench/agent-skills",
+  "prompts_file": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/prompt-sets/prompt2.latency_speed_1.json"
+}

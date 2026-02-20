@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-20260218T0505Z",
+  "workflow_id": "opencode_run_headless",
+  "system": "opencode",
+  "workflow_kind": "headless",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 2,
+  "first_output_latency_ms": 11324,
+  "completion_latency_ms": 28534,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:05:48Z",
+  "job_completed_at": "2026-02-18T05:06:16Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 2,
+      "first_output_latency_ms": 11324,
+      "completion_latency_ms": 28534,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391159709,\"sessionID\":\"ses_390dc16efffe2KsvBqDKokwEb9\",\"part\":{\"id\":\"prt_c6f240d9b001uHZtj5Uht1p132\",\"sessionID\":\"ses_390dc16efffe2KsvBqDKokwEb9\",\"messageID\":\"msg_c6f23e9490011pkcCzyOfS3yl8\",\"type\":\"step-start\",\"snapshot\":\"c34da211a26e32de74b1ac56c0ee2677d44b0c0c\"}}\n{\"type\":\"text\",\"timestamp\":1771391176782,\"sessionID\":\"ses_390dc16efffe2KsvBqDKokwEb9\",\"part\":{\"id\":\"prt_c6f243744001RXRzDbtjQfUI9S\",\"sessionID\":\"ses_390dc16efffe2KsvBqDKokwEb9\",\"messageID\":\"msg_c6f23e9490011pkcCzyOfS3yl8\",\"type\":\"text\",\"text\":\"(1) **Contradictions:**\\n- Log A (30s) vs Log B (3s): different timeout values for same or related operation\\n- Config `request_timeout: 30` lacks units \u2014 ambiguous (seconds? milliseconds?)\\n\\n(2) **Assumptions:**\\n- Log A is authoritative (matches config value 30)\\n- Log B may be a *different* timeout (e.g., `connect_timeout`, `read_timeout`)\\n- Missing units default to seconds (common convention)\\n- Application supports explicit unit suffixes\\n\\n(3) **Minimal safe patch:**\\n```yaml\\nrequest_timeout: 30s\\n# If Log B is a separate timeout:\\nconnect_timeout: 3s\\n```\\n\\n(4) **Verification command:**\\n```bash\\ngrep -E \\\"(timeout|30s|3s)\\\" /var/log/app.log | tail -20\\n```\",\"time\":{\"start\":1771391176781,\"end\":1771391176781}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391176846,\"sessionID\":\"ses_390dc16efffe2KsvBqDKokwEb9\",\"part\":{\"id\":\"prt_c6f24504f001uBBDDlqRDJ3Zdc\",\"sessionID\":\"ses_390dc16efffe2KsvBqDKokwEb9\",\"messageID\":\"msg_c6f23e9490011pkcCzyOfS3yl8\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"29cea3b60a64d3a781577c5219088494e67c87c4\",\"cost\":0,\"tokens\":{\"total\":25326,\"input\":24385,\"output\":493,\"reasoning\":0,\"cache\":{\"read\":448,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:05:48Z",
+      "attempt_completed_at": "2026-02-18T05:06:16Z"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "run_id": "dryrun-techlead-001",
+  "created_at": "2026-02-18T04:41:36Z",
+  "workflows": [
+    "cc_glm_headless",
+    "opencode_run_headless",
+    "opencode_server_http",
+    "opencode_server_attach_run"
+  ],
+  "model": "glm-5",
+  "parallel": 4,
+  "max_retries": 1,
+  "timeout_sec": 300.0,
+  "dry_run": true,
+  "cwd": "/private/tmp/agents/bd-opencode-bench/agent-skills",
+  "prompts_file": "/private/tmp/agents/bd-opencode-bench/agent-skills/scripts/benchmarks/opencode_cc_glm/benchmark_prompts.json"
+}

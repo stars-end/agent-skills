@@ -1,0 +1,43 @@
+{
+  "run_id": "dryrun-techlead-002",
+  "workflow_id": "cc_glm_headless",
+  "system": "cc-glm",
+  "workflow_kind": "headless",
+  "prompt_id": "latency_speed_1",
+  "prompt_category": "latency_speed",
+  "prompt_title": "Fast constrained output",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 67,
+  "first_output_latency_ms": 264,
+  "completion_latency_ms": 2697,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T04:42:27Z",
+  "job_completed_at": "2026-02-18T04:42:27Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 67,
+      "first_output_latency_ms": 264,
+      "completion_latency_ms": 2697,
+      "stdout": "dry-run output run_id=dryrun-techlead-002 workflow_id=cc_glm_headless prompt_id=latency_speed_1",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T04:42:27Z",
+      "attempt_completed_at": "2026-02-18T04:42:27Z"
+    }
+  ]
+}

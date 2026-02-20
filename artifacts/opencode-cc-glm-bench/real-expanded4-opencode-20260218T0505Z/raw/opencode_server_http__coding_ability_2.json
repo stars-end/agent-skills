@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-20260218T0505Z",
+  "workflow_id": "opencode_server_http",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "coding_ability_2",
+  "prompt_category": "coding_ability",
+  "prompt_title": "Fix and optimize JS transformation",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 0,
+  "first_output_latency_ms": 1128,
+  "completion_latency_ms": 16864,
+  "workflow_startup_latency_ms": 778,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": "ses_390dc1ca0ffecr3urWPB1NGgDx",
+  "used_model_fallback": true,
+  "job_started_at": "2026-02-18T05:05:48Z",
+  "job_completed_at": "2026-02-18T05:06:05Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 0,
+      "first_output_latency_ms": 1128,
+      "completion_latency_ms": 16864,
+      "stdout": "Given this JavaScript snippet: `function dedupe(items){const out=[];for(const i of items){if(out.indexOf(i)===-1){out.push(i)}}return out}`. Refactor it for linear-time complexity and preserve first-seen order. Include before/after complexity and 5 table-driven tests in plain JS.\n```javascript\n// BEFORE: O(n\u00b2) time, O(n) space\nfunction dedupe(items) {\n  const out = [];\n  for (const i of items) {\n    if (out.indexOf(i) === -1) {  // O(n) lookup\n      out.push(i);\n    }\n  }\n  return out;\n}\n\n// AFTER: O(n) time, O(n) space\nfunction dedupeLinear(items) {\n  const seen = new Set();\n  const out = [];\n  for (const i of items) {\n    if (!seen.has(i)) {  // O(1) lookup\n      seen.add(i);\n      out.push(i);\n    }\n  }\n  return out;\n}\n\n// Table-driven tests\nconst tests = [\n  { input: [], expected: [], desc: 'empty array' },\n  { input: [1, 1, 2, 2, 3], expected: [1, 2, 3], desc: 'numbers with duplicates' },\n  { input: ['a', 'b', 'a', 'c'], expected: ['a', 'b', 'c'], desc: 'strings preserving order' },\n  { input: [1, 2, 3], expected: [1, 2, 3], desc: 'no duplicates' },\n  { input: [null, null, undefined, undefined], expected: [null, undefined], desc: 'null and undefined' },\n];\n\nfor (const { input, expected, desc } of tests) {\n  const result = dedupeLinear(input);\n  const pass = JSON.stringify(result) === JSON.stringify(expected);\n  console.log(`${pass ? '\u2713' : '\u2717'} ${desc}: ${JSON.stringify(result)}`);\n}\n```\n\n**Complexity:**\n| | Before | After |\n|--|--------|-------|\n| Time | O(n\u00b2) | O(n) |\n| Space | O(n) | O(n) |\n\nThe key change: `Set.has()` is O(1) vs `Array.indexOf()` which is O(n), reducing the nested loop from implicit O(n\u00b2) to linear.",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": "ses_390dc1ca0ffecr3urWPB1NGgDx",
+      "used_model_fallback": true,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:05:48Z",
+      "attempt_completed_at": "2026-02-18T05:06:05Z"
+    }
+  ]
+}

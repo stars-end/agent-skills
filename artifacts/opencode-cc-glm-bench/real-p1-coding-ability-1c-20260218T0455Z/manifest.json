@@ -1,0 +1,17 @@
+{
+  "run_id": "real-p1-coding-ability-1c-20260218T0455Z",
+  "created_at": "2026-02-18T04:54:59Z",
+  "workflows": [
+    "cc_glm_headless",
+    "opencode_run_headless",
+    "opencode_server_http",
+    "opencode_server_attach_run"
+  ],
+  "model": "glm-5",
+  "parallel": 4,
+  "max_retries": 0,
+  "timeout_sec": 90.0,
+  "dry_run": false,
+  "cwd": "/private/tmp/agents/bd-opencode-bench/agent-skills",
+  "prompts_file": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/prompt-sets/prompt1.coding_ability_1.json"
+}

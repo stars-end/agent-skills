@@ -1,0 +1,35 @@
+# 4-Task Parallel Execution Plan
+
+## Feature: Add User Avatar Upload
+
+| Task | Owner | Dependencies | Validation Gate | Rollback Rule |
+|------|-------|--------------|-----------------|---------------|
+| **T1: API Endpoint** | Backend Agent | None | `make test-api` passes; schema validates; curl upload returns 201 | Revert commit; API returns 404 |
+| **T2: Storage Layer** | Infra Agent | None | `make test-storage` passes; S3 bucket writeable; presigned URL generates | Delete uploaded files; remove bucket policy |
+| **T3: Frontend UI** | Frontend Agent | T1 complete | `pnpm test` passes; a11y audit green; upload flow E2E passes | Hide upload button; fallback to gravatar |
+| **T4: Integration Tests** | QA Agent | T1, T2, T3 complete | `make verify-pipeline` passes; full upload→display flow works in staging | Disable integration test suite; flag for manual QA |
+
+---
+
+## Execution Waves
+
+```
+Wave 1 (parallel): T1 + T2
+Wave 2 (parallel after Wave 1): T3
+Wave 3 (after Wave 2): T4
+```
+
+## Rollback Protocol
+
+**Trigger**: Any validation gate fails after 1 retry
+
+**Rule**: Tasks roll back in reverse dependency order:
+1. T4 → T3 → T1/T2 (simultaneous)
+2. Each agent runs `git revert HEAD --no-edit` on their commit
+3. Orchestrator confirms clean `git status` before marking blocked
+
+## Commit-Only Discipline
+
+- Agents commit (don't push) after validation passes
+- Orchestrator pushes once per wave after reviewing diffs
+- Feature-Key trailer required: `Feature-Key: bd-<beads-id>`

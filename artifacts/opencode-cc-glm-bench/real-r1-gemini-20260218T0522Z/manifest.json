@@ -1,0 +1,14 @@
+{
+  "run_id": "real-r1-gemini-20260218T0522Z",
+  "created_at": "2026-02-18T05:29:24Z",
+  "workflows": [
+    "gemini_run_headless"
+  ],
+  "model": "gemini-2.5-pro",
+  "parallel": 3,
+  "max_retries": 0,
+  "timeout_sec": 180.0,
+  "dry_run": false,
+  "cwd": "/private/tmp/agents/bd-opencode-bench/agent-skills",
+  "prompts_file": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/prompt-sets/trio_robust_speed_code.json"
+}

@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "workflow_id": "opencode_server_http",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 0,
+  "first_output_latency_ms": 20,
+  "completion_latency_ms": 32215,
+  "workflow_startup_latency_ms": 777,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": "ses_390d8129bffeufXnVjKxfsX6dn",
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:10:13Z",
+  "job_completed_at": "2026-02-18T05:10:45Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 0,
+      "first_output_latency_ms": 20,
+      "completion_latency_ms": 32215,
+      "stdout": "You have partial context: log line A says timeout at 30s, log line B says timeout at 3s, and config fragment is missing units: `request_timeout: 30`. Provide: (1) contradictions found, (2) assumptions you must make, (3) minimal safe patch in YAML, (4) one verification command.\n## Analysis: Timeout Configuration Contradiction\n\n### 1. Contradictions Found\n- **Value mismatch**: Log A reports `30s`, Log B reports `3s` \u2014 both claim to be the timeout\n- **Unit ambiguity**: Config `request_timeout: 30` has no units; could be seconds, milliseconds, or minutes\n- **Likely interpretation conflict**: One component reading as seconds (30s), another as seconds\u00d70.1 or different unit\n\n### 2. Assumptions I Must Make\n- `request_timeout` is intended to be **30 seconds** (matches Log A)\n- Log B's 3s is a bug/misinterpretation, not intentional\n- YAML parser doesn't auto-convert unitless numbers\n- Both logs reference the same configuration source\n\n### 3. Minimal Safe Patch\n```yaml\nrequest_timeout: 30s\n```\n\nExplicitly suffixing `s` removes ambiguity and forces consistent interpretation across all consumers.\n\n### 4. Verification Command\n```bash\ngrep -E \"timeout.*(30|3)\" /var/log/app.log | tail -5\n```\nConfirms which timeout value is actually being applied after the patch.",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": "ses_390d8129bffeufXnVjKxfsX6dn",
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:10:13Z",
+      "attempt_completed_at": "2026-02-18T05:10:45Z"
+    }
+  ]
+}

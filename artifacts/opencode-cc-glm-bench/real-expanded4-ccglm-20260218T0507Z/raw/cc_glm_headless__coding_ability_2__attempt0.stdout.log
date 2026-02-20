@@ -1,0 +1,73 @@
+# JavaScript Array Deduplication Refactor
+
+## Original Code (O(n²))
+
+```javascript
+function dedupe(items) {
+  const out = [];
+  for (const i of items) {
+    if (out.indexOf(i) === -1) {
+      out.push(i);
+    }
+  }
+  return out;
+}
+```
+
+## Refactored Code (O(n))
+
+```javascript
+function dedupe(items) {
+  const seen = new Set();
+  const out = [];
+  for (const i of items) {
+    if (!seen.has(i)) {
+      seen.add(i);
+      out.push(i);
+    }
+  }
+  return out;
+}
+```
+
+## Complexity Analysis
+
+| Metric | Original | Refactored |
+|--------|----------|------------|
+| Time | O(n²) | O(n) |
+| Space | O(n) | O(n) |
+| Lookup | O(n) per `indexOf` | O(1) per `Set.has` |
+
+**Why:** `Set` provides O(1) average lookup via hashing, while `indexOf` scans the array each time (O(n)). For n items, original does ~n²/2 comparisons.
+
+## Test Suite
+
+```javascript
+const tests = [
+  // [name, input, expected]
+  ['empty array', [], []],
+  ['no duplicates', [1, 2, 3], [1, 2, 3]],
+  ['all duplicates', [1, 1, 1, 1], [1]],
+  ['mixed primitives', [1, 'a', 1, 'a', 2], [1, 'a', 2]],
+  ['preserves first-seen order', [3, 1, 4, 1, 5, 9, 2, 6, 5], [3, 1, 4, 5, 9, 2, 6]],
+];
+
+for (const [name, input, expected] of tests) {
+  const result = dedupe(input);
+  const pass = JSON.stringify(result) === JSON.stringify(expected);
+  console.log(`${pass ? '✓' : '✗'} ${name}`);
+  if (!pass) {
+    console.log(`  expected: ${JSON.stringify(expected)}`);
+    console.log(`  got:      ${JSON.stringify(result)}`);
+  }
+}
+```
+
+**Output:**
+```
+✓ empty array
+✓ no duplicates
+✓ all duplicates
+✓ mixed primitives
+✓ preserves first-seen order
+```

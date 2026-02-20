@@ -1,0 +1,54 @@
+{
+  "session_id": "2cf80d72-212a-4e96-97d2-0464d104eba2",
+  "response": "```javascript\n/*\n * # Before: O(n^2) - Quadratic Time Complexity\n * The original function uses `items.indexOf(i)` inside a `for` loop. For each of\n * the `n` items in the input array, `indexOf` itself performs a search that can\n * take up to `n` comparisons in the worst case. This results in a nested\n * iteration pattern, leading to a time complexity of O(n * n) or O(n^2).\n */\nfunction dedupe_slow(items) {\n  const out = [];\n  for (const i of items) {\n    if (out.indexOf(i) === -1) {\n      out.push(i);\n    }\n  }\n  return out;\n}\n\n\n/*\n * # After: O(n) - Linear Time Complexity\n * This refactored function leverages the `Set` object, which stores only unique\n * values. Creating a `new Set(items)` iterates through the `n` items of the\n * input array once. The spread syntax `...` then converts the Set back into an\n * array, which is another O(n) operation. Because these operations are sequential,\n * the total time complexity is O(n + n), which simplifies to O(n), or linear time.\n * This approach correctly preserves the insertion order of the first-seen elements.\n */\nfunction dedupe(items) {\n  return [...new Set(items)];\n}\n\n\n// --- Table-Driven Tests ---\n\nconst tests = [\n  {\n    name: \"empty array\",\n    input: [],\n    expected: [],\n  },\n  {\n    name: \"array with no duplicates\",\n    input: [1, 2, 3, 4],\n    expected: [1, 2, 3, 4],\n  },\n  {\n    name: \"array with number duplicates\",\n    input: [1, 2, 1, 3, 4, 2, 4],\n    expected: [1, 2, 3, 4],\n  },\n  {\n    name: \"array with mixed type duplicates\",\n    input: [\"apple\", 1, \"banana\", \"apple\", 2, 1],\n    expected: [\"apple\", 1, \"banana\", 2],\n  },\n  {\n    name: \"array with various primitive types\",\n    input: [null, undefined, 0, \"0\", null, false, true, false],\n    expected: [null, undefined, 0, \"0\", false, true],\n  },\n];\n\n// --- Test Runner ---\n\nlet allTestsPassed = true;\nconsole.log(\"Running 5 table-driven tests...\");\n\ntests.forEach((test, index) => {\n  const result = dedupe(test.input);\n  // Using JSON.stringify for a simple, deep comparison of primitive arrays.\n  const passed = JSON.stringify(result) === JSON.stringify(test.expected);\n\n  if (passed) {\n    console.log(`  [PASS] Test ${index + 1}: ${test.name}`);\n  } else {\n    console.error(`  [FAIL] Test ${index + 1}: ${test.name}`);\n    console.error(`         Input:    ${JSON.stringify(test.input)}`);\n    console.error(`         Expected: ${JSON.stringify(test.expected)}`);\n    console.error(`         Got:      ${JSON.stringify(result)}`);\n    allTestsPassed = false;\n  }\n});\n\nconsole.log(\"\\n--- Summary ---\");\nif (allTestsPassed) {\n  console.log(\"✅ All tests passed!\");\n} else {\n  console.log(\"❌ Some tests failed.\");\n}\n```",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 2,
+          "totalErrors": 0,
+          "totalLatencyMs": 25676
+        },
+        "tokens": {
+          "input": 20717,
+          "prompt": 46592,
+          "candidates": 1542,
+          "total": 49176,
+          "cached": 25875,
+          "thoughts": 1042,
+          "tool": 0
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 1,
+      "totalSuccess": 0,
+      "totalFail": 1,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {
+        "write_file": {
+          "count": 1,
+          "success": 0,
+          "fail": 1,
+          "durationMs": 0,
+          "decisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 0
+          }
+        }
+      }
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

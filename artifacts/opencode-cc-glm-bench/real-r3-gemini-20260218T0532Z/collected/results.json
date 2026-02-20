@@ -1,0 +1,214 @@
+{
+  "run_id": "real-r3-gemini-20260218T0532Z",
+  "generated_at": "2026-02-18T05:32:04Z",
+  "run_dir": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/real-r3-gemini-20260218T0532Z",
+  "record_count": 3,
+  "records": [
+    {
+      "run_id": "real-r3-gemini-20260218T0532Z",
+      "workflow_id": "gemini_run_headless",
+      "system": "gemini",
+      "workflow_kind": "headless",
+      "prompt_id": "coding_ability_2",
+      "prompt_category": "coding_ability",
+      "prompt_title": "Fix and optimize JS transformation",
+      "model": "gemini-2.5-pro",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 7,
+      "first_output_latency_ms": 8928,
+      "completion_latency_ms": 38531,
+      "workflow_startup_latency_ms": null,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T05:31:25Z",
+      "job_completed_at": "2026-02-18T05:32:04Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 7,
+          "first_output_latency_ms": 8928,
+          "completion_latency_ms": 38531,
+          "stdout": "{\n  \"session_id\": \"a9262241-36f8-418a-b8f5-436909ba2788\",\n  \"response\": \"```javascript\\n/*\\n### Complexity Analysis\\n\\n**Before:** `O(n^2)` (Quadratic)\\nThe original function iterates through each `item` in the input array (n items). Inside the loop, it calls `out.indexOf(i)`. In the worst-case scenario (an array with no duplicates), `indexOf` itself must iterate through the `out` array to check for the item's existence. As `out` grows, the `indexOf` call gets progressively slower, leading to a nested loop-like behavior and quadratic time complexity.\\n\\n**After:** `O(n)` (Linear)\\nThe refactored function leverages the JavaScript `Set` object.\\n1. `new Set(items)`: Creates a new `Set` from the input array. This process involves iterating through the `items` array once. Since `Set`s only store unique values, duplicates are automatically discarded. Lookups and insertions in a `Set` are, on average, O(1) operations.\\n2. `[...new Set(items)]`: The spread syntax then iterates through the unique values in the `Set` once to create a new array.\\nBecause the array is iterated only once to build the `Set`, and the `Set` is iterated only once to build the final array, the overall time complexity is linear. `Set` objects also preserve insertion order, so the \\\"first-seen\\\" order is maintained.\\n*/\\n\\n// Original (for reference)\\nfunction dedupe_original(items) {\\n  const out = [];\\n  for (const i of items) {\\n    if (out.indexOf(i) === -1) {\\n      out.push(i);\\n    }\\n  }\\n  return out;\\n}\\n\\n// Refactored\\nfunction dedupe(items) {\\n  return [...new Set(items)];\\n}\\n\\n\\n// --- Tests ---\\n\\nconst testCases = [\\n  {\\n    name: \\\"Test 1: Empty array\\\",\\n    input: [],\\n    expected: []\\n  },\\n  {\\n    name: \\\"Test 2: Array with no duplicates\\\",\\n    input: [1, 2, 3, \\\"a\\\", \\\"b\\\"],\\n    expected: [1, 2, 3, \\\"a\\\", \\\"b\\\"]\\n  },\\n  {\\n    name: \\\"Test 3: Array with numeric duplicates\\\",\\n    input: [1, 2, 1, 3, 4, 2, 4, 5],\\n    expected: [1, 2, 3, 4, 5]\\n  },\\n  {\\n    name: \\\"Test 4: Array with string duplicates\\\",\\n    input: [\\\"apple\\\", \\\"orange\\\", \\\"banana\\\", \\\"apple\\\", \\\"grape\\\", \\\"orange\\\"],\\n    expected: [\\\"apple\\\", \\\"orange\\\", \\\"banana\\\", \\\"grape\\\"]\\n  },\\n  {\\n    name: \\\"Test 5: Array with mixed types and duplicates\\\",\\n    input: [1, \\\"1\\\", 2, \\\"2\\\", 1, null, undefined, null],\\n    expected: [1, \\\"1\\\", 2, \\\"2\\\", null, undefined]\\n  },\\n];\\n\\nfunction runTests() {\\n  console.log(\\\"Running table-driven tests for dedupe function...\\\");\\n  let allPassed = true;\\n\\n  testCases.forEach(testCase => {\\n    const result = dedupe(testCase.input);\\n    const passed = JSON.stringify(result) === JSON.stringify(testCase.expected);\\n\\n    if (passed) {\\n      console.log(`\u2705 [PASS] ${testCase.name}`);\\n    } else {\\n      console.error(`\u274c [FAIL] ${testCase.name}`);\\n      console.error(`     Input:    ${JSON.stringify(testCase.input)}`);\\n      console.error(`     Expected: ${JSON.stringify(testCase.expected)}`);\\n      console.error(`     Got:      ${JSON.stringify(result)}`);\\n      allPassed = false;\\n    }\\n  });\\n\\n  console.log(\\\"\\\\n\\\" + (allPassed ? \\\"All tests passed!\\\" : \\\"Some tests failed.\\\"));\\n}\\n\\n// To run tests:\\n// 1. Save the code as a file (e.g., dedupe.js)\\n// 2. Run `node dedupe.js` in your terminal\\nrunTests();\\n```\",\n  \"stats\": {\n    \"models\": {\n      \"gemini-2.5-pro\": {\n        \"api\": {\n          \"totalRequests\": 2,\n          \"totalErrors\": 0,\n          \"totalLatencyMs\": 29545\n        },\n        \"tokens\": {\n          \"input\": 23037,\n          \"prompt\": 46858,\n          \"candidates\": 1921,\n          \"total\": 49886,\n          \"cached\": 23821,\n          \"thoughts\": 1107,\n          \"tool\": 0\n        }\n      }\n    },\n    \"tools\": {\n      \"totalCalls\": 1,\n      \"totalSuccess\": 0,\n      \"totalFail\": 1,\n      \"totalDurationMs\": 0,\n      \"totalDecisions\": {\n        \"accept\": 0,\n        \"reject\": 0,\n        \"modify\": 0,\n        \"auto_accept\": 0\n      },\n      \"byName\": {\n        \"write_file\": {\n          \"count\": 1,\n          \"success\": 0,\n          \"fail\": 1,\n          \"durationMs\": 0,\n          \"decisions\": {\n            \"accept\": 0,\n            \"reject\": 0,\n            \"modify\": 0,\n            \"auto_accept\": 0\n          }\n        }\n      }\n    },\n    \"files\": {\n      \"totalLinesAdded\": 0,\n      \"totalLinesRemoved\": 0\n    }\n  }\n}",
+          "stderr": "Loaded cached credentials.\nLoading extension: conductor\nSkill \"skill-creator\" from \"/Users/fengning/.agents/skills/skill-creator/SKILL.md\" is overriding the built-in skill.\nError executing tool write_file: Tool \"write_file\" not found. Did you mean one of: \"read_file\", \"write_todos\", \"cli_help\"?\n",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T05:31:25Z",
+          "attempt_completed_at": "2026-02-18T05:32:04Z"
+        }
+      ]
+    },
+    {
+      "run_id": "real-r3-gemini-20260218T0532Z",
+      "workflow_id": "gemini_run_headless",
+      "system": "gemini",
+      "workflow_kind": "headless",
+      "prompt_id": "latency_speed_1",
+      "prompt_category": "latency_speed",
+      "prompt_title": "Fast constrained output",
+      "model": "gemini-2.5-pro",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 6,
+      "first_output_latency_ms": 8967,
+      "completion_latency_ms": 12941,
+      "workflow_startup_latency_ms": null,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T05:31:25Z",
+      "job_completed_at": "2026-02-18T05:31:38Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 6,
+          "first_output_latency_ms": 8967,
+          "completion_latency_ms": 12941,
+          "stdout": "{\n  \"session_id\": \"c0bb812e-8919-4a1b-8317-c5c800f2286b\",\n  \"response\": \"```json\\n{\\n  \\\"status\\\": \\\"ok\\\",\\n  \\\"checksum\\\": \\\"bench-42\\\",\\n  \\\"steps\\\": [\\n    1,\\n    2,\\n    3\\n  ]\\n}\\n```\",\n  \"stats\": {\n    \"models\": {\n      \"gemini-2.5-pro\": {\n        \"api\": {\n          \"totalRequests\": 2,\n          \"totalErrors\": 1,\n          \"totalLatencyMs\": 2920\n        },\n        \"tokens\": {\n          \"input\": 21003,\n          \"prompt\": 22900,\n          \"candidates\": 47,\n          \"total\": 23006,\n          \"cached\": 1897,\n          \"thoughts\": 59,\n          \"tool\": 0\n        }\n      }\n    },\n    \"tools\": {\n      \"totalCalls\": 0,\n      \"totalSuccess\": 0,\n      \"totalFail\": 0,\n      \"totalDurationMs\": 0,\n      \"totalDecisions\": {\n        \"accept\": 0,\n        \"reject\": 0,\n        \"modify\": 0,\n        \"auto_accept\": 0\n      },\n      \"byName\": {}\n    },\n    \"files\": {\n      \"totalLinesAdded\": 0,\n      \"totalLinesRemoved\": 0\n    }\n  }\n}",
+          "stderr": "Loaded cached credentials.\nLoading extension: conductor\nSkill \"skill-creator\" from \"/Users/fengning/.agents/skills/skill-creator/SKILL.md\" is overriding the built-in skill.\nAttempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 1s.. Retrying after 1005.1160429999999ms...\n\ngemini_api_total_errors=1",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T05:31:25Z",
+          "attempt_completed_at": "2026-02-18T05:31:38Z"
+        }
+      ]
+    },
+    {
+      "run_id": "real-r3-gemini-20260218T0532Z",
+      "workflow_id": "gemini_run_headless",
+      "system": "gemini",
+      "workflow_kind": "headless",
+      "prompt_id": "robustness_partial_context_1",
+      "prompt_category": "robustness",
+      "prompt_title": "Handle malformed and partial context",
+      "model": "gemini-2.5-pro",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 4,
+      "first_output_latency_ms": 9041,
+      "completion_latency_ms": 22700,
+      "workflow_startup_latency_ms": null,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T05:31:25Z",
+      "job_completed_at": "2026-02-18T05:31:48Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 4,
+          "first_output_latency_ms": 9041,
+          "completion_latency_ms": 22700,
+          "stdout": "{\n  \"session_id\": \"0cc95e92-7df6-4427-bad0-6906d7a6f811\",\n  \"response\": \"(1) **Contradictions Found:**\\n    - Log A reports a 30s timeout.\\n    - Log B reports a 3s timeout.\\n    - Configuration `request_timeout: 30` is ambiguous due to missing units (e.g., seconds, milliseconds).\\n\\n(2) **Assumptions to Proceed:**\\n    - The configuration value `30` is the intended source of truth.\\n    - The intended unit for the timeout is seconds (`s`).\\n    - The system interpreting the timeout as 3s is likely using a default or a separate, incorrect configuration.\\n\\n(3) **Minimal Safe Patch (YAML):**\\n```yaml\\n# Explicitly set timeout to 30 seconds to resolve ambiguity.\\nrequest_timeout: 30s\\n```\\n\\n(4) **Verification Command:**\\n```sh\\ngrep -r \\\"request_timeout\\\" .\\n```\",\n  \"stats\": {\n    \"models\": {\n      \"gemini-2.5-pro\": {\n        \"api\": {\n          \"totalRequests\": 3,\n          \"totalErrors\": 2,\n          \"totalLatencyMs\": 9800\n        },\n        \"tokens\": {\n          \"input\": 163,\n          \"prompt\": 22929,\n          \"candidates\": 191,\n          \"total\": 23722,\n          \"cached\": 22766,\n          \"thoughts\": 602,\n          \"tool\": 0\n        }\n      }\n    },\n    \"tools\": {\n      \"totalCalls\": 0,\n      \"totalSuccess\": 0,\n      \"totalFail\": 0,\n      \"totalDurationMs\": 0,\n      \"totalDecisions\": {\n        \"accept\": 0,\n        \"reject\": 0,\n        \"modify\": 0,\n        \"auto_accept\": 0\n      },\n      \"byName\": {}\n    },\n    \"files\": {\n      \"totalLinesAdded\": 0,\n      \"totalLinesRemoved\": 0\n    }\n  }\n}",
+          "stderr": "Loaded cached credentials.\nLoading extension: conductor\nSkill \"skill-creator\" from \"/Users/fengning/.agents/skills/skill-creator/SKILL.md\" is overriding the built-in skill.\nAttempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 946.3140589999999ms...\nAttempt 2 failed: You have exhausted your capacity on this model. Your quota will reset after 2s.. Retrying after 2849.666482ms...\n\ngemini_api_total_errors=2",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T05:31:25Z",
+          "attempt_completed_at": "2026-02-18T05:31:48Z"
+        }
+      ]
+    }
+  ],
+  "aggregates": {
+    "by_workflow": [
+      {
+        "workflow_id": "gemini_run_headless",
+        "job_count": 3,
+        "success_count": 3,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 5.666666666666667,
+        "first_output_latency_ms_p50": 8967.0,
+        "first_output_latency_ms_p95": 9033.6,
+        "completion_latency_ms_p50": 22700.0,
+        "completion_latency_ms_p95": 36947.899999999994
+      }
+    ],
+    "by_system": [
+      {
+        "system": "gemini",
+        "job_count": 3,
+        "success_count": 3,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 5.666666666666667,
+        "first_output_latency_ms_p50": 8967.0,
+        "first_output_latency_ms_p95": 9033.6,
+        "completion_latency_ms_p50": 22700.0,
+        "completion_latency_ms_p95": 36947.899999999994
+      }
+    ],
+    "failure_taxonomy": {
+      "category_counts": {},
+      "reason_counts": {}
+    },
+    "prompt_matrix": [
+      {
+        "prompt_id": "coding_ability_2",
+        "prompt_category": "coding_ability",
+        "workflows": {
+          "gemini_run_headless": {
+            "success": true,
+            "completion_latency_ms": 38531,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          }
+        }
+      },
+      {
+        "prompt_id": "latency_speed_1",
+        "prompt_category": "latency_speed",
+        "workflows": {
+          "gemini_run_headless": {
+            "success": true,
+            "completion_latency_ms": 12941,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          }
+        }
+      },
+      {
+        "prompt_id": "robustness_partial_context_1",
+        "prompt_category": "robustness",
+        "workflows": {
+          "gemini_run_headless": {
+            "success": true,
+            "completion_latency_ms": 22700,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          }
+        }
+      }
+    ]
+  }
+}

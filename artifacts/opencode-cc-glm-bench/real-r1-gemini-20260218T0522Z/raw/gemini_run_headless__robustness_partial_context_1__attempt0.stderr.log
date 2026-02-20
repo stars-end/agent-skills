@@ -1,0 +1,7 @@
+Loaded cached credentials.
+Loading extension: conductor
+Skill "skill-creator" from "/Users/fengning/.agents/skills/skill-creator/SKILL.md" is overriding the built-in skill.
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 604.4453149999999ms...
+Attempt 2 failed: You have exhausted your capacity on this model.. Retrying after 10000ms...
+
+gemini_api_total_errors=2

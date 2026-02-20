@@ -1,0 +1,102 @@
+{
+  "run_id": "real-gemini-smoke-20260218T0521Z",
+  "generated_at": "2026-02-18T05:29:07Z",
+  "run_dir": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/real-gemini-smoke-20260218T0521Z",
+  "record_count": 1,
+  "records": [
+    {
+      "run_id": "real-gemini-smoke-20260218T0521Z",
+      "workflow_id": "gemini_run_headless",
+      "system": "gemini",
+      "workflow_kind": "headless",
+      "prompt_id": "latency_speed_1",
+      "prompt_category": "latency_speed",
+      "prompt_title": "Fast constrained output",
+      "model": "gemini-2.5-pro",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 2,
+      "first_output_latency_ms": 5007,
+      "completion_latency_ms": 10409,
+      "workflow_startup_latency_ms": null,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T05:28:57Z",
+      "job_completed_at": "2026-02-18T05:29:07Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 2,
+          "first_output_latency_ms": 5007,
+          "completion_latency_ms": 10409,
+          "stdout": "{\n  \"session_id\": \"e1d79d8d-a5c2-4903-ba72-0ae6e42fcd96\",\n  \"response\": \"```json\\n{\\n  \\\"status\\\": \\\"ok\\\",\\n  \\\"checksum\\\": \\\"bench-42\\\",\\n  \\\"steps\\\": [1, 2, 3]\\n}\\n```\",\n  \"stats\": {\n    \"models\": {\n      \"gemini-2.5-pro\": {\n        \"api\": {\n          \"totalRequests\": 1,\n          \"totalErrors\": 0,\n          \"totalLatencyMs\": 5363\n        },\n        \"tokens\": {\n          \"input\": 22900,\n          \"prompt\": 22900,\n          \"candidates\": 41,\n          \"total\": 23276,\n          \"cached\": 0,\n          \"thoughts\": 335,\n          \"tool\": 0\n        }\n      }\n    },\n    \"tools\": {\n      \"totalCalls\": 0,\n      \"totalSuccess\": 0,\n      \"totalFail\": 0,\n      \"totalDurationMs\": 0,\n      \"totalDecisions\": {\n        \"accept\": 0,\n        \"reject\": 0,\n        \"modify\": 0,\n        \"auto_accept\": 0\n      },\n      \"byName\": {}\n    },\n    \"files\": {\n      \"totalLinesAdded\": 0,\n      \"totalLinesRemoved\": 0\n    }\n  }\n}",
+          "stderr": "Loaded cached credentials.\nLoading extension: conductor\nSkill \"skill-creator\" from \"/Users/fengning/.agents/skills/skill-creator/SKILL.md\" is overriding the built-in skill.\n",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T05:28:57Z",
+          "attempt_completed_at": "2026-02-18T05:29:07Z"
+        }
+      ]
+    }
+  ],
+  "aggregates": {
+    "by_workflow": [
+      {
+        "workflow_id": "gemini_run_headless",
+        "job_count": 1,
+        "success_count": 1,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 2.0,
+        "first_output_latency_ms_p50": 5007.0,
+        "first_output_latency_ms_p95": 5007.0,
+        "completion_latency_ms_p50": 10409.0,
+        "completion_latency_ms_p95": 10409.0
+      }
+    ],
+    "by_system": [
+      {
+        "system": "gemini",
+        "job_count": 1,
+        "success_count": 1,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 2.0,
+        "first_output_latency_ms_p50": 5007.0,
+        "first_output_latency_ms_p95": 5007.0,
+        "completion_latency_ms_p50": 10409.0,
+        "completion_latency_ms_p95": 10409.0
+      }
+    ],
+    "failure_taxonomy": {
+      "category_counts": {},
+      "reason_counts": {}
+    },
+    "prompt_matrix": [
+      {
+        "prompt_id": "latency_speed_1",
+        "prompt_category": "latency_speed",
+        "workflows": {
+          "gemini_run_headless": {
+            "success": true,
+            "completion_latency_ms": 10409,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          }
+        }
+      }
+    ]
+  }
+}

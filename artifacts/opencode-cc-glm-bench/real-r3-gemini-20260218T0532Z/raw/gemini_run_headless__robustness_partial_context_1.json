@@ -1,0 +1,43 @@
+{
+  "run_id": "real-r3-gemini-20260218T0532Z",
+  "workflow_id": "gemini_run_headless",
+  "system": "gemini",
+  "workflow_kind": "headless",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "gemini-2.5-pro",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 4,
+  "first_output_latency_ms": 9041,
+  "completion_latency_ms": 22700,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:31:25Z",
+  "job_completed_at": "2026-02-18T05:31:48Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 4,
+      "first_output_latency_ms": 9041,
+      "completion_latency_ms": 22700,
+      "stdout": "{\n  \"session_id\": \"0cc95e92-7df6-4427-bad0-6906d7a6f811\",\n  \"response\": \"(1) **Contradictions Found:**\\n    - Log A reports a 30s timeout.\\n    - Log B reports a 3s timeout.\\n    - Configuration `request_timeout: 30` is ambiguous due to missing units (e.g., seconds, milliseconds).\\n\\n(2) **Assumptions to Proceed:**\\n    - The configuration value `30` is the intended source of truth.\\n    - The intended unit for the timeout is seconds (`s`).\\n    - The system interpreting the timeout as 3s is likely using a default or a separate, incorrect configuration.\\n\\n(3) **Minimal Safe Patch (YAML):**\\n```yaml\\n# Explicitly set timeout to 30 seconds to resolve ambiguity.\\nrequest_timeout: 30s\\n```\\n\\n(4) **Verification Command:**\\n```sh\\ngrep -r \\\"request_timeout\\\" .\\n```\",\n  \"stats\": {\n    \"models\": {\n      \"gemini-2.5-pro\": {\n        \"api\": {\n          \"totalRequests\": 3,\n          \"totalErrors\": 2,\n          \"totalLatencyMs\": 9800\n        },\n        \"tokens\": {\n          \"input\": 163,\n          \"prompt\": 22929,\n          \"candidates\": 191,\n          \"total\": 23722,\n          \"cached\": 22766,\n          \"thoughts\": 602,\n          \"tool\": 0\n        }\n      }\n    },\n    \"tools\": {\n      \"totalCalls\": 0,\n      \"totalSuccess\": 0,\n      \"totalFail\": 0,\n      \"totalDurationMs\": 0,\n      \"totalDecisions\": {\n        \"accept\": 0,\n        \"reject\": 0,\n        \"modify\": 0,\n        \"auto_accept\": 0\n      },\n      \"byName\": {}\n    },\n    \"files\": {\n      \"totalLinesAdded\": 0,\n      \"totalLinesRemoved\": 0\n    }\n  }\n}",
+      "stderr": "Loaded cached credentials.\nLoading extension: conductor\nSkill \"skill-creator\" from \"/Users/fengning/.agents/skills/skill-creator/SKILL.md\" is overriding the built-in skill.\nAttempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 946.3140589999999ms...\nAttempt 2 failed: You have exhausted your capacity on this model. Your quota will reset after 2s.. Retrying after 2849.666482ms...\n\ngemini_api_total_errors=2",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:31:25Z",
+      "attempt_completed_at": "2026-02-18T05:31:48Z"
+    }
+  ]
+}

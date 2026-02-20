@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-20260218T0505Z",
+  "workflow_id": "opencode_run_headless",
+  "system": "opencode",
+  "workflow_kind": "headless",
+  "prompt_id": "latency_speed_1",
+  "prompt_category": "latency_speed",
+  "prompt_title": "Fast constrained output",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 3,
+  "first_output_latency_ms": 8480,
+  "completion_latency_ms": 9731,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.5,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:05:48Z",
+  "job_completed_at": "2026-02-18T05:05:58Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 3,
+      "first_output_latency_ms": 8480,
+      "completion_latency_ms": 9731,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391156861,\"sessionID\":\"ses_390dc18a3ffeLII7SocrWDLv6y\",\"part\":{\"id\":\"prt_c6f24027b001rN6zH0eo0Eu2z0\",\"sessionID\":\"ses_390dc18a3ffeLII7SocrWDLv6y\",\"messageID\":\"msg_c6f23e7b9001UGdht1xTxgF7g2\",\"type\":\"step-start\",\"snapshot\":\"4f0bbba349ce65ddc201d2155bd003399a00b73d\"}}\n{\"type\":\"text\",\"timestamp\":1771391158006,\"sessionID\":\"ses_390dc18a3ffeLII7SocrWDLv6y\",\"part\":{\"id\":\"prt_c6f24062c001vEhdsGHYVIiNU9\",\"sessionID\":\"ses_390dc18a3ffeLII7SocrWDLv6y\",\"messageID\":\"msg_c6f23e7b9001UGdht1xTxgF7g2\",\"type\":\"text\",\"text\":\"{\\\"status\\\":\\\"ok\\\",\\\"checksum\\\":\\\"bench-42\\\",\\\"steps\\\":[1,2,3]}\",\"time\":{\"start\":1771391158005,\"end\":1771391158005}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391158053,\"sessionID\":\"ses_390dc18a3ffeLII7SocrWDLv6y\",\"part\":{\"id\":\"prt_c6f2406f7001T6D98CUyauXWY1\",\"sessionID\":\"ses_390dc18a3ffeLII7SocrWDLv6y\",\"messageID\":\"msg_c6f23e7b9001UGdht1xTxgF7g2\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"8a925f38318f12de8e996f11c6d4346869a8f8b5\",\"cost\":0,\"tokens\":{\"total\":24864,\"input\":16167,\"output\":57,\"reasoning\":0,\"cache\":{\"read\":8640,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.5,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:05:48Z",
+      "attempt_completed_at": "2026-02-18T05:05:58Z"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "run_id": "real-r1-ccglm-20260218T0514Z",
+  "workflow_id": "cc_glm_headless",
+  "system": "cc-glm",
+  "workflow_kind": "headless",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 1,
+  "first_output_latency_ms": 23560,
+  "completion_latency_ms": 25945,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:15:50Z",
+  "job_completed_at": "2026-02-18T05:16:16Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 1,
+      "first_output_latency_ms": 23560,
+      "completion_latency_ms": 25945,
+      "stdout": "# Log Timeout Contradiction Analysis\n\n## (1) Contradictions Found\n\n| Source | Value | Issue |\n|--------|-------|-------|\n| Log line A | 30s timeout | Explicit unit |\n| Log line B | 3s timeout | Explicit unit, different value |\n| Config fragment | `request_timeout: 30` | **No unit specified** - ambiguous |\n\nThe core contradiction: **The config lacks units, making it unclear whether `30` means 30 seconds, 30 milliseconds, or something else.** The logs suggest two different timeout values are being applied somewhere in the system.\n\n## (2) Assumptions I Must Make\n\n1. **`request_timeout: 30` should mean 30 seconds** (matching log line A)\n2. **Log line B's 3s timeout** is likely from a different timeout setting (e.g., `read_timeout`, `connect_timeout`) or a default/fallback value\n3. **The system requires explicit units** in the config format (e.g., `30s`, `30000ms`)\n4. **Without units, the value may be interpreted inconsistently** or default to something unexpected\n\n## (3) Minimal Safe Patch in YAML\n\n```yaml\nrequest_timeout: 30s\n```\n\n**Rationale:** Add explicit `s` suffix to eliminate ambiguity. If 3s is the intended value, use `3s` instead.\n\n## (4) Verification Command\n\n```bash\n# Check if the timeout is now being applied correctly\ngrep -E \"timeout.*(30|3)\" /var/log/<service>/*.log | tail -5\n```\n\nOr if you have the config file path:\n\n```bash\n# Validate YAML syntax and show the parsed value\npython3 -c \"import yaml; print(yaml.safe_load(open('config.yaml'))['request_timeout'])\"\n```\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:15:50Z",
+      "attempt_completed_at": "2026-02-18T05:16:16Z"
+    }
+  ]
+}

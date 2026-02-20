@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "name": "cc-glm-vs-opencode-glm5",
+  "prompts": [
+    {
+      "id": "coding_ability_1",
+      "category": "coding_ability",
+      "title": "Implement robust semantic version comparator",
+      "prompt": "Write a Python function `compare_semver(a: str, b: str) -> int` that follows semantic version precedence (major.minor.patch, optional prerelease). Return -1/0/1. Include edge-case handling and 8 pytest-style tests. Output only code in one fenced block.",
+      "success_hints": [
+        "def compare_semver",
+        "pytest",
+        "assert"
+      ]
+    }
+  ]
+}

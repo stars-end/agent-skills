@@ -1,0 +1,43 @@
+{
+  "run_id": "real-r1-ccglm-20260218T0514Z",
+  "workflow_id": "cc_glm_headless",
+  "system": "cc-glm",
+  "workflow_kind": "headless",
+  "prompt_id": "latency_speed_1",
+  "prompt_category": "latency_speed",
+  "prompt_title": "Fast constrained output",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 1,
+  "first_output_latency_ms": 9767,
+  "completion_latency_ms": 12476,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:15:50Z",
+  "job_completed_at": "2026-02-18T05:16:02Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 1,
+      "first_output_latency_ms": 9767,
+      "completion_latency_ms": 12476,
+      "stdout": "{\"status\": \"ok\", \"checksum\": \"bench-42\", \"steps\": [1,2,3]}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:15:50Z",
+      "attempt_completed_at": "2026-02-18T05:16:02Z"
+    }
+  ]
+}

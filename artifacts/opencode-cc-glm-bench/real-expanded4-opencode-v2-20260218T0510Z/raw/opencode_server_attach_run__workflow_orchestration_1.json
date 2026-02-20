@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "workflow_id": "opencode_server_attach_run",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "workflow_orchestration_1",
+  "prompt_category": "workflow_orchestration",
+  "prompt_title": "Parallel execution plan with dependencies",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 1,
+  "first_output_latency_ms": 5924,
+  "completion_latency_ms": 21149,
+  "workflow_startup_latency_ms": 769,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.6666666666666666,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:10:37Z",
+  "job_completed_at": "2026-02-18T05:10:58Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 1,
+      "first_output_latency_ms": 5924,
+      "completion_latency_ms": 21149,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391443512,\"sessionID\":\"ses_390d7b295ffeNsGUDV854MLqD8\",\"part\":{\"id\":\"prt_c6f28613e001fkD702Q1B6Oxxt\",\"sessionID\":\"ses_390d7b295ffeNsGUDV854MLqD8\",\"messageID\":\"msg_c6f284d93001l5NnJkTqVu7K9Q\",\"type\":\"step-start\",\"snapshot\":\"\"}}\n{\"type\":\"text\",\"timestamp\":1771391458691,\"sessionID\":\"ses_390d7b295ffeNsGUDV854MLqD8\",\"part\":{\"id\":\"prt_c6f28765f001Ut4ABmOB3ipUa2\",\"sessionID\":\"ses_390d7b295ffeNsGUDV854MLqD8\",\"messageID\":\"msg_c6f284d93001l5NnJkTqVu7K9Q\",\"type\":\"text\",\"text\":\"| Task | Description | Dependencies | Owner Role | Validation Gate |\\n|------|-------------|--------------|------------|-----------------|\\n| T1 | **Backend API** - Add endpoint, types, unit tests | None | Backend Agent | `make test` passes, types compile |\\n| T2 | **Database Migration** - Schema change, seed data | None | Infra Agent | Migration dry-run succeeds, rollback script tested |\\n| T3 | **Frontend UI** - Component, integration, E2E test | T1 (mock mode OK) | Frontend Agent | `pnpm test:e2e` passes, lint clean |\\n| T4 | **Integration + Deploy** - Wire services, verify in staging | T1, T2, T3 | Orchestrator | Health check green, smoke test passes |\\n\\n---\\n\\n**Rollback Rule (T4 Blocking)**:\\n```\\nIF staging smoke test fails OR health check timeout > 60s:\\n  \u2192 Halt all tasks\\n  \u2192 Run: make rollback-migration\\n  \u2192 Revert PRs in order: T3 \u2192 T1\\n  \u2192 Escalate to human with logs attached\\n```\\n\\n**Parallelization**:\\n- T1, T2 run in parallel (independent)\\n- T3 starts after T1 API contract frozen (can use mocks)\\n- T4 runs after T1, T2, T3 complete\\n\\n**Total wall time**: ~2 parallel waves vs ~4 sequential\",\"time\":{\"start\":1771391458662,\"end\":1771391458662}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.6666666666666666,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:10:37Z",
+      "attempt_completed_at": "2026-02-18T05:10:58Z"
+    }
+  ]
+}

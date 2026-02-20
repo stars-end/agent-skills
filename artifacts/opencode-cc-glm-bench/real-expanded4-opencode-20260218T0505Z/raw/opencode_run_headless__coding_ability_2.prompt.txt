@@ -1,0 +1,1 @@
+Given this JavaScript snippet: `function dedupe(items){const out=[];for(const i of items){if(out.indexOf(i)===-1){out.push(i)}}return out}`. Refactor it for linear-time complexity and preserve first-seen order. Include before/after complexity and 5 table-driven tests in plain JS.

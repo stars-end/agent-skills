@@ -1,0 +1,43 @@
+{
+  "run_id": "real-r2-ccglm-20260218T0516Z",
+  "workflow_id": "cc_glm_headless",
+  "system": "cc-glm",
+  "workflow_kind": "headless",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 3,
+  "first_output_latency_ms": 28620,
+  "completion_latency_ms": 31786,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:16:50Z",
+  "job_completed_at": "2026-02-18T05:17:21Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 3,
+      "first_output_latency_ms": 28620,
+      "completion_latency_ms": 31786,
+      "stdout": "## Analysis: Timeout Configuration Issue\n\n### (1) Contradictions Found\n\n| Location | Value | Issue |\n|----------|-------|-------|\n| Log line A | 30s timeout | Matches config value |\n| Log line B | 3s timeout | Contradicts config (10x faster) |\n| Config fragment | `request_timeout: 30` | **Missing units** - ambiguous |\n\n### (2) Assumptions I Must Make\n\n1. **Config expects seconds** (not ms, not minutes)\n2. **Log line B (3s)** is the actual behavior - likely a hardcoded default or runtime override\n3. **Log line A (30s)** may be from a different code path, stale log, or different environment\n4. The framework/library parses bare numbers as **milliseconds** by default (common pattern)\n\n### (3) Minimal Safe Patch in YAML\n\n```yaml\n# Before (ambiguous)\nrequest_timeout: 30\n\n# After (explicit units)\nrequest_timeout: 30s\n```\n\n**Alternative if framework requires milliseconds:**\n```yaml\nrequest_timeout: 30000  # 30 seconds in ms\n```\n\n### (4) Verification Command\n\n```bash\n# Check actual timeout being applied at runtime\ncurl -w \"Time: %{time_total}s\\n\" -X POST http://localhost:8080/health \\\n  --max-time 35 -H \"X-Test-Timeout: true\"\n```\n\nOr check config parsing directly:\n```bash\n# If using a framework that validates config\ngrep -E \"timeout|Timeout\" config.yaml && \\\n  python -c \"import yaml; c=yaml.safe_load(open('config.yaml')); print(f'Parsed: {c.get(\\\"request_timeout\\\")}')\"\n```\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:16:50Z",
+      "attempt_completed_at": "2026-02-18T05:17:21Z"
+    }
+  ]
+}

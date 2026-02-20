@@ -1,0 +1,43 @@
+{
+  "run_id": "dryrun-techlead-001",
+  "workflow_id": "opencode_server_http",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "coding_ability_2",
+  "prompt_category": "coding_ability",
+  "prompt_title": "Fix and optimize JS transformation",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 20,
+  "first_output_latency_ms": 480,
+  "completion_latency_ms": 2660,
+  "workflow_startup_latency_ms": 810,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T04:41:37Z",
+  "job_completed_at": "2026-02-18T04:41:37Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 20,
+      "first_output_latency_ms": 480,
+      "completion_latency_ms": 2660,
+      "stdout": "dry-run output run_id=dryrun-techlead-001 workflow_id=opencode_server_http prompt_id=coding_ability_2",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T04:41:37Z",
+      "attempt_completed_at": "2026-02-18T04:41:37Z"
+    }
+  ]
+}

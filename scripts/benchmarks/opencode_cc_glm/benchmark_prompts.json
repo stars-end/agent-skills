@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "name": "cc-glm-vs-opencode-glm5",
+  "prompts": [
+    {
+      "id": "coding_ability_1",
+      "category": "coding_ability",
+      "title": "Implement robust semantic version comparator",
+      "prompt": "Write a Python function `compare_semver(a: str, b: str) -> int` that follows semantic version precedence (major.minor.patch, optional prerelease). Return -1/0/1. Include edge-case handling and 8 pytest-style tests. Output only code in one fenced block.",
+      "success_hints": ["def compare_semver", "pytest", "assert"]
+    },
+    {
+      "id": "coding_ability_2",
+      "category": "coding_ability",
+      "title": "Fix and optimize JS transformation",
+      "prompt": "Given this JavaScript snippet: `function dedupe(items){const out=[];for(const i of items){if(out.indexOf(i)===-1){out.push(i)}}return out}`. Refactor it for linear-time complexity and preserve first-seen order. Include before/after complexity and 5 table-driven tests in plain JS.",
+      "success_hints": ["Set", "O(n)", "tests"]
+    },
+    {
+      "id": "latency_speed_1",
+      "category": "latency_speed",
+      "title": "Fast constrained output",
+      "prompt": "Return exactly one JSON object with keys `status`, `checksum`, `steps`. Use values: status='ok', checksum='bench-42', steps=[1,2,3]. No markdown, no extra text.",
+      "success_hints": ["\"status\"", "bench-42"]
+    },
+    {
+      "id": "robustness_partial_context_1",
+      "category": "robustness",
+      "title": "Handle malformed and partial context",
+      "prompt": "You have partial context: log line A says timeout at 30s, log line B says timeout at 3s, and config fragment is missing units: `request_timeout: 30`. Provide: (1) contradictions found, (2) assumptions you must make, (3) minimal safe patch in YAML, (4) one verification command.",
+      "success_hints": ["assumption", "YAML", "verification"]
+    },
+    {
+      "id": "workflow_orchestration_1",
+      "category": "workflow_orchestration",
+      "title": "Parallel execution plan with dependencies",
+      "prompt": "Design a 4-task execution plan for parallel agents to ship a small feature. Include dependencies, owner role per task, validation gate per task, and one rollback rule. Output as a markdown table.",
+      "success_hints": ["|", "dependency", "rollback"]
+    }
+  ]
+}

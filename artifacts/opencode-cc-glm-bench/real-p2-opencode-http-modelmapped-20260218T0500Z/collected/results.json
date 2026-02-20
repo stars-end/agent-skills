@@ -1,0 +1,102 @@
+{
+  "run_id": "real-p2-opencode-http-modelmapped-20260218T0500Z",
+  "generated_at": "2026-02-18T04:59:25Z",
+  "run_dir": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/real-p2-opencode-http-modelmapped-20260218T0500Z",
+  "record_count": 1,
+  "records": [
+    {
+      "run_id": "real-p2-opencode-http-modelmapped-20260218T0500Z",
+      "workflow_id": "opencode_server_http",
+      "system": "opencode",
+      "workflow_kind": "server",
+      "prompt_id": "latency_speed_1",
+      "prompt_category": "latency_speed",
+      "prompt_title": "Fast constrained output",
+      "model": "zai-coding-plan/glm-5",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 0,
+      "first_output_latency_ms": 1046,
+      "completion_latency_ms": 10695,
+      "workflow_startup_latency_ms": 780,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": "ses_390e21cb7ffet3GA3uTZNR0Rdp",
+      "used_model_fallback": true,
+      "job_started_at": "2026-02-18T04:59:15Z",
+      "job_completed_at": "2026-02-18T04:59:25Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 0,
+          "first_output_latency_ms": 1046,
+          "completion_latency_ms": 10695,
+          "stdout": "Return exactly one JSON object with keys `status`, `checksum`, `steps`. Use values: status='ok', checksum='bench-42', steps=[1,2,3]. No markdown, no extra text.\n{\"status\":\"ok\",\"checksum\":\"bench-42\",\"steps\":[1,2,3]}",
+          "stderr": "",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": "ses_390e21cb7ffet3GA3uTZNR0Rdp",
+          "used_model_fallback": true,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T04:59:15Z",
+          "attempt_completed_at": "2026-02-18T04:59:25Z"
+        }
+      ]
+    }
+  ],
+  "aggregates": {
+    "by_workflow": [
+      {
+        "workflow_id": "opencode_server_http",
+        "job_count": 1,
+        "success_count": 1,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 0.0,
+        "first_output_latency_ms_p50": 1046.0,
+        "first_output_latency_ms_p95": 1046.0,
+        "completion_latency_ms_p50": 10695.0,
+        "completion_latency_ms_p95": 10695.0
+      }
+    ],
+    "by_system": [
+      {
+        "system": "opencode",
+        "job_count": 1,
+        "success_count": 1,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 0.0,
+        "first_output_latency_ms_p50": 1046.0,
+        "first_output_latency_ms_p95": 1046.0,
+        "completion_latency_ms_p50": 10695.0,
+        "completion_latency_ms_p95": 10695.0
+      }
+    ],
+    "failure_taxonomy": {
+      "category_counts": {},
+      "reason_counts": {}
+    },
+    "prompt_matrix": [
+      {
+        "prompt_id": "latency_speed_1",
+        "prompt_category": "latency_speed",
+        "workflows": {
+          "opencode_server_http": {
+            "success": true,
+            "completion_latency_ms": 10695,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          }
+        }
+      }
+    ]
+  }
+}

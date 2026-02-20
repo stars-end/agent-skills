@@ -1,0 +1,43 @@
+{
+  "run_id": "real-p1-coding-ability-1c-20260218T0455Z",
+  "workflow_id": "opencode_run_headless",
+  "system": "opencode",
+  "workflow_kind": "headless",
+  "prompt_id": "coding_ability_1",
+  "prompt_category": "coding_ability",
+  "prompt_title": "Implement robust semantic version comparator",
+  "model": "glm-5",
+  "success": false,
+  "retry_count": 0,
+  "startup_latency_ms": 4,
+  "first_output_latency_ms": 1755,
+  "completion_latency_ms": 1770,
+  "workflow_startup_latency_ms": null,
+  "failure_category": "model",
+  "failure_reason": "model_not_supported",
+  "hint_match_ratio": 0.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T04:55:01Z",
+  "job_completed_at": "2026-02-18T04:55:03Z",
+  "attempts": [
+    {
+      "success": false,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 4,
+      "first_output_latency_ms": 1755,
+      "completion_latency_ms": 1770,
+      "stdout": "{\"type\":\"error\",\"timestamp\":1771390503363,\"sessionID\":\"ses_390e5f68cffecvdh6KDiL67A1d\",\"error\":{\"name\":\"UnknownError\",\"data\":{\"message\":\"Model not found: glm-5/.\"}}}\n",
+      "stderr": "1094 |     const provider = s.providers[providerID]\n1095 |     if (!provider) {\n1096 |       const availableProviders = Object.keys(s.providers)\n1097 |       const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })\n1098 |       const suggestions = matches.map((m) => m.target)\n1099 |       throw new ModelNotFoundError({ providerID, modelID, suggestions })\n                   ^\nProviderModelNotFoundError: ProviderModelNotFoundError\n data: {\n  providerID: \"glm-5\",\n  modelID: \"\",\n  suggestions: [],\n},\n\n      at getModel (src/provider/provider.ts:1099:13)\n\n\nModel not found: glm-5/.",
+      "failure_category": "model",
+      "failure_reason": "model_not_supported",
+      "hint_match_ratio": 0.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T04:55:01Z",
+      "attempt_completed_at": "2026-02-18T04:55:03Z"
+    }
+  ]
+}

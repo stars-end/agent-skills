@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-20260218T0505Z",
+  "workflow_id": "opencode_run_headless",
+  "system": "opencode",
+  "workflow_kind": "headless",
+  "prompt_id": "workflow_orchestration_1",
+  "prompt_category": "workflow_orchestration",
+  "prompt_title": "Parallel execution plan with dependencies",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 3,
+  "first_output_latency_ms": 8609,
+  "completion_latency_ms": 17604,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.6666666666666666,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:05:48Z",
+  "job_completed_at": "2026-02-18T05:06:05Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 3,
+      "first_output_latency_ms": 8609,
+      "completion_latency_ms": 17604,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391156996,\"sessionID\":\"ses_390dc1812ffe4Qk6RHuKNl3ski\",\"part\":{\"id\":\"prt_c6f240302001Zl4vjg9GXaTgea\",\"sessionID\":\"ses_390dc1812ffe4Qk6RHuKNl3ski\",\"messageID\":\"msg_c6f23e82e001Pxaa2VBolXBMXU\",\"type\":\"step-start\",\"snapshot\":\"313b99db89035775484bd68527204c1c6dda8d9d\"}}\n{\"type\":\"text\",\"timestamp\":1771391165875,\"sessionID\":\"ses_390dc1812ffe4Qk6RHuKNl3ski\",\"part\":{\"id\":\"prt_c6f240bdb001nSfQnjC2uyBwky\",\"sessionID\":\"ses_390dc1812ffe4Qk6RHuKNl3ski\",\"messageID\":\"msg_c6f23e82e001Pxaa2VBolXBMXU\",\"type\":\"text\",\"text\":\"| Task | Owner Role | Dependencies | Validation Gate |\\n|------|------------|--------------|-----------------|\\n| **T1: API Layer** | Backend Agent | None | `make test-api` passes, contract tests green |\\n| **T2: UI Components** | Frontend Agent | None | Storybook builds, `pnpm test` passes |\\n| **T3: Integration** | Integration Agent | T1, T2 complete | E2E tests pass, `make verify-pipeline` green |\\n| **T4: Docs + Changelog** | Orchestrator | T3 complete | CHANGELOG.md updated, PR title has `bd-<id>` |\\n\\n**Rollback Rule:** If T3 fails twice consecutively \u2192 abort wave, revert T1+T2 commits, escalate to human with failure logs.\",\"time\":{\"start\":1771391165875,\"end\":1771391165875}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391165921,\"sessionID\":\"ses_390dc1812ffe4Qk6RHuKNl3ski\",\"part\":{\"id\":\"prt_c6f2425b4001DAxMkqsoaSThG3\",\"sessionID\":\"ses_390dc1812ffe4Qk6RHuKNl3ski\",\"messageID\":\"msg_c6f23e82e001Pxaa2VBolXBMXU\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"33cf1260a2d384be08e7b980f3d9953e70eceb9c\",\"cost\":0,\"tokens\":{\"total\":25049,\"input\":16164,\"output\":245,\"reasoning\":0,\"cache\":{\"read\":8640,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.6666666666666666,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:05:48Z",
+      "attempt_completed_at": "2026-02-18T05:06:05Z"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "run_id": "dryrun-techlead-002",
+  "workflow_id": "opencode_server_http",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "workflow_orchestration_1",
+  "prompt_category": "workflow_orchestration",
+  "prompt_title": "Parallel execution plan with dependencies",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 54,
+  "first_output_latency_ms": 218,
+  "completion_latency_ms": 2464,
+  "workflow_startup_latency_ms": 0,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T04:42:27Z",
+  "job_completed_at": "2026-02-18T04:42:27Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 54,
+      "first_output_latency_ms": 218,
+      "completion_latency_ms": 2464,
+      "stdout": "dry-run output run_id=dryrun-techlead-002 workflow_id=opencode_server_http prompt_id=workflow_orchestration_1",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T04:42:27Z",
+      "attempt_completed_at": "2026-02-18T04:42:27Z"
+    }
+  ]
+}

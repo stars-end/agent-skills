@@ -1,0 +1,9 @@
+Design a 4-task execution plan for parallel agents to ship a small feature. Include dependencies, owner role per task, validation gate per task, and one rollback rule. Output as a markdown table.
+| Task | Description | Dependencies | Owner | Validation Gate | Rollback Rule |
+|------|-------------|--------------|-------|-----------------|---------------|
+| T1 | Backend API endpoint | None | Agent A | Unit tests pass, schema validated | Revert commit, close bd-xxx.1 |
+| T2 | Frontend component | T1 | Agent B | Storybook renders, E2E smoke | Revert commit, close bd-xxx.2 |
+| T3 | Integration tests | T1, T2 | Agent A | CI green, coverage ≥80% | Revert commit, close bd-xxx.3 |
+| T4 | PR creation + merge | T3 | Orchestrator | CI green, review approved | **Rollback**: If T4 fails post-merge, revert PR, reopen bd-xxx, reset branch to T3 commit |
+
+**Execution**: T1 parallel, then T2||T3 (B runs T2, A runs T3), then T4 sequential.

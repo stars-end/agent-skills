@@ -1,0 +1,1 @@
+You have partial context: log line A says timeout at 30s, log line B says timeout at 3s, and config fragment is missing units: `request_timeout: 30`. Provide: (1) contradictions found, (2) assumptions you must make, (3) minimal safe patch in YAML, (4) one verification command.

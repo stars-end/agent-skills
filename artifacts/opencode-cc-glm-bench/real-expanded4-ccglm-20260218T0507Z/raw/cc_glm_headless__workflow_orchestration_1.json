@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-ccglm-20260218T0507Z",
+  "workflow_id": "cc_glm_headless",
+  "system": "cc-glm",
+  "workflow_kind": "headless",
+  "prompt_id": "workflow_orchestration_1",
+  "prompt_category": "workflow_orchestration",
+  "prompt_title": "Parallel execution plan with dependencies",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 1,
+  "first_output_latency_ms": 27067,
+  "completion_latency_ms": 29493,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:07:28Z",
+  "job_completed_at": "2026-02-18T05:07:57Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 1,
+      "first_output_latency_ms": 27067,
+      "completion_latency_ms": 29493,
+      "stdout": "# 4-Task Parallel Execution Plan\n\n## Feature: Add User Avatar Upload\n\n| Task | Owner | Dependencies | Validation Gate | Rollback Rule |\n|------|-------|--------------|-----------------|---------------|\n| **T1: API Endpoint** | Backend Agent | None | `make test-api` passes; schema validates; curl upload returns 201 | Revert commit; API returns 404 |\n| **T2: Storage Layer** | Infra Agent | None | `make test-storage` passes; S3 bucket writeable; presigned URL generates | Delete uploaded files; remove bucket policy |\n| **T3: Frontend UI** | Frontend Agent | T1 complete | `pnpm test` passes; a11y audit green; upload flow E2E passes | Hide upload button; fallback to gravatar |\n| **T4: Integration Tests** | QA Agent | T1, T2, T3 complete | `make verify-pipeline` passes; full upload\u2192display flow works in staging | Disable integration test suite; flag for manual QA |\n\n---\n\n## Execution Waves\n\n```\nWave 1 (parallel): T1 + T2\nWave 2 (parallel after Wave 1): T3\nWave 3 (after Wave 2): T4\n```\n\n## Rollback Protocol\n\n**Trigger**: Any validation gate fails after 1 retry\n\n**Rule**: Tasks roll back in reverse dependency order:\n1. T4 \u2192 T3 \u2192 T1/T2 (simultaneous)\n2. Each agent runs `git revert HEAD --no-edit` on their commit\n3. Orchestrator confirms clean `git status` before marking blocked\n\n## Commit-Only Discipline\n\n- Agents commit (don't push) after validation passes\n- Orchestrator pushes once per wave after reviewing diffs\n- Feature-Key trailer required: `Feature-Key: bd-<beads-id>`\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:07:28Z",
+      "attempt_completed_at": "2026-02-18T05:07:57Z"
+    }
+  ]
+}

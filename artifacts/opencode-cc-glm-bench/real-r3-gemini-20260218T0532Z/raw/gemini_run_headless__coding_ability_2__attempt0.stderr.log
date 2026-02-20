@@ -1,0 +1,4 @@
+Loaded cached credentials.
+Loading extension: conductor
+Skill "skill-creator" from "/Users/fengning/.agents/skills/skill-creator/SKILL.md" is overriding the built-in skill.
+Error executing tool write_file: Tool "write_file" not found. Did you mean one of: "read_file", "write_todos", "cli_help"?

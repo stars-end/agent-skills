@@ -1,0 +1,43 @@
+{
+  "run_id": "real-r3-opencode-20260218T0532Z",
+  "workflow_id": "opencode_run_headless",
+  "system": "opencode",
+  "workflow_kind": "headless",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 5,
+  "first_output_latency_ms": 7919,
+  "completion_latency_ms": 26923,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:31:25Z",
+  "job_completed_at": "2026-02-18T05:31:52Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 5,
+      "first_output_latency_ms": 7919,
+      "completion_latency_ms": 26923,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771392693804,\"sessionID\":\"ses_390c49faeffeqUSsRVpRx7XTwG\",\"part\":{\"id\":\"prt_c6f3b7624001pdVWy1RMjVnWo1\",\"sessionID\":\"ses_390c49faeffeqUSsRVpRx7XTwG\",\"messageID\":\"msg_c6f3b6127001CdewpxcFC6vcQm\",\"type\":\"step-start\",\"snapshot\":\"bce9e3eaaa259f9007535c42a050eebfe01718bf\"}}\n{\"type\":\"text\",\"timestamp\":1771392712711,\"sessionID\":\"ses_390c49faeffeqUSsRVpRx7XTwG\",\"part\":{\"id\":\"prt_c6f3b9c80001Avg9ZAr4iIOVb9\",\"sessionID\":\"ses_390c49faeffeqUSsRVpRx7XTwG\",\"messageID\":\"msg_c6f3b6127001CdewpxcFC6vcQm\",\"type\":\"text\",\"text\":\"## Analysis\\n\\n**(1) Contradictions Found**\\n- Log A (30s) vs Log B (3s): conflicting timeout values suggest different code paths, services, or one is stale/misconfigured\\n- Config `request_timeout: 30` has no units \u2014 could be seconds, milliseconds, or requests\\n\\n**(2) Assumptions**\\n- `request_timeout` expects seconds (industry convention, matches Log A)\\n- Log B's 3s may be a different timeout setting (e.g., `read_timeout`, `connect_timeout`)\\n- The value `30` is intentional and should be 30 seconds, not 30ms\\n\\n**(3) Minimal Safe Patch**\\n```yaml\\nrequest_timeout: 30s\\n```\\nAdding explicit `s` suffix makes units unambiguous and self-documenting.\\n\\n**(4) Verification Command**\\n```bash\\ngrep -E \\\"timeout.*[0-9]\\\" config.yaml | head -5\\n```\\nOr if there's a config validation tool:\\n```bash\\n<config-validate-command> --check config.yaml\\n```\\n\\n---\\n\\n**Note:** To resolve the Log A vs Log B contradiction definitively, you'd need to identify which service/code path each log line originates from and whether they reference the same `request_timeout` setting or different timeout configurations.\",\"time\":{\"start\":1771392712710,\"end\":1771392712710}}}\n{\"type\":\"step_finish\",\"timestamp\":1771392712750,\"sessionID\":\"ses_390c49faeffeqUSsRVpRx7XTwG\",\"part\":{\"id\":\"prt_c6f3bc008001tcNfpRiQ5xupoG\",\"sessionID\":\"ses_390c49faeffeqUSsRVpRx7XTwG\",\"messageID\":\"msg_c6f3b6127001CdewpxcFC6vcQm\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"93566916161395fc571db5a24103f882f2e756dc\",\"cost\":0,\"tokens\":{\"total\":25367,\"input\":15999,\"output\":536,\"reasoning\":0,\"cache\":{\"read\":8832,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:31:25Z",
+      "attempt_completed_at": "2026-02-18T05:31:52Z"
+    }
+  ]
+}

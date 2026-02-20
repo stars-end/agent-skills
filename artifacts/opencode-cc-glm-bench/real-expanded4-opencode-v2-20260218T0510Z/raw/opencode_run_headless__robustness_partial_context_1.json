@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "workflow_id": "opencode_run_headless",
+  "system": "opencode",
+  "workflow_kind": "headless",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 6,
+  "first_output_latency_ms": 19533,
+  "completion_latency_ms": 31156,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.6666666666666666,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:10:04Z",
+  "job_completed_at": "2026-02-18T05:10:35Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 6,
+      "first_output_latency_ms": 19533,
+      "completion_latency_ms": 31156,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391424073,\"sessionID\":\"ses_390d82e1dffe58NUIn2MzujP09\",\"part\":{\"id\":\"prt_c6f281647001fboIURdzxcaIcd\",\"sessionID\":\"ses_390d82e1dffe58NUIn2MzujP09\",\"messageID\":\"msg_c6f27d217001iWwIYbmxWq1qw8\",\"type\":\"step-start\",\"snapshot\":\"1d12fc9851f107e648e40407bb9d05bc81fc350e\"}}\n{\"type\":\"text\",\"timestamp\":1771391435631,\"sessionID\":\"ses_390d82e1dffe58NUIn2MzujP09\",\"part\":{\"id\":\"prt_c6f2827b9001fJobuDO7Bbt4fP\",\"sessionID\":\"ses_390d82e1dffe58NUIn2MzujP09\",\"messageID\":\"msg_c6f27d217001iWwIYbmxWq1qw8\",\"type\":\"text\",\"text\":\"1. **Contradictions:** Log A (30s) vs Log B (3s) show inconsistent timeout behavior from same config\\n\\n2. **Assumptions:**\\n   - `request_timeout: 30` means seconds (not ms) - unitless = ambiguous\\n   - Log B's 3s indicates another timeout source (connection? read?) overriding request_timeout\\n   - The 30s in log A is the intended behavior, 3s is premature\\n\\n3. **Patch:**\\n```yaml\\nrequest_timeout: 30s\\nconnect_timeout: 30s\\nread_timeout: 30s\\n```\\n\\n4. **Verify:**\\n```bash\\ngrep -r \\\"timeout\\\" config/ | grep -E \\\"[0-9]+[^sms]\\\"\\n```\",\"time\":{\"start\":1771391435631,\"end\":1771391435631}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391435653,\"sessionID\":\"ses_390d82e1dffe58NUIn2MzujP09\",\"part\":{\"id\":\"prt_c6f284371001oEJsT4DZF2CtvT\",\"sessionID\":\"ses_390d82e1dffe58NUIn2MzujP09\",\"messageID\":\"msg_c6f27d217001iWwIYbmxWq1qw8\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"\",\"cost\":0,\"tokens\":{\"total\":25129,\"input\":15874,\"output\":295,\"reasoning\":0,\"cache\":{\"read\":8960,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.6666666666666666,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:10:04Z",
+      "attempt_completed_at": "2026-02-18T05:10:35Z"
+    }
+  ]
+}

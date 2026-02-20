@@ -1,0 +1,41 @@
+{
+  "session_id": "e1d79d8d-a5c2-4903-ba72-0ae6e42fcd96",
+  "response": "```json\n{\n  \"status\": \"ok\",\n  \"checksum\": \"bench-42\",\n  \"steps\": [1, 2, 3]\n}\n```",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 5363
+        },
+        "tokens": {
+          "input": 22900,
+          "prompt": 22900,
+          "candidates": 41,
+          "total": 23276,
+          "cached": 0,
+          "thoughts": 335,
+          "tool": 0
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

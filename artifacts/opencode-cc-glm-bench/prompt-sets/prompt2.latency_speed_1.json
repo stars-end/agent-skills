@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "name": "cc-glm-vs-opencode-glm5",
+  "prompts": [
+    {
+      "id": "latency_speed_1",
+      "category": "latency_speed",
+      "title": "Fast constrained output",
+      "prompt": "Return exactly one JSON object with keys `status`, `checksum`, `steps`. Use values: status='ok', checksum='bench-42', steps=[1,2,3]. No markdown, no extra text.",
+      "success_hints": [
+        "\"status\"",
+        "bench-42"
+      ]
+    }
+  ]
+}

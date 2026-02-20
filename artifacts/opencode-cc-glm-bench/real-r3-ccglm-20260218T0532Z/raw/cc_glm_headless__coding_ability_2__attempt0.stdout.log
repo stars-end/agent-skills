@@ -1,0 +1,83 @@
+# Dedupe Function Refactor
+
+## Before & After
+
+```javascript
+// BEFORE: O(n²) - indexOf is O(n) inside O(n) loop
+function dedupe(items) {
+  const out = [];
+  for (const i of items) {
+    if (out.indexOf(i) === -1) {
+      out.push(i);
+    }
+  }
+  return out;
+}
+
+// AFTER: O(n) - Set lookup is O(1)
+function dedupe(items) {
+  const seen = new Set();
+  const out = [];
+  for (const i of items) {
+    if (!seen.has(i)) {
+      seen.add(i);
+      out.push(i);
+    }
+  }
+  return out;
+}
+```
+
+## Complexity Analysis
+
+| Version | Time | Space | Why |
+|---------|------|-------|-----|
+| Before | O(n²) | O(n) | `indexOf` scans `out` array (grows to n) for each of n items |
+| After | O(n) | O(n) | `Set.has()` is O(1), single pass through items |
+
+## Table-Driven Tests
+
+```javascript
+const tests = [
+  {
+    name: 'removes duplicates',
+    input: [1, 2, 2, 3, 1],
+    expected: [1, 2, 3]
+  },
+  {
+    name: 'preserves order (first seen)',
+    input: ['b', 'a', 'b', 'c', 'a'],
+    expected: ['b', 'a', 'c']
+  },
+  {
+    name: 'handles empty array',
+    input: [],
+    expected: []
+  },
+  {
+    name: 'no duplicates returns same',
+    input: [1, 2, 3],
+    expected: [1, 2, 3]
+  },
+  {
+    name: 'all same values',
+    input: [5, 5, 5, 5],
+    expected: [5]
+  }
+];
+
+for (const { name, input, expected } of tests) {
+  const result = dedupe(input);
+  const pass = JSON.stringify(result) === JSON.stringify(expected);
+  console.log(pass ? '✓' : '✗', name, pass ? '' : `(got ${JSON.stringify(result)})`);
+}
+```
+
+Output:
+```
+✓ removes duplicates
+✓ preserves order (first seen)
+✓ handles empty array
+✓ no duplicates returns same
+✓ all same values
+```

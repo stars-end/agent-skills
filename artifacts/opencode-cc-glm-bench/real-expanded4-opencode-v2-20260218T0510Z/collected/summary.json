@@ -1,0 +1,65 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "generated_at": "2026-02-18T05:10:58Z",
+  "record_count": 12,
+  "workflow_metrics": [
+    {
+      "workflow_id": "opencode_run_headless",
+      "job_count": 4,
+      "success_count": 4,
+      "success_rate": 1.0,
+      "retry_count": 0,
+      "retry_rate": 0.0,
+      "startup_latency_ms_mean": 3.25,
+      "first_output_latency_ms_p50": 14288.0,
+      "first_output_latency_ms_p95": 19131.75,
+      "completion_latency_ms_p50": 27279.5,
+      "completion_latency_ms_p95": 32763.350000000002
+    },
+    {
+      "workflow_id": "opencode_server_attach_run",
+      "job_count": 4,
+      "success_count": 4,
+      "success_rate": 1.0,
+      "retry_count": 0,
+      "retry_rate": 0.0,
+      "startup_latency_ms_mean": 1.0,
+      "first_output_latency_ms_p50": 6686.5,
+      "first_output_latency_ms_p95": 11478.849999999999,
+      "completion_latency_ms_p50": 21472.5,
+      "completion_latency_ms_p95": 24952.9
+    },
+    {
+      "workflow_id": "opencode_server_http",
+      "job_count": 4,
+      "success_count": 4,
+      "success_rate": 1.0,
+      "retry_count": 0,
+      "retry_rate": 0.0,
+      "startup_latency_ms_mean": 0.0,
+      "first_output_latency_ms_p50": 478.0,
+      "first_output_latency_ms_p95": 941.1,
+      "completion_latency_ms_p50": 30764.0,
+      "completion_latency_ms_p95": 32116.45
+    }
+  ],
+  "system_metrics": [
+    {
+      "system": "opencode",
+      "job_count": 12,
+      "success_count": 12,
+      "success_rate": 1.0,
+      "retry_count": 0,
+      "retry_rate": 0.0,
+      "startup_latency_ms_mean": 1.4166666666666667,
+      "first_output_latency_ms_p50": 6466.5,
+      "first_output_latency_ms_p95": 18061.75,
+      "completion_latency_ms_p50": 24456.5,
+      "completion_latency_ms_p95": 32589.399999999998
+    }
+  ],
+  "failure_taxonomy": {
+    "category_counts": {},
+    "reason_counts": {}
+  }
+}

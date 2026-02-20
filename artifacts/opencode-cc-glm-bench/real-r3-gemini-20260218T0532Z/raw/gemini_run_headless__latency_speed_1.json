@@ -1,0 +1,43 @@
+{
+  "run_id": "real-r3-gemini-20260218T0532Z",
+  "workflow_id": "gemini_run_headless",
+  "system": "gemini",
+  "workflow_kind": "headless",
+  "prompt_id": "latency_speed_1",
+  "prompt_category": "latency_speed",
+  "prompt_title": "Fast constrained output",
+  "model": "gemini-2.5-pro",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 6,
+  "first_output_latency_ms": 8967,
+  "completion_latency_ms": 12941,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:31:25Z",
+  "job_completed_at": "2026-02-18T05:31:38Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 6,
+      "first_output_latency_ms": 8967,
+      "completion_latency_ms": 12941,
+      "stdout": "{\n  \"session_id\": \"c0bb812e-8919-4a1b-8317-c5c800f2286b\",\n  \"response\": \"```json\\n{\\n  \\\"status\\\": \\\"ok\\\",\\n  \\\"checksum\\\": \\\"bench-42\\\",\\n  \\\"steps\\\": [\\n    1,\\n    2,\\n    3\\n  ]\\n}\\n```\",\n  \"stats\": {\n    \"models\": {\n      \"gemini-2.5-pro\": {\n        \"api\": {\n          \"totalRequests\": 2,\n          \"totalErrors\": 1,\n          \"totalLatencyMs\": 2920\n        },\n        \"tokens\": {\n          \"input\": 21003,\n          \"prompt\": 22900,\n          \"candidates\": 47,\n          \"total\": 23006,\n          \"cached\": 1897,\n          \"thoughts\": 59,\n          \"tool\": 0\n        }\n      }\n    },\n    \"tools\": {\n      \"totalCalls\": 0,\n      \"totalSuccess\": 0,\n      \"totalFail\": 0,\n      \"totalDurationMs\": 0,\n      \"totalDecisions\": {\n        \"accept\": 0,\n        \"reject\": 0,\n        \"modify\": 0,\n        \"auto_accept\": 0\n      },\n      \"byName\": {}\n    },\n    \"files\": {\n      \"totalLinesAdded\": 0,\n      \"totalLinesRemoved\": 0\n    }\n  }\n}",
+      "stderr": "Loaded cached credentials.\nLoading extension: conductor\nSkill \"skill-creator\" from \"/Users/fengning/.agents/skills/skill-creator/SKILL.md\" is overriding the built-in skill.\nAttempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 1s.. Retrying after 1005.1160429999999ms...\n\ngemini_api_total_errors=1",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:31:25Z",
+      "attempt_completed_at": "2026-02-18T05:31:38Z"
+    }
+  ]
+}

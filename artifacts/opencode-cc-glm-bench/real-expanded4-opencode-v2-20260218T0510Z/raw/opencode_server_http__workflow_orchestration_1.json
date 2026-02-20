@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "workflow_id": "opencode_server_http",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "workflow_orchestration_1",
+  "prompt_category": "workflow_orchestration",
+  "prompt_title": "Parallel execution plan with dependencies",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 0,
+  "first_output_latency_ms": 16,
+  "completion_latency_ms": 29970,
+  "workflow_startup_latency_ms": 777,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.6666666666666666,
+  "session_id": "ses_390d8114fffetTV4hnjLOmoHWL",
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:10:13Z",
+  "job_completed_at": "2026-02-18T05:10:43Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 0,
+      "first_output_latency_ms": 16,
+      "completion_latency_ms": 29970,
+      "stdout": "Design a 4-task execution plan for parallel agents to ship a small feature. Include dependencies, owner role per task, validation gate per task, and one rollback rule. Output as a markdown table.\n| Task | Description | Dependencies | Owner Role | Validation Gate |\n|------|-------------|--------------|------------|-----------------|\n| T1 | Create implementation spec & API contract | None | Architect | Spec reviewed + approved in Beads |\n| T2 | Implement backend logic + API endpoints | T1 | Backend Agent | Unit tests pass + `make lint` clean |\n| T3 | Implement frontend components + wiring | T1 | Frontend Agent | Component renders + `npm run typecheck` |\n| T4 | Integration tests + E2E validation | T2, T3 | QA Agent | `make verify-pipeline` passes |\n\n**Rollback Rule:** If T4 validation fails after 2 fix attempts \u2192 `git revert --no-commit HEAD~N` (where N = commits from T2+T3), re-open T1 with failure analysis in Beads notes.",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.6666666666666666,
+      "session_id": "ses_390d8114fffetTV4hnjLOmoHWL",
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:10:13Z",
+      "attempt_completed_at": "2026-02-18T05:10:43Z"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "run_id": "real-p1-ccglm-longtimeout-20260218T0501Z",
+  "created_at": "2026-02-18T04:59:44Z",
+  "workflows": [
+    "cc_glm_headless"
+  ],
+  "model": "glm-5",
+  "parallel": 1,
+  "max_retries": 0,
+  "timeout_sec": 180.0,
+  "dry_run": false,
+  "cwd": "/private/tmp/agents/bd-opencode-bench/agent-skills",
+  "prompts_file": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/prompt-sets/prompt1.coding_ability_1.json"
+}

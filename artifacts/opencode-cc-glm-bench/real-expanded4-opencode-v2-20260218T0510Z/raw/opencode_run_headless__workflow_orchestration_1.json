@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "workflow_id": "opencode_run_headless",
+  "system": "opencode",
+  "workflow_kind": "headless",
+  "prompt_id": "workflow_orchestration_1",
+  "prompt_category": "workflow_orchestration",
+  "prompt_title": "Parallel execution plan with dependencies",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 4,
+  "first_output_latency_ms": 16858,
+  "completion_latency_ms": 33047,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.6666666666666666,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:10:04Z",
+  "job_completed_at": "2026-02-18T05:10:37Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 4,
+      "first_output_latency_ms": 16858,
+      "completion_latency_ms": 33047,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391421399,\"sessionID\":\"ses_390d82eabffeOYWSkDtbVwrssV\",\"part\":{\"id\":\"prt_c6f280bd6001QURXEseVG5SqG5\",\"sessionID\":\"ses_390d82eabffeOYWSkDtbVwrssV\",\"messageID\":\"msg_c6f27d18a0010hb6RM2JiOWUB5\",\"type\":\"step-start\",\"snapshot\":\"277903ebcafbf389631df1eb6699a89023cdeac2\"}}\n{\"type\":\"text\",\"timestamp\":1771391437388,\"sessionID\":\"ses_390d82eabffeOYWSkDtbVwrssV\",\"part\":{\"id\":\"prt_c6f282874001rN0RJUwYNdcXXq\",\"sessionID\":\"ses_390d82eabffeOYWSkDtbVwrssV\",\"messageID\":\"msg_c6f27d18a0010hb6RM2JiOWUB5\",\"type\":\"text\",\"text\":\"| Task | Description | Dependencies | Owner Role | Validation Gate | Rollback Rule |\\n|------|-------------|--------------|------------|-----------------|---------------|\\n| T1 | Database schema: Add `notification_preferences` table | None | Backend/DB | Migration succeeds; `make db:test` passes | Revert migration; `db:rollback` |\\n| T2 | API endpoints: CRUD for preferences | T1 | Backend | Unit tests pass; OpenAPI schema valid | Revert T2 commit; API returns 404 |\\n| T3 | Frontend: Preferences UI component | T2 | Frontend | Storybook renders; `pnpm lint` clean | Revert T3 commit; UI hidden |\\n| T4 | E2E tests: Full preference flow | T2, T3 | QA/Automation | `make e2e` passes; coverage \u226580% | Skip T4; feature ships without E2E |\\n\\n**Rollback Rule (T1 failure):** If T1 fails validation, block T2-T4; run `db:rollback` and notify orchestrator before retry.\",\"time\":{\"start\":1771391437388,\"end\":1771391437388}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391437514,\"sessionID\":\"ses_390d82eabffeOYWSkDtbVwrssV\",\"part\":{\"id\":\"prt_c6f284a4d001MfwRIbuQlZWMUG\",\"sessionID\":\"ses_390d82eabffeOYWSkDtbVwrssV\",\"messageID\":\"msg_c6f27d18a0010hb6RM2JiOWUB5\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"5c3ff92b597332cf15371b4276c18b593991ed4e\",\"cost\":0,\"tokens\":{\"total\":25223,\"input\":16289,\"output\":422,\"reasoning\":0,\"cache\":{\"read\":8512,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.6666666666666666,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:10:04Z",
+      "attempt_completed_at": "2026-02-18T05:10:37Z"
+    }
+  ]
+}

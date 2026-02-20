@@ -1,0 +1,43 @@
+{
+  "run_id": "real-r3-ccglm-20260218T0532Z",
+  "workflow_id": "cc_glm_headless",
+  "system": "cc-glm",
+  "workflow_kind": "headless",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 2,
+  "first_output_latency_ms": 34326,
+  "completion_latency_ms": 36823,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:31:25Z",
+  "job_completed_at": "2026-02-18T05:32:02Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 2,
+      "first_output_latency_ms": 34326,
+      "completion_latency_ms": 36823,
+      "stdout": "# Analysis: Request Timeout Configuration Issue\n\nBased on the partial context you've provided, let me analyze the timeout configuration problem.\n\n## 1) Contradictions Found\n\n| Source | Value | Issue |\n|--------|-------|-------|\n| Log line A | timeout at **30s** | Matches config value |\n| Log line B | timeout at **3s** | **Contradicts** config (10x faster) |\n| Config fragment | `request_timeout: 30` | **Missing units** - could be seconds or milliseconds |\n\n**Key contradiction**: Log line B shows 3s timeout while config shows 30 (with unclear units). This suggests either:\n- Config value is being interpreted as milliseconds (30ms \u2248 3s after network overhead)\n- A default fallback is being used\n- Different code paths are reading different configs\n\n## 2) Assumptions Required\n\n1. **Assume the config key is correct** - `request_timeout` is the right field name\n2. **Assume the library expects explicit units** - The 3s vs 30s gap suggests implicit defaults\n3. **Assume YAML number without units defaults to seconds** (common pattern)\n4. **Assume log line B is the symptom** - 3s is the unexpected behavior we're fixing\n\n## 3) Minimal Safe Patch\n\n```yaml\n# BEFORE (ambiguous)\nrequest_timeout: 30\n\n# AFTER (explicit units)\nrequest_timeout: 30s\n```\n\n**Rationale**: Adding the `s` suffix makes the units explicit. Most timeout libraries (hyper, reqwest, httpx) support this notation. If the library requires milliseconds:\n\n```yaml\n# Alternative if library requires ms\nrequest_timeout: 30000\n```\n\n## 4) Verification Command\n\n```bash\n# Grep for timeout-related config to confirm the fix is applied\ngrep -r \"request_timeout\" config/ && \\\n# Check runtime logs for the new timeout value\ntail -f logs/*.log | grep -i timeout\n```\n\n---\n\n**Recommendation**: First check what library/framework you're using to confirm the expected format. For example:\n- **Python httpx**: `\"30s\"` or `30.0` (seconds as float)\n- **Rust reqwest**: `Duration::from_secs(30)`\n- **Node.js**: milliseconds as integer `30000`\n\nDo you have the actual config file or library documentation I can reference to give you a precise fix?\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:31:25Z",
+      "attempt_completed_at": "2026-02-18T05:32:02Z"
+    }
+  ]
+}

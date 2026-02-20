@@ -1,0 +1,60 @@
+# JavaScript Array Deduplication Refactor
+
+## Before (O(n²))
+
+```javascript
+function dedupe(items) {
+  const out = [];
+  for (const i of items) {
+    if (out.indexOf(i) === -1) {
+      out.push(i);
+    }
+  }
+  return out;
+}
+```
+
+**Complexity**: O(n²) — `indexOf` is O(k) where k is current output length, called n times.
+
+## After (O(n))
+
+```javascript
+function dedupe(items) {
+  const seen = new Set();
+  const out = [];
+  for (const i of items) {
+    if (!seen.has(i)) {
+      seen.add(i);
+      out.push(i);
+    }
+  }
+  return out;
+}
+```
+
+**Complexity**: O(n) — Set.has() is O(1) amortized, called n times.
+
+## Test Cases
+
+```javascript
+const tests = [
+  // [name, input, expected]
+  ['removes duplicates, preserves order', [1, 2, 2, 3, 1], [1, 2, 3]],
+  ['handles empty array', [], []],
+  ['handles no duplicates', ['a', 'b', 'c'], ['a', 'b', 'c']],
+  ['handles all same values', [5, 5, 5, 5], [5]],
+  ['preserves first occurrence', [3, 1, 3, 2, 1], [3, 1, 2]],
+];
+
+for (const [name, input, expected] of tests) {
+  const result = dedupe(input);
+  const passed = JSON.stringify(result) === JSON.stringify(expected);
+  console.log(`${passed ? '✓' : '✗'} ${name}`);
+  if (!passed) {
+    console.log(`  Expected: ${JSON.stringify(expected)}`);
+    console.log(`  Got:      ${JSON.stringify(result)}`);
+  }
+}
+```
+
+**Key insight**: Using a `Set` for membership checking eliminates the linear scan per element, dropping overall complexity from quadratic to linear.

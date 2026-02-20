@@ -1,0 +1,43 @@
+{
+  "run_id": "dryrun-techlead-001",
+  "workflow_id": "cc_glm_headless",
+  "system": "cc-glm",
+  "workflow_kind": "headless",
+  "prompt_id": "workflow_orchestration_1",
+  "prompt_category": "workflow_orchestration",
+  "prompt_title": "Parallel execution plan with dependencies",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 54,
+  "first_output_latency_ms": 488,
+  "completion_latency_ms": 2234,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T04:41:37Z",
+  "job_completed_at": "2026-02-18T04:41:37Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 54,
+      "first_output_latency_ms": 488,
+      "completion_latency_ms": 2234,
+      "stdout": "dry-run output run_id=dryrun-techlead-001 workflow_id=cc_glm_headless prompt_id=workflow_orchestration_1",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T04:41:37Z",
+      "attempt_completed_at": "2026-02-18T04:41:37Z"
+    }
+  ]
+}

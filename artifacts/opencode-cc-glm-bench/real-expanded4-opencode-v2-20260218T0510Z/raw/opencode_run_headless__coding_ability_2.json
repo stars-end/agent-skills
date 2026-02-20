@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "workflow_id": "opencode_run_headless",
+  "system": "opencode",
+  "workflow_kind": "headless",
+  "prompt_id": "coding_ability_2",
+  "prompt_category": "coding_ability",
+  "prompt_title": "Fix and optimize JS transformation",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 1,
+  "first_output_latency_ms": 11718,
+  "completion_latency_ms": 23403,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:10:04Z",
+  "job_completed_at": "2026-02-18T05:10:27Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 1,
+      "first_output_latency_ms": 11718,
+      "completion_latency_ms": 23403,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391416256,\"sessionID\":\"ses_390d82f34ffe2ZFYxffVyD0wr9\",\"part\":{\"id\":\"prt_c6f27f7bc001661u9T5jaZs1QQ\",\"sessionID\":\"ses_390d82f34ffe2ZFYxffVyD0wr9\",\"messageID\":\"msg_c6f27d102001dWzcD7O4HpA3ED\",\"type\":\"step-start\",\"snapshot\":\"866df35057c6ca767fac2c263058093cc8fe1d5c\"}}\n{\"type\":\"text\",\"timestamp\":1771391427822,\"sessionID\":\"ses_390d82f34ffe2ZFYxffVyD0wr9\",\"part\":{\"id\":\"prt_c6f2809ca001m23WMXq5TlAxkD\",\"sessionID\":\"ses_390d82f34ffe2ZFYxffVyD0wr9\",\"messageID\":\"msg_c6f27d102001dWzcD7O4HpA3ED\",\"type\":\"text\",\"text\":\"**Before:** O(n\u00b2) \u2014 `indexOf` is O(n) per iteration  \\n**After:** O(n) \u2014 Set has O(1) lookups\\n\\n```javascript\\nfunction dedupe(items) {\\n  const seen = new Set();\\n  const out = [];\\n  for (const i of items) {\\n    if (!seen.has(i)) {\\n      seen.add(i);\\n      out.push(i);\\n    }\\n  }\\n  return out;\\n}\\n\\nconst tests = [\\n  { input: [1, 2, 1, 3, 2], expected: [1, 2, 3] },\\n  { input: [], expected: [] },\\n  { input: ['a', 'b', 'a', 'a'], expected: ['a', 'b'] },\\n  { input: [null, null, undefined, undefined], expected: [null, undefined] },\\n  { input: [1, 1, 1, 1], expected: [1] },\\n];\\n\\nfor (const { input, expected } of tests) {\\n  const result = dedupe(input);\\n  const pass = JSON.stringify(result) === JSON.stringify(expected);\\n  console.log(pass ? 'PASS' : 'FAIL', JSON.stringify(input), '=>', JSON.stringify(result));\\n}\\n```\",\"time\":{\"start\":1771391427822,\"end\":1771391427822}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391427867,\"sessionID\":\"ses_390d82f34ffe2ZFYxffVyD0wr9\",\"part\":{\"id\":\"prt_c6f2824ef001ZXM4jR3vch9sXk\",\"sessionID\":\"ses_390d82f34ffe2ZFYxffVyD0wr9\",\"messageID\":\"msg_c6f27d102001dWzcD7O4HpA3ED\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"40b05e41f21f4b9793d508448de2df9a784ea5d6\",\"cost\":0,\"tokens\":{\"total\":25216,\"input\":16060,\"output\":388,\"reasoning\":0,\"cache\":{\"read\":8768,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:10:04Z",
+      "attempt_completed_at": "2026-02-18T05:10:27Z"
+    }
+  ]
+}

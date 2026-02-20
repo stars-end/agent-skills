@@ -1,0 +1,9 @@
+Design a 4-task execution plan for parallel agents to ship a small feature. Include dependencies, owner role per task, validation gate per task, and one rollback rule. Output as a markdown table.
+| Task | Description | Dependencies | Owner Role | Validation Gate |
+|------|-------------|--------------|------------|-----------------|
+| T1 | Create implementation spec & API contract | None | Architect | Spec reviewed + approved in Beads |
+| T2 | Implement backend logic + API endpoints | T1 | Backend Agent | Unit tests pass + `make lint` clean |
+| T3 | Implement frontend components + wiring | T1 | Frontend Agent | Component renders + `npm run typecheck` |
+| T4 | Integration tests + E2E validation | T2, T3 | QA Agent | `make verify-pipeline` passes |
+
+**Rollback Rule:** If T4 validation fails after 2 fix attempts → `git revert --no-commit HEAD~N` (where N = commits from T2+T3), re-open T1 with failure analysis in Beads notes.

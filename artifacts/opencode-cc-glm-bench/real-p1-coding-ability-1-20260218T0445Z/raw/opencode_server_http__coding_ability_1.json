@@ -1,0 +1,43 @@
+{
+  "run_id": "real-p1-coding-ability-1-20260218T0445Z",
+  "workflow_id": "opencode_server_http",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "coding_ability_1",
+  "prompt_category": "coding_ability",
+  "prompt_title": "Implement robust semantic version comparator",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 0,
+  "first_output_latency_ms": 969,
+  "completion_latency_ms": 51128,
+  "workflow_startup_latency_ms": 774,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": "ses_390ea2f73ffeFgcV55BjKhDtbG",
+  "used_model_fallback": true,
+  "job_started_at": "2026-02-18T04:50:26Z",
+  "job_completed_at": "2026-02-18T04:51:17Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 0,
+      "first_output_latency_ms": 969,
+      "completion_latency_ms": 51128,
+      "stdout": "Write a Python function `compare_semver(a: str, b: str) -> int` that follows semantic version precedence (major.minor.patch, optional prerelease). Return -1/0/1. Include edge-case handling and 8 pytest-style tests. Output only code in one fenced block.\n```python\nimport re\nfrom typing import List, Tuple, Union\n\ndef _parse_version(v: str) -> Tuple[int, int, int, List[Union[int, str]]]:\n    \"\"\"Parse semver into (major, minor, patch, prerelease_parts).\"\"\"\n    if not v or not isinstance(v, str):\n        raise ValueError(f\"Invalid version: {v!r}\")\n    \n    v = v.strip()\n    prerelease: List[Union[int, str]] = []\n    \n    if '-' in v:\n        core, prerelease_str = v.split('-', 1)\n        if not prerelease_str:\n            raise ValueError(f\"Empty prerelease in: {v!r}\")\n        for part in prerelease_str.split('.'):\n            if not part:\n                raise ValueError(f\"Empty prerelease identifier in: {v!r}\")\n            if part.isdigit():\n                if len(part) > 1 and part[0] == '0':\n                    raise ValueError(f\"Leading zero in prerelease: {part}\")\n                prerelease.append(int(part))\n            else:\n                prerelease.append(part)\n    else:\n        core = v\n    \n    parts = core.split('.')\n    if len(parts) < 1 or len(parts) > 3:\n        raise ValueError(f\"Invalid version format: {v!r}\")\n    \n    version_parts = []\n    for i, p in enumerate(parts):\n        if not p.isdigit():\n            raise ValueError(f\"Non-numeric version part: {p!r}\")\n        if len(p) > 1 and p[0] == '0':\n            raise ValueError(f\"Leading zero in version: {p}\")\n        version_parts.append(int(p))\n    \n    while len(version_parts) < 3:\n        version_parts.append(0)\n    \n    return (version_parts[0], version_parts[1], version_parts[2], prerelease)\n\ndef _compare_prerelease(a: List[Union[int, str]], b: List[Union[int, str]]) -> int:\n    \"\"\"Compare prerelease lists. Empty list > non-empty list.\"\"\"\n    if not a and not b:\n        return 0\n    if not a:\n        return 1  # no prerelease > has prerelease\n    if not b:\n        return -1\n    \n    for pa, pb in zip(a, b):\n        type_a, type_b = type(pa), type(pb)\n        \n        if type_a == int and type_b == int:\n            if pa < pb:\n                return -1\n            if pa > pb:\n                return 1\n        elif type_a == int and type_b == str:\n            return -1  # numeric < alphanumeric\n        elif type_a == str and type_b == int:\n            return 1\n        else:  # both str\n            if pa < pb:\n                return -1\n            if pa > pb:\n                return 1\n    \n    if len(a) < len(b):\n        return -1\n    if len(a) > len(b):\n        return 1\n    return 0\n\ndef compare_semver(a: str, b: str) -> int:\n    \"\"\"\n    Compare two semantic version strings.\n    \n    Returns:\n        -1 if a < b\n         0 if a == b\n         1 if a > b\n    \n    Raises:\n        ValueError: If either version string is invalid.\n    \"\"\"\n    maj_a, min_a, patch_a, pre_a = _parse_version(a)\n    maj_b, min_b, patch_b, pre_b = _parse_version(b)\n    \n    for va, vb in [(maj_a, maj_b), (min_a, min_b), (patch_a, patch_b)]:\n        if va < vb:\n            return -1\n        if va > vb:\n            return 1\n    \n    return _compare_prerelease(pre_a, pre_b)\n\n# ==================== TESTS ====================\n\nimport pytest\n\ndef test_basic_comparison():\n    assert compare_semver(\"1.0.0\", \"2.0.0\") == -1\n    assert compare_semver(\"2.0.0\", \"1.0.0\") == 1\n    assert compare_semver(\"1.0.0\", \"1.0.0\") == 0\n\ndef test_minor_and_patch_comparison():\n    assert compare_semver(\"1.2.0\", \"1.3.0\") == -1\n    assert compare_semver(\"1.0.5\", \"1.0.10\") == -1\n    assert compare_semver(\"2.1.3\", \"2.1.3\") == 0\n\ndef test_implicit_zero_parts():\n    assert compare_semver(\"1.0\", \"1.0.0\") == 0\n    assert compare_semver(\"1\", \"1.0.0\") == 0\n    assert compare_semver(\"2\", \"1.9.9\") == 1\n\ndef test_prerelease_lower_than_release():\n    assert compare_semver(\"1.0.0-alpha\", \"1.0.0\") == -1\n    assert compare_semver(\"1.0.0\", \"1.0.0-alpha\") == 1\n    assert compare_semver(\"1.0.0-beta\", \"1.0.0-alpha\") == 1\n\ndef test_prerelease_numeric_comparison():\n    assert compare_semver(\"1.0.0-alpha.1\", \"1.0.0-alpha.2\") == -1\n    assert compare_semver(\"1.0.0-alpha.10\", \"1.0.0-alpha.2\") == 1\n    assert compare_semver(\"1.0.0-1\", \"1.0.0-2\") == -1\n\ndef test_prerelease_alphanumeric_vs_numeric():\n    assert compare_semver(\"1.0.0-alpha\", \"1.0.0-1\") == 1  # alpha > 1 (numeric)\n    assert compare_semver(\"1.0.0-1\", \"1.0.0-beta\") == -1\n\ndef test_prerelease_length_difference():\n    assert compare_semver(\"1.0.0-alpha\", \"1.0.0-alpha.1\") == -1\n    assert compare_semver(\"1.0.0-alpha.1\", \"1.0.0-alpha.1.1\") == -1\n    assert compare_semver(\"1.0.0-alpha.beta\", \"1.0.0-alpha.beta.1\") == -1\n\ndef test_invalid_versions_raise():\n    with pytest.raises(ValueError):\n        compare_semver(\"\", \"1.0.0\")\n    with pytest.raises(ValueError):\n        compare_semver(\"1.0.0-\", \"1.0.0\")\n    with pytest.raises(ValueError):\n        compare_semver(\"01.0.0\", \"1.0.0\")  # leading zero\n    with pytest.raises(ValueError):\n        compare_semver(\"1.0.0-alpha..1\", \"1.0.0\")\n    with pytest.raises(ValueError):\n        compare_semver(\"1.0.0.0\", \"1.0.0\")  # too many parts\n```",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": "ses_390ea2f73ffeFgcV55BjKhDtbG",
+      "used_model_fallback": true,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T04:50:26Z",
+      "attempt_completed_at": "2026-02-18T04:51:17Z"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+Write a Python function `compare_semver(a: str, b: str) -> int` that follows semantic version precedence (major.minor.patch, optional prerelease). Return -1/0/1. Include edge-case handling and 8 pytest-style tests. Output only code in one fenced block.

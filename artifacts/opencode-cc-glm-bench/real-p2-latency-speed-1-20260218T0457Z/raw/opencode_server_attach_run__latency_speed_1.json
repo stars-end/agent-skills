@@ -1,0 +1,43 @@
+{
+  "run_id": "real-p2-latency-speed-1-20260218T0457Z",
+  "workflow_id": "opencode_server_attach_run",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "latency_speed_1",
+  "prompt_category": "latency_speed",
+  "prompt_title": "Fast constrained output",
+  "model": "glm-5",
+  "success": false,
+  "retry_count": 0,
+  "startup_latency_ms": 2,
+  "first_output_latency_ms": null,
+  "completion_latency_ms": 1603,
+  "workflow_startup_latency_ms": 1026,
+  "failure_category": "harness",
+  "failure_reason": "empty_or_unknown",
+  "hint_match_ratio": 0.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T04:57:05Z",
+  "job_completed_at": "2026-02-18T04:57:07Z",
+  "attempts": [
+    {
+      "success": false,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 2,
+      "first_output_latency_ms": null,
+      "completion_latency_ms": 1603,
+      "stdout": "",
+      "stderr": "",
+      "failure_category": "harness",
+      "failure_reason": "empty_or_unknown",
+      "hint_match_ratio": 0.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T04:57:05Z",
+      "attempt_completed_at": "2026-02-18T04:57:07Z"
+    }
+  ]
+}

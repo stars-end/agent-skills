@@ -1,0 +1,43 @@
+{
+  "run_id": "real-r2-opencode-20260218T0516Z",
+  "workflow_id": "opencode_run_headless",
+  "system": "opencode",
+  "workflow_kind": "headless",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 7,
+  "first_output_latency_ms": 5852,
+  "completion_latency_ms": 19097,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:16:50Z",
+  "job_completed_at": "2026-02-18T05:17:09Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 7,
+      "first_output_latency_ms": 5852,
+      "completion_latency_ms": 19097,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391815885,\"sessionID\":\"ses_390d1ff31ffe1hpvY3uXudSbeb\",\"part\":{\"id\":\"prt_c6f2e10ca0011ZaBv7twmNiweM\",\"sessionID\":\"ses_390d1ff31ffe1hpvY3uXudSbeb\",\"messageID\":\"msg_c6f2e0143001VO7UGR7GwJ2pDb\",\"type\":\"step-start\",\"snapshot\":\"13b32bceb468157810bf95887e6ec6f3c998f2e3\"}}\n{\"type\":\"text\",\"timestamp\":1771391829027,\"sessionID\":\"ses_390d1ff31ffe1hpvY3uXudSbeb\",\"part\":{\"id\":\"prt_c6f2e1f23001iLAbgSF4eIkcNg\",\"sessionID\":\"ses_390d1ff31ffe1hpvY3uXudSbeb\",\"messageID\":\"msg_c6f2e0143001VO7UGR7GwJ2pDb\",\"type\":\"text\",\"text\":\"## Analysis\\n\\n### 1) Contradictions\\n- **Log A**: timeout at 30s\\n- **Log B**: timeout at 3s  \\n- **Conflict**: Two different timeout values for what appears to be the same setting, suggesting either:\\n  - Multiple timeout configs (connection vs request)\\n  - Config hot-reload failed\\n  - Different services/endpoints using different defaults\\n\\n### 2) Assumptions (must make)\\n- `request_timeout: 30` is in **seconds** (YAML bare number = seconds by convention)\\n- Log A and Log B refer to the **same timeout type** (not connection vs read timeout)\\n- The config file location is known (e.g., `config.yaml` or `values.yaml`)\\n- The service reads timeout from this exact key\\n\\n### 3) Minimal Safe Patch\\n```yaml\\nrequest_timeout: 30s\\n```\\n(Explicit `s` suffix removes ambiguity)\\n\\n### 4) Verification Command\\n```bash\\ngrep -E \\\"(timeout|Timeout)\\\" <logfile> | tail -5\\n```\",\"time\":{\"start\":1771391829026,\"end\":1771391829026}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391829067,\"sessionID\":\"ses_390d1ff31ffe1hpvY3uXudSbeb\",\"part\":{\"id\":\"prt_c6f2e4424001iMviikB1fk1iye\",\"sessionID\":\"ses_390d1ff31ffe1hpvY3uXudSbeb\",\"messageID\":\"msg_c6f2e0143001VO7UGR7GwJ2pDb\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"361e44b806c25d8dce55d28460c464cc881f9f7b\",\"cost\":0,\"tokens\":{\"total\":25138,\"input\":16063,\"output\":307,\"reasoning\":0,\"cache\":{\"read\":8768,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:16:50Z",
+      "attempt_completed_at": "2026-02-18T05:17:09Z"
+    }
+  ]
+}

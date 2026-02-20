@@ -1,0 +1,9 @@
+INFO  2026-02-18T04:41:36 +353ms service=default version=1.2.0 args=["serve","--hostname","127.0.0.1","--port","4096","--print-logs"] opencode
+Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.
+INFO  2026-02-18T04:41:36 +3ms service=config path=/Users/fengning/.config/opencode/config.json loading
+INFO  2026-02-18T04:41:36 +7ms service=config path=/Users/fengning/.config/opencode/opencode.json loading
+INFO  2026-02-18T04:41:36 +0ms service=config path=/Users/fengning/.config/opencode/opencode.jsonc loading
+opencode server listening on http://127.0.0.1:4096
+INFO  2026-02-18T04:41:37 +141ms service=server method=GET path=/global/health request
+INFO  2026-02-18T04:41:37 +0ms service=server status=started method=GET path=/global/health request
+INFO  2026-02-18T04:41:37 +1ms service=server status=completed duration=1 method=GET path=/global/health request

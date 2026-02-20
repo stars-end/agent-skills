@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-20260218T0505Z",
+  "workflow_id": "opencode_server_http",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "workflow_orchestration_1",
+  "prompt_category": "workflow_orchestration",
+  "prompt_title": "Parallel execution plan with dependencies",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 0,
+  "first_output_latency_ms": 14,
+  "completion_latency_ms": 20488,
+  "workflow_startup_latency_ms": 778,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.6666666666666666,
+  "session_id": "ses_390dbf89effem9tRf4TTuDIIst",
+  "used_model_fallback": true,
+  "job_started_at": "2026-02-18T05:05:58Z",
+  "job_completed_at": "2026-02-18T05:06:18Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 0,
+      "first_output_latency_ms": 14,
+      "completion_latency_ms": 20488,
+      "stdout": "Design a 4-task execution plan for parallel agents to ship a small feature. Include dependencies, owner role per task, validation gate per task, and one rollback rule. Output as a markdown table.\n| Task | Description | Dependencies | Owner | Validation Gate | Rollback Rule |\n|------|-------------|--------------|-------|-----------------|---------------|\n| T1 | Backend API endpoint | None | Agent A | Unit tests pass, schema validated | Revert commit, close bd-xxx.1 |\n| T2 | Frontend component | T1 | Agent B | Storybook renders, E2E smoke | Revert commit, close bd-xxx.2 |\n| T3 | Integration tests | T1, T2 | Agent A | CI green, coverage \u226580% | Revert commit, close bd-xxx.3 |\n| T4 | PR creation + merge | T3 | Orchestrator | CI green, review approved | **Rollback**: If T4 fails post-merge, revert PR, reopen bd-xxx, reset branch to T3 commit |\n\n**Execution**: T1 parallel, then T2||T3 (B runs T2, A runs T3), then T4 sequential.",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.6666666666666666,
+      "session_id": "ses_390dbf89effem9tRf4TTuDIIst",
+      "used_model_fallback": true,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:05:58Z",
+      "attempt_completed_at": "2026-02-18T05:06:18Z"
+    }
+  ]
+}

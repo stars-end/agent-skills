@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "workflow_id": "opencode_server_attach_run",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "latency_speed_1",
+  "prompt_category": "latency_speed",
+  "prompt_title": "Fast constrained output",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 1,
+  "first_output_latency_ms": 4754,
+  "completion_latency_ms": 6815,
+  "workflow_startup_latency_ms": 769,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.5,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:10:35Z",
+  "job_completed_at": "2026-02-18T05:10:42Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 1,
+      "first_output_latency_ms": 4754,
+      "completion_latency_ms": 6815,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391440452,\"sessionID\":\"ses_390d7b9e3ffeMP49S64ZlgDc2u\",\"part\":{\"id\":\"prt_c6f2856430015jBEwxz1uRtPej\",\"sessionID\":\"ses_390d7b9e3ffeMP49S64ZlgDc2u\",\"messageID\":\"msg_c6f28462f001jO9l23urzpaejc\",\"type\":\"step-start\",\"snapshot\":\"3fa9672441cf5aadeb050cfd8058e5eafa9dad12\"}}\n{\"type\":\"text\",\"timestamp\":1771391442348,\"sessionID\":\"ses_390d7b9e3ffeMP49S64ZlgDc2u\",\"part\":{\"id\":\"prt_c6f285b51001fTdwQqVBwMNbAZ\",\"sessionID\":\"ses_390d7b9e3ffeMP49S64ZlgDc2u\",\"messageID\":\"msg_c6f28462f001jO9l23urzpaejc\",\"type\":\"text\",\"text\":\"{\\\"status\\\":\\\"ok\\\",\\\"checksum\\\":\\\"bench-42\\\",\\\"steps\\\":[1,2,3]}\",\"time\":{\"start\":1771391442346,\"end\":1771391442346}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391442422,\"sessionID\":\"ses_390d7b9e3ffeMP49S64ZlgDc2u\",\"part\":{\"id\":\"prt_c6f285dac001gsWYIrqX9w5RCE\",\"sessionID\":\"ses_390d7b9e3ffeMP49S64ZlgDc2u\",\"messageID\":\"msg_c6f28462f001jO9l23urzpaejc\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"970ac72c152832cd8c94ae4f93e3874391845673\",\"cost\":0,\"tokens\":{\"total\":24859,\"input\":16101,\"output\":54,\"reasoning\":0,\"cache\":{\"read\":8704,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.5,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:10:35Z",
+      "attempt_completed_at": "2026-02-18T05:10:42Z"
+    }
+  ]
+}

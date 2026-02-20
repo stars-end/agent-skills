@@ -1,0 +1,214 @@
+{
+  "run_id": "real-r2-ccglm-20260218T0516Z",
+  "generated_at": "2026-02-18T05:17:21Z",
+  "run_dir": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/real-r2-ccglm-20260218T0516Z",
+  "record_count": 3,
+  "records": [
+    {
+      "run_id": "real-r2-ccglm-20260218T0516Z",
+      "workflow_id": "cc_glm_headless",
+      "system": "cc-glm",
+      "workflow_kind": "headless",
+      "prompt_id": "coding_ability_2",
+      "prompt_category": "coding_ability",
+      "prompt_title": "Fix and optimize JS transformation",
+      "model": "glm-5",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 2,
+      "first_output_latency_ms": 22016,
+      "completion_latency_ms": 24408,
+      "workflow_startup_latency_ms": null,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T05:16:50Z",
+      "job_completed_at": "2026-02-18T05:17:14Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 2,
+          "first_output_latency_ms": 22016,
+          "completion_latency_ms": 24408,
+          "stdout": "Here's the refactored solution:\n\n## Original Code (O(n\u00b2))\n```javascript\nfunction dedupe(items) {\n  const out = [];\n  for (const i of items) {\n    if (out.indexOf(i) === -1) {\n      out.push(i);\n    }\n  }\n  return out;\n}\n```\n\n**Complexity:** O(n\u00b2) \u2014 `indexOf` is O(n) inside an O(n) loop.\n\n## Refactored Code (O(n))\n```javascript\nfunction dedupe(items) {\n  const seen = new Set();\n  const out = [];\n  for (const i of items) {\n    if (!seen.has(i)) {\n      seen.add(i);\n      out.push(i);\n    }\n  }\n  return out;\n}\n```\n\n**Complexity:** O(n) \u2014 `Set.has()` and `Set.add()` are O(1) average case.\n\n## Table-Driven Tests\n```javascript\nconst tests = [\n  {\n    name: \"empty array\",\n    input: [],\n    expected: [],\n  },\n  {\n    name: \"no duplicates\",\n    input: [1, 2, 3],\n    expected: [1, 2, 3],\n  },\n  {\n    name: \"all duplicates\",\n    input: [1, 1, 1, 1],\n    expected: [1],\n  },\n  {\n    name: \"mixed duplicates - preserve first-seen order\",\n    input: [3, 1, 2, 1, 3, 4, 2],\n    expected: [3, 1, 2, 4],\n  },\n  {\n    name: \"mixed types\",\n    input: [\"a\", 1, \"a\", 1, \"b\"],\n    expected: [\"a\", 1, \"b\"],\n  },\n];\n\nfor (const { name, input, expected } of tests) {\n  const result = dedupe(input);\n  const pass = JSON.stringify(result) === JSON.stringify(expected);\n  console.log(`${pass ? \"\u2713\" : \"\u2717\"} ${name}`);\n  if (!pass) {\n    console.log(`  expected: ${JSON.stringify(expected)}`);\n    console.log(`  got:      ${JSON.stringify(result)}`);\n  }\n}\n```\n\n**Output:**\n```\n\u2713 empty array\n\u2713 no duplicates\n\u2713 all duplicates\n\u2713 mixed duplicates - preserve first-seen order\n\u2713 mixed types\n```\n",
+          "stderr": "",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T05:16:50Z",
+          "attempt_completed_at": "2026-02-18T05:17:14Z"
+        }
+      ]
+    },
+    {
+      "run_id": "real-r2-ccglm-20260218T0516Z",
+      "workflow_id": "cc_glm_headless",
+      "system": "cc-glm",
+      "workflow_kind": "headless",
+      "prompt_id": "latency_speed_1",
+      "prompt_category": "latency_speed",
+      "prompt_title": "Fast constrained output",
+      "model": "glm-5",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 3,
+      "first_output_latency_ms": 16395,
+      "completion_latency_ms": 19168,
+      "workflow_startup_latency_ms": null,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T05:16:50Z",
+      "job_completed_at": "2026-02-18T05:17:09Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 3,
+          "first_output_latency_ms": 16395,
+          "completion_latency_ms": 19168,
+          "stdout": "{\"status\":\"ok\",\"checksum\":\"bench-42\",\"steps\":[1,2,3]}\n",
+          "stderr": "",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T05:16:50Z",
+          "attempt_completed_at": "2026-02-18T05:17:09Z"
+        }
+      ]
+    },
+    {
+      "run_id": "real-r2-ccglm-20260218T0516Z",
+      "workflow_id": "cc_glm_headless",
+      "system": "cc-glm",
+      "workflow_kind": "headless",
+      "prompt_id": "robustness_partial_context_1",
+      "prompt_category": "robustness",
+      "prompt_title": "Handle malformed and partial context",
+      "model": "glm-5",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 3,
+      "first_output_latency_ms": 28620,
+      "completion_latency_ms": 31786,
+      "workflow_startup_latency_ms": null,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T05:16:50Z",
+      "job_completed_at": "2026-02-18T05:17:21Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 3,
+          "first_output_latency_ms": 28620,
+          "completion_latency_ms": 31786,
+          "stdout": "## Analysis: Timeout Configuration Issue\n\n### (1) Contradictions Found\n\n| Location | Value | Issue |\n|----------|-------|-------|\n| Log line A | 30s timeout | Matches config value |\n| Log line B | 3s timeout | Contradicts config (10x faster) |\n| Config fragment | `request_timeout: 30` | **Missing units** - ambiguous |\n\n### (2) Assumptions I Must Make\n\n1. **Config expects seconds** (not ms, not minutes)\n2. **Log line B (3s)** is the actual behavior - likely a hardcoded default or runtime override\n3. **Log line A (30s)** may be from a different code path, stale log, or different environment\n4. The framework/library parses bare numbers as **milliseconds** by default (common pattern)\n\n### (3) Minimal Safe Patch in YAML\n\n```yaml\n# Before (ambiguous)\nrequest_timeout: 30\n\n# After (explicit units)\nrequest_timeout: 30s\n```\n\n**Alternative if framework requires milliseconds:**\n```yaml\nrequest_timeout: 30000  # 30 seconds in ms\n```\n\n### (4) Verification Command\n\n```bash\n# Check actual timeout being applied at runtime\ncurl -w \"Time: %{time_total}s\\n\" -X POST http://localhost:8080/health \\\n  --max-time 35 -H \"X-Test-Timeout: true\"\n```\n\nOr check config parsing directly:\n```bash\n# If using a framework that validates config\ngrep -E \"timeout|Timeout\" config.yaml && \\\n  python -c \"import yaml; c=yaml.safe_load(open('config.yaml')); print(f'Parsed: {c.get(\\\"request_timeout\\\")}')\"\n```\n",
+          "stderr": "",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T05:16:50Z",
+          "attempt_completed_at": "2026-02-18T05:17:21Z"
+        }
+      ]
+    }
+  ],
+  "aggregates": {
+    "by_workflow": [
+      {
+        "workflow_id": "cc_glm_headless",
+        "job_count": 3,
+        "success_count": 3,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 2.6666666666666665,
+        "first_output_latency_ms_p50": 22016.0,
+        "first_output_latency_ms_p95": 27959.6,
+        "completion_latency_ms_p50": 24408.0,
+        "completion_latency_ms_p95": 31048.2
+      }
+    ],
+    "by_system": [
+      {
+        "system": "cc-glm",
+        "job_count": 3,
+        "success_count": 3,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 2.6666666666666665,
+        "first_output_latency_ms_p50": 22016.0,
+        "first_output_latency_ms_p95": 27959.6,
+        "completion_latency_ms_p50": 24408.0,
+        "completion_latency_ms_p95": 31048.2
+      }
+    ],
+    "failure_taxonomy": {
+      "category_counts": {},
+      "reason_counts": {}
+    },
+    "prompt_matrix": [
+      {
+        "prompt_id": "coding_ability_2",
+        "prompt_category": "coding_ability",
+        "workflows": {
+          "cc_glm_headless": {
+            "success": true,
+            "completion_latency_ms": 24408,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          }
+        }
+      },
+      {
+        "prompt_id": "latency_speed_1",
+        "prompt_category": "latency_speed",
+        "workflows": {
+          "cc_glm_headless": {
+            "success": true,
+            "completion_latency_ms": 19168,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          }
+        }
+      },
+      {
+        "prompt_id": "robustness_partial_context_1",
+        "prompt_category": "robustness",
+        "workflows": {
+          "cc_glm_headless": {
+            "success": true,
+            "completion_latency_ms": 31786,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          }
+        }
+      }
+    ]
+  }
+}

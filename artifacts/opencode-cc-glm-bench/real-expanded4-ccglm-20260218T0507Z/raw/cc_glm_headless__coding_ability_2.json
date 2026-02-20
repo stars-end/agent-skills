@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-ccglm-20260218T0507Z",
+  "workflow_id": "cc_glm_headless",
+  "system": "cc-glm",
+  "workflow_kind": "headless",
+  "prompt_id": "coding_ability_2",
+  "prompt_category": "coding_ability",
+  "prompt_title": "Fix and optimize JS transformation",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 1,
+  "first_output_latency_ms": 29813,
+  "completion_latency_ms": 32337,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:06:56Z",
+  "job_completed_at": "2026-02-18T05:07:28Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 1,
+      "first_output_latency_ms": 29813,
+      "completion_latency_ms": 32337,
+      "stdout": "# JavaScript Array Deduplication Refactor\n\n## Original Code (O(n\u00b2))\n\n```javascript\nfunction dedupe(items) {\n  const out = [];\n  for (const i of items) {\n    if (out.indexOf(i) === -1) {\n      out.push(i);\n    }\n  }\n  return out;\n}\n```\n\n## Refactored Code (O(n))\n\n```javascript\nfunction dedupe(items) {\n  const seen = new Set();\n  const out = [];\n  for (const i of items) {\n    if (!seen.has(i)) {\n      seen.add(i);\n      out.push(i);\n    }\n  }\n  return out;\n}\n```\n\n## Complexity Analysis\n\n| Metric | Original | Refactored |\n|--------|----------|------------|\n| Time | O(n\u00b2) | O(n) |\n| Space | O(n) | O(n) |\n| Lookup | O(n) per `indexOf` | O(1) per `Set.has` |\n\n**Why:** `Set` provides O(1) average lookup via hashing, while `indexOf` scans the array each time (O(n)). For n items, original does ~n\u00b2/2 comparisons.\n\n## Test Suite\n\n```javascript\nconst tests = [\n  // [name, input, expected]\n  ['empty array', [], []],\n  ['no duplicates', [1, 2, 3], [1, 2, 3]],\n  ['all duplicates', [1, 1, 1, 1], [1]],\n  ['mixed primitives', [1, 'a', 1, 'a', 2], [1, 'a', 2]],\n  ['preserves first-seen order', [3, 1, 4, 1, 5, 9, 2, 6, 5], [3, 1, 4, 5, 9, 2, 6]],\n];\n\nfor (const [name, input, expected] of tests) {\n  const result = dedupe(input);\n  const pass = JSON.stringify(result) === JSON.stringify(expected);\n  console.log(`${pass ? '\u2713' : '\u2717'} ${name}`);\n  if (!pass) {\n    console.log(`  expected: ${JSON.stringify(expected)}`);\n    console.log(`  got:      ${JSON.stringify(result)}`);\n  }\n}\n```\n\n**Output:**\n```\n\u2713 empty array\n\u2713 no duplicates\n\u2713 all duplicates\n\u2713 mixed primitives\n\u2713 preserves first-seen order\n```\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:06:56Z",
+      "attempt_completed_at": "2026-02-18T05:07:28Z"
+    }
+  ]
+}

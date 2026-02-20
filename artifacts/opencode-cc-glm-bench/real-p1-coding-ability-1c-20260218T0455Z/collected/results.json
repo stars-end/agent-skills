@@ -1,0 +1,311 @@
+{
+  "run_id": "real-p1-coding-ability-1c-20260218T0455Z",
+  "generated_at": "2026-02-18T04:56:31Z",
+  "run_dir": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/real-p1-coding-ability-1c-20260218T0455Z",
+  "record_count": 4,
+  "records": [
+    {
+      "run_id": "real-p1-coding-ability-1c-20260218T0455Z",
+      "workflow_id": "cc_glm_headless",
+      "system": "cc-glm",
+      "workflow_kind": "headless",
+      "prompt_id": "coding_ability_1",
+      "prompt_category": "coding_ability",
+      "prompt_title": "Implement robust semantic version comparator",
+      "model": "glm-5",
+      "success": false,
+      "retry_count": 0,
+      "startup_latency_ms": 2,
+      "first_output_latency_ms": null,
+      "completion_latency_ms": 90074,
+      "workflow_startup_latency_ms": null,
+      "failure_category": "model",
+      "failure_reason": "timeout",
+      "hint_match_ratio": 0.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T04:55:01Z",
+      "job_completed_at": "2026-02-18T04:56:31Z",
+      "attempts": [
+        {
+          "success": false,
+          "return_code": -9,
+          "timed_out": true,
+          "startup_latency_ms": 2,
+          "first_output_latency_ms": null,
+          "completion_latency_ms": 90074,
+          "stdout": "",
+          "stderr": "",
+          "failure_category": "model",
+          "failure_reason": "timeout",
+          "hint_match_ratio": 0.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T04:55:01Z",
+          "attempt_completed_at": "2026-02-18T04:56:31Z"
+        }
+      ]
+    },
+    {
+      "run_id": "real-p1-coding-ability-1c-20260218T0455Z",
+      "workflow_id": "opencode_run_headless",
+      "system": "opencode",
+      "workflow_kind": "headless",
+      "prompt_id": "coding_ability_1",
+      "prompt_category": "coding_ability",
+      "prompt_title": "Implement robust semantic version comparator",
+      "model": "glm-5",
+      "success": false,
+      "retry_count": 0,
+      "startup_latency_ms": 4,
+      "first_output_latency_ms": 1755,
+      "completion_latency_ms": 1770,
+      "workflow_startup_latency_ms": null,
+      "failure_category": "model",
+      "failure_reason": "model_not_supported",
+      "hint_match_ratio": 0.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T04:55:01Z",
+      "job_completed_at": "2026-02-18T04:55:03Z",
+      "attempts": [
+        {
+          "success": false,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 4,
+          "first_output_latency_ms": 1755,
+          "completion_latency_ms": 1770,
+          "stdout": "{\"type\":\"error\",\"timestamp\":1771390503363,\"sessionID\":\"ses_390e5f68cffecvdh6KDiL67A1d\",\"error\":{\"name\":\"UnknownError\",\"data\":{\"message\":\"Model not found: glm-5/.\"}}}\n",
+          "stderr": "1094 |     const provider = s.providers[providerID]\n1095 |     if (!provider) {\n1096 |       const availableProviders = Object.keys(s.providers)\n1097 |       const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })\n1098 |       const suggestions = matches.map((m) => m.target)\n1099 |       throw new ModelNotFoundError({ providerID, modelID, suggestions })\n                   ^\nProviderModelNotFoundError: ProviderModelNotFoundError\n data: {\n  providerID: \"glm-5\",\n  modelID: \"\",\n  suggestions: [],\n},\n\n      at getModel (src/provider/provider.ts:1099:13)\n\n\nModel not found: glm-5/.",
+          "failure_category": "model",
+          "failure_reason": "model_not_supported",
+          "hint_match_ratio": 0.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T04:55:01Z",
+          "attempt_completed_at": "2026-02-18T04:55:03Z"
+        }
+      ]
+    },
+    {
+      "run_id": "real-p1-coding-ability-1c-20260218T0455Z",
+      "workflow_id": "opencode_server_attach_run",
+      "system": "opencode",
+      "workflow_kind": "server",
+      "prompt_id": "coding_ability_1",
+      "prompt_category": "coding_ability",
+      "prompt_title": "Implement robust semantic version comparator",
+      "model": "glm-5",
+      "success": false,
+      "retry_count": 0,
+      "startup_latency_ms": 3,
+      "first_output_latency_ms": null,
+      "completion_latency_ms": 1515,
+      "workflow_startup_latency_ms": 1031,
+      "failure_category": "harness",
+      "failure_reason": "empty_or_unknown",
+      "hint_match_ratio": 0.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T04:55:01Z",
+      "job_completed_at": "2026-02-18T04:55:03Z",
+      "attempts": [
+        {
+          "success": false,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 3,
+          "first_output_latency_ms": null,
+          "completion_latency_ms": 1515,
+          "stdout": "",
+          "stderr": "",
+          "failure_category": "harness",
+          "failure_reason": "empty_or_unknown",
+          "hint_match_ratio": 0.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T04:55:01Z",
+          "attempt_completed_at": "2026-02-18T04:55:03Z"
+        }
+      ]
+    },
+    {
+      "run_id": "real-p1-coding-ability-1c-20260218T0455Z",
+      "workflow_id": "opencode_server_http",
+      "system": "opencode",
+      "workflow_kind": "server",
+      "prompt_id": "coding_ability_1",
+      "prompt_category": "coding_ability",
+      "prompt_title": "Implement robust semantic version comparator",
+      "model": "glm-5",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 0,
+      "first_output_latency_ms": 1252,
+      "completion_latency_ms": 88471,
+      "workflow_startup_latency_ms": 1028,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": "ses_390e5fa49ffeBmKKolonSZ4uWX",
+      "used_model_fallback": true,
+      "job_started_at": "2026-02-18T04:55:01Z",
+      "job_completed_at": "2026-02-18T04:56:30Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 0,
+          "first_output_latency_ms": 1252,
+          "completion_latency_ms": 88471,
+          "stdout": "Write a Python function `compare_semver(a: str, b: str) -> int` that follows semantic version precedence (major.minor.patch, optional prerelease). Return -1/0/1. Include edge-case handling and 8 pytest-style tests. Output only code in one fenced block.\n```python\ndef compare_semver(a: str, b: str) -> int:\n    \"\"\"Compare semantic versions. Returns -1 if a<b, 0 if a==b, 1 if a>b.\"\"\"\n    def parse(v: str):\n        parts = v.split('-', 1)\n        release = tuple(int(x) for x in parts[0].split('.'))\n        prerelease = parts[1].split('.') if len(parts) > 1 else None\n        return release, prerelease\n\n    def cmp_pre(pa, pb):\n        if pa is None and pb is None:\n            return 0\n        if pa is None:\n            return 1\n        if pb is None:\n            return -1\n        for i in range(max(len(pa), len(pb))):\n            if i >= len(pa):\n                return -1\n            if i >= len(pb):\n                return 1\n            xa, xb = pa[i], pb[i]\n            an, bn = xa.isdigit(), xb.isdigit()\n            if an and bn:\n                if (d := int(xa) - int(xb)) != 0:\n                    return 1 if d > 0 else -1\n            elif an:\n                return -1\n            elif bn:\n                return 1\n            elif xa != xb:\n                return -1 if xa < xb else 1\n        return 0\n\n    ar, ap = parse(a)\n    br, bp = parse(b)\n    if ar < br:\n        return -1\n    if ar > br:\n        return 1\n    return cmp_pre(ap, bp)\n\n\nimport pytest\n\ndef test_equal_versions():\n    assert compare_semver(\"1.0.0\", \"1.0.0\") == 0\n\ndef test_major_difference():\n    assert compare_semver(\"2.0.0\", \"1.9.9\") == 1\n    assert compare_semver(\"1.0.0\", \"2.0.0\") == -1\n\ndef test_minor_difference():\n    assert compare_semver(\"1.2.0\", \"1.1.9\") == 1\n    assert compare_semver(\"1.0.5\", \"1.1.0\") == -1\n\ndef test_patch_difference():\n    assert compare_semver(\"1.0.1\", \"1.0.0\") == 1\n    assert compare_semver(\"1.0.0\", \"1.0.1\") == -1\n\ndef test_prerelease_lower_than_release():\n    assert compare_semver(\"1.0.0-alpha\", \"1.0.0\") == -1\n    assert compare_semver(\"1.0.0\", \"1.0.0-beta\") == 1\n\ndef test_prerelease_lexicographic():\n    assert compare_semver(\"1.0.0-alpha\", \"1.0.0-beta\") == -1\n    assert compare_semver(\"1.0.0-beta\", \"1.0.0-alpha\") == 1\n    assert compare_semver(\"1.0.0-alpha.1\", \"1.0.0-alpha.2\") == -1\n\ndef test_numeric_vs_string_prerelease():\n    assert compare_semver(\"1.0.0-1\", \"1.0.0-alpha\") == -1\n    assert compare_semver(\"1.0.0-alpha.1\", \"1.0.0-alpha.beta\") == -1\n\ndef test_prerelease_field_count():\n    assert compare_semver(\"1.0.0-alpha\", \"1.0.0-alpha.1\") == -1\n    assert compare_semver(\"1.0.0-alpha.1.beta\", \"1.0.0-alpha.1\") == 1\n```",
+          "stderr": "",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": "ses_390e5fa49ffeBmKKolonSZ4uWX",
+          "used_model_fallback": true,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T04:55:01Z",
+          "attempt_completed_at": "2026-02-18T04:56:30Z"
+        }
+      ]
+    }
+  ],
+  "aggregates": {
+    "by_workflow": [
+      {
+        "workflow_id": "cc_glm_headless",
+        "job_count": 1,
+        "success_count": 0,
+        "success_rate": 0.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 2.0,
+        "first_output_latency_ms_p50": null,
+        "first_output_latency_ms_p95": null,
+        "completion_latency_ms_p50": 90074.0,
+        "completion_latency_ms_p95": 90074.0
+      },
+      {
+        "workflow_id": "opencode_run_headless",
+        "job_count": 1,
+        "success_count": 0,
+        "success_rate": 0.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 4.0,
+        "first_output_latency_ms_p50": 1755.0,
+        "first_output_latency_ms_p95": 1755.0,
+        "completion_latency_ms_p50": 1770.0,
+        "completion_latency_ms_p95": 1770.0
+      },
+      {
+        "workflow_id": "opencode_server_attach_run",
+        "job_count": 1,
+        "success_count": 0,
+        "success_rate": 0.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 3.0,
+        "first_output_latency_ms_p50": null,
+        "first_output_latency_ms_p95": null,
+        "completion_latency_ms_p50": 1515.0,
+        "completion_latency_ms_p95": 1515.0
+      },
+      {
+        "workflow_id": "opencode_server_http",
+        "job_count": 1,
+        "success_count": 1,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 0.0,
+        "first_output_latency_ms_p50": 1252.0,
+        "first_output_latency_ms_p95": 1252.0,
+        "completion_latency_ms_p50": 88471.0,
+        "completion_latency_ms_p95": 88471.0
+      }
+    ],
+    "by_system": [
+      {
+        "system": "cc-glm",
+        "job_count": 1,
+        "success_count": 0,
+        "success_rate": 0.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 2.0,
+        "first_output_latency_ms_p50": null,
+        "first_output_latency_ms_p95": null,
+        "completion_latency_ms_p50": 90074.0,
+        "completion_latency_ms_p95": 90074.0
+      },
+      {
+        "system": "opencode",
+        "job_count": 3,
+        "success_count": 1,
+        "success_rate": 0.3333333333333333,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 2.3333333333333335,
+        "first_output_latency_ms_p50": 1503.5,
+        "first_output_latency_ms_p95": 1729.8500000000001,
+        "completion_latency_ms_p50": 1770.0,
+        "completion_latency_ms_p95": 79800.9
+      }
+    ],
+    "failure_taxonomy": {
+      "category_counts": {
+        "model": 2,
+        "harness": 1
+      },
+      "reason_counts": {
+        "timeout": 1,
+        "model_not_supported": 1,
+        "empty_or_unknown": 1
+      }
+    },
+    "prompt_matrix": [
+      {
+        "prompt_id": "coding_ability_1",
+        "prompt_category": "coding_ability",
+        "workflows": {
+          "cc_glm_headless": {
+            "success": false,
+            "completion_latency_ms": 90074,
+            "retry_count": 0,
+            "failure_category": "model",
+            "failure_reason": "timeout"
+          },
+          "opencode_run_headless": {
+            "success": false,
+            "completion_latency_ms": 1770,
+            "retry_count": 0,
+            "failure_category": "model",
+            "failure_reason": "model_not_supported"
+          },
+          "opencode_server_attach_run": {
+            "success": false,
+            "completion_latency_ms": 1515,
+            "retry_count": 0,
+            "failure_category": "harness",
+            "failure_reason": "empty_or_unknown"
+          },
+          "opencode_server_http": {
+            "success": true,
+            "completion_latency_ms": 88471,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          }
+        }
+      }
+    ]
+  }
+}

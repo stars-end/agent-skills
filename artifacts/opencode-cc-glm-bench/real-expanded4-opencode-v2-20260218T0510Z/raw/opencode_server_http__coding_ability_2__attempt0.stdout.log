@@ -1,0 +1,41 @@
+Given this JavaScript snippet: `function dedupe(items){const out=[];for(const i of items){if(out.indexOf(i)===-1){out.push(i)}}return out}`. Refactor it for linear-time complexity and preserve first-seen order. Include before/after complexity and 5 table-driven tests in plain JS.
+```javascript
+// BEFORE: O(n²) - indexOf is O(n) per iteration
+function dedupe(items) {
+  const out = [];
+  for (const i of items) {
+    if (out.indexOf(i) === -1) {
+      out.push(i);
+    }
+  }
+  return out;
+}
+
+// AFTER: O(n) - Set.has is O(1)
+function dedupe(items) {
+  const seen = new Set();
+  const out = [];
+  for (const i of items) {
+    if (!seen.has(i)) {
+      seen.add(i);
+      out.push(i);
+    }
+  }
+  return out;
+}
+
+// Table-driven tests
+const tests = [
+  { input: [], expected: [] },
+  { input: [1, 2, 3], expected: [1, 2, 3] },
+  { input: [1, 1, 1], expected: [1] },
+  { input: [1, 2, 1, 3, 2], expected: [1, 2, 3] },
+  { input: ['a', 'b', 'a', 'c'], expected: ['a', 'b', 'c'] },
+];
+
+for (const { input, expected } of tests) {
+  const result = dedupe(input);
+  const pass = JSON.stringify(result) === JSON.stringify(expected);
+  console.log(`${pass ? '✓' : '✗'} input: ${JSON.stringify(input)} → ${JSON.stringify(result)}`);
+}
+```

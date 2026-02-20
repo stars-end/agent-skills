@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-20260218T0505Z",
+  "workflow_id": "opencode_server_attach_run",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "workflow_orchestration_1",
+  "prompt_category": "workflow_orchestration",
+  "prompt_title": "Parallel execution plan with dependencies",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 2,
+  "first_output_latency_ms": 3682,
+  "completion_latency_ms": 13917,
+  "workflow_startup_latency_ms": 773,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 0.6666666666666666,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:06:10Z",
+  "job_completed_at": "2026-02-18T05:06:24Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 2,
+      "first_output_latency_ms": 3682,
+      "completion_latency_ms": 13917,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391174010,\"sessionID\":\"ses_390dbc62cffe5aIGRyyJM3lEDa\",\"part\":{\"id\":\"prt_c6f244579001BddmwtEB42YTBK\",\"sessionID\":\"ses_390dbc62cffe5aIGRyyJM3lEDa\",\"messageID\":\"msg_c6f2439e4001Mat23DT3UeF3Xz\",\"type\":\"step-start\",\"snapshot\":\"33c709f7f4906b9b204a3d08fbb0835b95c2f56b\"}}\n{\"type\":\"text\",\"timestamp\":1771391184117,\"sessionID\":\"ses_390dbc62cffe5aIGRyyJM3lEDa\",\"part\":{\"id\":\"prt_c6f244ff50015BuPGQw5Yg3Z38\",\"sessionID\":\"ses_390dbc62cffe5aIGRyyJM3lEDa\",\"messageID\":\"msg_c6f2439e4001Mat23DT3UeF3Xz\",\"type\":\"text\",\"text\":\"| Task | Description | Dependencies | Owner | Validation Gate | Rollback Rule |\\n|------|-------------|--------------|-------|-----------------|---------------|\\n| T1 | Create Beads tracking issue + feature branch | None | Orchestrator | `bd show bd-xxx` returns valid issue | Delete branch, close issue |\\n| T2 | Implement core logic (backend/API) | T1 | Agent-A | `make test` + typecheck pass | `git checkout .` |\\n| T3 | Implement UI components | T1 | Agent-B | `npm run lint` + Storybook builds | `git checkout .` |\\n| T4 | Integration tests + PR creation | T2, T3 | Orchestrator | CI green, `bd close bd-xxx` succeeds | Close PR as draft, re-open issue |\\n\\n**Rollback Rule**: If T4 validation fails \u2192 revert to T1 state (delete branch, re-open issue), log failure to Beads notes, escalate to human.\",\"time\":{\"start\":1771391184115,\"end\":1771391184115}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391184179,\"sessionID\":\"ses_390dbc62cffe5aIGRyyJM3lEDa\",\"part\":{\"id\":\"prt_c6f246cf5001jsTwuCenQ4wZ43\",\"sessionID\":\"ses_390dbc62cffe5aIGRyyJM3lEDa\",\"messageID\":\"msg_c6f2439e4001Mat23DT3UeF3Xz\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"7c17d48a483343821096cf6c2b97d8b58e4fa30f\",\"cost\":0,\"tokens\":{\"total\":25088,\"input\":99,\"output\":285,\"reasoning\":0,\"cache\":{\"read\":24704,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 0.6666666666666666,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:06:10Z",
+      "attempt_completed_at": "2026-02-18T05:06:24Z"
+    }
+  ]
+}

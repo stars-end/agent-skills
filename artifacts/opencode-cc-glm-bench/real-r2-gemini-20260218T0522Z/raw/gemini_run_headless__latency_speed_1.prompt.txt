@@ -1,0 +1,1 @@
+Return exactly one JSON object with keys `status`, `checksum`, `steps`. Use values: status='ok', checksum='bench-42', steps=[1,2,3]. No markdown, no extra text.

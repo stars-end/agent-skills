@@ -1,0 +1,20 @@
+You have partial context: log line A says timeout at 30s, log line B says timeout at 3s, and config fragment is missing units: `request_timeout: 30`. Provide: (1) contradictions found, (2) assumptions you must make, (3) minimal safe patch in YAML, (4) one verification command.
+**1. Contradictions:**
+- Log A shows 30s timeout actually applied
+- Log B shows 3s timeout actually applied
+- Same `request_timeout: 30` value produces different runtime behavior
+
+**2. Assumptions:**
+- `30` without units defaults to seconds (not milliseconds)
+- Logs A and B are from different services/instances reading the same config
+- One service interprets unitless values differently (e.g., as milliseconds → 30ms ≈ 3s with rounding)
+
+**3. Minimal safe patch:**
+```yaml
+request_timeout: 30s
+```
+
+**4. Verification:**
+```bash
+grep -E "timeout.*(30|3)" /var/log/service.log | tail -5
+```

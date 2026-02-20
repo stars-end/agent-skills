@@ -1,0 +1,43 @@
+{
+  "run_id": "real-r3-ccglm-20260218T0532Z",
+  "workflow_id": "cc_glm_headless",
+  "system": "cc-glm",
+  "workflow_kind": "headless",
+  "prompt_id": "coding_ability_2",
+  "prompt_category": "coding_ability",
+  "prompt_title": "Fix and optimize JS transformation",
+  "model": "glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 2,
+  "first_output_latency_ms": 27195,
+  "completion_latency_ms": 29613,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:31:25Z",
+  "job_completed_at": "2026-02-18T05:31:55Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 2,
+      "first_output_latency_ms": 27195,
+      "completion_latency_ms": 29613,
+      "stdout": "# Dedupe Function Refactor\n\n## Before & After\n\n```javascript\n// BEFORE: O(n\u00b2) - indexOf is O(n) inside O(n) loop\nfunction dedupe(items) {\n  const out = [];\n  for (const i of items) {\n    if (out.indexOf(i) === -1) {\n      out.push(i);\n    }\n  }\n  return out;\n}\n\n// AFTER: O(n) - Set lookup is O(1)\nfunction dedupe(items) {\n  const seen = new Set();\n  const out = [];\n  for (const i of items) {\n    if (!seen.has(i)) {\n      seen.add(i);\n      out.push(i);\n    }\n  }\n  return out;\n}\n```\n\n## Complexity Analysis\n\n| Version | Time | Space | Why |\n|---------|------|-------|-----|\n| Before | O(n\u00b2) | O(n) | `indexOf` scans `out` array (grows to n) for each of n items |\n| After | O(n) | O(n) | `Set.has()` is O(1), single pass through items |\n\n## Table-Driven Tests\n\n```javascript\nconst tests = [\n  {\n    name: 'removes duplicates',\n    input: [1, 2, 2, 3, 1],\n    expected: [1, 2, 3]\n  },\n  {\n    name: 'preserves order (first seen)',\n    input: ['b', 'a', 'b', 'c', 'a'],\n    expected: ['b', 'a', 'c']\n  },\n  {\n    name: 'handles empty array',\n    input: [],\n    expected: []\n  },\n  {\n    name: 'no duplicates returns same',\n    input: [1, 2, 3],\n    expected: [1, 2, 3]\n  },\n  {\n    name: 'all same values',\n    input: [5, 5, 5, 5],\n    expected: [5]\n  }\n];\n\nfor (const { name, input, expected } of tests) {\n  const result = dedupe(input);\n  const pass = JSON.stringify(result) === JSON.stringify(expected);\n  console.log(pass ? '\u2713' : '\u2717', name, pass ? '' : `(got ${JSON.stringify(result)})`);\n}\n```\n\nOutput:\n```\n\u2713 removes duplicates\n\u2713 preserves order (first seen)\n\u2713 handles empty array\n\u2713 no duplicates returns same\n\u2713 all same values\n```\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:31:25Z",
+      "attempt_completed_at": "2026-02-18T05:31:55Z"
+    }
+  ]
+}

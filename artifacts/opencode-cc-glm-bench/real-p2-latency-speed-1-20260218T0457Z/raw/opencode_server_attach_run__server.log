@@ -1,0 +1,104 @@
+INFO  2026-02-18T04:57:05 +483ms service=default version=1.2.0 args=["serve","--hostname","127.0.0.1","--port","4097","--print-logs"] opencode
+Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.
+INFO  2026-02-18T04:57:05 +0ms service=config path=/Users/fengning/.config/opencode/config.json loading
+INFO  2026-02-18T04:57:05 +4ms service=config path=/Users/fengning/.config/opencode/opencode.json loading
+INFO  2026-02-18T04:57:05 +2ms service=config path=/Users/fengning/.config/opencode/opencode.jsonc loading
+opencode server listening on http://127.0.0.1:4097
+INFO  2026-02-18T04:57:05 +227ms service=server method=GET path=/global/health request
+INFO  2026-02-18T04:57:05 +0ms service=server status=started method=GET path=/global/health request
+INFO  2026-02-18T04:57:05 +0ms service=server status=completed duration=0 method=GET path=/global/health request
+INFO  2026-02-18T04:57:06 +955ms service=server method=POST path=/session request
+INFO  2026-02-18T04:57:06 +0ms service=server status=started method=POST path=/session request
+INFO  2026-02-18T04:57:06 +0ms service=default directory=/private/tmp/agents/bd-opencode-bench/agent-skills creating instance
+INFO  2026-02-18T04:57:06 +1ms service=project directory=/private/tmp/agents/bd-opencode-bench/agent-skills fromDirectory
+INFO  2026-02-18T04:57:06 +81ms service=db path=/Users/fengning/.local/share/opencode/opencode.db opening database
+INFO  2026-02-18T04:57:06 +2ms service=db count=3 mode=bundled applying migrations
+INFO  2026-02-18T04:57:06 +3ms service=default directory=/private/tmp/agents/bd-opencode-bench/agent-skills bootstrapping
+INFO  2026-02-18T04:57:06 +5ms service=config path=/Users/fengning/.opencode/opencode.jsonc loading
+INFO  2026-02-18T04:57:06 +0ms service=config path=/Users/fengning/.opencode/opencode.json loading
+INFO  2026-02-18T04:57:06 +4ms service=plugin name=CodexAuthPlugin loading internal plugin
+INFO  2026-02-18T04:57:06 +0ms service=plugin name=CopilotAuthPlugin loading internal plugin
+INFO  2026-02-18T04:57:06 +0ms service=plugin name=gitlabAuthPlugin loading internal plugin
+INFO  2026-02-18T04:57:06 +0ms service=plugin path=opencode-anthropic-auth@0.0.13 loading plugin
+INFO  2026-02-18T04:57:06 +11ms service=bus type=* subscribing
+INFO  2026-02-18T04:57:06 +0ms service=bus type=session.updated subscribing
+INFO  2026-02-18T04:57:06 +0ms service=bus type=message.updated subscribing
+INFO  2026-02-18T04:57:06 +0ms service=bus type=message.part.updated subscribing
+INFO  2026-02-18T04:57:06 +0ms service=bus type=session.diff subscribing
+INFO  2026-02-18T04:57:06 +0ms service=format init
+INFO  2026-02-18T04:57:06 +0ms service=bus type=file.edited subscribing
+INFO  2026-02-18T04:57:06 +0ms service=lsp serverIds=deno, typescript, vue, eslint, oxlint, biome, gopls, ruby-lsp, pyright, elixir-ls, zls, csharp, fsharp, sourcekit-lsp, rust, clangd, svelte, astro, jdtls, kotlin-ls, yaml-ls, lua-ls, php intelephense, prisma, dart, ocaml-lsp, bash, terraform, texlab, dockerfile, gleam, clojure-lsp, nixd, tinymist, haskell-language-server enabled LSP servers
+INFO  2026-02-18T04:57:06 +1ms service=file.watcher init
+INFO  2026-02-18T04:57:06 +1ms service=scheduler id=snapshot.cleanup run
+INFO  2026-02-18T04:57:06 +0ms service=scheduler id=tool.truncation.cleanup run
+INFO  2026-02-18T04:57:06 +0ms service=bus type=command.executed subscribing
+INFO  2026-02-18T04:57:06 +0ms service=file.watcher platform=darwin backend=fs-events watcher backend
+INFO  2026-02-18T04:57:07 +462ms service=session id=ses_390e411ceffexXtvLS69VUn9g9 slug=proud-pixel version=1.2.0 projectID=782c0f6ceedd93e51ce32de48aac56f1aca302c8 directory=/private/tmp/agents/bd-opencode-bench/agent-skills title=real-p2-latency-speed-1-20260218T0457Z:opencode_server_attach_run:latency_speed_1 permission=[{"permission":"question","pattern":"*","action":"deny"},{"permission":"plan_enter","pattern":"*","action":"deny"},{"permission":"plan_exit","pattern":"*","action":"deny"}] time={"created":1771390627377,"updated":1771390627377} created
+INFO  2026-02-18T04:57:07 +0ms service=bus type=session.created publishing
+INFO  2026-02-18T04:57:07 +0ms service=bus type=session.updated publishing
+INFO  2026-02-18T04:57:07 +1ms service=server status=completed duration=572 method=POST path=/session request
+INFO  2026-02-18T04:57:07 +4ms service=vcs branch=feature-bd-opencode-bench initialized
+INFO  2026-02-18T04:57:07 +0ms service=bus type=file.watcher.updated subscribing
+INFO  2026-02-18T04:57:07 +0ms service=server method=GET path=/config request
+INFO  2026-02-18T04:57:07 +0ms service=server status=started method=GET path=/config request
+INFO  2026-02-18T04:57:07 +12ms service=server status=completed duration=11 method=GET path=/config request
+INFO  2026-02-18T04:57:07 +5ms service=server method=GET path=/event request
+INFO  2026-02-18T04:57:07 +0ms service=server status=started method=GET path=/event request
+INFO  2026-02-18T04:57:07 +0ms service=server event connected
+INFO  2026-02-18T04:57:07 +1ms service=bus type=* subscribing
+INFO  2026-02-18T04:57:07 +0ms service=server status=completed duration=1 method=GET path=/event request
+INFO  2026-02-18T04:57:07 +1ms service=server method=POST path=/session/ses_390e411ceffexXtvLS69VUn9g9/message request
+INFO  2026-02-18T04:57:07 +0ms service=server status=started method=POST path=/session/ses_390e411ceffexXtvLS69VUn9g9/message request
+INFO  2026-02-18T04:57:07 +5ms service=server status=completed duration=5 method=POST path=/session/ses_390e411ceffexXtvLS69VUn9g9/message request
+WARN  2026-02-18T04:57:07 +10ms service=skill name=service existing=/Users/fengning/.claude/skills/service/SKILL.md duplicate=/Users/fengning/.agents/skills/service/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +0ms service=skill name=templates existing=/Users/fengning/.claude/skills/templates/SKILL.md duplicate=/Users/fengning/.agents/skills/templates/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +0ms service=skill name=projects existing=/Users/fengning/.claude/skills/projects/SKILL.md duplicate=/Users/fengning/.agents/skills/projects/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +1ms service=skill name=domain existing=/Users/fengning/.claude/skills/domain/SKILL.md duplicate=/Users/fengning/.agents/skills/domain/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +1ms service=skill name=database existing=/Users/fengning/.claude/skills/database/SKILL.md duplicate=/Users/fengning/.agents/skills/database/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +0ms service=skill name=metrics existing=/Users/fengning/.claude/skills/metrics/SKILL.md duplicate=/Users/fengning/.agents/skills/metrics/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +0ms service=skill name=deploy existing=/Users/fengning/.claude/skills/deploy/SKILL.md duplicate=/Users/fengning/.agents/skills/deploy/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +1ms service=skill name=find-skills existing=/Users/fengning/.claude/skills/find-skills/SKILL.md duplicate=/Users/fengning/.agents/skills/find-skills/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +0ms service=skill name=environment existing=/Users/fengning/.claude/skills/environment/SKILL.md duplicate=/Users/fengning/.agents/skills/environment/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +0ms service=skill name=deployment existing=/Users/fengning/.claude/skills/deployment/SKILL.md duplicate=/Users/fengning/.agents/skills/deployment/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +1ms service=skill name=status existing=/Users/fengning/.claude/skills/status/SKILL.md duplicate=/Users/fengning/.agents/skills/status/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +1ms service=skill name=central-station existing=/Users/fengning/.claude/skills/central-station/SKILL.md duplicate=/Users/fengning/.agents/skills/central-station/SKILL.md duplicate skill name
+WARN  2026-02-18T04:57:07 +1ms service=skill name=railway-docs existing=/Users/fengning/.claude/skills/railway-docs/SKILL.md duplicate=/Users/fengning/.agents/skills/railway-docs/SKILL.md duplicate skill name
+INFO  2026-02-18T04:57:07 +4ms service=bus type=message.updated publishing
+INFO  2026-02-18T04:57:07 +2ms service=provider status=started state
+INFO  2026-02-18T04:57:07 +0ms service=bus type=message.part.updated publishing
+INFO  2026-02-18T04:57:07 +2ms service=bus type=session.updated publishing
+INFO  2026-02-18T04:57:07 +2ms service=bus type=session.status publishing
+INFO  2026-02-18T04:57:07 +0ms service=session.prompt step=0 sessionID=ses_390e411ceffexXtvLS69VUn9g9 loop
+INFO  2026-02-18T04:57:07 +12ms service=provider init
+INFO  2026-02-18T04:57:07 +6ms service=provider providerID=zai-coding-plan found
+INFO  2026-02-18T04:57:07 +1ms service=provider providerID=nvidia found
+INFO  2026-02-18T04:57:07 +0ms service=provider providerID=openai found
+INFO  2026-02-18T04:57:07 +0ms service=provider providerID=anthropic found
+INFO  2026-02-18T04:57:07 +0ms service=provider providerID=opencode found
+INFO  2026-02-18T04:57:07 +0ms service=provider providerID=minimax found
+INFO  2026-02-18T04:57:07 +0ms service=provider status=completed duration=23 state
+INFO  2026-02-18T04:57:07 +1ms service=bus type=session.error publishing
+INFO  2026-02-18T04:57:07 +1ms service=session.prompt sessionID=ses_390e411ceffexXtvLS69VUn9g9 cancel
+INFO  2026-02-18T04:57:07 +0ms service=bus type=session.status publishing
+INFO  2026-02-18T04:57:07 +0ms service=bus type=session.idle publishing
+1094 |     const provider = s.providers[providerID]
+1095 |     if (!provider) {
+1096 |       const availableProviders = Object.keys(s.providers)
+1097 |       const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })
+1098 |       const suggestions = matches.map((m) => m.target)
+1099 |       throw new ModelNotFoundError({ providerID, modelID, suggestions })
+                   ^
+ProviderModelNotFoundError: ProviderModelNotFoundError
+ data: {
+  providerID: "glm-5",
+  modelID: "",
+  suggestions: [],
+},
+
+      at getModel (src/provider/provider.ts:1099:13)
+
+ERROR 2026-02-18T04:57:07 +0ms service=default e=ProviderModelNotFoundError rejection
+INFO  2026-02-18T04:57:07 +8ms service=bus type=* unsubscribing
+INFO  2026-02-18T04:57:07 +0ms service=server event disconnected
+INFO  2026-02-18T04:57:07 +43ms service=snapshot prune=7.days cleanup
+INFO  2026-02-18T04:57:10 +2666ms service=bus type=file.watcher.updated publishing

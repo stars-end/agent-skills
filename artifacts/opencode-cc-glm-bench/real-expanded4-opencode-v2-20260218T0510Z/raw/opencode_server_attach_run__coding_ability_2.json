@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-v2-20260218T0510Z",
+  "workflow_id": "opencode_server_attach_run",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "coding_ability_2",
+  "prompt_category": "coding_ability",
+  "prompt_title": "Fix and optimize JS transformation",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 1,
+  "first_output_latency_ms": 12190,
+  "completion_latency_ms": 25510,
+  "workflow_startup_latency_ms": 769,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:10:27Z",
+  "job_completed_at": "2026-02-18T05:10:53Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 1,
+      "first_output_latency_ms": 12190,
+      "completion_latency_ms": 25510,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391440132,\"sessionID\":\"ses_390d7d687ffeF5GXVPP1sO9nLk\",\"part\":{\"id\":\"prt_c6f285503001Rvjk6Plt1kZhaq\",\"sessionID\":\"ses_390d7d687ffeF5GXVPP1sO9nLk\",\"messageID\":\"msg_c6f2829b2001GwlWc3WDfDAcYc\",\"type\":\"step-start\",\"snapshot\":\"3e3ddf2342f9d0172587d2489e09c8e23e3ce2fb\"}}\n{\"type\":\"text\",\"timestamp\":1771391453300,\"sessionID\":\"ses_390d7d687ffeF5GXVPP1sO9nLk\",\"part\":{\"id\":\"prt_c6f286643001LK8BcBY4F9cmff\",\"sessionID\":\"ses_390d7d687ffeF5GXVPP1sO9nLk\",\"messageID\":\"msg_c6f2829b2001GwlWc3WDfDAcYc\",\"type\":\"text\",\"text\":\"## Before (O(n\u00b2))\\n```javascript\\nfunction dedupe(items){const out=[];for(const i of items){if(out.indexOf(i)===-1){out.push(i)}}return out}\\n```\\n- `indexOf` is O(n) per call\\n- Called n times \u2192 **O(n\u00b2)**\\n\\n## After (O(n))\\n```javascript\\nfunction dedupe(items){const seen=new Set();const out=[];for(const i of items){if(!seen.has(i)){seen.add(i);out.push(i)}}return out}\\n```\\n- `Set.has()` is O(1) average\\n- **O(n)** total, preserves first-seen order\\n\\n## Tests\\n```javascript\\nconst tests = [\\n  {input: [1,2,3,2,1], expected: [1,2,3]},\\n  {input: ['a','b','a','c'], expected: ['a','b','c']},\\n  {input: [], expected: []},\\n  {input: [1,1,1,1], expected: [1]},\\n  {input: [{x:1},{x:1}], expected: [{x:1},{x:1}]},\\n];\\n\\ntests.forEach(({input, expected}, i) => {\\n  const result = dedupe(input);\\n  const pass = JSON.stringify(result) === JSON.stringify(expected);\\n  console.log(`Test ${i+1}: ${pass ? 'PASS' : 'FAIL'}`);\\n});\\n```\\n\\n**Note:** Objects are deduped by reference, not value (test 5 shows both objects kept). Use `JSON.stringify` or a key function if you need deep equality.\",\"time\":{\"start\":1771391453298,\"end\":1771391453298}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391453379,\"sessionID\":\"ses_390d7d687ffeF5GXVPP1sO9nLk\",\"part\":{\"id\":\"prt_c6f288873001TSATSeCtuAxAcX\",\"sessionID\":\"ses_390d7d687ffeF5GXVPP1sO9nLk\",\"messageID\":\"msg_c6f2829b2001GwlWc3WDfDAcYc\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"8ced1ccd6dd92fd9f15371e6c22fe9a3298b6798\",\"cost\":0,\"tokens\":{\"total\":25286,\"input\":16124,\"output\":458,\"reasoning\":0,\"cache\":{\"read\":8704,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:10:27Z",
+      "attempt_completed_at": "2026-02-18T05:10:53Z"
+    }
+  ]
+}

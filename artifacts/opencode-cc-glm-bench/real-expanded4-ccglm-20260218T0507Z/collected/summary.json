@@ -1,0 +1,39 @@
+{
+  "run_id": "real-expanded4-ccglm-20260218T0507Z",
+  "generated_at": "2026-02-18T05:07:58Z",
+  "record_count": 4,
+  "workflow_metrics": [
+    {
+      "workflow_id": "cc_glm_headless",
+      "job_count": 4,
+      "success_count": 4,
+      "success_rate": 1.0,
+      "retry_count": 0,
+      "retry_rate": 0.0,
+      "startup_latency_ms_mean": 1.0,
+      "first_output_latency_ms_p50": 23330.0,
+      "first_output_latency_ms_p95": 29401.1,
+      "completion_latency_ms_p50": 25733.0,
+      "completion_latency_ms_p95": 31910.4
+    }
+  ],
+  "system_metrics": [
+    {
+      "system": "cc-glm",
+      "job_count": 4,
+      "success_count": 4,
+      "success_rate": 1.0,
+      "retry_count": 0,
+      "retry_rate": 0.0,
+      "startup_latency_ms_mean": 1.0,
+      "first_output_latency_ms_p50": 23330.0,
+      "first_output_latency_ms_p95": 29401.1,
+      "completion_latency_ms_p50": 25733.0,
+      "completion_latency_ms_p95": 31910.4
+    }
+  ],
+  "failure_taxonomy": {
+    "category_counts": {},
+    "reason_counts": {}
+  }
+}

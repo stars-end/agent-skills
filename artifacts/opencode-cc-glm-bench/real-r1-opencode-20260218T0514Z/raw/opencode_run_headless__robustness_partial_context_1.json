@@ -1,0 +1,43 @@
+{
+  "run_id": "real-r1-opencode-20260218T0514Z",
+  "workflow_id": "opencode_run_headless",
+  "system": "opencode",
+  "workflow_kind": "headless",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 3,
+  "first_output_latency_ms": 12495,
+  "completion_latency_ms": 20286,
+  "workflow_startup_latency_ms": null,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": null,
+  "used_model_fallback": false,
+  "job_started_at": "2026-02-18T05:15:50Z",
+  "job_completed_at": "2026-02-18T05:16:10Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 3,
+      "first_output_latency_ms": 12495,
+      "completion_latency_ms": 20286,
+      "stdout": "{\"type\":\"step_start\",\"timestamp\":1771391762768,\"sessionID\":\"ses_390d2e831ffeZiKou3DC80juS4\",\"part\":{\"id\":\"prt_c6f2d4147001vwNtPPEmUjHqT7\",\"sessionID\":\"ses_390d2e831ffeZiKou3DC80juS4\",\"messageID\":\"msg_c6f2d1854001V7fbGn3QBe2ZYy\",\"type\":\"step-start\",\"snapshot\":\"b8d75354d39b16ae9bc1a5dd47bb43de8597bcf6\"}}\n{\"type\":\"text\",\"timestamp\":1771391770454,\"sessionID\":\"ses_390d2e831ffeZiKou3DC80juS4\",\"part\":{\"id\":\"prt_c6f2d4d5f0017cpZTJiIwj6Z2K\",\"sessionID\":\"ses_390d2e831ffeZiKou3DC80juS4\",\"messageID\":\"msg_c6f2d1854001V7fbGn3QBe2ZYy\",\"type\":\"text\",\"text\":\"## 1) Contradictions Found\\n\\n- **Log A (30s) vs Log B (3s)**: Two different timeout values being enforced simultaneously\\n- **Config ambiguity**: `request_timeout: 30` without units could mean 30 seconds, 30 milliseconds, or 30 minutes depending on parser\\n\\n## 2) Assumptions\\n\\n- Config parser defaults to **seconds** when units omitted (most common convention)\\n- Log A is the **actual enforcement** (30s matches config value)\\n- Log B may be from a **different service/component** with its own timeout\\n- No explicit unit suffix (s/ms/m) in the config\\n\\n## 3) Minimal Safe Patch\\n\\n```yaml\\nrequest_timeout: 30s\\n```\\n\\n## 4) Verification Command\\n\\n```bash\\ngrep -E \\\"timeout.*(30|3)\\\" /var/log/*.log | head -20\\n```\",\"time\":{\"start\":1771391770453,\"end\":1771391770453}}}\n{\"type\":\"step_finish\",\"timestamp\":1771391770494,\"sessionID\":\"ses_390d2e831ffeZiKou3DC80juS4\",\"part\":{\"id\":\"prt_c6f2d5f57001a78f1JzpCW1GNp\",\"sessionID\":\"ses_390d2e831ffeZiKou3DC80juS4\",\"messageID\":\"msg_c6f2d1854001V7fbGn3QBe2ZYy\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"aeaa7ae16466bbad92b87136be963af15343d501\",\"cost\":0,\"tokens\":{\"total\":25147,\"input\":16194,\"output\":313,\"reasoning\":0,\"cache\":{\"read\":8640,\"write\":0}}}}\n",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:15:50Z",
+      "attempt_completed_at": "2026-02-18T05:16:10Z"
+    }
+  ]
+}

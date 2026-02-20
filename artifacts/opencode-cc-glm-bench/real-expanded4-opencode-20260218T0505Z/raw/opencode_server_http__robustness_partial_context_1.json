@@ -1,0 +1,43 @@
+{
+  "run_id": "real-expanded4-opencode-20260218T0505Z",
+  "workflow_id": "opencode_server_http",
+  "system": "opencode",
+  "workflow_kind": "server",
+  "prompt_id": "robustness_partial_context_1",
+  "prompt_category": "robustness",
+  "prompt_title": "Handle malformed and partial context",
+  "model": "zai-coding-plan/glm-5",
+  "success": true,
+  "retry_count": 0,
+  "startup_latency_ms": 0,
+  "first_output_latency_ms": 19,
+  "completion_latency_ms": 14732,
+  "workflow_startup_latency_ms": 778,
+  "failure_category": null,
+  "failure_reason": null,
+  "hint_match_ratio": 1.0,
+  "session_id": "ses_390dc0274ffeq6U7Zds370hPRr",
+  "used_model_fallback": true,
+  "job_started_at": "2026-02-18T05:05:55Z",
+  "job_completed_at": "2026-02-18T05:06:10Z",
+  "attempts": [
+    {
+      "success": true,
+      "return_code": 0,
+      "timed_out": false,
+      "startup_latency_ms": 0,
+      "first_output_latency_ms": 19,
+      "completion_latency_ms": 14732,
+      "stdout": "You have partial context: log line A says timeout at 30s, log line B says timeout at 3s, and config fragment is missing units: `request_timeout: 30`. Provide: (1) contradictions found, (2) assumptions you must make, (3) minimal safe patch in YAML, (4) one verification command.\n**1. Contradictions:**\n- Log A shows 30s timeout actually applied\n- Log B shows 3s timeout actually applied\n- Same `request_timeout: 30` value produces different runtime behavior\n\n**2. Assumptions:**\n- `30` without units defaults to seconds (not milliseconds)\n- Logs A and B are from different services/instances reading the same config\n- One service interprets unitless values differently (e.g., as milliseconds \u2192 30ms \u2248 3s with rounding)\n\n**3. Minimal safe patch:**\n```yaml\nrequest_timeout: 30s\n```\n\n**4. Verification:**\n```bash\ngrep -E \"timeout.*(30|3)\" /var/log/service.log | tail -5\n```",
+      "stderr": "",
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": "ses_390dc0274ffeq6U7Zds370hPRr",
+      "used_model_fallback": true,
+      "attempt": 0,
+      "attempt_started_at": "2026-02-18T05:05:55Z",
+      "attempt_completed_at": "2026-02-18T05:06:10Z"
+    }
+  ]
+}

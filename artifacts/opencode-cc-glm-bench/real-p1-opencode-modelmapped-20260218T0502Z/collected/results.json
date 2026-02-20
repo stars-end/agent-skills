@@ -1,0 +1,165 @@
+{
+  "run_id": "real-p1-opencode-modelmapped-20260218T0502Z",
+  "generated_at": "2026-02-18T05:02:18Z",
+  "run_dir": "/private/tmp/agents/bd-opencode-bench/agent-skills/artifacts/opencode-cc-glm-bench/real-p1-opencode-modelmapped-20260218T0502Z",
+  "record_count": 2,
+  "records": [
+    {
+      "run_id": "real-p1-opencode-modelmapped-20260218T0502Z",
+      "workflow_id": "opencode_run_headless",
+      "system": "opencode",
+      "workflow_kind": "headless",
+      "prompt_id": "coding_ability_1",
+      "prompt_category": "coding_ability",
+      "prompt_title": "Implement robust semantic version comparator",
+      "model": "zai-coding-plan/glm-5",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 3,
+      "first_output_latency_ms": 7482,
+      "completion_latency_ms": 47033,
+      "workflow_startup_latency_ms": null,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T05:01:31Z",
+      "job_completed_at": "2026-02-18T05:02:18Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 3,
+          "first_output_latency_ms": 7482,
+          "completion_latency_ms": 47033,
+          "stdout": "{\"type\":\"step_start\",\"timestamp\":1771390898659,\"sessionID\":\"ses_390e002bcffep9LnUsf7SFF6I7\",\"part\":{\"id\":\"prt_c6f2011e1001Y1BLqBN27JyKLB\",\"sessionID\":\"ses_390e002bcffep9LnUsf7SFF6I7\",\"messageID\":\"msg_c6f1ffd95001Bbjruambo4oJDN\",\"type\":\"step-start\",\"snapshot\":\"f6728a342f0f794ed17e2f07007cd8a71ed7f0fa\"}}\n{\"type\":\"text\",\"timestamp\":1771390938102,\"sessionID\":\"ses_390e002bcffep9LnUsf7SFF6I7\",\"part\":{\"id\":\"prt_c6f2018c800160xBhGi76TbH0I\",\"sessionID\":\"ses_390e002bcffep9LnUsf7SFF6I7\",\"messageID\":\"msg_c6f1ffd95001Bbjruambo4oJDN\",\"type\":\"text\",\"text\":\"```python\\nimport re\\nfrom typing import List, Tuple, Union\\n\\ndef compare_semver(a: str, b: str) -> int:\\n    \\\"\\\"\\\"\\n    Compare two semantic version strings.\\n    \\n    Returns:\\n        -1 if a < b\\n         0 if a == b\\n         1 if a > b\\n    \\\"\\\"\\\"\\n    def parse_version(v: str) -> Tuple[Tuple[int, ...], List[Union[int, str]]]:\\n        \\\"\\\"\\\"Parse semver into (release tuple, prerelease list).\\\"\\\"\\\"\\n        # Handle empty/None\\n        if not v:\\n            raise ValueError(\\\"Version string cannot be empty\\\")\\n        \\n        # Split prerelease\\n        prerelease: List[Union[int, str]] = []\\n        if '-' in v:\\n            v, pre_str = v.split('-', 1)\\n            if pre_str:\\n                for part in pre_str.split('.'):\\n                    if part.isdigit():\\n                        prerelease.append(int(part))\\n                    else:\\n                        prerelease.append(part)\\n        \\n        # Parse release\\n        parts = v.split('.')\\n        if len(parts) < 1:\\n            raise ValueError(f\\\"Invalid version format: {v}\\\")\\n        \\n        try:\\n            release = tuple(int(p) for p in parts)\\n        except ValueError as e:\\n            raise ValueError(f\\\"Invalid version format: {v}\\\") from e\\n        \\n        return release, prerelease\\n    \\n    def compare_prerelease(a_pre: List[Union[int, str]], \\n                          b_pre: List[Union[int, str]]) -> int:\\n        \\\"\\\"\\\"\\n        Compare prerelease identifiers.\\n        Empty prerelease > any prerelease (1.0.0 > 1.0.0-alpha)\\n        \\\"\\\"\\\"\\n        # No prerelease means stable, which is greater\\n        if not a_pre and not b_pre:\\n            return 0\\n        if not a_pre:\\n            return 1  # a is stable, b is prerelease\\n        if not b_pre:\\n            return -1  # a is prerelease, b is stable\\n        \\n        # Compare each identifier\\n        for a_part, b_part in zip(a_pre, b_pre):\\n            # Both integers: numeric comparison\\n            if isinstance(a_part, int) and isinstance(b_part, int):\\n                if a_part < b_part:\\n                    return -1\\n                if a_part > b_part:\\n                    return 1\\n            # Both strings: lexical comparison\\n            elif isinstance(a_part, str) and isinstance(b_part, str):\\n                if a_part < b_part:\\n                    return -1\\n                if a_part > b_part:\\n                    return 1\\n            # Mixed: integers always less than strings (per semver spec)\\n            elif isinstance(a_part, int) and isinstance(b_part, str):\\n                return -1\\n            else:  # a_part is str, b_part is int\\n                return 1\\n        \\n        # All compared parts equal, longer prerelease > shorter\\n        if len(a_pre) < len(b_pre):\\n            return -1\\n        if len(a_pre) > len(b_pre):\\n            return 1\\n        return 0\\n    \\n    a_release, a_pre = parse_version(a)\\n    b_release, b_pre = parse_version(b)\\n    \\n    # Compare release versions first\\n    if a_release < b_release:\\n        return -1\\n    if a_release > b_release:\\n        return 1\\n    \\n    # Release equal, compare prerelease\\n    return compare_prerelease(a_pre, b_pre)\\n\\n\\nimport pytest\\n\\nclass TestCompareSemver:\\n    \\n    def test_basic_comparison(self):\\n        assert compare_semver(\\\"1.0.0\\\", \\\"2.0.0\\\") == -1\\n        assert compare_semver(\\\"2.0.0\\\", \\\"1.0.0\\\") == 1\\n        assert compare_semver(\\\"1.0.0\\\", \\\"1.0.0\\\") == 0\\n    \\n    def test_minor_and_patch(self):\\n        assert compare_semver(\\\"1.2.0\\\", \\\"1.3.0\\\") == -1\\n        assert compare_semver(\\\"1.0.5\\\", \\\"1.0.10\\\") == -1\\n        assert compare_semver(\\\"2.1.9\\\", \\\"2.1.9\\\") == 0\\n    \\n    def test_prerelease_lower_than_release(self):\\n        assert compare_semver(\\\"1.0.0-alpha\\\", \\\"1.0.0\\\") == -1\\n        assert compare_semver(\\\"1.0.0\\\", \\\"1.0.0-beta\\\") == 1\\n        assert compare_semver(\\\"2.0.0-rc.1\\\", \\\"2.0.0\\\") == -1\\n    \\n    def test_prerelease_comparison(self):\\n        assert compare_semver(\\\"1.0.0-alpha\\\", \\\"1.0.0-beta\\\") == -1\\n        assert compare_semver(\\\"1.0.0-alpha.1\\\", \\\"1.0.0-alpha.2\\\") == -1\\n        assert compare_semver(\\\"1.0.0-alpha.1\\\", \\\"1.0.0-alpha.beta\\\") == -1  # int < str\\n    \\n    def test_numeric_vs_string_prerelease(self):\\n        # Numeric identifiers compared numerically\\n        assert compare_semver(\\\"1.0.0-1\\\", \\\"1.0.0-2\\\") == -1\\n        # String identifiers compared lexically\\n        assert compare_semver(\\\"1.0.0-a\\\", \\\"1.0.0-b\\\") == -1\\n        # Numeric < String (semver spec)\\n        assert compare_semver(\\\"1.0.0-1\\\", \\\"1.0.0-alpha\\\") == -1\\n    \\n    def test_prerelease_length(self):\\n        assert compare_semver(\\\"1.0.0-alpha\\\", \\\"1.0.0-alpha.1\\\") == -1\\n        assert compare_semver(\\\"1.0.0-alpha.beta\\\", \\\"1.0.0-alpha.beta.1\\\") == -1\\n    \\n    def test_missing_parts(self):\\n        # Allow missing minor/patch (default to 0)\\n        assert compare_semver(\\\"1\\\", \\\"1.0.0\\\") == 0\\n        assert compare_semver(\\\"1.0\\\", \\\"1.0.0\\\") == 0\\n        assert compare_semver(\\\"2\\\", \\\"1.9.9\\\") == 1\\n    \\n    def test_empty_prerelease(self):\\n        assert compare_semver(\\\"1.0.0-\\\", \\\"1.0.0\\\") == -1  # Empty prerelease < stable\\n        assert compare_semver(\\\"1.0.0-\\\", \\\"1.0.0-alpha\\\") == -1  # Empty < alpha\\n```\",\"time\":{\"start\":1771390938101,\"end\":1771390938101}}}\n{\"type\":\"step_finish\",\"timestamp\":1771390938159,\"sessionID\":\"ses_390e002bcffep9LnUsf7SFF6I7\",\"part\":{\"id\":\"prt_c6f20abf8001WTsan4DVVDcksA\",\"sessionID\":\"ses_390e002bcffep9LnUsf7SFF6I7\",\"messageID\":\"msg_c6f1ffd95001Bbjruambo4oJDN\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"962787e6ebd96248711c2fd0c1c2b3c31813ef26\",\"cost\":0,\"tokens\":{\"total\":26302,\"input\":15995,\"output\":1475,\"reasoning\":0,\"cache\":{\"read\":8832,\"write\":0}}}}\n",
+          "stderr": "",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T05:01:31Z",
+          "attempt_completed_at": "2026-02-18T05:02:18Z"
+        }
+      ]
+    },
+    {
+      "run_id": "real-p1-opencode-modelmapped-20260218T0502Z",
+      "workflow_id": "opencode_server_attach_run",
+      "system": "opencode",
+      "workflow_kind": "server",
+      "prompt_id": "coding_ability_1",
+      "prompt_category": "coding_ability",
+      "prompt_title": "Implement robust semantic version comparator",
+      "model": "zai-coding-plan/glm-5",
+      "success": true,
+      "retry_count": 0,
+      "startup_latency_ms": 2,
+      "first_output_latency_ms": 9253,
+      "completion_latency_ms": 34526,
+      "workflow_startup_latency_ms": 1619,
+      "failure_category": null,
+      "failure_reason": null,
+      "hint_match_ratio": 1.0,
+      "session_id": null,
+      "used_model_fallback": false,
+      "job_started_at": "2026-02-18T05:01:31Z",
+      "job_completed_at": "2026-02-18T05:02:05Z",
+      "attempts": [
+        {
+          "success": true,
+          "return_code": 0,
+          "timed_out": false,
+          "startup_latency_ms": 2,
+          "first_output_latency_ms": 9253,
+          "completion_latency_ms": 34526,
+          "stdout": "{\"type\":\"step_start\",\"timestamp\":1771390900432,\"sessionID\":\"ses_390e0047affeVx3VYKbr8LD6IR\",\"part\":{\"id\":\"prt_c6f20188d001E91zSsCPHpKY4U\",\"sessionID\":\"ses_390e0047affeVx3VYKbr8LD6IR\",\"messageID\":\"msg_c6f1ffcb200100jtCUg2ZjzGN1\",\"type\":\"step-start\",\"snapshot\":\"f6728a342f0f794ed17e2f07007cd8a71ed7f0fa\"}}\n{\"type\":\"text\",\"timestamp\":1771390925517,\"sessionID\":\"ses_390e0047affeVx3VYKbr8LD6IR\",\"part\":{\"id\":\"prt_c6f2020d5001qyRF1D5XFG6NtD\",\"sessionID\":\"ses_390e0047affeVx3VYKbr8LD6IR\",\"messageID\":\"msg_c6f1ffcb200100jtCUg2ZjzGN1\",\"type\":\"text\",\"text\":\"```python\\nimport re\\nfrom typing import List, Tuple\\n\\ndef _parse_prerelease(prerelease: str) -> Tuple[int, List[str | int]]:\\n    if not prerelease:\\n        return (1, [])\\n    parts = prerelease.split('.')\\n    parsed = []\\n    for p in parts:\\n        if p.isdigit():\\n            parsed.append(int(p))\\n        else:\\n            parsed.append(p)\\n    return (0, parsed)\\n\\ndef _compare_prerelease_parts(a: List[str | int], b: List[str | int]) -> int:\\n    for i in range(max(len(a), len(b))):\\n        if i >= len(a):\\n            return -1\\n        if i >= len(b):\\n            return 1\\n        av, bv = a[i], b[i]\\n        if type(av) is int and type(bv) is int:\\n            if av < bv:\\n                return -1\\n            if av > bv:\\n                return 1\\n        elif type(av) is int:\\n            return -1\\n        elif type(bv) is int:\\n            return 1\\n        else:\\n            if av < bv:\\n                return -1\\n            if av > bv:\\n                return 1\\n    return 0\\n\\ndef compare_semver(a: str, b: str) -> int:\\n    pattern = r'^(\\\\d+)\\\\.(\\\\d+)\\\\.(\\\\d+)(?:-([a-zA-Z0-9.-]+))?$'\\n    ma = re.match(pattern, a)\\n    mb = re.match(pattern, b)\\n    if not ma or not mb:\\n        raise ValueError(f\\\"Invalid semver: {a if not ma else b}\\\")\\n    \\n    major_a, minor_a, patch_a = int(ma.group(1)), int(ma.group(2)), int(ma.group(3))\\n    major_b, minor_b, patch_b = int(mb.group(1)), int(mb.group(2)), int(mb.group(3))\\n    \\n    if (major_a, minor_a, patch_a) < (major_b, minor_b, patch_b):\\n        return -1\\n    if (major_a, minor_a, patch_a) > (major_b, minor_b, patch_b):\\n        return 1\\n    \\n    pre_a = _parse_prerelease(ma.group(4) or '')\\n    pre_b = _parse_prerelease(mb.group(4) or '')\\n    \\n    if pre_a[0] != pre_b[0]:\\n        return -1 if pre_a[0] < pre_b[0] else 1\\n    \\n    return _compare_prerelease_parts(pre_a[1], pre_b[1])\\n\\n\\nimport pytest\\n\\ndef test_equal_versions():\\n    assert compare_semver(\\\"1.0.0\\\", \\\"1.0.0\\\") == 0\\n\\ndef test_major_difference():\\n    assert compare_semver(\\\"2.0.0\\\", \\\"1.9.9\\\") == 1\\n    assert compare_semver(\\\"1.0.0\\\", \\\"2.0.0\\\") == -1\\n\\ndef test_minor_difference():\\n    assert compare_semver(\\\"1.2.0\\\", \\\"1.1.9\\\") == 1\\n    assert compare_semver(\\\"1.1.0\\\", \\\"1.2.0\\\") == -1\\n\\ndef test_patch_difference():\\n    assert compare_semver(\\\"1.0.2\\\", \\\"1.0.1\\\") == 1\\n    assert compare_semver(\\\"1.0.1\\\", \\\"1.0.2\\\") == -1\\n\\ndef test_prerelease_lower_than_release():\\n    assert compare_semver(\\\"1.0.0-alpha\\\", \\\"1.0.0\\\") == -1\\n    assert compare_semver(\\\"1.0.0\\\", \\\"1.0.0-alpha\\\") == 1\\n\\ndef test_prerelease_lexicographic():\\n    assert compare_semver(\\\"1.0.0-alpha\\\", \\\"1.0.0-beta\\\") == -1\\n    assert compare_semver(\\\"1.0.0-beta\\\", \\\"1.0.0-alpha\\\") == 1\\n\\ndef test_prerelease_numeric_parts():\\n    assert compare_semver(\\\"1.0.0-alpha.1\\\", \\\"1.0.0-alpha.2\\\") == -1\\n    assert compare_semver(\\\"1.0.0-alpha.2\\\", \\\"1.0.0-alpha.1\\\") == 1\\n    assert compare_semver(\\\"1.0.0-alpha.1\\\", \\\"1.0.0-alpha\\\") == 1\\n\\ndef test_prerelease_numeric_vs_string():\\n    assert compare_semver(\\\"1.0.0-1\\\", \\\"1.0.0-alpha\\\") == -1\\n    assert compare_semver(\\\"1.0.0-alpha\\\", \\\"1.0.0-1\\\") == 1\\n```\",\"time\":{\"start\":1771390925514,\"end\":1771390925514}}}\n{\"type\":\"step_finish\",\"timestamp\":1771390925605,\"sessionID\":\"ses_390e0047affeVx3VYKbr8LD6IR\",\"part\":{\"id\":\"prt_c6f207acc001m266IfYj2fDruj\",\"sessionID\":\"ses_390e0047affeVx3VYKbr8LD6IR\",\"messageID\":\"msg_c6f1ffcb200100jtCUg2ZjzGN1\",\"type\":\"step-finish\",\"reason\":\"stop\",\"snapshot\":\"1e4804d6c88f0d849bf5eff79e550dee10e12add\",\"cost\":0,\"tokens\":{\"total\":25889,\"input\":16182,\"output\":1067,\"reasoning\":0,\"cache\":{\"read\":8640,\"write\":0}}}}\n",
+          "stderr": "",
+          "failure_category": null,
+          "failure_reason": null,
+          "hint_match_ratio": 1.0,
+          "session_id": null,
+          "used_model_fallback": false,
+          "attempt": 0,
+          "attempt_started_at": "2026-02-18T05:01:31Z",
+          "attempt_completed_at": "2026-02-18T05:02:05Z"
+        }
+      ]
+    }
+  ],
+  "aggregates": {
+    "by_workflow": [
+      {
+        "workflow_id": "opencode_run_headless",
+        "job_count": 1,
+        "success_count": 1,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 3.0,
+        "first_output_latency_ms_p50": 7482.0,
+        "first_output_latency_ms_p95": 7482.0,
+        "completion_latency_ms_p50": 47033.0,
+        "completion_latency_ms_p95": 47033.0
+      },
+      {
+        "workflow_id": "opencode_server_attach_run",
+        "job_count": 1,
+        "success_count": 1,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 2.0,
+        "first_output_latency_ms_p50": 9253.0,
+        "first_output_latency_ms_p95": 9253.0,
+        "completion_latency_ms_p50": 34526.0,
+        "completion_latency_ms_p95": 34526.0
+      }
+    ],
+    "by_system": [
+      {
+        "system": "opencode",
+        "job_count": 2,
+        "success_count": 2,
+        "success_rate": 1.0,
+        "retry_count": 0,
+        "retry_rate": 0.0,
+        "startup_latency_ms_mean": 2.5,
+        "first_output_latency_ms_p50": 8367.5,
+        "first_output_latency_ms_p95": 9164.45,
+        "completion_latency_ms_p50": 40779.5,
+        "completion_latency_ms_p95": 46407.65
+      }
+    ],
+    "failure_taxonomy": {
+      "category_counts": {},
+      "reason_counts": {}
+    },
+    "prompt_matrix": [
+      {
+        "prompt_id": "coding_ability_1",
+        "prompt_category": "coding_ability",
+        "workflows": {
+          "opencode_run_headless": {
+            "success": true,
+            "completion_latency_ms": 47033,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          },
+          "opencode_server_attach_run": {
+            "success": true,
+            "completion_latency_ms": 34526,
+            "retry_count": 0,
+            "failure_category": null,
+            "failure_reason": null
+          }
+        }
+      }
+    ]
+  }
+}

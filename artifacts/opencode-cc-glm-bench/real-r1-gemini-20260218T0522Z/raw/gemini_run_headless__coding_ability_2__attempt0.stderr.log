@@ -1,0 +1,32 @@
+Loaded cached credentials.
+Loading extension: conductor
+Skill "skill-creator" from "/Users/fengning/.agents/skills/skill-creator/SKILL.md" is overriding the built-in skill.
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 2s.. Retrying after 2503.542488ms...
+Attempt 2 failed: You have exhausted your capacity on this model. Your quota will reset after 2s.. Retrying after 2822.0270520000004ms...
+Attempt 3 failed: You have exhausted your capacity on this model. Your quota will reset after 2s.. Max attempts reached
+Error when talking to Gemini API Full report available at: /var/folders/nd/k_rj19k11ln7glnb6jbg4w9c0000gn/T/gemini-client-error-Turn.run-sendMessageStream-2026-02-18T05-29-36-190Z.json RetryableQuotaError: You have exhausted your capacity on this model. Your quota will reset after 2s.
+    at classifyGoogleError (file:///opt/homebrew/Cellar/gemini-cli/0.29.0/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/googleQuotaErrors.js:211:28)
+    at retryWithBackoff (file:///opt/homebrew/Cellar/gemini-cli/0.29.0/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/utils/retry.js:151:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///opt/homebrew/Cellar/gemini-cli/0.29.0/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:444:32)
+    at async GeminiChat.streamWithRetries (file:///opt/homebrew/Cellar/gemini-cli/0.29.0/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/geminiChat.js:265:40)
+    at async Turn.run (file:///opt/homebrew/Cellar/gemini-cli/0.29.0/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/turn.js:67:30)
+    at async GeminiClient.processTurn (file:///opt/homebrew/Cellar/gemini-cli/0.29.0/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:475:26)
+    at async GeminiClient.sendMessageStream (file:///opt/homebrew/Cellar/gemini-cli/0.29.0/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/core/client.js:575:20)
+    at async file:///opt/homebrew/Cellar/gemini-cli/0.29.0/libexec/lib/node_modules/@google/gemini-cli/dist/src/nonInteractiveCli.js:195:34
+    at async main (file:///opt/homebrew/Cellar/gemini-cli/0.29.0/libexec/lib/node_modules/@google/gemini-cli/dist/src/gemini.js:497:9) {
+  cause: {
+    code: 429,
+    message: 'You have exhausted your capacity on this model. Your quota will reset after 2s.',
+    details: [ [Object], [Object] ]
+  },
+  retryDelayMs: 2852.938982
+}
+{
+  "session_id": "27e234a9-3f35-4e38-a9ba-fc973eeb7f39",
+  "error": {
+    "type": "Error",
+    "message": "[object Object]",
+    "code": 1
+  }
+}
