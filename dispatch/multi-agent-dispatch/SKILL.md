@@ -1,16 +1,23 @@
 ---
 name: multi-agent-dispatch
-description: Cross-VM task dispatch with dx-runner as canonical governance runner and OpenCode as primary execution lane. Use dx-dispatch as compatibility transport/orchestration for remote fanout, Jules Cloud, and fleet workflows. EPYC6 is currently disabled - see enablement gate.
+description: |
+  Cross-VM task dispatch with dx-runner as canonical governance runner and OpenCode as primary execution lane.
+  dx-dispatch is a BREAK-GLASS compatibility shim for remote fanout when dx-runner is unavailable.
+  EPYC6 is currently disabled - see enablement gate.
+tags: [workflow, dispatch, dx-runner, governance, cross-vm]
 ---
 
 # Multi-Agent Dispatch (dx-runner Canonical)
 
-`dx-runner` is the canonical dispatch/governance surface. OpenCode (`opencode run` / `opencode serve`) remains the primary execution lane. `dx-dispatch` is a compatibility wrapper for cross-VM/cloud fanout workflows.
+`dx-runner` is the **canonical dispatch/governance surface**. OpenCode (`opencode run` / `opencode serve`) remains the primary execution lane. 
+
+`dx-dispatch` is a **BREAK-GLASS compatibility shim** for remote fanout when dx-runner direct dispatch is unavailable. Use only for legacy cross-VM orchestration.
 
 ## Dispatch Lanes
 
-- Primary throughput lane: OpenCode on `zai-coding-plan/glm-5`
-- Reliability lane: cc-glm when governance gates fail or critical-wave policy requires fallback
+- **Primary**: `dx-runner --provider opencode` (governed, canonical)
+- **Reliability backstop**: `dx-runner --provider cc-glm` when governance gates require fallback
+- **Break-glass**: `dx-dispatch` (compatibility shim, deprecated)
 
 ## When to Use
 
@@ -33,25 +40,28 @@ dx-runner check --beads bd-123 --json
 dx-runner report --beads bd-123 --format json
 ```
 
-### SSH Dispatch (dx-dispatch compatibility wrapper)
+### SSH Dispatch (BREAK-GLASS ONLY - dx-dispatch compat)
+
+> ⚠️ **DEPRECATED**: `dx-dispatch` is a compatibility shim that forwards to `dx-runner` with deprecation warnings.
+> Use `dx-runner start --provider opencode` for governed dispatch. Only use `dx-dispatch` for emergency cross-VM fanout when dx-runner direct dispatch is unavailable.
 
 ```bash
-# Dispatch to canonical VMs (use epyc12, NOT epyc6)
+# BREAK-GLASS: Dispatch to canonical VMs (use epyc12, NOT epyc6)
 dx-dispatch epyc12 "Run make test in ~/affordabot"
 dx-dispatch macmini "Build the iOS app"
 dx-dispatch homedesktop-wsl "Run integration tests"
 
-# Check VM status
+# BREAK-GLASS: Check VM status
 dx-dispatch --list
 
-# Resume existing session
+# BREAK-GLASS: Resume existing session
 dx-dispatch epyc12 "Continue" --session ses_abc123
 
-# Wait for completion
+# BREAK-GLASS: Wait for completion
 dx-dispatch epyc12 "Run tests" --wait --timeout 600
 ```
 
-### Jules Cloud Dispatch
+### Jules Cloud Dispatch (BREAK-GLASS - uses dx-dispatch shim)
 
 ```bash
 # Dispatch Beads issue to Jules Cloud
@@ -61,7 +71,7 @@ dx-dispatch --jules --issue bd-123
 dx-dispatch --jules --issue bd-123 --dry-run
 ```
 
-### Fleet Operations
+### Fleet Operations (BREAK-GLASS)
 
 ```bash
 # Finalize PR for a session
@@ -128,6 +138,7 @@ if preflight.status == PreflightStatus.OK:
 Use `--slack` to enable audit trail (default: enabled):
 
 ```bash
+# BREAK-GLASS: dx-dispath with Slack notifications
 dx-dispatch epyc12 "Run tests" --slack
 ```
 
@@ -137,6 +148,14 @@ After completing, use slack_conversations_add_message
 to post summary to channel C09MQGMFKDE.
 ```
 
-## Full Guide
+## Migration from dx-dispatch
+
+| dx-dispatch (deprecated) | dx-runner (canonical) |
+|--------------------------|----------------------|
+| `dx-dispatch epyc12 "task"` | `dx-runner start --provider opencode --beads bd-xxx --prompt-file /tmp/p.prompt` |
+| `dx-dispatch --list` | `dx-runner status` |
+| `dx-dispatch --status epyc12` | `dx-runner status --json` |
+
+**Full Guide**
 
 See [docs/MULTI_AGENT_COMMS.md](../../docs/MULTI_AGENT_COMMS.md)

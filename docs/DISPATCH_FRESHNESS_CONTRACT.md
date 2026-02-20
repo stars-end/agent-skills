@@ -1,12 +1,24 @@
 # Dispatch Freshness Contract
 
-This document defines the **freshness guarantee** for multi-VM dispatch (`dx-dispatch`) without sacrificing the primary requirement: **never lose work**.
+> **Note**: `dx-runner` is the canonical dispatch surface. This document describes freshness guarantees for the `dx-dispatch` compatibility shim (break-glass only). For canonical dispatch, use `dx-runner start --provider opencode`.
+
+This document defines the **freshness guarantee** for multi-VM dispatch via the `dx-dispatch` compatibility shim without sacrificing the primary requirement: **never lose work**.
 
 ## Goals
 
 - Never lose work when agents forget to commit.
 - Keep canonical clones in `~/<repo>` fast-forwardable (clean on trunk) for `ru sync`.
 - Make `dx-dispatch` operate on fresh code by default (best-effort, bounded time).
+
+## Canonical Dispatch
+
+**Primary path**: Use `dx-runner` for governed dispatch:
+
+```bash
+dx-runner start --provider opencode --beads bd-xxx --prompt-file /tmp/prompt.md
+```
+
+**Break-glass path**: Use `dx-dispatch` for legacy cross-VM fanout only when dx-runner direct dispatch is unavailable.
 
 ## Canonical model
 

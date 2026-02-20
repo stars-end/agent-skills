@@ -1,15 +1,18 @@
 ---
 name: coordinator-dx
-description: Coordinator playbook for multi-repo, multi-VM parallel execution with OpenCode as primary dispatch service and governed cc-glm fallback.
+description: |
+  Coordinator playbook for multi-repo, multi-VM parallel execution with dx-runner as canonical governance surface,
+  OpenCode as primary execution lane, and cc-glm as reliability backstop. dx-dispatch is break-glass only.
 ---
 
-# coordinator-dx (OpenCode-Primary)
+# coordinator-dx (dx-runner Canonical)
 
 Coordinator playbook for running multi‑repo, multi‑VM work in parallel without relying on humans copy/pasting long checklists.
 
-Lane defaults:
-- Throughput lane: OpenCode via `dx-runner --provider opencode` (direct `opencode run/serve` optional)
+**Canonical dispatch**: `dx-runner` (governed, unified governance layer)
+- Primary lane: OpenCode via `dx-runner --provider opencode` 
 - Backstop lane: cc-glm via `dx-runner --provider cc-glm` when policy/gates require fallback
+- Break-glass: `dx-dispatch` (compatibility shim, deprecated - use only for legacy cross-VM fanout)
 
 Key conventions:
 - Each VM/agent sets `AGENT_NAME=<vm>-<tool>` (e.g. `macmini-codex`, `epyc6-claude-code`, `homedesktop-wsl-gemini`)
