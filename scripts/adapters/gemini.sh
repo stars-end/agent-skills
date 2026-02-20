@@ -51,16 +51,28 @@ adapter_preflight() {
         echo "OK (env key mode)"
         auth_ok=1
     elif [[ -n "$gemini_bin" ]]; then
-        # CLI-auth probe: use a non-interactive command that requires auth
+        # CLI-auth probe: use a non-interactive command that requires auth.
         if "$gemini_bin" --list-sessions >/dev/null 2>&1; then
             echo "OK (cli-auth mode)"
             auth_ok=1
+        else
+            # OAuth cached credential probe for environments that do not export API keys.
+            local probe_model="${GEMINI_MODEL:-$GEMINI_CANONICAL_MODEL}"
+            local probe_output=""
+            probe_output="$(timeout "${GEMINI_AUTH_PROBE_TIMEOUT_SEC:-25}" "$gemini_bin" -y --model "$probe_model" -p "Return exactly READY" 2>&1)" || true
+            if echo "$probe_output" | grep -qi "READY"; then
+                echo "OK (oauth cached credentials)"
+                auth_ok=1
+            elif echo "$probe_output" | grep -qiE "loaded cached credentials|logged in with google"; then
+                echo "OK (oauth session)"
+                auth_ok=1
+            fi
         fi
     fi
 
     if [[ "$auth_ok" -eq 0 ]]; then
         echo "FAILED"
-        echo "  ERROR: GEMINI_API_KEY/GOOGLE_API_KEY not set and CLI-auth probe failed"
+        echo "  ERROR_CODE=gemini_auth_missing severity=error action=gemini_login_or_set_api_key"
         echo "  Action: Set API key or run 'gemini login'"
         errors=$((errors + 1))
     fi

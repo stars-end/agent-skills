@@ -11,7 +11,7 @@
 #   test_health_states       - Test health state classification
 #   test_json_output         - Verify JSON output is deterministic
 #   test_outcome_lifecycle   - Outcome persistence + launcher capture
-#   test_model_resolution    - Canonical strict model resolution
+#   test_model_resolution    - Canonical + allowed fallback model resolution
 #   test_probe_model_flag    - Probe command honors --model
 #   test_prune_stale_jobs    - Stale PID transitions and pruning
 
@@ -209,7 +209,7 @@ test_governance_gates() {
     
     # Test feature-key gate (no commits, should pass)
     git checkout -b test-branch --quiet
-    result="$("$DX_RUNNER" feature-key-gate --worktree "$temp_dir" --feature-key "test-key" --branch test-branch 2>&1)" || true
+    result="$("$DX_RUNNER" feature-key-gate --worktree "$temp_dir" --feature-key "bd-test.1" --branch test-branch 2>&1)" || true
     if echo "$result" | grep -q "no_commits_in_range"; then
         pass "feature-key-gate handles no-commits case"
     else
@@ -429,11 +429,11 @@ test_outcome_lifecycle() {
 }
 
 # ============================================================================
-# Test: OpenCode Model Resolution (Strict Canonical)
+# Test: OpenCode Model Resolution (Canonical + Allowed Fallback)
 # ============================================================================
 
 test_model_resolution() {
-    echo "=== Testing Model Resolution (Strict Canonical) ==="
+    echo "=== Testing Model Resolution (Canonical + Allowed Fallback) ==="
 
     local tmp_bin
     tmp_bin="$(mktemp -d)"
@@ -455,6 +455,8 @@ EOF
     local models_file
     models_file="$(mktemp)"
     PATH="$tmp_bin:$PATH"
+    export OPENCODE_MODELS_CACHE_TTL_SEC=0
+    rm -f /tmp/dx-runner/opencode/.models_cache
 
     # shellcheck disable=SC1091
     source "$ADAPTERS_DIR/opencode.sh"
@@ -474,29 +476,32 @@ zai-coding-plan/glm-5
 opencode/glm-5-free
 EOF
     local r2
+    rm -f /tmp/dx-runner/opencode/.models_cache
     r2="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12" || true)"
-    [[ "$r2" == "|unavailable|"* ]] && pass "model resolution fails when canonical model is missing" || fail "expected unavailable when canonical missing: $r2"
+    [[ "$r2" == zai-coding-plan/glm-5* ]] && pass "model resolution falls back to allowlisted zai model when canonical is missing" || fail "expected zai fallback when canonical missing: $r2"
 
     local r3
     r3="$(adapter_resolve_model "zai-coding-plan/glm-5" "epyc12" || true)"
-    [[ "$r3" == "|unavailable|"* ]] && pass "model resolution rejects non-canonical requested models" || fail "expected non-canonical rejection: $r3"
+    [[ "$r3" == zai-coding-plan/glm-5* ]] && pass "model resolution accepts allowlisted non-canonical requested models" || fail "expected allowlisted requested model acceptance: $r3"
 
-    # Start should fail with deterministic rc=25 and reason_code when canonical is unavailable
+    # Start should fail with deterministic rc=25 and reason_code when canonical-only policy cannot be satisfied
     local prompt_file log_file start_out rc
     prompt_file="$(mktemp)"
     log_file="$(mktemp)"
     echo "READY" > "$prompt_file"
     set +e
-    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "/tmp" "$log_file" 2>/dev/null)"
+    rm -f /tmp/dx-runner/opencode/.models_cache
+    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" OPENCODE_ALLOWED_MODELS="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "/tmp" "$log_file" 2>/dev/null)"
     rc=$?
     set -e
     if [[ "$rc" -eq 25 ]] && echo "$start_out" | grep -q "reason_code=opencode_model_unavailable"; then
-        pass "opencode start returns rc=25 with opencode_model_unavailable when canonical model is missing"
+        pass "opencode start returns rc=25 with opencode_model_unavailable when canonical-only policy cannot be satisfied"
     else
-        fail "expected rc=25 + reason_code for unavailable canonical model (rc=$rc, out=$start_out)"
+        fail "expected rc=25 + reason_code for unavailable canonical-only model policy (rc=$rc, out=$start_out)"
     fi
 
     rm -rf "$tmp_bin" "$models_file" "$prompt_file" "$log_file"
+    unset OPENCODE_MODELS_CACHE_TTL_SEC
 }
 
 # ============================================================================
@@ -652,6 +657,14 @@ if [[ "$1" == "--list-sessions" ]]; then
   echo "Session 1"
   exit 0
 fi
+if [[ "$1" == "-y" ]]; then
+  if [[ "${MOCK_OAUTH_FAIL:-}" == "true" ]]; then
+    echo "oauth probe failed" >&2
+    exit 1
+  fi
+  echo "READY"
+  exit 0
+fi
 exit 0
 FAKEEOF
     chmod +x "$fake_gemini"
@@ -662,10 +675,11 @@ FAKEEOF
     unset GEMINI_API_KEY
     unset GOOGLE_API_KEY
     
-    # Test 1: Fail when both key and CLI-auth fail
+    # Test 1: Fail when env key, CLI-auth, and OAuth probe all fail
     (
         export PATH="$tmp_bin:$PATH"
         export MOCK_AUTH_FAIL=true
+        export MOCK_OAUTH_FAIL=true
         source "$ADAPTERS_DIR/gemini.sh"
         set +e
         adapter_preflight > /dev/null
@@ -675,7 +689,7 @@ FAKEEOF
         else
             exit 1
         fi
-    ) && pass "preflight fails when both env key and CLI auth are missing" || fail "preflight should fail when both env key and CLI auth are missing"
+    ) && pass "preflight fails when env key, CLI auth, and OAuth probe are all unavailable" || fail "preflight should fail when env key, CLI auth, and OAuth probe are all unavailable"
 
     # Test 2: Pass via env key
     (
@@ -689,9 +703,19 @@ FAKEEOF
     (
         export PATH="$tmp_bin:$PATH"
         export MOCK_AUTH_FAIL=false
+        export MOCK_OAUTH_FAIL=true
         source "$ADAPTERS_DIR/gemini.sh"
         adapter_preflight > /dev/null
     ) && pass "preflight passes via CLI auth probe" || fail "preflight should pass via CLI auth probe"
+
+    # Test 4: Pass via OAuth probe when --list-sessions fails
+    (
+        export PATH="$tmp_bin:$PATH"
+        export MOCK_AUTH_FAIL=true
+        export MOCK_OAUTH_FAIL=false
+        source "$ADAPTERS_DIR/gemini.sh"
+        adapter_preflight > /dev/null
+    ) && pass "preflight passes via OAuth probe when CLI session listing fails" || fail "preflight should pass via OAuth probe"
 
     # Restore keys
     [[ -n "$orig_gemini_key" ]] && export GEMINI_API_KEY="$orig_gemini_key"
@@ -879,6 +903,309 @@ test_outcome_metadata() {
 }
 
 # ============================================================================
+# Test: Provider Switch Resolution
+# ============================================================================
+
+test_provider_switch_resolution() {
+    echo "=== Testing Provider Switch Resolution ==="
+
+    local beads="test-switch-$$"
+    mkdir -p /tmp/dx-runner/gemini /tmp/dx-runner/opencode
+
+    cat > "/tmp/dx-runner/gemini/${beads}.meta" <<EOF
+beads=$beads
+provider=gemini
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+host=old-host
+cwd=/tmp/old
+worktree=/tmp/old
+run_instance=old-run
+EOF
+    cat > "/tmp/dx-runner/gemini/${beads}.outcome" <<EOF
+beads=$beads
+provider=gemini
+exit_code=1
+state=failed
+reason_code=old_provider_failure
+completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+duration_sec=10
+retries=0
+selected_model=gemini-3-flash-preview
+fallback_reason=none
+run_instance=old-run
+host=old-host
+cwd=/tmp/old
+worktree=/tmp/old
+EOF
+
+    sleep 1
+    cat > "/tmp/dx-runner/opencode/${beads}.meta" <<EOF
+beads=$beads
+provider=opencode
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+host=new-host
+cwd=/tmp/new
+worktree=/tmp/new
+run_instance=new-run
+EOF
+    cat > "/tmp/dx-runner/opencode/${beads}.outcome" <<EOF
+beads=$beads
+provider=opencode
+exit_code=0
+state=success
+reason_code=process_exit_with_rc
+completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+duration_sec=5
+retries=0
+selected_model=zhipuai-coding-plan/glm-5
+fallback_reason=none
+run_instance=new-run
+host=new-host
+cwd=/tmp/new
+worktree=/tmp/new
+EOF
+
+    local report_json
+    report_json="$("$DX_RUNNER" report --beads "$beads" --format json 2>/dev/null)"
+    if echo "$report_json" | jq -e '.provider=="opencode" and .run_instance=="new-run"' >/dev/null 2>&1; then
+        pass "report resolves to latest provider instance after switch"
+    else
+        fail "report returned stale provider context after switch"
+    fi
+
+    local check_json
+    check_json="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
+    if echo "$check_json" | jq -e '.provider=="opencode"' >/dev/null 2>&1; then
+        pass "check resolves to latest provider instance after switch"
+    else
+        fail "check returned stale provider context after switch"
+    fi
+
+    rm -f /tmp/dx-runner/gemini/"${beads}".* /tmp/dx-runner/opencode/"${beads}".*
+}
+
+# ============================================================================
+# Test: Host/Context Tags
+# ============================================================================
+
+test_host_context_tags() {
+    echo "=== Testing Host/Context Tags ==="
+
+    local adapter="$ADAPTERS_DIR/mock.sh"
+    create_mock_adapter "$adapter"
+    local beads="test-host-tags-$$"
+    local prompt
+    prompt="$(mktemp)"
+    echo "READY" > "$prompt"
+    local wt
+    wt="/tmp/agents/test-host-tags-${$}"
+    mkdir -p "$wt"
+
+    if "$DX_RUNNER" start --beads "$beads" --provider mock --worktree "$wt" --prompt-file "$prompt" >/dev/null 2>&1; then
+        for _ in {1..20}; do
+            [[ -f "/tmp/dx-runner/mock/${beads}.outcome" ]] && break
+            sleep 1
+        done
+        local outcome="/tmp/dx-runner/mock/${beads}.outcome"
+        if grep -q '^host=' "$outcome" && grep -q '^cwd=' "$outcome" && grep -q '^worktree=' "$outcome" && grep -q '^run_instance=' "$outcome"; then
+            pass "outcome includes host/cwd/worktree/run_instance tags"
+        else
+            fail "outcome missing host/cwd/worktree/run_instance tags"
+        fi
+
+        local status_json check_json report_json
+        status_json="$("$DX_RUNNER" status --beads "$beads" --json 2>/dev/null)"
+        check_json="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
+        report_json="$("$DX_RUNNER" report --beads "$beads" --format json 2>/dev/null)"
+        if echo "$status_json" | jq -e '.jobs[0].host and .jobs[0].cwd and .jobs[0].worktree and .jobs[0].run_instance' >/dev/null 2>&1; then
+            pass "status json includes host/cwd/worktree/run_instance"
+        else
+            fail "status json missing host/cwd/worktree/run_instance"
+        fi
+        if echo "$check_json" | jq -e '.host and .cwd and .worktree and .run_instance' >/dev/null 2>&1; then
+            pass "check json includes host/cwd/worktree/run_instance"
+        else
+            fail "check json missing host/cwd/worktree/run_instance"
+        fi
+        if echo "$report_json" | jq -e '.host and .cwd and .worktree and .run_instance' >/dev/null 2>&1; then
+            pass "report json includes host/cwd/worktree/run_instance"
+        else
+            fail "report json missing host/cwd/worktree/run_instance"
+        fi
+    else
+        fail "failed to start mock job for host/context tags"
+    fi
+
+    rm -f "$prompt" "$adapter"
+    rm -rf "$wt"
+    rm -f /tmp/dx-runner/mock/"${beads}".*
+}
+
+# ============================================================================
+# Test: Mutation/Log Accounting
+# ============================================================================
+
+test_mutation_log_accounting() {
+    echo "=== Testing Mutation/Log Accounting ==="
+
+    local beads="test-metrics-$$"
+    local provider="cc-glm"
+    local dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+
+    local wt
+    wt="$(mktemp -d)"
+    (
+        cd "$wt"
+        git init --quiet
+        echo "a" > f.txt
+        git add f.txt
+        git commit -m "init" --quiet
+        echo "b" >> f.txt
+    )
+    sleep 60 &
+    local pid="$!"
+    echo "$pid" > "$dir/${beads}.pid"
+    echo "log-line" > "$dir/${beads}.log"
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+worktree=$wt
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+EOF
+
+    local report_json
+    report_json="$("$DX_RUNNER" report --beads "$beads" --format json 2>/dev/null)"
+    if echo "$report_json" | jq -e '.mutations > 0 and .log_bytes > 0' >/dev/null 2>&1; then
+        pass "report shows non-zero mutation_count and log_size for active mutating run"
+    else
+        fail "report failed to show mutation/log growth for active run"
+    fi
+
+    kill "$pid" 2>/dev/null || true
+    rm -rf "$wt"
+    rm -f "$dir/${beads}".*
+}
+
+# ============================================================================
+# Test: Capacity Classification
+# ============================================================================
+
+test_capacity_classification() {
+    echo "=== Testing Capacity Classification ==="
+
+    local beads="test-capacity-$$"
+    local provider="gemini"
+    local dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+    echo "99999999" > "$dir/${beads}.pid"
+    echo "1" > "$dir/${beads}.rc"
+    cat > "$dir/${beads}.log" <<EOF
+ERROR: MODEL_CAPACITY_EXHAUSTED
+HTTP 429 RESOURCE_EXHAUSTED
+EOF
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+EOF
+
+    "$DX_RUNNER" check --beads "$beads" --json >/dev/null 2>&1 || true
+    local report_json
+    report_json="$("$DX_RUNNER" report --beads "$beads" --format json 2>/dev/null)"
+    if echo "$report_json" | jq -e '.outcome_reason_code=="gemini_capacity_exhausted" and .next_action=="retry_backoff_or_switch_to_opencode_or_cc_glm"' >/dev/null 2>&1; then
+        pass "capacity exhaustion is classified with deterministic reason + next action"
+    else
+        fail "capacity exhaustion classification missing or incorrect"
+    fi
+
+    rm -f "$dir/${beads}".*
+}
+
+# ============================================================================
+# Test: Feature-Key Validation
+# ============================================================================
+
+test_feature_key_validation() {
+    echo "=== Testing Feature-Key Validation ==="
+
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    cd "$temp_dir"
+    git init --quiet
+    echo "x" > a.txt
+    git add a.txt
+    git commit -m "init" --quiet
+
+    local out_valid out_invalid
+    out_valid="$("$DX_RUNNER" feature-key-gate --worktree "$temp_dir" --feature-key "bd-xga8.6.2" --json 2>/dev/null || true)"
+    if echo "$out_valid" | jq -e '.reason_code != "feature_key_invalid_format"' >/dev/null 2>&1; then
+        pass "valid dotted Feature-Key format is accepted"
+    else
+        fail "valid dotted Feature-Key format incorrectly rejected"
+    fi
+
+    out_invalid="$("$DX_RUNNER" feature-key-gate --worktree "$temp_dir" --feature-key "xga8.6.2" --json 2>/dev/null || true)"
+    if echo "$out_invalid" | jq -e '.reason_code == "feature_key_invalid_format"' >/dev/null 2>&1; then
+        pass "invalid Feature-Key format is rejected deterministically"
+    else
+        fail "invalid Feature-Key format was not rejected"
+    fi
+
+    cd /
+    rm -rf "$temp_dir"
+}
+
+# ============================================================================
+# Test: Pre-commit Flush Semantics
+# ============================================================================
+
+test_precommit_flush_semantics() {
+    echo "=== Testing Pre-commit Flush Semantics ==="
+
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    (
+        cd "$temp_dir"
+        git init --quiet
+        mkdir -p .beads bin
+        cat > bin/bd <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "sync" && "$2" == "--flush-only" ]]; then
+  exit 1
+fi
+exit 0
+EOF
+        chmod +x bin/bd
+
+        local out_warn out_strict rc_warn rc_strict
+        set +e
+        PATH="$temp_dir/bin:$PATH" "$ROOT_DIR/hooks/pre-commit" > /tmp/precommit-warn.out 2>&1
+        rc_warn=$?
+        PATH="$temp_dir/bin:$PATH" BEADS_FLUSH_STRICT=1 "$ROOT_DIR/hooks/pre-commit" > /tmp/precommit-strict.out 2>&1
+        rc_strict=$?
+        set -e
+
+        out_warn="$(cat /tmp/precommit-warn.out 2>/dev/null || true)"
+        out_strict="$(cat /tmp/precommit-strict.out 2>/dev/null || true)"
+
+        if [[ "$rc_warn" -eq 0 && "$out_warn" == *"Warning: Failed to flush bd changes to JSONL"* ]]; then
+            pass "pre-commit flush failure is warn-only by default"
+        else
+            fail "pre-commit warn-only semantics failed (rc=$rc_warn)"
+        fi
+        if [[ "$rc_strict" -ne 0 && "$out_strict" == *"strict mode"* ]]; then
+            pass "pre-commit flush failure is blocking in strict mode"
+        else
+            fail "pre-commit strict-mode blocking semantics failed (rc=$rc_strict)"
+        fi
+    )
+    rm -rf "$temp_dir" /tmp/precommit-warn.out /tmp/precommit-strict.out
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 
@@ -990,6 +1317,12 @@ run_all_tests() {
     test_json_output
     test_outcome_lifecycle
     test_outcome_metadata
+    test_provider_switch_resolution
+    test_host_context_tags
+    test_mutation_log_accounting
+    test_capacity_classification
+    test_feature_key_validation
+    test_precommit_flush_semantics
     test_restart_lifecycle
     test_model_resolution
     test_probe_model_flag
