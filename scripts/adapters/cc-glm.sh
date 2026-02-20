@@ -10,9 +10,44 @@
 #   adapter_preflight    - Provider-specific preflight
 #   adapter_probe_model  - Test model availability
 #   adapter_list_models  - List available models
+#   adapter_resolve_model - Resolve model with fallback (parity)
+#   adapter_find_cc_glm  - Find Claude binary (parity)
+#
+# Exit codes (parity with opencode):
+#   25 - Model unavailable
 
+CC_GLM_CANONICAL_MODEL="glm-5"
 ADAPTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CC_GLM_SCRIPTS="${ADAPTER_DIR}/../../extended/cc-glm/scripts"
+
+adapter_find_cc_glm() {
+    for candidate in "claude" "/home/linuxbrew/.linuxbrew/bin/claude" "/opt/homebrew/bin/claude" "$HOME/.local/bin/claude"; do
+        if command -v "$candidate" >/dev/null 2>&1 || [[ -x "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+adapter_resolve_model() {
+    local preferred="$1"
+    local available_models
+    available_models=("glm-4" "glm-5" "claude-3-5-sonnet-20241022")
+    
+    local required="${preferred:-$CC_GLM_CANONICAL_MODEL}"
+    
+    for m in "${available_models[@]}"; do
+        if [[ "$m" == "$required" ]]; then
+            echo "$required|available|"
+            return 0
+        fi
+    done
+    
+    local fallback="$CC_GLM_CANONICAL_MODEL"
+    echo "$fallback|fallback|preferred model '$required' not available, using canonical"
+    return 0
+}
 
 adapter_preflight() {
     local errors=0
@@ -160,6 +195,7 @@ EOF
     printf 'selected_model=%s\n' "$model"
     printf 'fallback_reason=%s\n' "none"
     printf 'launch_mode=%s\n' "$launch_mode"
+    printf 'execution_mode=%s\n' "$launch_mode"
     printf 'rc_file=%s\n' "$rc_file"
 }
 
@@ -203,5 +239,9 @@ adapter_stop() {
     local pid="$1"
     if [[ -n "$pid" ]] && ps -p "$pid" >/dev/null 2>&1; then
         kill "$pid" 2>/dev/null || true
+        sleep 2
+        if ps -p "$pid" >/dev/null 2>&1; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
     fi
 }

@@ -15,6 +15,11 @@
 #   adapter_preflight    - Provider-specific preflight
 #   adapter_probe_model  - Test model availability
 #   adapter_list_models  - List available models
+#   adapter_resolve_model - Resolve model with fallback (parity)
+#   adapter_find_opencode - Find OpenCode binary (parity)
+#
+# Exit codes:
+#   25 - Model unavailable (canonical model not found)
 
 CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zhipuai-coding-plan/glm-5}"
 OPENCODE_ALLOWED_MODELS_DEFAULT="${OPENCODE_ALLOWED_MODELS_DEFAULT:-zhipuai-coding-plan/glm-5,zai-coding-plan/glm-5}"
@@ -294,6 +299,7 @@ adapter_start() {
             printf 'selected_model=%s\n' "$model"
             printf 'fallback_reason=%s\n' "${fallback_reason:-none}"
             printf 'launch_mode=%s\n' "$launch_mode"
+            printf 'execution_mode=%s\n' "$launch_mode"
             printf 'rc_file=%s\n' "$rc_file"
             return 0
         fi
@@ -328,6 +334,7 @@ EOF
     printf 'selected_model=%s\n' "$model"
     printf 'fallback_reason=%s\n' "${fallback_reason:-none}"
     printf 'launch_mode=%s\n' "$launch_mode"
+    printf 'execution_mode=%s\n' "$launch_mode"
     printf 'rc_file=%s\n' "$rc_file"
 }
 
