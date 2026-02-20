@@ -1,81 +1,125 @@
 #!/bin/bash
-# dx-dispatch - Dispatch tasks via dx-runner (canonical) or legacy Python path
-# Part of agent-skills dx-* workflow
+# dx-dispatch - Compatibility shim forwarding to dx-runner (canonical)
+#
+# DEPRECATED: This shim forwards to dx-runner for migration compatibility.
+#              For new code, use dx-runner directly.
+#
+# Migration guide:
+#   dx-dispatch <vm> "task"       -> dx-runner start --provider opencode --beads <id> --prompt-file <path>
+#   dx-dispatch --list            -> dx-runner status
+#   dx-dispatch --status <vm>     -> dx-runner status
+#
+# Part of agent-skills dx-* workflow (bd-xga8.14.5 compatibility shim)
 #
 # Usage:
 #   dx-dispatch <vm> "task description" [options]
 #   dx-dispatch --list
 #   dx-dispatch --help
 
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DX_RUNNER="${SCRIPT_DIR}/dx-runner"
 PYTHON_SCRIPT="${SCRIPT_DIR}/dx-dispatch.py"
 
-# Prefer dx-runner unless explicitly requested legacy mode
-if [[ "${DX_DISPATCH_LEGACY:-0}" != "1" && -x "$DX_RUNNER" ]]; then
-    # Translate legacy dx-dispatch commands to dx-runner
-    case "${1:-}" in
-        --list)
-            shift
-            exec "$DX_RUNNER" status "$@"
-            ;;
-        --status)
-            shift
-            exec "$DX_RUNNER" status "$@"
-            ;;
-        --help|-h)
-            echo "dx-dispatch - Dispatch tasks via dx-runner"
-            echo ""
-            echo "Usage:"
-            echo "  dx-dispatch <vm> <task> [options]   Dispatch task"
-            echo "  dx-dispatch --list                  List active jobs"
-            echo "  dx-dispatch --help                  Show this help"
-            echo ""
-            echo "Note: This is a compat wrapper around dx-runner."
-            echo "For full options, run: dx-runner --help"
-            exit 0
-            ;;
-        *)
-            # Build dx-runner command from legacy args
-            vm="${1:-}"
-            task="${2:-}"
-            if [[ -z "$vm" || -z "$task" ]]; then
-                echo "ERROR: dx-dispatch requires <vm> and <task>" >&2
-                exit 2
-            fi
-            shift 2
-            
-            # Map VM to provider
-            provider="opencode"
-            case "$vm" in
-                cc-glm|local) provider="cc-glm" ;;
-                gemini) provider="gemini" ;;
-            esac
-            
-            # Parse remaining options
-            beads_id=""
-            while [[ $# -gt 0 ]]; do
-                case "$1" in
-                    --beads) beads_id="$2"; shift 2 ;;
-                    *) shift ;;
-                esac
-            done
-            
-            [[ -z "$beads_id" ]] && beads_id="dispatch-$(date +%Y%m%d%H%M%S)"
-            
-            prompt_file="/tmp/dx-dispatch-${beads_id}.prompt"
-            echo "$task" > "$prompt_file"
-            
-            exec "$DX_RUNNER" start --provider "$provider" --beads "$beads_id" --prompt-file "$prompt_file"
-            ;;
-    esac
+deprecation_warn() {
+    local msg="${1:-}"
+    echo "[DEPRECATION] dx-dispatch is a compatibility shim. Use dx-runner directly." >&2
+    if [[ -n "$msg" ]]; then
+        echo "[DEPRECATION] $msg" >&2
+    fi
+}
+
+usage() {
+    cat <<'EOF'
+dx-dispatch - Compatibility shim forwarding to dx-runner
+
+DEPRECATED: Use dx-runner directly for new code.
+
+Usage:
+  dx-dispatch <vm> <task> [options]   Dispatch task (forwards to dx-runner)
+  dx-dispatch --list                  List active jobs
+  dx-dispatch --help                  Show this help
+
+Migration:
+  Old: dx-dispatch epyc12 "task" --beads bd-123
+  New: dx-runner start --provider opencode --beads bd-123 --prompt-file /tmp/p.prompt
+
+  Old: dx-dispatch --list
+  New: dx-runner status
+
+For full dx-runner options, run: dx-runner --help
+EOF
+}
+
+emit_deprecation=1
+if [[ "${DX_DISPATCH_NO_DEPRECATION:-0}" == "1" ]]; then
+    emit_deprecation=0
 fi
 
-# Fallback to legacy Python path
-if [[ -f "$PYTHON_SCRIPT" ]]; then
-    echo "[WARN] Using legacy Python dispatch path. Set DX_DISPATCH_LEGACY=0 to suppress." >&2
-    python "$PYTHON_SCRIPT" "$@"
-else
-    echo "ERROR: Neither dx-runner nor dx-dispatch.py found" >&2
-    exit 1
+if [[ ! -x "$DX_RUNNER" ]]; then
+    if [[ -f "$PYTHON_SCRIPT" ]]; then
+        [[ "$emit_deprecation" -eq 1 ]] && deprecation_warn "Falling back to legacy Python path (dx-runner not found)"
+        python "$PYTHON_SCRIPT" "$@"
+        exit $?
+    else
+        echo "ERROR: Neither dx-runner nor dx-dispatch.py found" >&2
+        exit 1
+    fi
 fi
+
+case "${1:-}" in
+    --list|--status)
+        [[ "$emit_deprecation" -eq 1 ]] && deprecation_warn "'$1' -> 'dx-runner status'"
+        shift || true
+        exec "$DX_RUNNER" status "$@"
+        ;;
+    --help|-h)
+        usage
+        exit 0
+        ;;
+    "")
+        usage
+        exit 2
+        ;;
+esac
+
+vm="${1:-}"
+task="${2:-}"
+if [[ -z "$vm" || -z "$task" ]]; then
+    echo "ERROR: dx-dispatch requires <vm> and <task>" >&2
+    echo "Usage: dx-dispatch <vm> <task> [--beads <id>]" >&2
+    exit 2
+fi
+shift 2
+
+provider="opencode"
+case "$vm" in
+    cc-glm|local) provider="cc-glm" ;;
+    gemini) provider="gemini" ;;
+esac
+
+beads_id=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --beads) beads_id="$2"; shift 2 ;;
+        --session|--repo|--slack|--no-slack|--wait|--timeout|--smoke-pr|--all|--shell|--attach|--jules|--issue|--dry-run|--finalize-pr|--abort)
+            shift || true
+            if [[ "$1" != -* && $# -gt 0 ]]; then
+                shift
+            fi
+            ;;
+        *) shift ;;
+    esac
+done
+
+if [[ -z "$beads_id" ]]; then
+    beads_id="dispatch-$(date +%Y%m%d%H%M%S)"
+fi
+
+prompt_file="/tmp/dx-dispatch-${beads_id}.prompt"
+echo "$task" > "$prompt_file"
+
+[[ "$emit_deprecation" -eq 1 ]] && deprecation_warn "Forwarding to: dx-runner start --provider $provider --beads $beads_id"
+
+exec "$DX_RUNNER" start --provider "$provider" --beads "$beads_id" --prompt-file "$prompt_file"

@@ -4,6 +4,26 @@ from __future__ import annotations
 """
 dx-dispatch - Dispatch tasks to remote OpenCode agents
 
+================================================================================
+DEPRECATED (bd-xga8.14.5)
+================================================================================
+
+This Python script is deprecated. Use dx-runner for all dispatch operations.
+
+Migration guide:
+  Old: dx-dispatch epyc6 "task" --beads bd-123
+  New: dx-runner start --provider opencode --beads bd-123 --prompt-file /tmp/p.prompt
+
+  Old: dx-dispatch --list
+  New: dx-runner status
+
+Break-glass access:
+  Set DX_DISPATCH_LEGACY=1 to bypass the shell shim and use this script.
+  This is intended for emergency rollback only.
+
+This file will be archived after migration validation (T+72h).
+================================================================================
+
 Part of the agent-skills dx-* workflow.
 Now uses lib/fleet for unified dispatch logic.
 
