@@ -140,6 +140,33 @@ valid_feature_key() {
     [[ "$fk" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]
 }
 
+provider_max_parallel() {
+    local provider="$1"
+    case "$provider" in
+        opencode) echo "${DX_RUNNER_MAX_PARALLEL_OPENCODE:-2}" ;;
+        cc-glm) echo "${DX_RUNNER_MAX_PARALLEL_CC_GLM:-2}" ;;
+        gemini) echo "${DX_RUNNER_MAX_PARALLEL_GEMINI:-1}" ;;
+        *) echo "${DX_RUNNER_MAX_PARALLEL_DEFAULT:-2}" ;;
+    esac
+}
+
+provider_running_count() {
+    local provider="$1"
+    local count=0
+    shopt -s nullglob
+    for pidf in "/tmp/dx-runner/${provider}"/*.pid; do
+        [[ -f "$pidf" ]] || continue
+        local beads pid
+        beads="$(basename "$pidf" .pid)"
+        [[ "$beads" == *.monitor ]] && continue
+        pid="$(cat "$pidf" 2>/dev/null || true)"
+        if [[ "$pid" =~ ^[0-9]+$ ]] && ps -p "$pid" >/dev/null 2>&1; then
+            count=$((count + 1))
+        fi
+    done
+    echo "$count"
+}
+
 strip_ansi() {
     sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' 2>/dev/null || cat
 }
@@ -207,12 +234,14 @@ find_provider_for_beads() {
     fi
 
     # Resolve to the latest provider instance for this beads id.
+    # Use the newest artifact among meta/outcome/pid per provider to avoid
+    # stale selection after provider switches.
     local latest_provider=""
     local latest_epoch=0
     shopt -s nullglob
     for dir in /tmp/dx-runner/*/; do
         [[ -d "$dir" ]] || continue
-        local provider meta_file outcome_file pid_file candidate_epoch
+        local provider meta_file outcome_file pid_file candidate_epoch meta_epoch outcome_epoch pid_epoch
         provider="$(basename "$dir")"
         meta_file="${dir}${beads}.meta"
         outcome_file="${dir}${beads}.outcome"
@@ -220,12 +249,27 @@ find_provider_for_beads() {
         [[ -f "$meta_file" || -f "$outcome_file" || -f "$pid_file" ]] || continue
 
         candidate_epoch=0
+        meta_epoch=0
+        outcome_epoch=0
+        pid_epoch=0
         if [[ -f "$meta_file" ]]; then
-            candidate_epoch="$(file_mtime_epoch "$meta_file" 2>/dev/null || echo 0)"
-        elif [[ -f "$outcome_file" ]]; then
-            candidate_epoch="$(file_mtime_epoch "$outcome_file" 2>/dev/null || echo 0)"
-        elif [[ -f "$pid_file" ]]; then
-            candidate_epoch="$(file_mtime_epoch "$pid_file" 2>/dev/null || echo 0)"
+            meta_epoch="$(file_mtime_epoch "$meta_file" 2>/dev/null || echo 0)"
+        fi
+        if [[ -f "$outcome_file" ]]; then
+            outcome_epoch="$(file_mtime_epoch "$outcome_file" 2>/dev/null || echo 0)"
+        fi
+        if [[ -f "$pid_file" ]]; then
+            pid_epoch="$(file_mtime_epoch "$pid_file" 2>/dev/null || echo 0)"
+        fi
+
+        if [[ "$meta_epoch" -gt "$candidate_epoch" ]]; then
+            candidate_epoch="$meta_epoch"
+        fi
+        if [[ "$outcome_epoch" -gt "$candidate_epoch" ]]; then
+            candidate_epoch="$outcome_epoch"
+        fi
+        if [[ "$pid_epoch" -gt "$candidate_epoch" ]]; then
+            candidate_epoch="$pid_epoch"
         fi
 
         if [[ "$candidate_epoch" -ge "$latest_epoch" ]]; then
@@ -521,6 +565,15 @@ next_action_for_reason() {
         opencode_model_unavailable)
             echo "use_cc_glm_or_gemini"
             ;;
+        awaiting_finalize_monitor_active)
+            echo "wait_for_finalize_or_run_dx_runner_finalize"
+            ;;
+        stalled_no_progress)
+            echo "run_dx_runner_finalize_or_restart"
+            ;;
+        provider_concurrency_cap_exceeded)
+            echo "wait_for_provider_capacity_or_switch_provider"
+            ;;
         *)
             echo "-"
             ;;
@@ -808,10 +861,19 @@ job_health_detail() {
             local oc_exit
             oc_exit="$(meta_get "$OUTCOME_FILE" "exit_code")"
             oc_exit="${oc_exit:-1}"
+            local omut olog ocpu opid
+            omut="$(meta_get "$OUTCOME_FILE" "mutations" 2>/dev/null || echo 0)"
+            olog="$(meta_get "$OUTCOME_FILE" "log_bytes" 2>/dev/null || echo 0)"
+            ocpu="$(meta_get "$OUTCOME_FILE" "cpu_time_sec" 2>/dev/null || echo 0)"
+            opid="$(meta_get "$OUTCOME_FILE" "pid_age_sec" 2>/dev/null || echo 0)"
+            [[ "$omut" =~ ^[0-9]+$ ]] || omut=0
+            [[ "$olog" =~ ^[0-9]+$ ]] || olog=0
+            [[ "$ocpu" =~ ^[0-9]+$ ]] || ocpu=0
+            [[ "$opid" =~ ^[0-9]+$ ]] || opid=0
             if [[ "$oc_exit" -eq 0 ]]; then
-                printf "exited_ok|outcome_exit_0|0|0|0|0|0\n"
+                printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
             else
-                printf "exited_err|outcome_exit_nonzero|0|0|0|0|0\n"
+                printf "exited_err|outcome_exit_nonzero|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
             fi
             return 0
         fi
@@ -827,10 +889,19 @@ job_health_detail() {
             local oc_exit2
             oc_exit2="$(meta_get "$OUTCOME_FILE" "exit_code")"
             oc_exit2="${oc_exit2:-1}"
+            local omut2 olog2 ocpu2 opid2
+            omut2="$(meta_get "$OUTCOME_FILE" "mutations" 2>/dev/null || echo 0)"
+            olog2="$(meta_get "$OUTCOME_FILE" "log_bytes" 2>/dev/null || echo 0)"
+            ocpu2="$(meta_get "$OUTCOME_FILE" "cpu_time_sec" 2>/dev/null || echo 0)"
+            opid2="$(meta_get "$OUTCOME_FILE" "pid_age_sec" 2>/dev/null || echo 0)"
+            [[ "$omut2" =~ ^[0-9]+$ ]] || omut2=0
+            [[ "$olog2" =~ ^[0-9]+$ ]] || olog2=0
+            [[ "$ocpu2" =~ ^[0-9]+$ ]] || ocpu2=0
+            [[ "$opid2" =~ ^[0-9]+$ ]] || opid2=0
             if [[ "$oc_exit2" -eq 0 ]]; then
-                printf "exited_ok|outcome_exit_0|0|0|0|0|0\n"
+                printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
             else
-                printf "exited_err|outcome_exit_nonzero|0|0|0|0|0\n"
+                printf "exited_err|outcome_exit_nonzero|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
             fi
             return 0
         fi
@@ -876,16 +947,37 @@ job_health_detail() {
     fi
 
     if ! ps -p "$pid" >/dev/null 2>&1; then
+        if [[ -f "$MONITOR_PID_FILE" ]]; then
+            local mpid
+            mpid="$(cat "$MONITOR_PID_FILE" 2>/dev/null || true)"
+            if [[ "$mpid" =~ ^[0-9]+$ ]] && ps -p "$mpid" >/dev/null 2>&1; then
+                printf "awaiting_finalize|awaiting_finalize_monitor_active|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
+                return 0
+            fi
+        fi
         finalize_exited_job "$beads" "$provider"
         if [[ -f "$OUTCOME_FILE" ]]; then
             local exit_code
             exit_code="$(meta_get "$OUTCOME_FILE" "exit_code")"
             exit_code="${exit_code:-1}"
+            local omut3 olog3 ocpu3 opid3
+            omut3="$(meta_get "$OUTCOME_FILE" "mutations" 2>/dev/null || echo "$mutation_count")"
+            olog3="$(meta_get "$OUTCOME_FILE" "log_bytes" 2>/dev/null || echo "$log_bytes")"
+            ocpu3="$(meta_get "$OUTCOME_FILE" "cpu_time_sec" 2>/dev/null || echo 0)"
+            opid3="$(meta_get "$OUTCOME_FILE" "pid_age_sec" 2>/dev/null || echo "$pid_age")"
+            [[ "$omut3" =~ ^[0-9]+$ ]] || omut3="${mutation_count:-0}"
+            [[ "$olog3" =~ ^[0-9]+$ ]] || olog3="${log_bytes:-0}"
+            [[ "$ocpu3" =~ ^[0-9]+$ ]] || ocpu3=0
+            [[ "$opid3" =~ ^[0-9]+$ ]] || opid3="${pid_age:-0}"
             if [[ "$exit_code" -eq 0 ]]; then
-                printf "exited_ok|outcome_exit_0|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
+                printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|%s\n" "$omut3" "$olog3" "$ocpu3" "$opid3" "$log_age"
             else
-                printf "exited_err|outcome_exit_nonzero|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
+                printf "exited_err|outcome_exit_nonzero|%s|%s|%s|%s|%s\n" "$omut3" "$olog3" "$ocpu3" "$opid3" "$log_age"
             fi
+            return 0
+        fi
+        if [[ "$pid_age" -gt "$stall_threshold" ]]; then
+            printf "stalled|stalled_no_progress|%s|%s|0|%s|%s\n" "$mutation_count" "$log_bytes" "$pid_age" "$log_age"
             return 0
         fi
         if [[ "$log_bytes" -eq 0 ]]; then
@@ -1058,6 +1150,24 @@ persist_outcome() {
     cwd="${cwd:-$(pwd)}"
     worktree="${worktree:--}"
 
+    local snap_mutations=0 snap_log_bytes=0 snap_cpu=0 snap_pid_age=0
+    if [[ "$provider" != "unknown" ]]; then
+        job_paths "$beads" "$provider"
+        if [[ -f "$LOG_FILE" ]]; then
+            snap_log_bytes="$(wc -c < "$LOG_FILE" | tr -d ' ')" || snap_log_bytes=0
+        fi
+        if [[ -f "$META_FILE" ]]; then
+            snap_mutations="$(check_mutations "$beads" 2>/dev/null || echo 0)"
+            snap_cpu="$(meta_get "$META_FILE" "last_cpu_time" 2>/dev/null || echo 0)"
+        fi
+        if [[ -f "$PID_FILE" ]]; then
+            local now pid_mtime
+            now="$(date +%s)"
+            pid_mtime="$(file_mtime_epoch "$PID_FILE" 2>/dev/null || echo "$now")"
+            snap_pid_age=$((now - pid_mtime))
+        fi
+    fi
+
     cat > "$outcome_file" <<EOF
 beads=$beads
 provider=$provider
@@ -1074,6 +1184,10 @@ run_instance=$run_instance
 host=$host
 cwd=$cwd
 worktree=$worktree
+mutations=${snap_mutations:-0}
+log_bytes=${snap_log_bytes:-0}
+cpu_time_sec=${snap_cpu:-0}
+pid_age_sec=${snap_pid_age:-0}
 EOF
 }
 
@@ -1275,6 +1389,15 @@ prune_job() {
             rm -f "$PID_FILE"
             pruned=1
         elif ! ps -p "$pid" >/dev/null 2>&1; then
+            # If monitor is still alive, keep PID/meta for awaiting_finalize state.
+            if [[ -f "$MONITOR_PID_FILE" ]]; then
+                local mpid
+                mpid="$(cat "$MONITOR_PID_FILE" 2>/dev/null || true)"
+                if [[ "$mpid" =~ ^[0-9]+$ ]] && ps -p "$mpid" >/dev/null 2>&1; then
+                    echo "$pruned"
+                    return 0
+                fi
+            fi
             finalize_exited_job "$beads" "$provider"
             pruned=1
         fi
@@ -1582,6 +1705,7 @@ Exit Codes:
   23 No-op detected
   24 Beads gate failed
   25 Model unavailable
+  26 Provider concurrency cap exceeded
 
 Beads Gate Reason Codes:
   beads_ok              Gate passed
@@ -1595,7 +1719,7 @@ Beads Gate Reason Codes:
 
 Health States:
   launching, waiting_first_output, silent_mutation, stalled,
-  healthy, exited_ok, exited_err, blocked, missing, no_op
+  healthy, awaiting_finalize, exited_ok, exited_err, blocked, missing, no_op
 EOF
 }
 
@@ -1621,6 +1745,18 @@ start_cmd() {
         echo "job $BEADS already running (pid=$(cat "$PID_FILE"))" >&2
         exit 1
     fi
+
+    local provider_cap provider_running
+    provider_cap="$(provider_max_parallel "$PROVIDER")"
+    provider_running="$(provider_running_count "$PROVIDER")"
+    if [[ "$provider_running" -ge "$provider_cap" ]]; then
+        local msg
+        msg="provider '$PROVIDER' concurrency cap exceeded (${provider_running}/${provider_cap})"
+        echo "reason_code=provider_concurrency_cap_exceeded"
+        echo "next_action=wait_for_provider_capacity_or_switch_provider"
+        echo "$msg" >&2
+        exit 26
+    fi
     
     # Preflight gate
     if ! unified_preflight "$PROVIDER"; then
@@ -1635,6 +1771,9 @@ start_cmd() {
         if [[ "$perm_result" != OK* ]]; then
             echo "permission gate failed: $perm_result" >&2
             exit 22
+        fi
+        if [[ "${DX_RUNNER_AUTO_TRUST_MISE:-1}" == "1" ]] && command -v mise >/dev/null 2>&1; then
+            mise trust "$WORKTREE" >/dev/null 2>&1 || true
         fi
     fi
     
@@ -1975,12 +2114,14 @@ check_cmd() {
     
     if [[ "$OUTPUT_JSON" == "true" ]]; then
         local j_host j_cwd j_worktree j_run_instance
+        local j_action
         j_host="$(meta_get "$META_FILE" "host" 2>/dev/null || echo "-")"
         j_cwd="$(meta_get "$META_FILE" "cwd" 2>/dev/null || echo "-")"
         j_worktree="$(meta_get "$META_FILE" "worktree" 2>/dev/null || echo "-")"
         j_run_instance="$(meta_get "$META_FILE" "run_instance" 2>/dev/null || echo "-")"
-        printf '{"beads":"%s","provider":"%s","state":"%s","reason_code":"%s","host":"%s","cwd":"%s","worktree":"%s","run_instance":"%s"}\n' \
-            "$BEADS" "${provider:-unknown}" "$state" "$reason" "$(json_escape "$j_host")" "$(json_escape "$j_cwd")" "$(json_escape "$j_worktree")" "$(json_escape "$j_run_instance")"
+        j_action="$(next_action_for_reason "$reason")"
+        printf '{"beads":"%s","provider":"%s","state":"%s","reason_code":"%s","next_action":"%s","host":"%s","cwd":"%s","worktree":"%s","run_instance":"%s"}\n' \
+            "$BEADS" "${provider:-unknown}" "$state" "$reason" "$j_action" "$(json_escape "$j_host")" "$(json_escape "$j_cwd")" "$(json_escape "$j_worktree")" "$(json_escape "$j_run_instance")"
     else
         echo "$BEADS: $state ($reason)"
         local action
@@ -2202,6 +2343,10 @@ report_cmd() {
     local detail state reason mutations log_bytes cpu_time pid_age log_age
     detail="$(job_health_detail "$BEADS")"
     IFS='|' read -r state reason mutations log_bytes cpu_time pid_age log_age <<< "$detail"
+    [[ "$mutations" =~ ^[0-9]+$ ]] || mutations=0
+    [[ "$log_bytes" =~ ^[0-9]+$ ]] || log_bytes=0
+    [[ "$cpu_time" =~ ^[0-9]+$ ]] || cpu_time=0
+    [[ "$pid_age" =~ ^[0-9]+$ ]] || pid_age=0
     
     local retries="0" started_at="-" worktree="-" prompt_file="-" exit_code="-" duration="-" outcome_state="-" outcome_reason="-" selected_model="-" fallback_reason="-"
     local host="-" cwd="-" run_instance="-" next_action="-"
@@ -2321,9 +2466,15 @@ probe_cmd() {
     fi
     
     local model="${MODEL_ID:-${PROVIDER_DEFAULT_MODEL[$PROVIDER]:-}}"
+    local probe_rc=0
     
     echo "Probing $PROVIDER with model $model..."
-    if adapter_probe_model "$model"; then
+    if [[ "$PROVIDER" == "opencode" ]]; then
+        OPENCODE_MODELS_CACHE_TTL_SEC=0 adapter_probe_model "$model" || probe_rc=$?
+    else
+        adapter_probe_model "$model" || probe_rc=$?
+    fi
+    if [[ "$probe_rc" -eq 0 ]]; then
         echo "OK: $PROVIDER/$model is healthy"
         exit 0
     else
@@ -2592,7 +2743,7 @@ beads_gate_eval() {
     # 5. Consistency check
     if [[ "$repo_id_local" != "unavailable:"* && "$repo_id_db" != "unavailable:"* && "$repo_id_local" != "$repo_id_db" ]]; then
         reason_code="beads_repo_mismatch"
-        details="Local repo_id=$repo_id_local does not match DB repo_id=$repo_id_db"
+        details="Local repo_id=$repo_id_local does not match DB repo_id=$repo_id_db. Remediate in worktree: printf 'y\n' | bd migrate --update-repo-id"
         printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
         return 1
     fi
@@ -2624,12 +2775,20 @@ beads_gate_cmd() {
     local repo_path="${REPO:-$(pwd)}"
     
     local result gate_pass gate_reason gate_db_status gate_repo_local gate_repo_db gate_details gate_external_repo gate_external_remote
+    local gate_next_action="-"
     result="$(beads_gate_eval "$repo_path" "$PROBE_ID" "$WRITE_PROBE")" || true
     IFS='|' read -r gate_pass gate_reason gate_db_status gate_repo_local gate_repo_db gate_details gate_external_repo gate_external_remote <<< "$result"
+    case "$gate_reason" in
+        beads_repo_mismatch) gate_next_action="run_bd_migrate_update_repo_id" ;;
+        beads_external_remote_mismatch) gate_next_action="fix_beads_external_origin" ;;
+        beads_external_repo_missing) gate_next_action="clone_or_restore_external_beads_repo" ;;
+        beads_db_error) gate_next_action="check_beads_db_connectivity" ;;
+        *) gate_next_action="-" ;;
+    esac
     
     if [[ "$OUTPUT_JSON" == "true" ]]; then
-        printf '{"passed":%s,"reason_code":"%s","db_status":"%s","repo_id_local":"%s","repo_id_db":"%s","external_repo":"%s","external_remote":"%s","details":"%s"}\n' \
-            "$gate_pass" "$gate_reason" "$gate_db_status" "$gate_repo_local" "$gate_repo_db" "$(json_escape "$gate_external_repo")" "$(json_escape "$gate_external_remote")" "$(json_escape "$gate_details")"
+        printf '{"passed":%s,"reason_code":"%s","next_action":"%s","db_status":"%s","repo_id_local":"%s","repo_id_db":"%s","external_repo":"%s","external_remote":"%s","details":"%s"}\n' \
+            "$gate_pass" "$gate_reason" "$gate_next_action" "$gate_db_status" "$gate_repo_local" "$gate_repo_db" "$(json_escape "$gate_external_repo")" "$(json_escape "$gate_external_remote")" "$(json_escape "$gate_details")"
     else
         echo "Beads Gate: $gate_pass ($gate_reason)"
         echo "  DB Status: $gate_db_status"
@@ -2638,6 +2797,7 @@ beads_gate_cmd() {
         echo "  External Repo: ${gate_external_repo:-<not checked>}"
         echo "  External Remote: ${gate_external_remote:-<not checked>}"
         echo "  Details: $gate_details"
+        [[ "$gate_next_action" != "-" ]] && echo "  Next Action: $gate_next_action"
     fi
     
     if [[ "$gate_pass" != "true" ]]; then

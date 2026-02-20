@@ -51,7 +51,17 @@ fi
 # Default behavior is warn-only to avoid contradictory "commit succeeded + error" UX.
 # Set BEADS_FLUSH_STRICT=1 to make this blocking.
 # V8: Use --no-daemon for deterministic behavior (avoids daemon staleness issues).
-if ! bd --no-daemon sync --flush-only >/dev/null 2>&1; then
+flush_ok=0
+if bd --no-daemon sync --flush-only >/dev/null 2>&1; then
+    flush_ok=1
+else
+    # Retry once to reduce false warnings from transient DB lock/race.
+    sleep 0.2
+    if bd --no-daemon sync --flush-only >/dev/null 2>&1; then
+        flush_ok=1
+    fi
+fi
+if [[ "$flush_ok" -ne 1 ]]; then
     if [[ "${BEADS_FLUSH_STRICT:-0}" == "1" ]]; then
         echo "Error: Failed to flush bd changes to JSONL (strict mode)" >&2
         echo "BEADS_DIR=$BEADS_DIR" >&2

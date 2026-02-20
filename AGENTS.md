@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: eedddf5739ec3994c451ba90d31dccd31fc6bdaa -->
-<!-- Last updated: 2026-02-20 02:19:16 UTC -->
+<!-- Source SHA: d60bc246c1fc377082bbc26cfe9a4acd89d41e26 -->
+<!-- Last updated: 2026-02-20 12:51:01 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -89,11 +89,11 @@ dx-runner check --beads bd-xxx --json
 
 ```bash
 # Headless single-run lane
-opencode run -m zai-coding-plan/glm-5 "Implement task T1 from plan.md"
+opencode run -m zhipuai-coding-plan/glm-5 "Implement task T1 from plan.md"
 
 # Server lane for parallel clients
 opencode serve --hostname 127.0.0.1 --port 4096
-opencode run --attach http://127.0.0.1:4096 -m zai-coding-plan/glm-5 "Implement task T2 from plan.md"
+opencode run --attach http://127.0.0.1:4096 -m zhipuai-coding-plan/glm-5 "Implement task T2 from plan.md"
 ```
 
 **Reliability backstop: cc-glm via dx-runner**
@@ -128,6 +128,17 @@ Task:
 ```
 
 **Cross-VM: dx-dispatch** (compat wrapper to `dx-runner` for remote execution)
+
+### dx-runner Best Practices
+
+- Run `dx-runner preflight --provider <provider>` before starting a wave.
+- Always pass a unique Beads id per run: `--beads bd-...`.
+- Use `--prompt-file` with immutable prompt artifacts, not inline ad hoc prompts.
+- Monitor with `status --json` + `check --json`; automate on `reason_code`/`next_action`.
+- Use `report --format json` as the source of truth for outcome and metrics.
+- Prefer one controlled restart max; then escalate using failure taxonomy.
+- Run `dx-runner prune` periodically to clear stale PID ghosts.
+- For OpenCode, enforce canonical model `zhipuai-coding-plan/glm-5`; fallback provider if unavailable.
 
 ### Monitoring (Simplified)
 
@@ -218,7 +229,7 @@ Notes:
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
 | **bd-doctor** | Check and fix common Beads workflow issues across all repos. | `bd export --force` |  |
-| **dx-cron** | Monitor and manage dx-* system cron jobs and their logs. MUST BE USED when user asks "is the cron running", "show me cron logs", or "status of dx jobs". | — | health, auth, audit, cron, monitoring |
+| **dx-cron** | Monitor and manage dx-* system cron jobs and their logs.  MUST BE USED when user asks "is the cron running", "show me cron logs", or "status of dx jobs". | — | health, auth, audit, cron, monitoring |
 | **lockfile-doctor** | Check and fix lockfile drift across Poetry (Python) and pnpm (Node.js) projects. | — |  |
 | **mcp-doctor** | Warn-only health check for canonical MCP configuration and related DX tooling. Strict mode is opt-in via MCP_DOCTOR_STRICT=1. | — | dx, mcp, health, verification |
 | **railway-doctor** | Pre-flight checks for Railway deployments to catch failures BEFORE deploying. Use when about to deploy, running verify-* commands, or debugging Railway issues. | — | railway, deployment, validation, pre-flight |
@@ -237,7 +248,7 @@ Notes:
 | **dx-alerts** | Lightweight “news wire” for DX changes and breakages, posted to Slack (no MCP required). | — |  |
 | **fleet-deploy** | Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12). MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs. Uses configs/fleet_hosts.yaml as authoritative source for SSH targets, with dx-runner governance. | `dx-runner start --provider opencode --beads bd-xyz --prompt-` | fleet, deploy, vm, canonical, dx-runner, ssh, infrastructure |
 | **github-runner-setup** | GitHub Actions self-hosted runner setup and maintenance. Use when setting up dedicated runner users, migrating runners from personal accounts, troubleshooting runner issues, or implementing runner isolation. Covers systemd services, environment isolation, and skills plane integration. | — | github-actions, devops, runner, systemd, infrastructure |
-| **vm-bootstrap** | Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment. Supports modes: check (warn-only), install (operator-confirmed), strict (CI-ready). Enforces Linux-only + mise as canonical; honors preference brew→npm (with apt fallback). Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, op, bd, dcg, ru, tmux, rg. Handles optional tools as warnings: tailscale, playwright, docker, bv. Never prints/seeds secrets; never stores tokens in repo/YAML; Railway vars only for app runtime env. Safe on dirty repos (refuses and points to dirty-repo-bootstrap skill, or snapshots WIP branch). Keywords: vm, bootstrap, setup, mise, toolchain, linux, environment, provision, verify, new vm | — | dx, tooling, setup, linux |
+| **vm-bootstrap** | Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment. Supports modes: check (warn-only), install (operator-confirmed), strict (CI-ready). Enforces Linux-only  mise as canonical; honors preference brew→npm (with apt fallback). Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, op, bd, dcg, ru, tmux, rg. Handles optional tools as warnings: tailscale, playwright, docker, bv. Never prints/seeds secrets; never stores tokens in repo/YAML; Railway vars only for app runtime env. Safe on dirty repos (refuses and points to dirty-repo-bootstrap skill, or snapshots WIP branch). Keywords: vm, bootstrap, setup, mise, toolchain, linux, environment, provision, verify, new vm | — | dx, tooling, setup, linux |
 | **multi-agent-dispatch** | Cross-VM task dispatch with dx-runner as canonical governance runner and OpenCode as primary execution lane. dx-dispatch is a BREAK-GLASS compatibility shim for remote fanout when dx-runner is unavailable. EPYC6 is currently disabled - see enablement gate. | `dx-dispatch is a BREAK-GLASS compatibility shim for remote f` | workflow, dispatch, dx-runner, governance, cross-vm |
 
 

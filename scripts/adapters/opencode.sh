@@ -22,21 +22,15 @@
 #   25 - Model unavailable (canonical model not found)
 
 CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zhipuai-coding-plan/glm-5}"
-OPENCODE_ALLOWED_MODELS_DEFAULT="${OPENCODE_ALLOWED_MODELS_DEFAULT:-zhipuai-coding-plan/glm-5,zai-coding-plan/glm-5}"
 
-adapter_allowed_models() {
-    local raw="${OPENCODE_ALLOWED_MODELS:-$OPENCODE_ALLOWED_MODELS_DEFAULT}"
-    local -a out=("$CANONICAL_MODEL")
-    local -a extras
-    IFS=',' read -r -a extras <<< "$raw"
-    local m
-    for m in "${extras[@]}"; do
-        [[ -n "$m" ]] || continue
-        if [[ "$m" != "$CANONICAL_MODEL" ]]; then
-            out+=("$m")
-        fi
-    done
-    printf '%s\n' "${out[@]}"
+adapter_run_with_timeout() {
+    local seconds="$1"
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$seconds" "$@"
+        return $?
+    fi
+    "$@"
 }
 
 adapter_models_cache_file() {
@@ -66,7 +60,7 @@ adapter_list_models_cached() {
     fi
 
     local models
-    models="$(timeout "${OPENCODE_MODELS_TIMEOUT_SEC:-12}" "$opencode_bin" models 2>/dev/null || true)"
+    models="$(adapter_run_with_timeout "${OPENCODE_MODELS_TIMEOUT_SEC:-12}" "$opencode_bin" models 2>/dev/null || true)"
     if [[ -n "$models" ]]; then
         printf '%s\n' "$models" > "$cache_file"
         printf '%s\n' "$models"
@@ -133,7 +127,7 @@ adapter_preflight() {
         errors=$((errors + 1))
     else
         local probe_output
-        probe_output="$(timeout 30 "$opencode_bin" run --model "$probe_model" --format json "Say READY" 2>&1)" || true
+        probe_output="$(adapter_run_with_timeout 30 "$opencode_bin" run --model "$probe_model" --format json "Say READY" 2>&1)" || true
         if echo "$probe_output" | grep -qi "READY"; then
             echo "OK ($probe_model)"
         elif echo "$probe_output" | grep -qiE "unauthorized|forbidden|insufficient.*balance|quota|rate.?limit|429"; then
@@ -194,40 +188,19 @@ adapter_resolve_model() {
     opencode_bin="$(adapter_find_opencode)" || return 1
 
     local required="${preferred:-$CANONICAL_MODEL}"
-    local -a allowed
-    mapfile -t allowed < <(adapter_allowed_models)
-    local allowed_joined
-    allowed_joined="$(printf '%s,' "${allowed[@]}")"
-    allowed_joined="${allowed_joined%,}"
-
-    local requested_allowed=false
-    local m
-    for m in "${allowed[@]}"; do
-        if [[ "$required" == "$m" ]]; then
-            requested_allowed=true
-            break
-        fi
-    done
-    if [[ "$requested_allowed" != "true" ]]; then
-        echo "|unavailable|unsupported opencode model '$required'; allowed: $allowed_joined"
+    if [[ "$required" != "$CANONICAL_MODEL" ]]; then
+        echo "|unavailable|unsupported opencode model '$required'; only '$CANONICAL_MODEL' is allowed"
         return 1
     fi
 
     local available_models
     available_models="$(adapter_list_models_cached "$opencode_bin" || true)"
-    if printf '%s\n' "$available_models" | grep -qxF "$required"; then
-        echo "$required|preferred|"
+    if printf '%s\n' "$available_models" | grep -qxF "$CANONICAL_MODEL"; then
+        echo "$CANONICAL_MODEL|canonical|"
         return 0
     fi
 
-    for m in "${allowed[@]}"; do
-        if [[ "$m" != "$required" ]] && printf '%s\n' "$available_models" | grep -qxF "$m"; then
-            echo "$m|fallback|preferred $required unavailable on this host"
-            return 0
-        fi
-    done
-
-    echo "|unavailable|allowed models unavailable ($allowed_joined); use cc-glm or gemini"
+    echo "|unavailable|canonical model '$CANONICAL_MODEL' unavailable; use cc-glm or gemini"
     return 1
 }
 
@@ -343,15 +316,12 @@ adapter_probe_model() {
     local opencode_bin
     opencode_bin="$(adapter_find_opencode)" || return 1
 
-    local allowed=false
-    local m
-    while IFS= read -r m; do
-        [[ "$m" == "$model" ]] && allowed=true && break
-    done < <(adapter_allowed_models)
-    [[ "$allowed" == "true" ]] || return 1
+    local resolved selection_reason resolve_reason
+    IFS='|' read -r resolved selection_reason resolve_reason < <(adapter_resolve_model "$model")
+    [[ -n "$resolved" ]] || return 1
     
     # Quick probe with timeout (bd-cbsb.15)
-    timeout 45 "$opencode_bin" run --model "$model" --format json "Return only READY" 2>/dev/null | grep -qi "READY" || return 1
+    adapter_run_with_timeout 45 "$opencode_bin" run --model "$resolved" --format json "Return only READY" 2>/dev/null | grep -qi "READY" || return 1
     
     return 0
 }

@@ -77,11 +77,11 @@ dx-runner check --beads bd-xxx --json
 
 ```bash
 # Headless single-run lane
-opencode run -m zai-coding-plan/glm-5 "Implement task T1 from plan.md"
+opencode run -m zhipuai-coding-plan/glm-5 "Implement task T1 from plan.md"
 
 # Server lane for parallel clients
 opencode serve --hostname 127.0.0.1 --port 4096
-opencode run --attach http://127.0.0.1:4096 -m zai-coding-plan/glm-5 "Implement task T2 from plan.md"
+opencode run --attach http://127.0.0.1:4096 -m zhipuai-coding-plan/glm-5 "Implement task T2 from plan.md"
 ```
 
 **Reliability backstop: cc-glm via dx-runner**
@@ -116,6 +116,17 @@ Task:
 ```
 
 **Cross-VM: dx-dispatch** (compat wrapper to `dx-runner` for remote execution)
+
+### dx-runner Best Practices
+
+- Run `dx-runner preflight --provider <provider>` before starting a wave.
+- Always pass a unique Beads id per run: `--beads bd-...`.
+- Use `--prompt-file` with immutable prompt artifacts, not inline ad hoc prompts.
+- Monitor with `status --json` + `check --json`; automate on `reason_code`/`next_action`.
+- Use `report --format json` as the source of truth for outcome and metrics.
+- Prefer one controlled restart max; then escalate using failure taxonomy.
+- Run `dx-runner prune` periodically to clear stale PID ghosts.
+- For OpenCode, enforce canonical model `zhipuai-coding-plan/glm-5`; fallback provider if unavailable.
 
 ### Monitoring (Simplified)
 

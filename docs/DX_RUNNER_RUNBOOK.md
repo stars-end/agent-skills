@@ -34,17 +34,24 @@ dx-runner finalize --beads bd-xxx --reason stalled --exit-code 1
 Run before wave dispatch to verify provider availability:
 
 ```bash
-# OpenCode (canonical + allowlisted GLM-5 variants)
+# OpenCode (strict canonical model policy)
 dx-runner preflight --provider opencode
 
 # Gemini
 dx-runner preflight --provider gemini
 ```
 
+OpenCode CLI contract is grounded in official docs:
+- CLI docs: https://opencode.ai/docs/cli/
+- Server docs: https://opencode.ai/docs/server/
+- Covered commands: `opencode run`, `opencode serve`, `opencode attach`, `opencode models`
+- Runner adapter uses documented flags: `run --model ... --format json --dir <worktree>`
+
 **Pass criteria:**
 - Binary found
 - API credentials valid
-- Canonical/allowlisted model available (OpenCode defaults: `zhipuai-coding-plan/glm-5`, `zai-coding-plan/glm-5`)
+- Canonical model available: `zhipuai-coding-plan/glm-5`
+- If unavailable, route to `cc-glm` or `gemini`
 
 ### 2. Beads Integrity Gate
 
@@ -118,7 +125,7 @@ done
 
 | Code | Meaning | Fallback |
 |------|---------|----------|
-| `opencode_model_unavailable` | GLM-5 not in available models | Use gemini or cc-glm |
+| `opencode_model_unavailable` | Canonical model unavailable | Use gemini or cc-glm |
 | `opencode_model_unsupported` | Requested non-canonical model | Must use GLM-5 |
 | `opencode_binary_missing` | CLI not installed | Install opencode |
 | `opencode_auth_blocked` | Auth/quota issue | Check API key, quota |
@@ -140,6 +147,7 @@ done
 | `launching` | Just started, no output yet | Wait |
 | `healthy` | Progress detected | Monitor |
 | `stalled` | No progress for stall threshold | Restart or investigate |
+| `awaiting_finalize` | Process exited; completion monitor still finalizing artifacts | Wait briefly or run `dx-runner finalize` |
 | `no_op` | No heartbeat, no mutation | Likely blocked |
 | `exited_ok` | Exit code 0 | Success |
 | `exited_err` | Non-zero exit | Check logs |
@@ -248,7 +256,6 @@ export DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES=30
 |----------|----------|-------------|
 | `OPENCODE_MODEL` | opencode | Override model (must be GLM-5) |
 | `OPENCODE_CANONICAL_MODEL` | opencode | Canonical model to prefer |
-| `OPENCODE_ALLOWED_MODELS` | opencode | Comma-separated allowed model list |
 | `GEMINI_MODEL` | gemini | Override model (default: gemini-3-flash-preview) |
 | `GEMINI_API_KEY` | gemini | API key |
 | `GOOGLE_API_KEY` | gemini | Alternative API key |
