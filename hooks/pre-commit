@@ -1,6 +1,9 @@
 #!/bin/bash
 # Global pre-commit hook for agent-skills
 # Chains Beads functionality with any other pre-commit checks
+#
+# V8 pattern: Respect external BEADS_DIR (~/bd/.beads) over repo-local .beads
+# Only auto-detect if BEADS_DIR is not set. Use --no-daemon for determinism.
 
 # shellcheck disable=SC1090
 SOURCE="${BASH_SOURCE[0]}"
@@ -13,54 +16,66 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 # Check if bd is available
 if ! command -v bd >/dev/null 2>&1; then
-    # Silently skip if bd not available (might not be a bd workspace)
     exit 0
 fi
 
-# Check if we're in a bd workspace
-# For worktrees, .beads is in the main repository root, not the worktree
-BEADS_DIR=""
-if git rev-parse --git-dir >/dev/null 2>&1; then
-    # Check if we're in a worktree
-    if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
-        # Worktree: .beads is in main repo root
-        MAIN_REPO_ROOT="$(git rev-parse --git-common-dir)"
-        MAIN_REPO_ROOT="$(dirname "$MAIN_REPO_ROOT")"
-        if [ -d "$MAIN_REPO_ROOT/.beads" ]; then
-            BEADS_DIR="$MAIN_REPO_ROOT/.beads"
-        fi
-    else
-        # Regular repo: check current directory
-        if [ -d .beads ]; then
-            BEADS_DIR=".beads"
+# V8: Respect existing BEADS_DIR from environment (external ~/bd/.beads)
+# Only auto-detect if not already set.
+if [ -z "${BEADS_DIR:-}" ]; then
+    # Check if we're in a bd workspace with repo-local .beads
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
+            MAIN_REPO_ROOT="$(git rev-parse --git-common-dir)"
+            MAIN_REPO_ROOT="$(dirname "$MAIN_REPO_ROOT")"
+            if [ -d "$MAIN_REPO_ROOT/.beads" ]; then
+                export BEADS_DIR="$MAIN_REPO_ROOT/.beads"
+            fi
+        else
+            if [ -d .beads ]; then
+                export BEADS_DIR="$(pwd)/.beads"
+            fi
         fi
     fi
 fi
 
-if [ -z "$BEADS_DIR" ]; then
+if [ -z "${BEADS_DIR:-}" ]; then
+    exit 0
+fi
+
+# Verify BEADS_DIR points to a valid beads workspace (has issues.jsonl)
+if [ ! -f "${BEADS_DIR}/issues.jsonl" ]; then
     exit 0
 fi
 
 # Flush pending changes to JSONL.
 # Default behavior is warn-only to avoid contradictory "commit succeeded + error" UX.
 # Set BEADS_FLUSH_STRICT=1 to make this blocking.
-if ! bd sync --flush-only >/dev/null 2>&1; then
+# V8: Use --no-daemon for deterministic behavior (avoids daemon staleness issues).
+if ! bd --no-daemon sync --flush-only >/dev/null 2>&1; then
     if [[ "${BEADS_FLUSH_STRICT:-0}" == "1" ]]; then
         echo "Error: Failed to flush bd changes to JSONL (strict mode)" >&2
-        echo "Run 'bd sync --flush-only' manually to diagnose" >&2
+        echo "BEADS_DIR=$BEADS_DIR" >&2
+        echo "Run 'bd --no-daemon sync --flush-only' manually to diagnose" >&2
         exit 1
     fi
     echo "Warning: Failed to flush bd changes to JSONL (non-blocking)" >&2
-    echo "Run 'bd sync --flush-only' manually to diagnose" >&2
+    echo "BEADS_DIR=$BEADS_DIR" >&2
+    echo "Run 'bd --no-daemon sync --flush-only' manually to diagnose" >&2
 fi
 
 # If the JSONL file was modified, stage it
-# For worktrees, the JSONL is in the main repo's working tree, not the worktree,
-# so we can't use git add. Skip this step for worktrees.
-if [ -f "$BEADS_DIR/issues.jsonl" ]; then
+# Only for regular repos (not worktrees) where JSONL is in working tree.
+# For V8 external BEADS_DIR (~/bd/.beads), this path is outside the repo, so skip.
+if [ -f "${BEADS_DIR}/issues.jsonl" ]; then
     if [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ]; then
-        # Regular repo: file is in the working tree, safe to add
-        git add "$BEADS_DIR/issues.jsonl" 2>/dev/null || true
+        # Only stage if BEADS_DIR is within the repo working tree
+        local_jsonl="${BEADS_DIR}/issues.jsonl"
+        repo_root="$(git rev-parse --show-toplevel)"
+        case "$local_jsonl" in
+            "$repo_root"*)
+                git add "$local_jsonl" 2>/dev/null || true
+                ;;
+        esac
     fi
 fi
 
