@@ -1,0 +1,136 @@
+name: Nightly Dispatch Integration
+
+on:
+  push:
+    paths:
+      - 'scripts/nightly_dispatch.py'
+      - 'tests/test_nightly_dispatch_integration.py'
+      - '.github/workflows/test-nightly-dispatch.yml'
+  pull_request:
+    paths:
+      - 'scripts/nightly_dispatch.py'
+      - 'tests/test_nightly_dispatch_integration.py'
+      - '.github/workflows/test-nightly-dispatch.yml'
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install pytest
+      
+      - name: Run unit tests
+        run: |
+          pytest tests/test_nightly_dispatch_integration.py -v -m "not integration" --tb=short
+
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install linting tools
+        run: |
+          pip install flake8 mypy
+      
+      - name: Run flake8
+        run: |
+          # E203: whitespace before ':' (black conflict)
+          # E402: module level import not at top (needed for sys.path.insert)
+          # W503: line break before binary operator
+          flake8 scripts/nightly_dispatch.py tests/test_nightly_dispatch_integration.py \
+            --max-line-length=120 \
+            --ignore=E203,E402,W503
+      
+      - name: Run mypy (optional)
+        continue-on-error: true
+        run: |
+          mypy scripts/nightly_dispatch.py --ignore-missing-imports
+
+  smoke-tests:
+    runs-on: ubuntu-latest
+    needs: [unit-tests, lint-and-typecheck]
+    # Only run smoke tests on schedule/push, or on PR with 'run-smoke-tests' label
+    # Note: Secrets check happens inside steps (secrets context not available in job-level if)
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-smoke-tests')
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install pytest
+      
+      - name: Check secrets availability
+        id: check-secrets
+        env:
+          DX_RUNNER_VERSION: "${{ secrets.DX_RUNNER_VERSION }}"
+          DX_RUNNER_SHA256: "${{ secrets.DX_RUNNER_SHA256 }}"
+        run: |
+          if [ -z "$DX_RUNNER_VERSION" ] || [ -z "$DX_RUNNER_SHA256" ]; then
+            echo "::warning::DX_RUNNER_VERSION and DX_RUNNER_SHA256 secrets not configured."
+            echo "::warning::Smoke tests will be skipped. Please configure secrets to enable smoke tests."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Setup dx-runner
+        if: steps.check-secrets.outputs.skip != 'true'
+        env:
+          DX_RUNNER_VERSION: "${{ secrets.DX_RUNNER_VERSION }}"
+          DX_RUNNER_SHA256: "${{ secrets.DX_RUNNER_SHA256 }}"
+        run: |
+          echo "Installing dx-runner v${DX_RUNNER_VERSION}"
+          curl -fsSL \
+            "https://github.com/stars-end/dx-runner/releases/download/v${DX_RUNNER_VERSION}/dx-runner-linux-amd64" \
+            -o /tmp/dx-runner
+          
+          # Verify checksum before install
+          echo "${DX_RUNNER_SHA256}  /tmp/dx-runner" | sha256sum -c - || {
+            echo "ERROR: SHA256 verification failed"
+            exit 1
+          }
+          
+          chmod +x /tmp/dx-runner
+          sudo mv /tmp/dx-runner /usr/local/bin/
+          dx-runner --version
+      
+      - name: Run smoke tests
+        if: steps.check-secrets.outputs.skip != 'true'
+        run: |
+          RUN_SMOKE=1 pytest tests/test_nightly_dispatch_integration.py -v -m integration --tb=short
+      
+      - name: Skip notice
+        if: steps.check-secrets.outputs.skip == 'true'
+        run: |
+          echo "::notice::Smoke tests skipped - DX_RUNNER_VERSION and DX_RUNNER_SHA256 secrets not configured"
+      
+      - name: Alert on failure
+        if: failure() && steps.check-secrets.outputs.skip != 'true'
+        env:
+          SLACK_WEBHOOK: "${{ secrets.SLACK_WEBHOOK }}"
+        run: |
+          if [ -n "$SLACK_WEBHOOK" ]; then
+            curl -X POST "$SLACK_WEBHOOK" \
+              -H 'Content-type: application/json' \
+              -d '{"text":"🚨 Nightly dispatch smoke test FAILED in CI"}'
+          fi
