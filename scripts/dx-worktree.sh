@@ -41,10 +41,22 @@ create() {
   "$AGENTS_ROOT/scripts/dx-toolchain.sh" ensure >/dev/null 2>&1 || true
   "$AGENTS_ROOT/scripts/dx-ensure-bins.sh" >/dev/null 2>&1 || true
 
-  local path
-  path="$("$AGENTS_ROOT/scripts/worktree-setup.sh" "$beads_id" "$repo")"
+  local path setup_out setup_rc
+  set +e
+  setup_out="$("$AGENTS_ROOT/scripts/worktree-setup.sh" "$beads_id" "$repo" 2>&1)"
+  setup_rc=$?
+  set -e
+  if [[ "$setup_rc" -ne 0 ]]; then
+    die "worktree-setup failed (rc=$setup_rc): $setup_out"
+  fi
+  path="$setup_out"
   if [[ -z "$path" ]]; then
     die "worktree-setup failed"
+  fi
+
+  # Best-effort trust to avoid gh/tooling failures on untrusted .mise.toml.
+  if command -v mise >/dev/null 2>&1 && [[ -d "$path" ]]; then
+    mise trust "$path" >/dev/null 2>&1 || true
   fi
 
   echo "$path"

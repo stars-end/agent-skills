@@ -200,7 +200,7 @@ Policy inputs:
 - `quota_headroom`
 
 Routing:
-1. Default throughput: OpenCode (`zai-coding-plan/glm-5`)
+1. Default throughput: OpenCode (`zhipuai-coding-plan/glm-5`)
 2. Backstop/fallback: cc-glm (`glm-5`)
 3. Optional overflow: Gemini (only with quota gate pass)
 

@@ -124,6 +124,34 @@ EOF
   exit 1
 fi
 
+FEATURE_KEY_VALUE="$(echo "$COMMIT_MSG" | awk -F': ' '/^Feature-Key: /{print $2; exit}')"
+if [[ -z "${FEATURE_KEY_VALUE:-}" ]]; then
+  cat >&2 <<EOF
+
+❌ COMMIT BLOCKED: Invalid Feature-Key trailer
+
+Feature-Key trailer is present but empty.
+Expected:
+  Feature-Key: bd-123
+  Feature-Key: bd-123.4
+
+EOF
+  exit 1
+fi
+
+# Dotted Beads IDs are valid (e.g., bd-5wys.10).
+if [[ ! "$FEATURE_KEY_VALUE" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
+  cat >&2 <<EOF
+
+❌ COMMIT BLOCKED: Invalid Feature-Key format
+
+Feature-Key must match:
+  ^bd-[a-z0-9]+(\\.[a-z0-9]+)*$
+
+EOF
+  exit 1
+fi
+
 # Enforce Agent
 if ! echo "$COMMIT_MSG" | grep -q "Agent:"; then
   cat >&2 <<EOF

@@ -31,11 +31,11 @@ dx-runner start --provider opencode --beads bd-xxx --prompt-file /tmp/task.promp
 dx-runner check --beads bd-xxx --json
 
 # Direct headless lane (advanced)
-opencode run -m zai-coding-plan/glm-5 "Implement task T1 from plan.md"
+opencode run -m zhipuai-coding-plan/glm-5 "Implement task T1 from plan.md"
 
 # Server lane (single host)
 opencode serve --hostname 127.0.0.1 --port 4096
-opencode run --attach http://127.0.0.1:4096 -m zai-coding-plan/glm-5 "Implement task T2 from plan.md"
+opencode run --attach http://127.0.0.1:4096 -m zhipuai-coding-plan/glm-5 "Implement task T2 from plan.md"
 ```
 
 ## Governed Benchmark Entry Points
@@ -50,9 +50,15 @@ python3 scripts/benchmarks/opencode_cc_glm/run_progressive_opencode.py \
 # Governance-wrapped benchmark
 python3 scripts/benchmarks/opencode_cc_glm/run_governed_benchmark.py \
   --workflows opencode_run_headless,opencode_server_http,opencode_server_attach_run \
-  --model zai-coding-plan/glm-5 \
+  --model zhipuai-coding-plan/glm-5 \
   --required-baseline "$(git rev-parse HEAD)" \
   --reported-commit "$(git rev-parse HEAD)" \
   --branch "$(git rev-parse --abbrev-ref HEAD)" \
   --parallel 6
 ```
+
+## Model Policy
+
+- OpenCode canonical model is `zhipuai-coding-plan/glm-5`.
+- `dx-runner` OpenCode adapter enforces this model strictly.
+- If unavailable, fail fast and route to `cc-glm` or `gemini`.

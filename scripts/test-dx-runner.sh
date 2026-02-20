@@ -62,11 +62,12 @@ adapter_start() {
   local log_file="$4"
   local rc_file="${DX_RUNNER_RC_FILE:-/tmp/dx-runner/mock/${beads}.rc}"
   local exit_code="${MOCK_ADAPTER_EXIT_CODE:-0}"
+  local sleep_sec="${MOCK_ADAPTER_SLEEP_SEC:-1}"
   mkdir -p "$(dirname "$rc_file")"
   (
     echo "READY_STDOUT for $beads"
     echo "READY_STDERR for $beads" >&2
-    sleep 1
+    sleep "$sleep_sec"
     echo "$exit_code" > "$rc_file"
     exit "$exit_code"
   ) >> "$log_file" 2>&1 &
@@ -429,11 +430,11 @@ test_outcome_lifecycle() {
 }
 
 # ============================================================================
-# Test: OpenCode Model Resolution (Canonical + Allowed Fallback)
+# Test: OpenCode Model Resolution (Strict Canonical)
 # ============================================================================
 
 test_model_resolution() {
-    echo "=== Testing Model Resolution (Canonical + Allowed Fallback) ==="
+    echo "=== Testing Model Resolution (Strict Canonical) ==="
 
     local tmp_bin
     tmp_bin="$(mktemp -d)"
@@ -478,11 +479,11 @@ EOF
     local r2
     rm -f /tmp/dx-runner/opencode/.models_cache
     r2="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12" || true)"
-    [[ "$r2" == zai-coding-plan/glm-5* ]] && pass "model resolution falls back to allowlisted zai model when canonical is missing" || fail "expected zai fallback when canonical missing: $r2"
+    [[ "$r2" == "|unavailable|"* ]] && pass "model resolution fails when canonical model is missing" || fail "expected unavailable when canonical missing: $r2"
 
     local r3
     r3="$(adapter_resolve_model "zai-coding-plan/glm-5" "epyc12" || true)"
-    [[ "$r3" == zai-coding-plan/glm-5* ]] && pass "model resolution accepts allowlisted non-canonical requested models" || fail "expected allowlisted requested model acceptance: $r3"
+    [[ "$r3" == "|unavailable|"* ]] && pass "model resolution rejects non-canonical requested models" || fail "expected non-canonical rejection: $r3"
 
     # Start should fail with deterministic rc=25 and reason_code when canonical-only policy cannot be satisfied
     local prompt_file log_file start_out rc
@@ -491,7 +492,7 @@ EOF
     echo "READY" > "$prompt_file"
     set +e
     rm -f /tmp/dx-runner/opencode/.models_cache
-    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" OPENCODE_ALLOWED_MODELS="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "/tmp" "$log_file" 2>/dev/null)"
+    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "/tmp" "$log_file" 2>/dev/null)"
     rc=$?
     set -e
     if [[ "$rc" -eq 25 ]] && echo "$start_out" | grep -q "reason_code=opencode_model_unavailable"; then
@@ -1125,6 +1126,114 @@ EOF
 }
 
 # ============================================================================
+# Test: Finalize/Stop Metric Preservation
+# ============================================================================
+
+test_stop_preserves_metrics() {
+    echo "=== Testing Stop/Finalize Metric Preservation ==="
+
+    local adapter="$ADAPTERS_DIR/mock.sh"
+    create_mock_adapter "$adapter"
+
+    local beads="test-stop-metrics-$$"
+    local prompt
+    prompt="$(mktemp)"
+    echo "READY" > "$prompt"
+
+    if MOCK_ADAPTER_SLEEP_SEC=20 "$DX_RUNNER" start --beads "$beads" --provider mock --prompt-file "$prompt" >/dev/null 2>&1; then
+        sleep 2
+        "$DX_RUNNER" stop --beads "$beads" >/dev/null 2>&1 || true
+        local report_json
+        report_json="$("$DX_RUNNER" report --beads "$beads" --format json 2>/dev/null || true)"
+        if echo "$report_json" | jq -e '.outcome_reason_code=="manual_stop" and .log_bytes > 0' >/dev/null 2>&1; then
+            pass "manual stop preserves final log metrics in report"
+        else
+            fail "manual stop did not preserve final metrics: $report_json"
+        fi
+    else
+        fail "failed to start mock run for stop metrics test"
+    fi
+
+    rm -f "$adapter" "$prompt"
+    rm -f /tmp/dx-runner/mock/"${beads}".*
+}
+
+# ============================================================================
+# Test: Awaiting Finalize Taxonomy
+# ============================================================================
+
+test_awaiting_finalize_taxonomy() {
+    echo "=== Testing Awaiting Finalize Taxonomy ==="
+
+    local provider="mock-await"
+    local beads="test-await-$$"
+    local dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+
+    # Dead process pid + live monitor pid + no outcome => awaiting_finalize
+    echo "99999999" > "$dir/${beads}.pid"
+    (sleep 20) >/dev/null 2>&1 &
+    local mpid="$!"
+    echo "$mpid" > "$dir/${beads}.monitor.pid"
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+EOF
+    echo "partial output" > "$dir/${beads}.log"
+
+    local check_json
+    check_json="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
+    if echo "$check_json" | jq -e '.state=="awaiting_finalize" and .reason_code=="awaiting_finalize_monitor_active" and .next_action=="wait_for_finalize_or_run_dx_runner_finalize"' >/dev/null 2>&1; then
+        pass "awaiting finalize state is classified with deterministic next_action"
+    else
+        fail "awaiting finalize classification missing: $check_json"
+    fi
+
+    kill "$mpid" >/dev/null 2>&1 || true
+    rm -f "$dir/${beads}".*
+}
+
+# ============================================================================
+# Test: Provider Concurrency Guardrail
+# ============================================================================
+
+test_provider_concurrency_guardrail() {
+    echo "=== Testing Provider Concurrency Guardrail ==="
+
+    local adapter="$ADAPTERS_DIR/mock.sh"
+    create_mock_adapter "$adapter"
+
+    local beads1="test-cap-a-$$"
+    local beads2="test-cap-b-$$"
+    local p1 p2
+    p1="$(mktemp)"
+    p2="$(mktemp)"
+    echo "READY" > "$p1"
+    echo "READY" > "$p2"
+
+    if DX_RUNNER_MAX_PARALLEL_DEFAULT=1 MOCK_ADAPTER_SLEEP_SEC=20 "$DX_RUNNER" start --beads "$beads1" --provider mock --prompt-file "$p1" >/dev/null 2>&1; then
+        local out rc
+        set +e
+        out="$(DX_RUNNER_MAX_PARALLEL_DEFAULT=1 "$DX_RUNNER" start --beads "$beads2" --provider mock --prompt-file "$p2" 2>&1)"
+        rc=$?
+        set -e
+        if [[ "$rc" -eq 26 ]] && echo "$out" | grep -q "reason_code=provider_concurrency_cap_exceeded"; then
+            pass "provider concurrency cap blocks over-cap start with deterministic reason"
+        else
+            fail "provider concurrency cap guard failed (rc=$rc out=$out)"
+        fi
+    else
+        fail "failed to start first mock job for concurrency guardrail test"
+    fi
+
+    "$DX_RUNNER" stop --beads "$beads1" >/dev/null 2>&1 || true
+    rm -f "$adapter" "$p1" "$p2"
+    rm -f /tmp/dx-runner/mock/"${beads1}".* /tmp/dx-runner/mock/"${beads2}".*
+}
+
+# ============================================================================
 # Test: Feature-Key Validation
 # ============================================================================
 
@@ -1167,41 +1276,44 @@ test_precommit_flush_semantics() {
 
     local temp_dir
     temp_dir="$(mktemp -d)"
-    (
-        cd "$temp_dir"
-        git init --quiet
-        mkdir -p .beads bin
-        cat > bin/bd <<'EOF'
+    cd "$temp_dir"
+    git init --quiet
+    mkdir -p .beads bin
+    cat > bin/bd <<'EOF'
 #!/usr/bin/env bash
+if [[ "$1" == "--no-daemon" ]]; then
+  shift
+fi
 if [[ "$1" == "sync" && "$2" == "--flush-only" ]]; then
   exit 1
 fi
 exit 0
 EOF
-        chmod +x bin/bd
+    chmod +x bin/bd
 
-        local out_warn out_strict rc_warn rc_strict
-        set +e
-        PATH="$temp_dir/bin:$PATH" "$ROOT_DIR/hooks/pre-commit" > /tmp/precommit-warn.out 2>&1
-        rc_warn=$?
-        PATH="$temp_dir/bin:$PATH" BEADS_FLUSH_STRICT=1 "$ROOT_DIR/hooks/pre-commit" > /tmp/precommit-strict.out 2>&1
-        rc_strict=$?
-        set -e
+    local out_warn out_strict rc_warn rc_strict
+    set +e
+    PATH="$temp_dir/bin:$PATH" "$ROOT_DIR/hooks/pre-commit" > /tmp/precommit-warn.out 2>&1
+    rc_warn=$?
+    PATH="$temp_dir/bin:$PATH" BEADS_FLUSH_STRICT=1 "$ROOT_DIR/hooks/pre-commit" > /tmp/precommit-strict.out 2>&1
+    rc_strict=$?
+    set -e
 
-        out_warn="$(cat /tmp/precommit-warn.out 2>/dev/null || true)"
-        out_strict="$(cat /tmp/precommit-strict.out 2>/dev/null || true)"
+    out_warn="$(cat /tmp/precommit-warn.out 2>/dev/null || true)"
+    out_strict="$(cat /tmp/precommit-strict.out 2>/dev/null || true)"
 
-        if [[ "$rc_warn" -eq 0 && "$out_warn" == *"Warning: Failed to flush bd changes to JSONL"* ]]; then
-            pass "pre-commit flush failure is warn-only by default"
-        else
-            fail "pre-commit warn-only semantics failed (rc=$rc_warn)"
-        fi
-        if [[ "$rc_strict" -ne 0 && "$out_strict" == *"strict mode"* ]]; then
-            pass "pre-commit flush failure is blocking in strict mode"
-        else
-            fail "pre-commit strict-mode blocking semantics failed (rc=$rc_strict)"
-        fi
-    )
+    if [[ "$rc_warn" -eq 0 && "$out_warn" == *"Warning: Failed to flush bd changes to JSONL"* ]]; then
+        pass "pre-commit flush failure is warn-only by default"
+    else
+        fail "pre-commit warn-only semantics failed (rc=$rc_warn)"
+    fi
+    if [[ "$rc_strict" -ne 0 && "$out_strict" == *"strict mode"* ]]; then
+        pass "pre-commit flush failure is blocking in strict mode"
+    else
+        fail "pre-commit strict-mode blocking semantics failed (rc=$rc_strict)"
+    fi
+
+    cd /
     rm -rf "$temp_dir" /tmp/precommit-warn.out /tmp/precommit-strict.out
 }
 
@@ -1524,6 +1636,9 @@ run_all_tests() {
     test_host_context_tags
     test_mutation_log_accounting
     test_capacity_classification
+    test_stop_preserves_metrics
+    test_awaiting_finalize_taxonomy
+    test_provider_concurrency_guardrail
     test_feature_key_validation
     test_precommit_flush_semantics
     test_restart_lifecycle
