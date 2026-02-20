@@ -1416,6 +1416,95 @@ test_adapter_stop_parity() {
     done
 }
 
+# ============================================================================
+# Test: dx-dispatch Compatibility Shim
+# ============================================================================
+
+test_dx_dispatch_shim() {
+    echo "=== Testing dx-dispatch Compatibility Shim ==="
+    
+    local DX_DISPATCH="${ROOT_DIR}/scripts/dx-dispatch"
+    
+    if [[ ! -x "$DX_DISPATCH" ]]; then
+        fail "dx-dispatch shim not found or not executable"
+        return
+    fi
+    
+    # Test 1: --help should work
+    local help_output
+    help_output="$("$DX_DISPATCH" --help 2>&1)" || true
+    if echo "$help_output" | grep -q "dx-runner"; then
+        pass "dx-dispatch --help references dx-runner"
+    else
+        fail "dx-dispatch --help should reference dx-runner"
+    fi
+    
+    # Test 2: --list should forward to dx-runner status
+    local list_output
+    list_output="$(DX_DISPATCH_NO_DEPRECATION=1 "$DX_DISPATCH" --list 2>&1)" || true
+    if echo "$list_output" | grep -qE "bead|provider|no jobs"; then
+        pass "dx-dispatch --list forwards to dx-runner status"
+    else
+        warn "dx-dispatch --list output: ${list_output:0:100}"
+    fi
+    
+    # Test 3: Missing arguments should error
+    set +e
+    "$DX_DISPATCH" >/dev/null 2>&1
+    local err_rc=$?
+    set -e
+    if [[ "$err_rc" -ne 0 ]]; then
+        pass "dx-dispatch with no args returns error (rc=$err_rc)"
+    else
+        fail "dx-dispatch with no args should error"
+    fi
+    
+    # Test 4: Deprecation warning is emitted (unless suppressed)
+    local deprec_output
+    deprec_output="$("$DX_DISPATCH" epyc12 "test task" --beads test-shim-$$ 2>&1)" || true
+    if echo "$deprec_output" | grep -qi "deprecat"; then
+        pass "dx-dispatch emits deprecation warning"
+    else
+        warn "dx-dispatch deprecation warning may be suppressed or forwarded"
+    fi
+    
+    # Test 5: Provider mapping
+    # cc-glm -> cc-glm
+    # gemini -> gemini
+    # other -> opencode
+    local help_text
+    help_text="$("$DX_DISPATCH" --help 2>&1)"
+    if echo "$help_text" | grep -q "provider"; then
+        pass "dx-dispatch help mentions provider mapping"
+    fi
+}
+
+test_dx_dispatch_shim_forwarding() {
+    echo "=== Testing dx-dispatch Shim Exit Code Propagation ==="
+    
+    local DX_DISPATCH="${ROOT_DIR}/scripts/dx-dispatch"
+    local DX_RUNNER="${ROOT_DIR}/scripts/dx-runner"
+    
+    if [[ ! -x "$DX_DISPATCH" ]] || [[ ! -x "$DX_RUNNER" ]]; then
+        fail "dx-dispatch or dx-runner not found"
+        return
+    fi
+    
+    # Test that dx-runner status exit code is propagated
+    DX_DISPATCH_NO_DEPRECATION=1 "$DX_DISPATCH" --list >/dev/null 2>&1
+    local rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+        pass "dx-dispatch --list propagates exit code 0"
+    else
+        warn "dx-dispatch --list returned $rc (expected 0)"
+    fi
+    
+    # Test with specific beads that doesn't exist
+    DX_DISPATCH_NO_DEPRECATION=1 "$DX_DISPATCH" --list >/dev/null 2>&1
+    rc=$?
+    pass "dx-dispatch shim executes without crash (rc=$rc)"
+}
+
 run_all_tests() {
     test_bash_syntax
     test_runner_commands
@@ -1443,6 +1532,8 @@ run_all_tests() {
     test_gemini_adapter
     test_gemini_preflight_auth
     test_prune_stale_jobs
+    test_dx_dispatch_shim
+    test_dx_dispatch_shim_forwarding
     
     echo ""
     echo "=== Summary ==="

@@ -239,19 +239,19 @@ Task:
   subagent_type: general-purpose
 ```
 
-### Option B: Cross-VM Dispatch (dx-dispatch compatibility wrapper)
+### Option B: Cross-VM Dispatch (SSH directly)
 
 For work that must run on a different VM:
 
 ```bash
 # Dispatch to remote VM via Tailscale SSH
-dx-dispatch macmini "cd ~/repo && make test"
+ssh fengning@macmini "cd ~/repo && make test"
 
 # Or use Tailscale directly
 tailscale ssh fengning@macmini "command"
 ```
 
-**Canonical VM Dispatch Targets:**
+Note: The dx-dispatch shell shim is deprecated. Use SSH directly or dx-runner with remote execution.
 
 | VM | Use Case | Status |
 |----|----------|--------|
@@ -260,12 +260,12 @@ tailscale ssh fengning@macmini "command"
 | `epyc12` | Linux compute, alternative to epyc6 | **Default Linux** |
 | `epyc6` | GPU work, ML training | **DISABLED** (see gate) |
 
-**When to use dx-dispatch:**
+**When to use cross-VM dispatch (SSH):**
 - Build requires macOS-specific tools (macmini)
 - Heavy compute workloads (epyc12 - NOT epyc6)
 - Remote environment has required secrets/tools
 
-**When NOT to use dx-dispatch:**
+**When NOT to use cross-VM dispatch:**
 - Local execution works (default to `dx-runner`)
 - No cross-VM requirement specified
 
