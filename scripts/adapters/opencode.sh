@@ -299,6 +299,7 @@ adapter_start() {
             printf 'selected_model=%s\n' "$model"
             printf 'fallback_reason=%s\n' "${fallback_reason:-none}"
             printf 'launch_mode=%s\n' "$launch_mode"
+            printf 'execution_mode=%s\n' "$launch_mode"
             printf 'rc_file=%s\n' "$rc_file"
             return 0
         fi
@@ -333,6 +334,7 @@ EOF
     printf 'selected_model=%s\n' "$model"
     printf 'fallback_reason=%s\n' "${fallback_reason:-none}"
     printf 'launch_mode=%s\n' "$launch_mode"
+    printf 'execution_mode=%s\n' "$launch_mode"
     printf 'rc_file=%s\n' "$rc_file"
 }
 

@@ -187,6 +187,7 @@ EOF
     printf 'selected_model=%s\n' "$model"
     printf 'fallback_reason=%s\n' "none"
     printf 'launch_mode=%s\n' "$launch_mode"
+    printf 'execution_mode=%s\n' "$launch_mode"
     printf 'rc_file=%s\n' "$rc_file"
 }
 

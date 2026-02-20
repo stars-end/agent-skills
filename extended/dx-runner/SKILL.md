@@ -308,6 +308,9 @@ beads-mcp binary: MISSING (optional - Beads context degraded)
   "retries": 0,
   "exit_code": "0",
   "outcome_state": "success",
+  "selected_model": "glm-5",
+  "fallback_reason": "none",
+  "execution_mode": "detached",
   "worktree": "/tmp/agents/bd-xxx/repo",
   "mutations": 5,
   "log_bytes": 2048,
@@ -315,6 +318,22 @@ beads-mcp binary: MISSING (optional - Beads context degraded)
   "pid_age_sec": 310
 }
 ```
+
+## Normalized Telemetry Fields
+
+All providers emit the following normalized fields in outcome files:
+
+| Field | Description |
+|-------|-------------|
+| `provider` | Provider name (cc-glm, opencode, gemini) |
+| `selected_model` | Model selected for execution |
+| `reason_code` | Reason for state transition |
+| `fallback_reason` | If fallback occurred, why |
+| `state` | Final state (success, failed, killed, no_op) |
+| `execution_mode` | How process was launched (detached, pty-detached, detached-script, etc.) |
+| `started_at` | ISO 8601 timestamp when job started |
+| `completed_at` | ISO 8601 timestamp when job completed |
+| `exit_code` | Process exit code |
 
 ## Failure Taxonomy
 
