@@ -169,8 +169,6 @@ adapter_start() {
         return 1
     }
     chmod +x "$launcher"
-    local child_pid_file="/tmp/dx-runner/gemini/${beads}.child.pid"
-    rm -f "$child_pid_file"
 
     local worktree_arg=""
     if [[ -n "$worktree" && -d "$worktree" ]]; then
@@ -180,14 +178,13 @@ adapter_start() {
 cat > "$launcher" <<EOF
 #!/usr/bin/env bash
 set +e
+# Use trap to ensure rc_file is written even if killed
+trap 'kill \$child_pid 2>/dev/null; rc=\$?; [[ -f $(printf '%q' "$rc_file") ]] || echo "\${rc:-1}" > $(printf '%q' "$rc_file"); rm -f $(printf '%q' "$launcher")' EXIT TERM INT HUP
 ${worktree_arg}${cmd_args[@]@Q} >> $(printf '%q' "$log_file") 2>&1 &
 child_pid=\$!
-echo "\$child_pid" > $(printf '%q' "$child_pid_file")
 wait "\$child_pid"
 rc=\$?
 echo "\$rc" > $(printf '%q' "$rc_file")
-rm -f $(printf '%q' "$launcher")
-rm -f $(printf '%q' "$child_pid_file")
 EOF
     if command -v setsid >/dev/null 2>&1; then
         launch_mode="${launch_mode}+setsid"
@@ -197,20 +194,7 @@ EOF
         nohup "$launcher" >/dev/null 2>&1 < /dev/null &
     fi
     local pid="$!"
-    # Prefer the real child pid so runner tracks the long-running gemini process.
-    local tries=30
-    while [[ $tries -gt 0 ]]; do
-        if [[ -f "$child_pid_file" ]]; then
-            local child_pid
-            child_pid="$(cat "$child_pid_file" 2>/dev/null || true)"
-            if [[ "$child_pid" =~ ^[0-9]+$ ]]; then
-                pid="$child_pid"
-                break
-            fi
-        fi
-        sleep 0.1
-        tries=$((tries - 1))
-    done
+    
     printf 'pid=%s\n' "$pid"
     printf 'selected_model=%s\n' "$model"
     printf 'fallback_reason=%s\n' "none"

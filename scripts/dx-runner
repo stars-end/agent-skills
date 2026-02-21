@@ -210,7 +210,7 @@ provider_running_count() {
         [[ -f "$pidf" ]] || continue
         local beads pid
         beads="$(basename "$pidf" .pid)"
-        [[ "$beads" == *.monitor ]] && continue
+        [[ "$beads" == *.monitor || "$beads" == *.child ]] && continue
         pid="$(cat "$pidf" 2>/dev/null || true)"
         if [[ "$pid" =~ ^[0-9]+$ ]] && ps -p "$pid" >/dev/null 2>&1; then
             count=$((count + 1))

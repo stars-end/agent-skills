@@ -176,10 +176,10 @@ adapter_start() {
     cat > "$launcher" <<EOF
 #!/usr/bin/env bash
 set +e
+trap 'rc=\$?; [[ -f $(printf '%q' "$rc_file") ]] || echo "\${rc:-1}" > $(printf '%q' "$rc_file"); rm -f $(printf '%q' "$launcher")' EXIT TERM INT HUP
 $run_q >> $(printf '%q' "$log_file") 2>&1
 rc=\$?
 echo "\$rc" > $(printf '%q' "$rc_file")
-rm -f $(printf '%q' "$launcher")
 EOF
 
     if command -v setsid >/dev/null 2>&1; then
