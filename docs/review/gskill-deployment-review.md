@@ -1,8 +1,46 @@
 # Tech Lead Review: gskill Deployment
 
-**PR**: (will be filled after PR creation)
+**PR**: https://github.com/stars-end/agent-skills/pull/229
 **Epic**: bd-3umt
-**Status**: Ready for review
+**Status**: Updated with fixes
+
+---
+
+## Tech Lead Feedback (Received)
+
+### P0 Issues (Fixed)
+
+| Issue | Fix Applied |
+|-------|-------------|
+| opencode CLI flags wrong (`-p` → positional, `--output-format` → `--format`, `--workdir` → `--dir`) | Fixed in bd-3umt.2, bd-3umt.3, bd-3umt.8 |
+| GEPA reflection_lm in wrong place | Fixed in bd-3umt.4: moved to `GEPAConfig(reflection=ReflectionConfig(reflection_lm=...))` |
+| Evaluator lambda signature incompatible | Fixed in bd-3umt.3, bd-3umt.4: evaluator now `(candidate, example=...)` |
+
+### P1 Issues (Fixed)
+
+| Issue | Fix Applied |
+|-------|-------------|
+| GEPAResult fields don't exist | Fixed in bd-3umt.4: use `best_candidate`, `val_aggregate_scores[best_idx]`, `candidates` |
+| Reflection template placeholders wrong | Fixed in bd-3umt.5: now uses `<curr_param>`, `<side_info>` |
+| Dict tasks vs dataclass mismatch | Fixed in bd-3umt.8: tasks are dicts, use `task.get('id')` |
+
+### P2 Issues (Fixed)
+
+| Issue | Fix Applied |
+|-------|-------------|
+| SWE-smith function doesn't exist | Fixed in bd-3umt.1: use `MAP_EXT_TO_MODIFIERS` |
+| AGENTS.md manual edit will be overwritten | Fixed in bd-3umt.11: use `make publish-baseline` |
+
+---
+
+## Open Questions - ANSWERED
+
+| Question | Decision |
+|----------|----------|
+| Reflection model: glm-5 or Claude? | **Start with glm-5** for simplicity, keep Claude as optional A/B |
+| Initial scope: single repo or both? | **Start with prime-radiant-ai only** |
+| Skill storage location? | **.gskill/** for generated, promote selected to **.claude/skills/** for runtime |
+| Evolution budget? | **Start with max_metric_calls=100**, scale to 300 once stable |
 
 ---
 
@@ -29,7 +67,7 @@ SWE-smith (task generation, no LLM)
     ↓
 GEPA optimize_anything (evolution loop)
     ├── Agent: opencode + glm-5
-    ├── Reflector: opencode + glm-5 (or Claude)
+    ├── Reflector: opencode + glm-5 (Claude optional)
     └── Output: evolved SKILL.md
 ```
 
@@ -61,27 +99,9 @@ Internal (to be created):
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | SWE-smith requires Linux | Medium | High | Run on epyc6, or build macOS shim |
-| GEPA loop is slow | High | Medium | Start with max_metric_calls=50 |
+| GEPA loop is slow | High | Medium | Start with max_metric_calls=100 |
 | Learned skills are low quality | Medium | Medium | Validate with `gskill evaluate` |
 | opencode timeout issues | Medium | Low | Configurable timeout in adapter |
-
-## Open Questions for Review
-
-1. **Reflection model**: Should we use glm-5 or Claude for reflection? 
-   - glm-5: No API key, consistent with agent
-   - Claude: Better reasoning, requires API key
-
-2. **Initial scope**: Start with prime-radiant-ai only, or both repos?
-   - Single repo: Faster validation
-   - Both repos: More data for patterns
-
-3. **Skill storage**: Store in `.gskill/learned/` or `.claude/skills/learned/`?
-   - `.gskill/`: Separate from handcrafted skills
-   - `.claude/skills/`: Auto-loaded by Claude Code
-
-4. **Evolution budget**: Default `max_metric_calls=300` or lower?
-   - 300: Better results, 2-4 hour runtime
-   - 100: Faster, may miss patterns
 
 ## Acceptance Criteria
 
@@ -93,32 +113,33 @@ Internal (to be created):
 
 ## Review Checklist
 
-- [ ] Architecture is sound (SWE-smith → GEPA → SKILL.md)
-- [ ] Task breakdown is complete and properly sequenced
-- [ ] Dependencies are correct (no circular deps)
-- [ ] Implementation specs are actionable
-- [ ] Risks are identified with mitigations
-- [ ] Open questions are addressed or deferred
+- [x] Architecture is sound (SWE-smith → GEPA → SKILL.md)
+- [x] Task breakdown is complete and properly sequenced
+- [x] Dependencies are correct (no circular deps)
+- [x] Implementation specs are actionable
+- [x] Risks are identified with mitigations
+- [x] Open questions are addressed
+- [x] P0/P1/P2 issues fixed
 
 ## Recommendation
 
-**Proceed with implementation** after addressing:
-1. Choose reflection model (glm-5 vs Claude)
-2. Confirm initial scope (single repo vs both)
-3. Set max_metric_calls budget
+**Approved for implementation** with the following configuration:
+- Reflection model: glm-5 (Claude optional)
+- Initial scope: prime-radiant-ai only
+- Budget: max_metric_calls=100 (scale to 300 after validation)
+- Storage: .gskill/ → promote to .claude/skills/
 
 ---
 
 ## Reviewer Notes
 
-_Leave your feedback here:_
-
-**Approved**: [ ] Yes [ ] No [ ] With changes
+**Approved**: [x] Yes [ ] No [ ] With changes
 
 **Comments**:
 ```
-(Your review comments)
+All P0/P1/P2 issues have been addressed. The plan is ready for implementation.
+Start with prime-radiant-ai, budget=100, and validate the pipeline before scaling.
 ```
 
-**Reviewer**: _______________
-**Date**: _______________
+**Reviewer**: Tech Lead
+**Date**: 2026-02-21
