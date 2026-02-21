@@ -23,6 +23,7 @@ allowed-tools:
 - **Separate review runs**: Review is always a separate dx-runner invocation
 - **Deterministic retry policy**: opencode -> cc-glm -> blocked
 - **Process hygiene**: Max child jobs, stale PID pruning, guaranteed cleanup
+- **Exec saturation guard**: Hard cap check before dispatch (`--exec-process-cap`, default 60)
 - **Preflight gates**: Provider/model/auth readiness checks before dispatch
 
 ## Commands
@@ -30,6 +31,8 @@ allowed-tools:
 ### start
 ```bash
 dx-batch start --items bd-aaa,bd-bbb,bd-ccc [--max-parallel 3] [--wave-id <id>]
+# Override saturation cap if needed:
+dx-batch start --items bd-aaa,bd-bbb --exec-process-cap 40
 ```
 
 ### status
@@ -79,3 +82,9 @@ PENDING -> IMPLEMENTING -> REVIEWING -> APPROVED
 ```bash
 pytest -q /Users/fengning/agent-skills/tests/dx_batch
 ```
+
+## Runtime Safety Notes
+
+- `dx-batch start` automatically runs `dx-runner prune` before queue start.
+- Every run-loop cycle performs a doctor check before launching new items.
+- If live dispatch/runner processes exceed cap, wave fails fast with `exec_saturation`.

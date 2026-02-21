@@ -32,6 +32,7 @@ class TestCLISmoke:
         assert "--items" in result.stdout
         assert "--wave-id" in result.stdout
         assert "--max-parallel" in result.stdout
+        assert "--exec-process-cap" in result.stdout
 
     def test_cli_status_help(self):
         result = subprocess.run(
