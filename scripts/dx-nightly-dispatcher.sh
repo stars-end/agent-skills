@@ -11,13 +11,19 @@ AGENTSKILLS_DIR="${AGENTSKILLS_DIR:-$HOME/agent-skills}"
 VENV_PATH="${VENV_PATH:-$REPO_ROOT/backend/.venv}"
 HOME_DIR="${HOME:-/Users/fengning}"
 
-# Setup environment
-export PATH="$HOME_DIR/.local/bin:$HOME_DIR/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin"
+# Setup environment (include /opt/homebrew/bin for bash 5+ required by dx-runner)
+export PATH="/opt/homebrew/bin:$HOME_DIR/bin:$HOME_DIR/.local/bin:$HOME_DIR/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin"
 export BEADS_DIR="$HOME_DIR/bd/.beads"
 export PYTHONPATH="$REPO_ROOT"
 
-# dx-runner configuration
-export DX_RUNNER_PATH="${DX_RUNNER_PATH:-/usr/local/bin/dx-runner}"
+# 1Password service account for non-interactive auth (required for cron jobs)
+export OP_SERVICE_ACCOUNT_TOKEN_FILE="${OP_SERVICE_ACCOUNT_TOKEN_FILE:-$HOME_DIR/.config/systemd/user/op-macmini-token}"
+
+# dx-runner configuration: find actual location in PATH
+if [ -z "${DX_RUNNER_PATH:-}" ]; then
+    DX_RUNNER_PATH=$(command -v dx-runner 2>/dev/null || echo "/usr/local/bin/dx-runner")
+fi
+export DX_RUNNER_PATH
 
 # Slack webhook for alerts (optional)
 export SLACK_WEBHOOK="${SLACK_WEBHOOK:-}"
@@ -45,7 +51,11 @@ if [ ! -x "$VENV_PATH/bin/python" ] && ! command -v python3 &> /dev/null; then
 fi
 
 # Use venv python if available, otherwise system python3
-PYTHON="${VENV_PATH/bin/python:-python3}"
+if [ -x "$VENV_PATH/bin/python" ]; then
+    PYTHON="$VENV_PATH/bin/python"
+else
+    PYTHON="python3"
+fi
 
 # Run the dispatcher
 log "Starting Nightly Fleet Dispatcher..."
