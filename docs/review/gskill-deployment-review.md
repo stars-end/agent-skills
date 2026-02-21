@@ -112,7 +112,7 @@ Internal (to be created):
 - [ ] Skills are stored in repo-specific location
 - [ ] Process is reproducible and documented
 
-### Critical Planning-Level Requirements (bd-3umt Round 2)
+### Critical Planning-Level Requirements (bd-3umt Round 3)
 
 These requirements ensure the plan uses REAL failing instances, not synthetic descriptions:
 
@@ -121,13 +121,16 @@ These requirements ensure the plan uses REAL failing instances, not synthetic de
 | bd-3umt.1 | Tasks admitted ONLY when mutation causes verified failing tests | No "instructional-only" tasks |
 | bd-3umt.1 | No `echo 'No test file'` fallback | Every task must have real test |
 | bd-3umt.1 | Apply `modifier.modify(entity)`, extract code from `BugRewrite.rewrite` | Real bug injection |
-| bd-3umt.1 | Use profile-based entity extraction (NOT `extract_entities` from procedural) | Correct SWE-smith API |
-| bd-3umt.1 | Patch uses RELATIVE paths for `patch -p1` compatibility | Patch applies correctly |
+| bd-3umt.1 | Use `RepoProfile.extract_entities_from_file()` (NOT nonexistent swesmith.utils) | Correct SWE-smith API |
+| bd-3umt.1 | Patch uses `a/` and `b/` prefixes for `patch -p1` compatibility | Patch applies correctly |
+| bd-3umt.1 | Task includes `mutated_code` field (NOT `original_code`) | Evaluator has mutation data |
 | bd-3umt.3 | Load/apply mutation BEFORE agent run | Evaluate on mutated state |
+| bd-3umt.3 | Use `mutated_code` field, fail fast if missing | No original-code fallback |
 | bd-3umt.3 | Repo/task isolation with tempfile | Prevent cross-contamination |
-| bd-3umt.3 | Patch application uses `-p1` for relative path compatibility | Matches generator format |
+| bd-3umt.3 | Patch application uses `-p1` for `a/` `b/` prefixed paths | Matches generator format |
 | bd-3umt.4 | Use `current_candidate` key for string candidates | Correct GEPA API |
 | bd-3umt.4 | Wire reflection template via `ReflectionConfig(reflection_prompt_template=...)` | Custom reflection enabled |
+| bd-3umt.4 | Dependencies include bd-3umt.2, .3, .5 (metadata matches description) | Correct scheduling |
 | bd-3umt.5 | Template uses `<curr_param>`, `<side_info>` placeholders | GEPA compatibility |
 | bd-3umt.6/.7 | Exclude patterns use fnmatch (glob), NOT substring | Patterns actually work |
 | bd-3umt.10 | Tests set patterns BEFORE discover_targets() OR use defaults | No test/generator mismatch |
