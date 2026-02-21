@@ -61,8 +61,10 @@ dx-runner start --beads <id> --provider <name> --prompt-file <path> [options]
 Options:
   --worktree <path>     Worktree path (must be under /tmp/agents or allowed prefix)
   --repo <name>         Repository name
+  --profile <name>      Load profile from configs/dx-runner-profiles/<name>.yaml (bd-8wdg.1)
   --pty                 Use PTY for output capture
   --required-baseline <sha>  Enforce baseline gate before dispatch
+  --allow-model-override    Allow OPENCODE_MODEL env override (bd-8wdg.2)
 ```
 
 ### status
@@ -142,6 +144,30 @@ Test provider/model availability:
 dx-runner probe --provider <name> [--model <id>]
 ```
 
+### profiles (bd-8wdg.1)
+
+List available profiles:
+
+```bash
+dx-runner profiles
+```
+
+### scope-gate (bd-8wdg.5)
+
+Evaluate scope constraints:
+
+```bash
+dx-runner scope-gate --allowed-paths-file <path> [--mutation-budget <n>]
+```
+
+### evidence-gate (bd-8wdg.6)
+
+Evaluate evidence requirements:
+
+```bash
+dx-runner evidence-gate --signoff-file <path>
+```
+
 ### Governance Gates
 
 ```bash
@@ -205,20 +231,108 @@ Operator expectations for Gemini finalization:
 - failure completion: `state=exited_err`, non-zero `exit_code` in outcome/report
 - if `reason_code=monitor_no_rc_file` or `late_finalize_no_rc`, treat as runner lifecycle defect and escalate
 
+## Profile System (bd-8wdg.1)
+
+Profiles provide pre-configured settings for common workflows:
+
+```bash
+# Use production profile (strict governance)
+dx-runner start --beads bd-xxx --profile opencode-prod --prompt-file /tmp/task.prompt
+
+# List available profiles
+dx-runner profiles
+```
+
+### Available Profiles
+
+| Profile | Provider | Description |
+|---------|----------|-------------|
+| `opencode-prod` | opencode | Production: strict governance, canonical model only |
+| `cc-glm-fallback` | cc-glm | Reliability backstop for critical waves |
+| `gemini-burst` | gemini | Burst capacity with relaxed constraints |
+| `dev` | opencode | Development: permissive, allows model override |
+
+### Profile File Structure
+
+```yaml
+# configs/dx-runner-profiles/opencode-prod.yaml
+provider: opencode
+description: "Production profile with strict governance"
+settings:
+  allow_model_override: false
+  required_baseline: null
+  mutation_budget: null
+  scope_paths: []
+  evidence_signoff: false
+```
+
+Profile priority: CLI flags > profile settings > defaults
+
+## Model Drift Blocking (bd-8wdg.2)
+
+OpenCode adapter enforces canonical model `zhipuai-coding-plan/glm-5`. The `OPENCODE_MODEL` environment variable is **ignored** by default.
+
+### Override Policy
+
+```bash
+# Blocked (default): OPENCODE_MODEL is ignored
+OPENCODE_MODEL=some-other-model dx-runner start --beads bd-xxx --provider opencode ...
+
+# Allowed via flag
+dx-runner start --beads bd-xxx --provider opencode --allow-model-override ...
+
+# Allowed via env
+DX_RUNNER_ALLOW_MODEL_OVERRIDE=1 dx-runner start --beads bd-xxx --provider opencode ...
+
+# Allowed via profile (dev profile has allow_model_override: true)
+dx-runner start --beads bd-xxx --profile dev ...
+```
+
+When blocked, the job fails preflight with:
+```
+[opencode-adapter] BLOCKED model override attempt: OPENCODE_MODEL=<value> (override not allowed)
+```
+
+This prevents silent model drift where operators accidentally use non-canonical models.
+
 ## Health States
 
 | State | Meaning | Action |
 |-------|---------|--------|
 | `launching` | Started, awaiting first output | Wait |
+| `slow_start` (bd-8wdg.10) | Within grace period, no output yet | Wait (grace period) |
 | `waiting_first_output` | CPU progress, no output past threshold | Monitor |
 | `silent_mutation` | Worktree changed, no log output | Check worktree |
 | `healthy` | Process running with activity | None |
 | `stalled` | No progress for N minutes | Restart |
+| `stopped` (bd-8wdg.3) | Manual stop via `dx-runner stop` | Review |
 | `no_op` | No heartbeat/mutation (bd-cbsb.17) | Investigate |
+| `no_op_success` (bd-8wdg.9) | Exit 0 but no mutations | Redispatch with guardrails |
 | `exited_ok` | Exited with code 0 | Review output |
 | `exited_err` | Exited with non-zero | Check logs |
 | `blocked` | Max retries exhausted | Manual intervention |
 | `missing` | No metadata found | Investigate |
+
+### Startup-Aware Health (bd-8wdg.10)
+
+Jobs in initial startup phase use `slow_start` state with configurable grace periods:
+
+```bash
+# Default grace: 60 seconds
+dx-runner start --beads bd-xxx --provider opencode ...
+
+# Custom grace period
+DX_RUNNER_SLOW_START_GRACE=120 dx-runner start ...
+```
+
+Transition: `slow_start` → `healthy` (on first output) or `slow_start` → `waiting_first_output` (grace expired)
+
+### Truthful Outcome Semantics (bd-8wdg.3)
+
+Health checks now use outcome `reason_code` when available, avoiding false-positive "healthy" classifications:
+
+- `stopped`: Set when job stopped via `dx-runner stop`
+- Outcome reason codes take precedence over process-alive heuristics
 
 Failure taxonomy notes:
 - `process_exit_with_rc`: process exited and runner captured `rc` deterministically
@@ -273,6 +387,60 @@ OpenCode adapter:
 OpenCode adapter warns if beads-mcp not found:
 ```
 beads-mcp binary: MISSING (optional - Beads context degraded)
+```
+
+### Scope Guard (bd-8wdg.5)
+
+Enforces filesystem scope constraints before job dispatch:
+
+```bash
+# Create allowed paths file
+echo -e "/tmp/agents/bd-xxx\n/tmp/dx-runner" > /tmp/scope.txt
+
+# Evaluate scope gate
+dx-runner scope-gate --allowed-paths-file /tmp/scope.txt --mutation-budget 50
+
+# Returns exit 0 if in scope, non-zero if out of scope
+```
+
+Options:
+- `--allowed-paths-file`: File with allowed path prefixes (one per line)
+- `--mutation-budget`: Maximum allowed file mutations
+
+### Evidence Gate (bd-8wdg.6)
+
+Verifies required signoffs/artifacts before considering job complete:
+
+```bash
+# Check for signoff file
+dx-runner evidence-gate --signoff-file /tmp/agents/bd-xxx/SIGNOFF.md
+
+# Returns exit 0 if evidence present, non-zero if missing
+```
+
+Options:
+- `--signoff-file`: Path to required signoff/evidence file
+
+### mise Trust Auto-Remediation (bd-8wdg.11)
+
+OpenCode adapter automatically attempts to trust mise if untrusted:
+
+```bash
+# During start, if mise is untrusted:
+# 1. Auto-run: mise trust (in worktree)
+# 2. Report status in preflight
+# 3. Continue if trust succeeds
+```
+
+Preflight output shows:
+```
+mise trust: UNTRUSTED → TRUSTED (auto-remediated)
+```
+
+Or if remediation fails:
+```
+mise trust: UNTRUSTED
+  WARN_CODE=opencode_mise_untrusted severity=warn action=run_mise_trust_in_worktree
 ```
 
 ## Migration from Legacy Tools
@@ -363,6 +531,29 @@ All providers emit the following normalized fields in outcome files:
 | 21 | Preflight failed | Fix preflight issues |
 | 22 | Permission denied | Use worktree path |
 | 23 | No-op detected | Investigate job |
+
+## dx-wave Wrapper (bd-8wdg.7)
+
+`dx-wave` is a safe operator wrapper with profile-first defaults:
+
+```bash
+# Uses opencode-prod profile by default
+dx-wave start --beads bd-xxx --prompt-file /tmp/task.prompt
+
+# Explicit profile selection
+dx-wave start --beads bd-xxx --profile cc-glm-fallback --prompt-file /tmp/task.prompt
+
+# List profiles
+dx-wave profiles
+
+# Show help
+dx-wave --help
+```
+
+Key differences from direct `dx-runner`:
+- Requires `--profile` (defaults to `opencode-prod`)
+- Enforces profile-first workflow
+- Simplified interface for wave operators
 
 ## Related
 

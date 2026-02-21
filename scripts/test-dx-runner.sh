@@ -390,10 +390,11 @@ test_outcome_lifecycle() {
         fi
         local state_ok
         state_ok="$("$DX_RUNNER" check --beads "$beads_ok" --json 2>/dev/null | jq -r '.state')" || state_ok=""
-        if [[ "$state_ok" == "exited_ok" ]]; then
-            pass "no false process_exited_without_outcome on success"
+        # bd-8wdg.9: no_op_success is valid for exit=0 with no mutations
+        if [[ "$state_ok" == "exited_ok" || "$state_ok" == "no_op_success" ]]; then
+            pass "no false process_exited_without_outcome on success (state=$state_ok)"
         else
-            fail "expected exited_ok for success, got $state_ok"
+            fail "expected exited_ok or no_op_success for success, got $state_ok"
         fi
         local log_ok="/tmp/dx-runner/mock/${beads_ok}.log"
         if [[ -f "$log_ok" ]] && grep -q "READY_STDOUT" "$log_ok" && grep -q "READY_STDERR" "$log_ok"; then
@@ -2003,6 +2004,366 @@ test_dx_dispatch_shim_forwarding() {
     pass "dx-dispatch shim executes without crash (rc=$rc)"
 }
 
+# ============================================================================
+# Test: Profile Loading (bd-8wdg.1)
+# ============================================================================
+
+test_profile_loading() {
+    echo "=== Testing Profile Loading ==="
+    
+    # Test profiles list command
+    local profiles_output
+    profiles_output="$("$DX_RUNNER" profiles --list 2>&1)" || true
+    if echo "$profiles_output" | grep -qE "opencode-prod|cc-glm-fallback|dev"; then
+        pass "profiles --list shows available profiles"
+    else
+        warn "profiles --list may be missing profiles: $profiles_output"
+    fi
+    
+    # Test profile show command
+    local show_output
+    show_output="$("$DX_RUNNER" profiles --show opencode-prod 2>&1)" || true
+    if echo "$show_output" | grep -qE "provider:|model:"; then
+        pass "profiles --show displays profile content"
+    else
+        fail "profiles --show did not display profile content"
+    fi
+}
+
+# ============================================================================
+# Test: Model Override Blocking (bd-8wdg.2)
+# ============================================================================
+
+test_model_override_blocking() {
+    echo "=== Testing Model Override Blocking ==="
+    
+    local tmp_bin fake_op models_file prompt repo_dir beads out rc
+    tmp_bin="$(mktemp -d)"
+    fake_op="$tmp_bin/opencode"
+    models_file="$(mktemp)"
+    prompt="$(mktemp)"
+    repo_dir="$(mktemp -d /tmp/agents/test-override-XXXXXX)"
+    beads="test-override-$$"
+    
+    echo "zhipuai-coding-plan/glm-5" > "$models_file"
+    echo "READY" > "$prompt"
+    git -C "$repo_dir" init --quiet
+    git -C "$repo_dir" config user.email "test@example.com"
+    git -C "$repo_dir" config user.name "Test Runner"
+    echo "x" > "$repo_dir/a.txt"
+    git -C "$repo_dir" add a.txt
+    git -C "$repo_dir" commit -m "init" --quiet
+    
+    cat > "$fake_op" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "models" ]]; then
+  cat "${FAKE_MODELS_FILE}"
+  exit 0
+fi
+if [[ "$1" == "run" ]]; then
+  echo '{"type":"assistant","content":"READY"}'
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$fake_op"
+    
+    # Test 1: OPENCODE_MODEL should be ignored by default
+    set +e
+    out="$(PATH="$tmp_bin:$PATH" FAKE_MODELS_FILE="$models_file" OPENCODE_MODEL="some-other-model" "$DX_RUNNER" start --beads "$beads" --provider opencode --prompt-file "$prompt" --worktree "$repo_dir" --json 2>&1)"
+    rc=$?
+    set -e
+    
+    # Should still work because we fall back to canonical model
+    if [[ "$rc" -eq 0 ]] || echo "$out" | grep -q "started"; then
+        pass "OPENCODE_MODEL is ignored when override not allowed"
+    else
+        fail "start failed when OPENCODE_MODEL set without override: $out"
+    fi
+    
+    rm -rf "$tmp_bin" "$repo_dir"
+    rm -f "$models_file" "$prompt"
+    rm -f /tmp/dx-runner/opencode/"${beads}".*
+}
+
+# ============================================================================
+# Test: Manual Stop Outcome Semantics (bd-8wdg.3)
+# ============================================================================
+
+test_manual_stop_semantics() {
+    echo "=== Testing Manual Stop Outcome Semantics ==="
+    
+    local adapter="$ADAPTERS_DIR/mock.sh"
+    create_mock_adapter "$adapter"
+    
+    local beads="test-stop-semantics-$$"
+    local prompt
+    prompt="$(mktemp)"
+    echo "READY" > "$prompt"
+    
+    if MOCK_ADAPTER_SLEEP_SEC=60 "$DX_RUNNER" start --beads "$beads" --provider mock --prompt-file "$prompt" >/dev/null 2>&1; then
+        sleep 2
+        "$DX_RUNNER" stop --beads "$beads" >/dev/null 2>&1 || true
+        
+        # Check outcome has manual_stop reason
+        local outcome_file="/tmp/dx-runner/mock/${beads}.outcome"
+        if [[ -f "$outcome_file" ]]; then
+            if grep -q "reason_code=manual_stop" "$outcome_file"; then
+                pass "manual stop persists manual_stop reason code"
+            else
+                fail "manual stop did not persist manual_stop reason: $(cat "$outcome_file")"
+            fi
+        else
+            fail "no outcome file after manual stop"
+        fi
+        
+        # Check that check command reports manual_stop
+        local check_out
+        check_out="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
+        if echo "$check_out" | grep -q "manual_stop"; then
+            pass "check command reports manual_stop reason"
+        else
+            fail "check did not report manual_stop: $check_out"
+        fi
+    else
+        fail "mock start failed for stop semantics test"
+    fi
+    
+    rm -f "$prompt" "$adapter"
+    rm -f /tmp/dx-runner/mock/"${beads}".*
+}
+
+# ============================================================================
+# Test: Slow Start Detection (bd-8wdg.10)
+# ============================================================================
+
+test_slow_start_detection() {
+    echo "=== Testing Slow Start Detection ==="
+    
+    local beads="test-slow-start-$$"
+    local provider="cc-glm"
+    local dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+    
+    # Simulate a running job with CPU activity but no output in startup grace period
+    sleep 300 &
+    local pid="$!"
+    echo "$pid" > "$dir/${beads}.pid"
+    : > "$dir/${beads}.log"
+    
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+worktree=/tmp/agents
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+EOF
+    
+    # Create a recent heartbeat to simulate CPU activity
+    cat > "$dir/${beads}.heartbeat" <<EOF
+beads=$beads
+provider=$provider
+count=5
+last_type=cpu_progress
+last_detail=cpu=10
+last_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF
+    
+    # Check should detect slow_start for recent job with no output
+    local check_out
+    check_out="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
+    
+    kill "$pid" 2>/dev/null || true
+    
+    if echo "$check_out" | grep -qE "slow_start|launching"; then
+        pass "slow start detection identifies startup state"
+    else
+        warn "slow start state detection: $check_out"
+    fi
+    
+    rm -f "$dir/${beads}".*
+}
+
+# ============================================================================
+# Test: No-Op Success Classification (bd-8wdg.9)
+# ============================================================================
+
+test_no_op_success_classification() {
+    echo "=== Testing No-Op Success Classification ==="
+    
+    local beads="test-no-op-success-$$"
+    local provider="cc-glm"
+    local dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+    
+    # Create meta file (required for job lookup)
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+worktree=/tmp/agents
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+EOF
+    
+    # Simulate a job that exited with 0 but had no mutations
+    cat > "$dir/${beads}.outcome" <<EOF
+beads=$beads
+provider=$provider
+state=exited_ok
+exit_code=0
+reason_code=outcome_exit_0
+mutations=0
+log_bytes=1024
+cpu_time_sec=30
+started_at=$(date -u -d '1 minute ago' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF
+    
+    # Check that health classifies this as no_op_success
+    local check_out
+    check_out="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null)" || true
+    
+    if echo "$check_out" | grep -q "no_op_success"; then
+        pass "no-op success (exit 0, no mutations) classified correctly"
+    else
+        # Check if it shows exit_zero_no_mutations in reason
+        if echo "$check_out" | grep -q "exit_zero_no_mutations"; then
+            pass "no-op success detected via reason code"
+        else
+            fail "expected no_op_success or exit_zero_no_mutations, got: $check_out"
+        fi
+    fi
+    
+    # Check next_action is correct
+    if echo "$check_out" | grep -q "redispatch_with_guardrails"; then
+        pass "no-op success has correct next_action"
+    else
+        warn "next_action for no-op: $check_out"
+    fi
+    
+    rm -f "$dir/${beads}".*
+}
+
+# ============================================================================
+# Test: Scope Guard (bd-8wdg.5)
+# ============================================================================
+
+test_scope_guard() {
+    echo "=== Testing Scope Guard ==="
+    
+    # Create temp worktree with mutation budget
+    local worktree
+    worktree="$(mktemp -d /tmp/agents/test-scope-XXXXXX)"
+    git -C "$worktree" init --quiet
+    git -C "$worktree" config user.email "test@example.com"
+    git -C "$worktree" config user.name "Test Runner"
+    echo "base" > "$worktree/file.txt"
+    git -C "$worktree" add file.txt
+    git -C "$worktree" commit -m "base" --quiet
+    
+    # Create allowed paths file
+    local allowed_file
+    allowed_file="$(mktemp)"
+    echo "src/" > "$allowed_file"
+    echo "lib/" >> "$allowed_file"
+    
+    # Test scope gate command
+    local scope_out
+    scope_out="$("$DX_RUNNER" scope-gate --worktree "$worktree" --allowed-paths-file "$allowed_file" --json 2>&1)" || true
+    
+    if echo "$scope_out" | grep -q "passed"; then
+        pass "scope gate command works"
+    else
+        warn "scope gate output: $scope_out"
+    fi
+    
+    rm -rf "$worktree" "$allowed_file"
+}
+
+# ============================================================================
+# Test: Evidence Gate (bd-8wdg.6)
+# ============================================================================
+
+test_evidence_gate() {
+    echo "=== Testing Evidence Gate ==="
+    
+    local beads="test-evidence-$$"
+    local provider="mock"
+    local dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+    
+    # Create mock meta and outcome
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+EOF
+    
+    cat > "$dir/${beads}.outcome" <<EOF
+beads=$beads
+provider=$provider
+exit_code=0
+state=success
+reason_code=process_exit_with_rc
+completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF
+    
+    # Create mock signoff file with claims
+    local signoff_file
+    signoff_file="$(mktemp)"
+    cat > "$signoff_file" <<EOF
+## Signoff
+- [x] CI passed
+- [x] Tests validated
+EOF
+    
+    local evidence_out
+    evidence_out="$("$DX_RUNNER" evidence-gate --beads "$beads" --signoff-file "$signoff_file" --json 2>&1)" || true
+    
+    if echo "$evidence_out" | grep -q "passed\|unverified_claims"; then
+        pass "evidence gate command works"
+    else
+        warn "evidence gate output: $evidence_out"
+    fi
+    
+    rm -f "$signoff_file"
+    rm -f "$dir/${beads}".*
+}
+
+# ============================================================================
+# Test: dx-wave Wrapper (bd-8wdg.7)
+# ============================================================================
+
+test_dx_wave_wrapper() {
+    echo "=== Testing dx-wave Wrapper ==="
+    
+    local dx_wave="${ROOT_DIR}/scripts/dx-wave"
+    
+    if [[ ! -x "$dx_wave" ]]; then
+        fail "dx-wave wrapper not found or not executable"
+        return
+    fi
+    
+    # Test help
+    local help_out
+    help_out="$("$dx_wave" --help 2>&1)" || true
+    if echo "$help_out" | grep -qE "start|check|status"; then
+        pass "dx-wave --help shows usage"
+    else
+        fail "dx-wave help missing commands"
+    fi
+    
+    # Test profiles
+    local profiles_out
+    profiles_out="$("$dx_wave" profiles --list 2>&1)" || true
+    if echo "$profiles_out" | grep -q "opencode-prod"; then
+        pass "dx-wave profiles works"
+    else
+        warn "dx-wave profiles output: $profiles_out"
+    fi
+}
+
 run_all_tests() {
     test_bash_syntax
     test_runner_commands
@@ -2041,6 +2402,16 @@ run_all_tests() {
     test_prune_stale_jobs
     test_dx_dispatch_shim
     test_dx_dispatch_shim_forwarding
+    
+    # bd-8wdg hardening tests
+    test_profile_loading
+    test_model_override_blocking
+    test_manual_stop_semantics
+    test_slow_start_detection
+    test_no_op_success_classification
+    test_scope_guard
+    test_evidence_gate
+    test_dx_wave_wrapper
     
     echo ""
     echo "=== Summary ==="

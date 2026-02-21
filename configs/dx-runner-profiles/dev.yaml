@@ -1,0 +1,47 @@
+# dx-runner profile: dev
+# Permissive development profile for local iteration
+
+profile:
+  name: dev
+  description: Development profile with permissive preflight for local iteration
+  version: "1.0.0"
+
+provider:
+  name: opencode
+  model: zhipuai-coding-plan/glm-5
+  allow_model_override: true
+  execution_mode: run
+  fallback_provider: cc-glm
+
+concurrency:
+  max_parallel: 4
+  queue_timeout_sec: 30
+
+preflight:
+  strict: false
+  policy:
+    # All checks are warnings in dev mode
+    opencode_binary_missing: error
+    model_unavailable: warn
+    canonical_model_probe_timeout: warn
+    mise_untrusted: warn
+    beads_mcp_missing: warn
+
+timeouts:
+  max_runtime_minutes: 60
+  no_mutation_timeout_minutes: 15
+  stall_minutes: 10
+  first_output_grace_seconds: 120
+  first_mutation_grace_seconds: 300
+
+scope:
+  enforce_allowed_paths: false
+  allowed_paths_file: null
+  mutation_budget: null
+  file_budget: null
+
+gates:
+  baseline: optional
+  feature_key: optional
+  commit_artifact: optional
+  railway_auth: optional

@@ -1,22 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# dx-runner (V1.2 - Unified Multi-Provider Dispatch Runner)
+# dx-runner (V2.0 - Unified Multi-Provider Dispatch Runner with Hardening)
 #
 # Canonical entrypoint for all agent dispatch with unified governance:
+#   - Profile-first starts with pinned provider/model/strictness (bd-8wdg.1)
+#   - Model drift blocking unless explicit override (bd-8wdg.2)
+#   - Deterministic outcome semantics (bd-8wdg.3)
+#   - Profile-based strict preflight (bd-8wdg.4)
+#   - Scope guardrails (bd-8wdg.5)
+#   - Evidence truthfulness gates (bd-8wdg.6)
 #   - Preflight checks (auth, model, backend)
 #   - Permission gates (worktree-only policy)
 #   - No-op heartbeat detection
 #   - Baseline/integrity/feature-key gates
 #   - Failure taxonomy with deterministic codes
+#   - Startup-aware health states (bd-8wdg.10)
+#   - Auto mise trust remediation (bd-8wdg.11)
 #
 # Providers:
 #   cc-glm    - Claude via Z.ai (reliability backstop)
 #   opencode  - OpenCode headless (primary throughput)
-#   gemini    - Gemini CLI (future capacity)
+#   gemini    - Gemini CLI (parallel capacity)
 #
 # Commands:
 #   start        --beads <id> --provider <name> --prompt-file <path> [options]
+#   start        --beads <id> --profile <name> --prompt-file <path> [options]
 #   status       [--beads <id>] [--json]
 #   check        --beads <id> [--stall-minutes <n>] [--json]
 #   health       [--beads <id>] [--json]
@@ -24,11 +33,14 @@ set -euo pipefail
 #   stop         --beads <id>
 #   watchdog     [--interval <sec>] [--max-retries <n>]
 #   report       --beads <id> [--format json|markdown]
-#   preflight    [--provider <name>]
+#   preflight    [--provider <name>] [--profile <name>]
 #   probe        --provider <name> --model <id>
+#   profiles     [--list] [--show <name>]
 #   baseline-gate [--beads <id> | --worktree <path>] --required-baseline <sha>
 #   integrity-gate [--beads <id> | --worktree <path>] --reported-commit <sha>
 #   feature-key-gate [--beads <id> | --worktree <path>] --feature-key <bd-id>
+#   evidence-gate --beads <id> --signoff-file <path>
+#   scope-gate   --beads <id> --allowed-paths-file <path> [--mutation-budget <n>]
 #
 # Exit Codes:
 #   0  - Success
@@ -41,9 +53,15 @@ set -euo pipefail
 #   21 - Preflight failed
 #   22 - Permission denied (non-worktree path)
 #   23 - No-op detected
+#   24 - Beads gate failed
+#   25 - Model unavailable
+#   26 - Provider concurrency cap exceeded
 #   27 - Provider execution mode unsupported/misconfigured
+#   28 - Model override blocked (drift protection)
+#   29 - Scope guard violation
+#   30 - Evidence gate failed
 
-RUNNER_VERSION="1.4.0"
+RUNNER_VERSION="2.0.0"
 # Resolve symlink to get actual script directory
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 if [[ -L "$SCRIPT_SOURCE" ]]; then
@@ -51,6 +69,7 @@ if [[ -L "$SCRIPT_SOURCE" ]]; then
 fi
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 ADAPTERS_DIR="${SCRIPT_DIR}/adapters"
+PROFILES_DIR="${SCRIPT_DIR}/../configs/dx-runner-profiles"
 
 # Default log directory (provider-specific subdirs)
 LOG_DIR="/tmp/dx-runner"
@@ -65,6 +84,10 @@ declare -A PROVIDER_DEFAULT_MODEL=(
 declare -A PROVIDER_FALLBACK_CHAIN=(
     ["opencode"]="zhipuai-coding-plan/glm-5"
 )
+
+# bd-8wdg.10: Startup-aware health thresholds
+STARTUP_FIRST_OUTPUT_GRACE_SEC="${DX_RUNNER_STARTUP_GRACE_SEC:-300}"
+STARTUP_FIRST_MUTATION_GRACE_SEC="${DX_RUNNER_STARTUP_MUTATION_GRACE_SEC:-600}"
 
 CMD="${1:-}"
 shift || true
@@ -240,6 +263,234 @@ meta_set() {
     fi
     printf "%s=%s\n" "$key" "$val" >> "$tmp"
     mv "$tmp" "$meta"
+}
+
+# ============================================================================
+# PROFILE SYSTEM (bd-8wdg.1)
+# ============================================================================
+
+# Default profile configuration
+declare -A PROFILE_CONFIG=()
+declare -A PROFILE_PREFLIGHT_POLICY=()
+PROFILE_NAME=""
+PROFILE_STRICT=false
+
+load_profile() {
+    local profile_name="$1"
+    local profile_file=""
+    
+    # Search for profile in order of precedence
+    for search_dir in "$PROFILES_DIR" "$SCRIPT_DIR/profiles" "/etc/dx-runner/profiles" "$HOME/.config/dx-runner/profiles"; do
+        if [[ -f "${search_dir}/${profile_name}.yaml" ]]; then
+            profile_file="${search_dir}/${profile_name}.yaml"
+            break
+        fi
+    done
+    
+    if [[ -z "$profile_file" ]]; then
+        echo "ERROR: Profile '$profile_name' not found" >&2
+        echo "reason_code=profile_not_found" >&2
+        return 1
+    fi
+    
+    # Parse YAML profile (simple key extraction)
+    PROFILE_NAME="$profile_name"
+    PROFILE_CONFIG["name"]="$profile_name"
+    
+    # Extract provider settings
+    local provider_block=false
+    local preflight_block=false
+    local policy_block=false
+    while IFS= read -r line; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        
+        # Detect sections
+        if [[ "$line" =~ ^provider: ]]; then
+            provider_block=true
+            preflight_block=false
+            policy_block=false
+            continue
+        elif [[ "$line" =~ ^preflight: ]]; then
+            preflight_block=true
+            provider_block=false
+            policy_block=false
+            continue
+        elif [[ "$line" =~ ^[[:space:]]*policy: ]] && [[ "$preflight_block" == true ]]; then
+            policy_block=true
+            continue
+        elif [[ "$line" =~ ^[a-z]+: ]] && [[ "$provider_block" == true ]] && [[ ! "$line" =~ ^[[:space:]] ]]; then
+            provider_block=false
+        elif [[ "$line" =~ ^[a-z]+: ]] && [[ "$preflight_block" == true ]] && [[ ! "$line" =~ ^[[:space:]] ]]; then
+            preflight_block=false
+            policy_block=false
+        fi
+        
+        # Extract key-value pairs
+        if [[ "$line" =~ ^[[:space:]]*([a-z_]+):[[:space:]]*(.+)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]//\"/}"
+            value="${value//\'/}"
+            
+            # bd-8wdg.4: Parse preflight.policy entries
+            if [[ "$policy_block" == true ]]; then
+                PROFILE_PREFLIGHT_POLICY["$key"]="$value"
+            fi
+            
+            case "$key" in
+                name|model|allow_model_override|execution_mode|fallback_provider)
+                    PROFILE_CONFIG["provider_$key"]="$value"
+                    ;;
+                max_parallel|queue_timeout_sec)
+                    PROFILE_CONFIG["concurrency_$key"]="$value"
+                    ;;
+                strict)
+                    PROFILE_CONFIG["preflight_$key"]="$value"
+                    if [[ "$value" == "true" ]]; then
+                        PROFILE_STRICT=true
+                    fi
+                    ;;
+                max_runtime_minutes|no_mutation_timeout_minutes|stall_minutes|first_output_grace_seconds|first_mutation_grace_seconds)
+                    PROFILE_CONFIG["timeouts_$key"]="$value"
+                    ;;
+                enforce_allowed_paths|allowed_paths_file|mutation_budget|file_budget)
+                    PROFILE_CONFIG["scope_$key"]="$value"
+                    ;;
+            esac
+        fi
+    done < "$profile_file"
+    
+    # Apply profile settings to environment
+    if [[ -n "${PROFILE_CONFIG[provider_name]:-}" ]]; then
+        PROVIDER="${PROFILE_CONFIG[provider_name]}"
+    fi
+    if [[ -n "${PROFILE_CONFIG[provider_model]:-}" ]]; then
+        export OPENCODE_MODEL="${PROFILE_CONFIG[provider_model]}"
+    fi
+    if [[ "${PROFILE_CONFIG[provider_allow_model_override]:-false}" == "true" ]]; then
+        export DX_RUNNER_ALLOW_MODEL_OVERRIDE=1
+    fi
+    if [[ -n "${PROFILE_CONFIG[concurrency_max_parallel]:-}" ]]; then
+        case "${PROFILE_CONFIG[provider_name]:-}" in
+            opencode) export DX_RUNNER_MAX_PARALLEL_OPENCODE="${PROFILE_CONFIG[concurrency_max_parallel]}" ;;
+            cc-glm) export DX_RUNNER_MAX_PARALLEL_CC_GLM="${PROFILE_CONFIG[concurrency_max_parallel]}" ;;
+            gemini) export DX_RUNNER_MAX_PARALLEL_GEMINI="${PROFILE_CONFIG[concurrency_max_parallel]}" ;;
+        esac
+    fi
+    if [[ -n "${PROFILE_CONFIG[timeouts_max_runtime_minutes]:-}" ]]; then
+        MAX_RUNTIME_MINUTES="${PROFILE_CONFIG[timeouts_max_runtime_minutes]}"
+    fi
+    if [[ -n "${PROFILE_CONFIG[timeouts_no_mutation_timeout_minutes]:-}" ]]; then
+        NO_MUTATION_TIMEOUT_MINUTES="${PROFILE_CONFIG[timeouts_no_mutation_timeout_minutes]}"
+    fi
+    if [[ -n "${PROFILE_CONFIG[timeouts_stall_minutes]:-}" ]]; then
+        STALL_MINUTES="${PROFILE_CONFIG[timeouts_stall_minutes]}"
+    fi
+    if [[ -n "${PROFILE_CONFIG[timeouts_first_output_grace_seconds]:-}" ]]; then
+        STARTUP_FIRST_OUTPUT_GRACE_SEC="${PROFILE_CONFIG[timeouts_first_output_grace_seconds]}"
+    fi
+    if [[ -n "${PROFILE_CONFIG[timeouts_first_mutation_grace_seconds]:-}" ]]; then
+        STARTUP_FIRST_MUTATION_GRACE_SEC="${PROFILE_CONFIG[timeouts_first_mutation_grace_seconds]}"
+    fi
+    
+    echo "profile_loaded=$profile_name"
+    echo "profile_file=$profile_file"
+    return 0
+}
+
+profile_get_preflight_policy() {
+    local check_code="$1"
+    local default="${2:-warn}"
+    
+    # bd-8wdg.4: Check profile-specific policy first
+    if [[ -n "${PROFILE_PREFLIGHT_POLICY[$check_code]:-}" ]]; then
+        echo "${PROFILE_PREFLIGHT_POLICY[$check_code]}"
+        return 0
+    fi
+    
+    # In strict mode, escalate critical warnings to errors
+    if [[ "$PROFILE_STRICT" == true ]]; then
+        case "$check_code" in
+            opencode_binary_missing|model_unavailable|auth_or_quota_blocked|worktree_missing|canonical_model_probe_timeout|mise_untrusted)
+                echo "error"
+                return 0
+                ;;
+        esac
+    fi
+    echo "$default"
+}
+
+# bd-8wdg.4: Helper for adapters to report check result based on profile policy
+# Usage: preflight_report_check <check_code> <status> <message> <error_var> <warn_var>
+# Returns: 0 if warning, 1 if error (for caller to increment counter)
+preflight_report_check() {
+    local check_code="$1"
+    local status="$2"  # ok, missing, failed, timeout, etc.
+    local message="$3"
+    local error_var="$4"
+    local warn_var="$5"
+    
+    if [[ "$status" == "ok" ]]; then
+        echo "OK ($message)"
+        return 0
+    fi
+    
+    local policy
+    policy="$(profile_get_preflight_policy "$check_code" "warn")"
+    
+    if [[ "$policy" == "error" ]]; then
+        echo "$status"
+        echo "  ERROR: $message"
+        echo "  ERROR_CODE=${check_code} severity=error"
+        if [[ -n "$error_var" ]]; then
+            eval "$error_var=\$(($error_var + 1))"
+        fi
+        return 1
+    else
+        echo "$status"
+        echo "  WARN: $message"
+        echo "  WARN_CODE=${check_code} severity=warn"
+        if [[ -n "$warn_var" ]]; then
+            eval "$warn_var=\$(($warn_var + 1))"
+        fi
+        return 0
+    fi
+}
+
+list_profiles() {
+    local found=0
+    for search_dir in "$PROFILES_DIR" "$SCRIPT_DIR/profiles" "/etc/dx-runner/profiles" "$HOME/.config/dx-runner/profiles"; do
+        if [[ -d "$search_dir" ]]; then
+            for f in "$search_dir"/*.yaml; do
+                [[ -f "$f" ]] || continue
+                local name
+                name="$(basename "$f" .yaml)"
+                echo "$name"
+                found=$((found + 1))
+            done
+        fi
+    done
+    return $([[ $found -gt 0 ]] && echo 0 || echo 1)
+}
+
+show_profile() {
+    local profile_name="$1"
+    local profile_file=""
+    
+    for search_dir in "$PROFILES_DIR" "$SCRIPT_DIR/profiles"; do
+        if [[ -f "${search_dir}/${profile_name}.yaml" ]]; then
+            profile_file="${search_dir}/${profile_name}.yaml"
+            break
+        fi
+    done
+    
+    if [[ -z "$profile_file" ]]; then
+        echo "Profile '$profile_name' not found" >&2
+        return 1
+    fi
+    
+    cat "$profile_file"
 }
 
 # ============================================================================
@@ -638,6 +889,35 @@ next_action_for_reason() {
         worktree_missing_for_opencode)
             echo "pass_valid_worktree_or_run_from_task_worktree"
             ;;
+        # bd-8wdg.3: Manual stop actions
+        manual_stop)
+            echo "job_stopped_by_operator_review_logs"
+            ;;
+        killed)
+            echo "job_killed_review_logs_and_restart_if_needed"
+            ;;
+        # bd-8wdg.9: No-op success (exit 0 but no mutations)
+        exit_zero_no_mutations|no_op_success)
+            echo "redispatch_with_guardrails_or_review_prompt_for_no_work"
+            ;;
+        # bd-8wdg.10: Slow start actions
+        slow_start|startup_scan_in_progress|startup_cpu_progress_no_output|startup_grace_no_output)
+            echo "wait_for_startup_completion_or_check_logs_for_progress"
+            ;;
+        # bd-8wdg.5: Scope guard violations
+        path_outside_allowlist)
+            echo "review_allowed_paths_and_worktree_changes"
+            ;;
+        mutation_budget_exceeded)
+            echo "review_mutation_count_and_adjust_budget"
+            ;;
+        # bd-8wdg.6: Evidence gate
+        unverified_claims)
+            echo "provide_evidence_for_signoff_claims"
+            ;;
+        signoff_file_missing|outcome_missing)
+            echo "ensure_signoff_file_and_outcome_exist"
+            ;;
         *)
             echo "-"
             ;;
@@ -898,7 +1178,7 @@ unified_preflight() {
 }
 
 # ============================================================================
-# HEALTH DETECTION (Deterministic substates)
+# HEALTH DETECTION (Deterministic substates + bd-8wdg hardening)
 # ============================================================================
 
 job_health_detail() {
@@ -906,7 +1186,6 @@ job_health_detail() {
     local provider
     provider="$(find_provider_for_beads "$beads")"
     
-    # If no provider found, search across provider directories
     if [[ -z "$provider" ]]; then
         for dir in /tmp/dx-runner/*/; do
             [[ -d "$dir" ]] || continue
@@ -920,6 +1199,9 @@ job_health_detail() {
     job_paths "$beads" "$provider"
     
     local stall_threshold="${2:-$((STALL_MINUTES * 60))}"
+    # bd-8wdg.10: Startup-aware thresholds
+    local startup_grace="${STARTUP_FIRST_OUTPUT_GRACE_SEC:-300}"
+    local mutation_grace="${STARTUP_FIRST_MUTATION_GRACE_SEC:-600}"
 
     local state="missing"
     local reason_code="pid_file_missing"
@@ -931,9 +1213,11 @@ job_health_detail() {
 
     if [[ ! -f "$PID_FILE" ]]; then
         if [[ -f "$OUTCOME_FILE" ]]; then
-            local oc_exit
+            local oc_exit oc_reason
             oc_exit="$(meta_get "$OUTCOME_FILE" "exit_code")"
             oc_exit="${oc_exit:-1}"
+            # bd-8wdg.3: Use outcome reason_code when available
+            oc_reason="$(meta_get "$OUTCOME_FILE" "reason_code" 2>/dev/null || true)"
             local omut olog ocpu opid
             omut="$(meta_get "$OUTCOME_FILE" "mutations" 2>/dev/null || echo 0)"
             olog="$(meta_get "$OUTCOME_FILE" "log_bytes" 2>/dev/null || echo 0)"
@@ -943,8 +1227,28 @@ job_health_detail() {
             [[ "$olog" =~ ^[0-9]+$ ]] || olog=0
             [[ "$ocpu" =~ ^[0-9]+$ ]] || ocpu=0
             [[ "$opid" =~ ^[0-9]+$ ]] || opid=0
-            if [[ "$oc_exit" -eq 0 ]]; then
-                printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
+            
+            # bd-8wdg.3 + bd-8wdg.9: Use explicit reason from outcome if available
+            if [[ -n "$oc_reason" ]]; then
+                if [[ "$oc_reason" == "manual_stop" || "$oc_reason" == "killed" ]]; then
+                    printf "stopped|%s|%s|%s|%s|%s|0\n" "$oc_reason" "$omut" "$olog" "$ocpu" "$opid"
+                elif [[ "$oc_exit" -eq 0 ]]; then
+                    # bd-8wdg.9: Check for no-op success (exit 0 but no mutations)
+                    if [[ "$omut" -eq 0 ]]; then
+                        printf "no_op_success|exit_zero_no_mutations|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
+                    else
+                        printf "exited_ok|%s|%s|%s|%s|%s|0\n" "$oc_reason" "$omut" "$olog" "$ocpu" "$opid"
+                    fi
+                else
+                    printf "exited_err|%s|%s|%s|%s|%s|0\n" "$oc_reason" "$omut" "$olog" "$ocpu" "$opid"
+                fi
+            elif [[ "$oc_exit" -eq 0 ]]; then
+                # bd-8wdg.9: Check for no-op success (exit 0 but no mutations)
+                if [[ "$omut" -eq 0 ]]; then
+                    printf "no_op_success|exit_zero_no_mutations|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
+                else
+                    printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
+                fi
             else
                 printf "exited_err|outcome_exit_nonzero|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
             fi
@@ -959,9 +1263,10 @@ job_health_detail() {
     if [[ -z "$pid" || ! "$pid" =~ ^[0-9]+$ ]]; then
         rm -f "$PID_FILE"
         if [[ -f "$OUTCOME_FILE" ]]; then
-            local oc_exit2
+            local oc_exit2 oc_reason2
             oc_exit2="$(meta_get "$OUTCOME_FILE" "exit_code")"
             oc_exit2="${oc_exit2:-1}"
+            oc_reason2="$(meta_get "$OUTCOME_FILE" "reason_code" 2>/dev/null || true)"
             local omut2 olog2 ocpu2 opid2
             omut2="$(meta_get "$OUTCOME_FILE" "mutations" 2>/dev/null || echo 0)"
             olog2="$(meta_get "$OUTCOME_FILE" "log_bytes" 2>/dev/null || echo 0)"
@@ -971,8 +1276,28 @@ job_health_detail() {
             [[ "$olog2" =~ ^[0-9]+$ ]] || olog2=0
             [[ "$ocpu2" =~ ^[0-9]+$ ]] || ocpu2=0
             [[ "$opid2" =~ ^[0-9]+$ ]] || opid2=0
-            if [[ "$oc_exit2" -eq 0 ]]; then
-                printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
+            
+            # bd-8wdg.3 + bd-8wdg.9: Use explicit reason from outcome if available
+            if [[ -n "$oc_reason2" ]]; then
+                if [[ "$oc_reason2" == "manual_stop" || "$oc_reason2" == "killed" ]]; then
+                    printf "stopped|%s|%s|%s|%s|%s|0\n" "$oc_reason2" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                elif [[ "$oc_exit2" -eq 0 ]]; then
+                    # bd-8wdg.9: Check for no-op success (exit 0 but no mutations)
+                    if [[ "$omut2" -eq 0 ]]; then
+                        printf "no_op_success|exit_zero_no_mutations|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                    else
+                        printf "exited_ok|%s|%s|%s|%s|%s|0\n" "$oc_reason2" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                    fi
+                else
+                    printf "exited_err|%s|%s|%s|%s|%s|0\n" "$oc_reason2" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                fi
+            elif [[ "$oc_exit2" -eq 0 ]]; then
+                # bd-8wdg.9: Check for no-op success (exit 0 but no mutations)
+                if [[ "$omut2" -eq 0 ]]; then
+                    printf "no_op_success|exit_zero_no_mutations|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                else
+                    printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                fi
             else
                 printf "exited_err|outcome_exit_nonzero|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
             fi
@@ -1030,9 +1355,11 @@ job_health_detail() {
         fi
         finalize_exited_job "$beads" "$provider"
         if [[ -f "$OUTCOME_FILE" ]]; then
-            local exit_code
+            local exit_code outcome_reason
             exit_code="$(meta_get "$OUTCOME_FILE" "exit_code")"
             exit_code="${exit_code:-1}"
+            # bd-8wdg.3: Use outcome reason_code when available
+            outcome_reason="$(meta_get "$OUTCOME_FILE" "reason_code" 2>/dev/null || true)"
             local omut3 olog3 ocpu3 opid3
             omut3="$(meta_get "$OUTCOME_FILE" "mutations" 2>/dev/null || echo "$mutation_count")"
             olog3="$(meta_get "$OUTCOME_FILE" "log_bytes" 2>/dev/null || echo "$log_bytes")"
@@ -1042,7 +1369,14 @@ job_health_detail() {
             [[ "$olog3" =~ ^[0-9]+$ ]] || olog3="${log_bytes:-0}"
             [[ "$ocpu3" =~ ^[0-9]+$ ]] || ocpu3=0
             [[ "$opid3" =~ ^[0-9]+$ ]] || opid3="${pid_age:-0}"
-            if [[ "$exit_code" -eq 0 ]]; then
+            # bd-8wdg.3: Return explicit reason from outcome
+            if [[ -n "$outcome_reason" ]]; then
+                if [[ "$exit_code" -eq 0 && "$outcome_reason" != "manual_stop" && "$outcome_reason" != "killed" ]]; then
+                    printf "exited_ok|%s|%s|%s|%s|%s|%s\n" "$outcome_reason" "$omut3" "$olog3" "$ocpu3" "$opid3" "$log_age"
+                else
+                    printf "stopped|%s|%s|%s|%s|%s|%s\n" "$outcome_reason" "$omut3" "$olog3" "$ocpu3" "$opid3" "$log_age"
+                fi
+            elif [[ "$exit_code" -eq 0 ]]; then
                 printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|%s\n" "$omut3" "$olog3" "$ocpu3" "$opid3" "$log_age"
             else
                 printf "exited_err|outcome_exit_nonzero|%s|%s|%s|%s|%s\n" "$omut3" "$olog3" "$ocpu3" "$opid3" "$log_age"
@@ -1072,12 +1406,29 @@ job_health_detail() {
 
     cpu_time="$(process_cpu_time "$pid")"
 
-    # Check for no-op (bd-cbsb.17)
+    # bd-8wdg.10: Startup-aware health detection
+    # Check if we're in the startup grace period
+    local in_startup_grace=false
+    local in_mutation_grace=false
+    if [[ "$pid_age" -lt "$startup_grace" ]]; then
+        in_startup_grace=true
+    fi
+    if [[ "$pid_age" -lt "$mutation_grace" ]]; then
+        in_mutation_grace=true
+    fi
+
+    # Check for no-op (bd-cbsb.17) - with startup awareness (bd-8wdg.10)
     local heartbeat_age
     heartbeat_age="$(check_heartbeat_age "$beads")"
     local noop_threshold=300  # 5 minutes without heartbeat
     
+    # bd-8wdg.10: Don't classify as no_op during startup grace if there's CPU activity
     if [[ "$heartbeat_age" -gt "$noop_threshold" && "$mutation_count" -eq 0 && "$log_bytes" -eq 0 ]]; then
+        if [[ "$in_startup_grace" == true && "$cpu_time" -gt 0 ]]; then
+            # Slow-start: provider is doing read-only scans, CPU active but no output yet
+            printf "slow_start|startup_scan_in_progress|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+            return 0
+        fi
         printf "no_op|no_heartbeat_no_mutation|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
         return 0
     fi
@@ -1088,14 +1439,20 @@ job_health_detail() {
             return 0
         fi
         if [[ "$cpu_time" -gt 0 ]]; then
-            if [[ "$pid_age" -gt "$stall_threshold" ]]; then
+            # bd-8wdg.10: Distinguish slow-start from stalled
+            if [[ "$in_startup_grace" == true ]]; then
+                printf "slow_start|startup_cpu_progress_no_output|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+            elif [[ "$pid_age" -gt "$stall_threshold" ]]; then
                 printf "waiting_first_output|cpu_progress_no_output_past_threshold|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
             else
                 printf "launching|cpu_progress_no_output|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
             fi
             return 0
         fi
-        if [[ "$pid_age" -gt "$stall_threshold" ]]; then
+        # bd-8wdg.10: Give more grace during startup for no-output
+        if [[ "$in_startup_grace" == true ]]; then
+            printf "launching|startup_grace_no_output|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+        elif [[ "$pid_age" -gt "$stall_threshold" ]]; then
             printf "stalled|no_output_no_progress_after_threshold|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
         else
             printf "launching|no_output_within_grace|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
@@ -1651,6 +2008,14 @@ WRITE_PROBE=false
 REQUIRE_COMMIT_ARTIFACT="${DX_RUNNER_REQUIRE_COMMIT_ARTIFACT:-0}"
 REQUIRE_RAILWAY_AUTH="${DX_RUNNER_REQUIRE_RAILWAY_AUTH:-0}"
 
+# bd-8wdg: Profile and scope options
+PROFILE=""
+ALLOW_MODEL_OVERRIDE="${DX_RUNNER_ALLOW_MODEL_OVERRIDE:-0}"
+ALLOWED_PATHS_FILE=""
+MUTATION_BUDGET=""
+FILE_BUDGET=""
+EVIDENCE_SIGNOFF_FILE=""
+
 MAX_RUNTIME_MINUTES="${DX_RUNNER_MAX_RUNTIME_MINUTES:-120}"
 NO_MUTATION_TIMEOUT_MINUTES="${DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES:-30}"
 
@@ -1663,6 +2028,10 @@ parse_common_args() {
                 ;;
             --provider)
                 PROVIDER="${2:-}"
+                shift 2
+                ;;
+            --profile)
+                PROFILE="${2:-}"
                 shift 2
                 ;;
             --prompt-file)
@@ -1781,6 +2150,27 @@ parse_common_args() {
                 REQUIRE_RAILWAY_AUTH=1
                 shift
                 ;;
+            --allow-model-override)
+                ALLOW_MODEL_OVERRIDE=1
+                export DX_RUNNER_ALLOW_MODEL_OVERRIDE=1
+                shift
+                ;;
+            --allowed-paths-file)
+                ALLOWED_PATHS_FILE="${2:-}"
+                shift 2
+                ;;
+            --mutation-budget)
+                MUTATION_BUDGET="${2:-}"
+                shift 2
+                ;;
+            --file-budget)
+                FILE_BUDGET="${2:-}"
+                shift 2
+                ;;
+            --signoff-file)
+                EVIDENCE_SIGNOFF_FILE="${2:-}"
+                shift 2
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -1796,10 +2186,11 @@ parse_common_args() {
 
 usage() {
     cat <<'EOF'
-dx-runner (V1.3 - Unified Multi-Provider Dispatch Runner)
+dx-runner (V2.0 - Unified Multi-Provider Dispatch Runner with Hardening)
 
 Usage:
   dx-runner start --beads <id> --provider <name> --prompt-file <path> [options]
+  dx-runner start --beads <id> --profile <name> --prompt-file <path> [options]
   dx-runner status [--beads <id>] [--recent <n>] [--json]
   dx-runner check --beads <id> [--stall-minutes <n>] [--json]
   dx-runner health [--beads <id>] [--json]
@@ -1809,12 +2200,15 @@ Usage:
   dx-runner prune [--beads <id>] [--json]
   dx-runner watchdog [--interval <sec>] [--max-retries <n>]
   dx-runner report --beads <id> [--format json|markdown]
-  dx-runner preflight [--provider <name>]
+  dx-runner preflight [--provider <name>] [--profile <name>]
   dx-runner probe --provider <name> --model <id>
+  dx-runner profiles [--list] [--show <name>]
   dx-runner beads-gate [--repo <path>] [--probe-id <id>] [--write-probe]
   dx-runner baseline-gate [--beads <id> | --worktree <path>] --required-baseline <sha>
   dx-runner integrity-gate [--beads <id> | --worktree <path>] --reported-commit <sha>
   dx-runner feature-key-gate [--beads <id> | --worktree <path>] --feature-key <bd-id>
+  dx-runner evidence-gate --beads <id> --signoff-file <path>
+  dx-runner scope-gate --beads <id> [--allowed-paths-file <path>] [--mutation-budget <n>]
   dx-runner finalize --beads <id> [--reason <code>] [--exit-code <n>]
 
 Providers:
@@ -1822,8 +2216,14 @@ Providers:
   opencode  OpenCode headless (primary throughput, strict canonical GLM-5)
   gemini    Gemini CLI (parallel capacity)
 
+Built-in Profiles (bd-8wdg.1):
+  opencode-prod    Production-safe OpenCode with strict governance
+  cc-glm-fallback  Reliability backstop profile
+  gemini-burst     Burst capacity using Gemini CLI
+  dev              Permissive development profile
+
 Commands:
-  start        Launch a job with specified provider
+  start        Launch a job with specified provider or profile
   status       Show status table of jobs
   check        Check single job health (exit 2 if stalled, 3 if error)
   health       Show detailed health state
@@ -1834,10 +2234,13 @@ Commands:
   report       Generate job report
   preflight    Verify prerequisites
   probe        Test provider/model availability
+  profiles     List or show configuration profiles
   beads-gate   Verify Beads DB connectivity and repo binding
   baseline-gate Verify runtime commit meets baseline
   integrity-gate Verify reported commit exists
   feature-key-gate Verify Feature-Key trailers
+  evidence-gate Verify QA/signoff evidence claims (bd-8wdg.6)
+  scope-gate   Verify scope and mutation budget (bd-8wdg.5)
   finalize     Force finalize a stuck job
 
 Exit Codes:
@@ -1855,24 +2258,27 @@ Exit Codes:
   25 Model unavailable
   26 Provider concurrency cap exceeded
   27 Provider execution mode unsupported/misconfigured
+  28 Model override blocked (drift protection)
+  29 Scope guard violation
+  30 Evidence gate failed
 
 Notable start/preflight options:
-  --require-commit-artifact  Enforce commit artifact on successful exit
-  --require-railway-auth     Enforce Railway auth + service context preflight
-
-Beads Gate Reason Codes:
-  beads_ok              Gate passed
-  beads_unavailable     bd CLI not found or not executable
-  beads_external_repo_missing External Beads repo missing (expected: ~/bd)
-  beads_external_remote_mismatch External Beads remote mismatch (expected substring: stars-end/bd)
-  beads_db_error        bd status failed (DB connectivity issue)
-  beads_repo_mismatch   Repo-id in Beads DB doesn't match current repo
-  beads_write_blocked   Write probe failed (permissions/DB issue)
-  beads_probe_not_found Probe ID specified but not found in DB
+  --profile <name>            Use profile for provider/model/strictness (bd-8wdg.1)
+  --allow-model-override      Allow OPENCODE_MODEL env to override (bd-8wdg.2)
+  --require-commit-artifact   Enforce commit artifact on successful exit
+  --require-railway-auth      Enforce Railway auth + service context preflight
+  --allowed-paths-file <path> Enforce path allowlist (bd-8wdg.5)
+  --mutation-budget <n>       Max allowed mutations (bd-8wdg.5)
 
 Health States:
-  launching, waiting_first_output, silent_mutation, stalled,
-  healthy, awaiting_finalize, exited_ok, exited_err, blocked, missing, no_op
+  launching, waiting_first_output, slow_start (bd-8wdg.10), silent_mutation, stalled,
+  healthy, awaiting_finalize, exited_ok, exited_err, stopped, blocked, missing, no_op
+
+Health Reason Codes:
+  slow_start*              Provider doing startup scans (bd-8wdg.10)
+  manual_stop              Job stopped by operator (bd-8wdg.3)
+  outcome_exit_0           Normal completion with success
+  outcome_exit_nonzero     Normal completion with error
 EOF
 }
 
@@ -1883,9 +2289,26 @@ EOF
 start_cmd() {
     parse_common_args "$@"
     [[ -n "$BEADS" ]] || { echo "start requires --beads" >&2; exit 2; }
-    [[ -n "$PROVIDER" ]] || { echo "start requires --provider" >&2; exit 2; }
     [[ -n "$PROMPT_FILE" ]] || { echo "start requires --prompt-file" >&2; exit 2; }
     [[ -f "$PROMPT_FILE" ]] || { echo "prompt file not found: $PROMPT_FILE" >&2; exit 1; }
+    
+    # bd-8wdg.1: Profile support - load profile if specified
+    if [[ -n "$PROFILE" ]]; then
+        local profile_load_result
+        profile_load_result="$(load_profile "$PROFILE" 2>&1)" || {
+            echo "profile load failed: $profile_load_result" >&2
+            echo "reason_code=profile_load_failed"
+            exit 21
+        }
+        # Provider may have been set by profile
+        if [[ -z "$PROVIDER" ]]; then
+            PROVIDER="${PROFILE_CONFIG[provider_name]:-}"
+            [[ -n "$PROVIDER" ]] || { echo "profile did not specify provider" >&2; exit 2; }
+        fi
+        echo "profile: $PROFILE -> provider: $PROVIDER" >&2
+    fi
+    
+    [[ -n "$PROVIDER" ]] || { echo "start requires --provider or --profile" >&2; exit 2; }
     
     local adapter="${ADAPTERS_DIR}/${PROVIDER}.sh"
     [[ -f "$adapter" ]] || { echo "provider adapter not found: $adapter" >&2; exit 20; }
@@ -1929,8 +2352,20 @@ start_cmd() {
             echo "permission gate failed: $perm_result" >&2
             exit 22
         fi
+        
+        # bd-8wdg.11: Auto-remediate mise trust with proper status reporting
         if [[ "${DX_RUNNER_AUTO_TRUST_MISE:-1}" == "1" ]] && command -v mise >/dev/null 2>&1; then
-            mise trust "$WORKTREE" >/dev/null 2>&1 || true
+            local trust_before trust_after
+            trust_before="$(mise trust --show 2>/dev/null || true)"
+            if [[ -z "$trust_before" ]]; then
+                mise trust "$WORKTREE" >/dev/null 2>&1 || true
+                trust_after="$(mise trust --show 2>/dev/null || true)"
+                if [[ -n "$trust_after" ]]; then
+                    echo "[bd-8wdg.11] mise trust auto-remediated for $WORKTREE" >&2
+                else
+                    echo "[bd-8wdg.11] WARN: mise trust auto-remediation failed for $WORKTREE" >&2
+                fi
+            fi
         fi
     fi
     
@@ -1945,6 +2380,18 @@ start_cmd() {
             exit 1
         fi
     fi
+    
+    # bd-8wdg.5: Scope guard (optional)
+    if [[ -n "$ALLOWED_PATHS_FILE" || -n "$MUTATION_BUDGET" ]]; then
+        local scope_result scope_pass scope_reason
+        scope_result="$(scope_guard_eval "${WORKTREE:-$(pwd)}" "$ALLOWED_PATHS_FILE" "$MUTATION_BUDGET")"
+        IFS='|' read -r scope_pass scope_reason _ _ _ <<< "$scope_result"
+        if [[ "$scope_pass" != "true" ]]; then
+            echo "scope guard failed: $scope_result" >&2
+            echo "reason_code=$scope_reason"
+            exit 29
+        fi
+    fi
 
     local run_instance
     run_instance="$(date +%Y%m%d%H%M%S)-${PROVIDER}-$$"
@@ -1954,7 +2401,7 @@ start_cmd() {
     cwd="$(pwd)"
     local switched_from=""
     local start_head_commit=""
-    if git -C "$WORKTREE" rev-parse --git-dir >/dev/null 2>&1; then
+    if [[ -n "$WORKTREE" ]] && git -C "$WORKTREE" rev-parse --git-dir >/dev/null 2>&1; then
         start_head_commit="$(git -C "$WORKTREE" rev-parse HEAD 2>/dev/null || true)"
     fi
     local existing_provider
@@ -1984,6 +2431,10 @@ cwd=$cwd
 provider_switch_from=${switched_from:-none}
 require_commit_artifact=${REQUIRE_COMMIT_ARTIFACT}
 start_head_commit=${start_head_commit:-none}
+profile=${PROFILE:-none}
+model_override_allowed=${ALLOW_MODEL_OVERRIDE:-0}
+allowed_paths_file=${ALLOWED_PATHS_FILE:-none}
+mutation_budget=${MUTATION_BUDGET:-none}
 EOF
 
     if [[ -n "$switched_from" ]]; then
@@ -2252,7 +2703,6 @@ check_cmd() {
     local provider
     provider="$(find_provider_for_beads "$BEADS")"
     
-    # If no provider found, search across provider directories
     if [[ -z "$provider" ]]; then
         for dir in /tmp/dx-runner/*/; do
             [[ -d "$dir" ]] || continue
@@ -2280,14 +2730,11 @@ check_cmd() {
     [[ "$cpu_time" =~ ^[0-9]+$ ]] || cpu_time=0
     [[ "$pid_age" =~ ^[0-9]+$ ]] || pid_age=0
     [[ "$log_age" =~ ^[0-9]+$ ]] || log_age=0
-    if [[ -f "$OUTCOME_FILE" && ( "$reason" == "outcome_exit_nonzero" || "$reason" == "outcome_exit_0" ) ]]; then
-        local outcome_reason
-        outcome_reason="$(meta_get "$OUTCOME_FILE" "reason_code" 2>/dev/null || true)"
-        [[ -n "$outcome_reason" ]] && reason="$outcome_reason"
-    fi
+    
+    # bd-8wdg.3: Reason already comes from outcome in job_health_detail for finalized jobs
     
     if [[ "$OUTPUT_JSON" == "true" ]]; then
-        local j_host j_cwd j_worktree j_run_instance j_model j_fallback
+        local j_host j_cwd j_worktree j_run_instance j_model j_fallback j_profile
         local j_action
         j_host="$(meta_get "$META_FILE" "host" 2>/dev/null || echo "-")"
         j_cwd="$(meta_get "$META_FILE" "cwd" 2>/dev/null || echo "-")"
@@ -2295,13 +2742,14 @@ check_cmd() {
         j_run_instance="$(meta_get "$META_FILE" "run_instance" 2>/dev/null || echo "-")"
         j_model="$(meta_get "$META_FILE" "selected_model" 2>/dev/null || echo "-")"
         j_fallback="$(meta_get "$META_FILE" "fallback_reason" 2>/dev/null || echo "-")"
+        j_profile="$(meta_get "$META_FILE" "profile" 2>/dev/null || echo "-")"
         if [[ -f "$OUTCOME_FILE" ]]; then
             j_model="$(meta_get "$OUTCOME_FILE" "selected_model" 2>/dev/null || echo "$j_model")"
             j_fallback="$(meta_get "$OUTCOME_FILE" "fallback_reason" 2>/dev/null || echo "$j_fallback")"
         fi
         j_action="$(next_action_for_reason "$reason")"
-        printf '{"beads":"%s","provider":"%s","state":"%s","reason_code":"%s","next_action":"%s","host":"%s","cwd":"%s","worktree":"%s","run_instance":"%s","selected_model":"%s","fallback_reason":"%s","mutation_count":%s,"log_bytes":%s,"cpu_time_sec":%s,"pid_age_sec":%s,"log_age_sec":%s}\n' \
-            "$BEADS" "${provider:-unknown}" "$state" "$reason" "$j_action" "$(json_escape "$j_host")" "$(json_escape "$j_cwd")" "$(json_escape "$j_worktree")" "$(json_escape "$j_run_instance")" "$(json_escape "$j_model")" "$(json_escape "$j_fallback")" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+        printf '{"beads":"%s","provider":"%s","state":"%s","reason_code":"%s","next_action":"%s","host":"%s","cwd":"%s","worktree":"%s","run_instance":"%s","selected_model":"%s","fallback_reason":"%s","profile":"%s","mutation_count":%s,"log_bytes":%s,"cpu_time_sec":%s,"pid_age_sec":%s,"log_age_sec":%s}\n' \
+            "$BEADS" "${provider:-unknown}" "$state" "$reason" "$j_action" "$(json_escape "$j_host")" "$(json_escape "$j_cwd")" "$(json_escape "$j_worktree")" "$(json_escape "$j_run_instance")" "$(json_escape "$j_model")" "$(json_escape "$j_fallback")" "$(json_escape "$j_profile")" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
     else
         echo "$BEADS: $state ($reason)"
         local action
@@ -2313,12 +2761,15 @@ check_cmd() {
         echo "metrics mutations=$mutation_count log_bytes=$log_bytes cpu_time_sec=$cpu_time pid_age_sec=$pid_age log_age_sec=$log_age"
     fi
     
+    # bd-8wdg.3: Handle stopped state explicitly
     case "$state" in
         stalled) exit 2 ;;
         no_op) exit 23 ;;
         exited_err) exit 3 ;;
+        stopped) exit 0 ;;  # Manual stop is not an error
         blocked) exit 3 ;;
         exited_ok) exit 0 ;;
+        slow_start) exit 0 ;;  # bd-8wdg.10: Slow start is not stalled
         *) exit 0 ;;
     esac
 }
@@ -2336,9 +2787,36 @@ stop_cmd() {
         exit 1
     fi
     
+    # bd-8wdg.3: Record metrics before stopping
+    local snap_mutations=0 snap_log_bytes=0 snap_cpu=0 snap_pid_age=0
+    if [[ -f "$LOG_FILE" ]]; then
+        snap_log_bytes="$(wc -c < "$LOG_FILE" 2>/dev/null | tr -d ' ')" || snap_log_bytes=0
+    fi
+    if [[ -f "$META_FILE" ]]; then
+        snap_mutations="$(check_mutations "$BEADS" 2>/dev/null || echo 0)"
+        snap_cpu="$(meta_get "$META_FILE" "last_cpu_time" 2>/dev/null || echo 0)"
+    fi
+    if [[ -f "$PID_FILE" ]]; then
+        local now pid_mtime
+        now="$(date +%s)"
+        pid_mtime="$(file_mtime_epoch "$PID_FILE" 2>/dev/null || echo "$now")"
+        snap_pid_age=$((now - pid_mtime))
+    fi
+    
     stop_job_internal "$BEADS" "$provider"
+    
+    # bd-8wdg.3: Persist outcome with manual_stop reason and captured metrics
     persist_outcome "$BEADS" 137 "$OUTCOME_FILE" "$META_FILE" "manual_stop"
-    echo "stopped beads=$BEADS"
+    
+    # Append metrics to outcome for consistency
+    if [[ -f "$OUTCOME_FILE" ]]; then
+        meta_set "$OUTCOME_FILE" "mutations" "$snap_mutations"
+        meta_set "$OUTCOME_FILE" "log_bytes" "$snap_log_bytes"
+        meta_set "$OUTCOME_FILE" "cpu_time_sec" "$snap_cpu"
+        meta_set "$OUTCOME_FILE" "pid_age_sec" "$snap_pid_age"
+    fi
+    
+    echo "stopped beads=$BEADS reason_code=manual_stop"
 }
 
 compact_log_filter() {
@@ -2813,6 +3291,249 @@ feature_key_gate_cmd() {
     [[ "$gate_pass" == "true" ]] || exit 1
 }
 
+# ============================================================================
+# SCOPE GUARD (bd-8wdg.5)
+# ============================================================================
+
+scope_guard_eval() {
+    local worktree="$1"
+    local allowed_paths_file="${2:-}"
+    local mutation_budget="${3:-}"
+    
+    local passed=true
+    local reason_code="scope_ok"
+    local violations=""
+    local mutation_count=0
+    local checked_files=0
+    
+    if [[ ! -d "$worktree" ]]; then
+        printf '%s|%s|%s|%s|%s\n' "false" "worktree_missing" "0" "0" "Worktree not found"
+        return 1
+    fi
+    
+    # Check allowed paths if file provided
+    if [[ -n "$allowed_paths_file" && -f "$allowed_paths_file" ]]; then
+        local -a allowed_paths=()
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && allowed_paths+=("$line")
+        done < "$allowed_paths_file"
+        
+        # Check for files modified outside allowed paths
+        if git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
+            local changed_files
+            
+            # bd-8wdg.5 fix: Only check CURRENT mutations (staged + unstaged + untracked)
+            # NOT historical committed changes - scope guard is about what THIS run changed
+            changed_files="$(
+                # Staged changes (about to be committed)
+                git -C "$worktree" diff --cached --name-only 2>/dev/null || true
+                # Unstaged changes (modified but not staged)
+                git -C "$worktree" diff --name-only 2>/dev/null || true
+                # Untracked files (new files not in git)
+                git -C "$worktree" ls-files --others --exclude-standard 2>/dev/null || true
+            )"
+            
+            while IFS= read -r file; do
+                [[ -n "$file" ]] || continue
+                checked_files=$((checked_files + 1))
+                local allowed=false
+                for allowed_path in "${allowed_paths[@]}"; do
+                    if [[ "$file" == "$allowed_path"* ]]; then
+                        allowed=true
+                        break
+                    fi
+                done
+                if [[ "$allowed" == false ]]; then
+                    passed=false
+                    reason_code="path_outside_allowlist"
+                    violations="${violations}${violations:+,}$file"
+                fi
+            done <<< "$changed_files"
+        fi
+    fi
+    
+    # Check mutation budget if specified
+    if [[ -n "$mutation_budget" && "$mutation_budget" =~ ^[0-9]+$ ]]; then
+        if git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
+            mutation_count="$(git -C "$worktree" status --porcelain --untracked-files=all 2>/dev/null | wc -l | tr -d ' ')" || mutation_count=0
+            if [[ "$mutation_count" -gt "$mutation_budget" ]]; then
+                passed=false
+                reason_code="mutation_budget_exceeded"
+                violations="mutations=$mutation_count budget=$mutation_budget"
+            fi
+        fi
+    fi
+    
+    printf '%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$mutation_count" "$checked_files" "$violations"
+}
+
+scope_gate_cmd() {
+    parse_common_args "$@"
+    local worktree
+    worktree="$(resolve_worktree "$BEADS" "$WORKTREE")"
+    
+    local result gate_pass gate_reason gate_mutations gate_checked gate_violations
+    result="$(scope_guard_eval "$worktree" "$ALLOWED_PATHS_FILE" "$MUTATION_BUDGET")"
+    IFS='|' read -r gate_pass gate_reason gate_mutations gate_checked gate_violations <<< "$result"
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        printf '{"passed":%s,"reason_code":"%s","mutations":%s,"checked_files":%s,"violations":"%s"}\n' \
+            "$gate_pass" "$gate_reason" "$gate_mutations" "$gate_checked" "$(json_escape "$gate_violations")"
+    else
+        echo "Scope Gate: $gate_pass ($gate_reason)"
+        echo "  Mutations: $gate_mutations"
+        echo "  Checked Files: $gate_checked"
+        [[ -n "$gate_violations" ]] && echo "  Violations: $gate_violations"
+    fi
+    
+    if [[ "$gate_pass" != "true" ]]; then
+        exit 29
+    fi
+}
+
+# ============================================================================
+# EVIDENCE TRUTHFULNESS GATE (bd-8wdg.6)
+# ============================================================================
+
+evidence_gate_eval() {
+    local beads="$1"
+    local signoff_file="$2"
+    local provider
+    provider="$(find_provider_for_beads "$beads")"
+    job_paths "$beads" "$provider"
+    
+    local passed=true
+    local reason_code="evidence_ok"
+    local missing_claims=""
+    local verified_claims=0
+    local total_claims=0
+    
+    if [[ ! -f "$signoff_file" ]]; then
+        printf '%s|%s|%s|%s|%s\n' "false" "signoff_file_missing" "0" "0" "Signoff file not found"
+        return 1
+    fi
+    
+    if [[ ! -f "$OUTCOME_FILE" ]]; then
+        printf '%s|%s|%s|%s|%s\n' "false" "outcome_missing" "0" "0" "No outcome file for this run"
+        return 1
+    fi
+    
+    # Extract claims from signoff file (lines like "Validated: X" or "- [x] X")
+    local claim_patterns=(
+        "validated:"
+        "- \[x\]"
+        "- \[X\]"
+        "VERIFIED:"
+        "CONFIRMED:"
+    )
+    
+    # Check for common unsupported claims
+    local unsupported_claims=()
+    while IFS= read -r line; do
+        line="$(echo "$line" | tr '[:upper:]' '[:lower:]')"
+        total_claims=$((total_claims + 1))
+        
+        # Check if claim is actually validated by outcome
+        local claim_verified=false
+        
+        # Check for test claims
+        if [[ "$line" =~ "tests pass" || "$line" =~ "all tests" ]]; then
+            # Would need test results - mark as needing verification
+            if [[ -f "$LOG_FILE" ]] && grep -qiE "tests?.*(pass|ok|success)" "$LOG_FILE" 2>/dev/null; then
+                claim_verified=true
+            fi
+        fi
+        
+        # Check for lint claims
+        if [[ "$line" =~ "lint" && "$line" =~ "pass" ]]; then
+            if [[ -f "$LOG_FILE" ]] && grep -qiE "lint.*(pass|ok|clean|no errors)" "$LOG_FILE" 2>/dev/null; then
+                claim_verified=true
+            fi
+        fi
+        
+        # Check for CI claims
+        if [[ "$line" =~ "ci" && "$line" =~ "pass" ]]; then
+            local exit_code
+            exit_code="$(meta_get "$OUTCOME_FILE" "exit_code" 2>/dev/null || echo 1)"
+            if [[ "$exit_code" == "0" ]]; then
+                claim_verified=true
+            fi
+        fi
+        
+        if [[ "$claim_verified" == true ]]; then
+            verified_claims=$((verified_claims + 1))
+        else
+            # Generic claim - check if outcome shows success
+            local exit_code outcome_state
+            exit_code="$(meta_get "$OUTCOME_FILE" "exit_code" 2>/dev/null || echo 1)"
+            outcome_state="$(meta_get "$OUTCOME_FILE" "state" 2>/dev/null || echo "unknown")"
+            if [[ "$exit_code" == "0" && "$outcome_state" == "success" ]]; then
+                verified_claims=$((verified_claims + 1))
+                claim_verified=true
+            fi
+        fi
+        
+        if [[ "$claim_verified" == false ]]; then
+            missing_claims="${missing_claims}${missing_claims:+,}$line"
+        fi
+    done < <(grep -iE "$(IFS='|'; echo "${claim_patterns[*]}")" "$signoff_file" 2>/dev/null || true)
+    
+    if [[ "$verified_claims" -lt "$total_claims" ]]; then
+        passed=false
+        reason_code="unverified_claims"
+    fi
+    
+    printf '%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$verified_claims" "$total_claims" "$missing_claims"
+}
+
+evidence_gate_cmd() {
+    parse_common_args "$@"
+    [[ -n "$BEADS" ]] || { echo "evidence-gate requires --beads" >&2; exit 2; }
+    [[ -n "$EVIDENCE_SIGNOFF_FILE" ]] || { echo "evidence-gate requires --signoff-file" >&2; exit 2; }
+    
+    local result gate_pass gate_reason gate_verified gate_total gate_missing
+    result="$(evidence_gate_eval "$BEADS" "$EVIDENCE_SIGNOFF_FILE")"
+    IFS='|' read -r gate_pass gate_reason gate_verified gate_total gate_missing <<< "$result"
+    
+    if [[ "$OUTPUT_JSON" == "true" ]]; then
+        printf '{"passed":%s,"reason_code":"%s","verified_claims":%s,"total_claims":%s,"missing_claims":"%s"}\n' \
+            "$gate_pass" "$gate_reason" "$gate_verified" "$gate_total" "$(json_escape "$gate_missing")"
+    else
+        echo "Evidence Gate: $gate_pass ($gate_reason)"
+        echo "  Verified: $gate_verified / $gate_total claims"
+        [[ -n "$gate_missing" ]] && echo "  Missing Evidence: $gate_missing"
+    fi
+    
+    if [[ "$gate_pass" != "true" ]]; then
+        exit 30
+    fi
+}
+
+# ============================================================================
+# PROFILES COMMAND (bd-8wdg.1)
+# ============================================================================
+
+profiles_cmd() {
+    local list_only=false
+    local show_profile=""
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --list) list_only=true; shift ;;
+            --show) show_profile="${2:-}"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    
+    if [[ -n "$show_profile" ]]; then
+        show_profile "$show_profile"
+        return $?
+    fi
+    
+    echo "Available profiles:"
+    list_profiles || echo "  (no profiles found)"
+}
+
 finalize_cmd() {
     parse_common_args "$@"
     [[ -n "$BEADS" ]] || { echo "finalize requires --beads" >&2; exit 2; }
@@ -3016,6 +3737,9 @@ case "$CMD" in
     baseline-gate) baseline_gate_cmd "$@" ;;
     integrity-gate) integrity_gate_cmd "$@" ;;
     feature-key-gate) feature_key_gate_cmd "$@" ;;
+    evidence-gate) evidence_gate_cmd "$@" ;;
+    scope-gate) scope_gate_cmd "$@" ;;
+    profiles) profiles_cmd "$@" ;;
     -h|--help|help) usage; exit 0 ;;
     *) echo "Unknown command: $CMD" >&2; usage; exit 2 ;;
 esac

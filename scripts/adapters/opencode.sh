@@ -2,11 +2,13 @@
 # opencode adapter for dx-runner
 #
 # Implements the adapter contract for OpenCode headless
-# Includes reliability fixes for bd-cbsb.15-.18:
+# Includes reliability fixes for bd-cbsb.15-.18 and bd-8wdg hardening:
 #   - Capability preflight with strict canonical model enforcement (bd-cbsb.15)
 #   - Permission handling (bd-cbsb.16)
 #   - No-op detection (bd-cbsb.17)
 #   - beads-mcp dependency check (bd-cbsb.18)
+#   - Model drift blocking unless explicit override (bd-8wdg.2)
+#   - Startup-aware health states (bd-8wdg.10)
 #
 # Required functions:
 #   adapter_start        - Start a job
@@ -20,9 +22,16 @@
 #
 # Exit codes:
 #   25 - Model unavailable (canonical model not found)
+#   28 - Model override blocked (drift protection)
 
 CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zhipuai-coding-plan/glm-5}"
 OPENCODE_EXECUTION_MODE="${OPENCODE_EXECUTION_MODE:-run}"
+
+# bd-8wdg.2: Model override policy
+# By default, OPENCODE_MODEL env var is IGNORED to prevent drift
+# Set DX_RUNNER_ALLOW_MODEL_OVERRIDE=1 or pass --allow-model-override to enable
+DX_RUNNER_ALLOW_MODEL_OVERRIDE="${DX_RUNNER_ALLOW_MODEL_OVERRIDE:-0}"
+MODEL_OVERRIDE_AUDIT_LOG=""
 
 adapter_run_with_timeout() {
     local seconds="$1"
@@ -92,6 +101,12 @@ adapter_preflight() {
     echo "cwd: $(pwd)"
     echo "execution mode: ${OPENCODE_EXECUTION_MODE}"
     echo "canonical model policy: ${CANONICAL_MODEL}"
+    
+    # bd-8wdg.4: Show profile context if loaded
+    if [[ -n "${PROFILE_NAME:-}" ]]; then
+        echo "profile: ${PROFILE_NAME}"
+        echo "profile strict: ${PROFILE_STRICT:-false}"
+    fi
 
     # Check 1: OpenCode binary (bd-cbsb.15)
     echo -n "opencode binary: "
@@ -100,10 +115,17 @@ adapter_preflight() {
     if [[ -n "$opencode_bin" ]]; then
         echo "OK ($opencode_bin)"
     else
+        # bd-8wdg.4: Use profile-based policy
+        local policy
+        policy="$(profile_get_preflight_policy "opencode_binary_missing" "error")"
         echo "MISSING"
-        echo "  ERROR: opencode CLI not found"
-        errors=$((errors + 1))
-        # Can't continue without binary
+        if [[ "$policy" == "error" ]]; then
+            echo "  ERROR: opencode CLI not found"
+            errors=$((errors + 1))
+        else
+            echo "  WARN: opencode CLI not found"
+            warnings=$((warnings + 1))
+        fi
         return $errors
     fi
     
@@ -117,35 +139,76 @@ adapter_preflight() {
     if [[ "$model_count" -gt 0 ]]; then
         echo "OK ($model_count models)"
     else
+        local policy
+        policy="$(profile_get_preflight_policy "model_unavailable" "error")"
         echo "NO_MODELS"
-        echo "  ERROR: No models available"
-        errors=$((errors + 1))
+        if [[ "$policy" == "error" ]]; then
+            echo "  ERROR: No models available"
+            errors=$((errors + 1))
+        else
+            echo "  WARN: No models available"
+            warnings=$((warnings + 1))
+        fi
     fi
     
     # Check 3: Canonical model probe with auth/quota (strict blocking)
     echo -n "canonical model probe: "
     local model_result probe_model selection_reason resolve_reason
-    model_result="$(adapter_resolve_model "${OPENCODE_MODEL:-$CANONICAL_MODEL}")"
+    
+    # bd-8wdg.2: Check model override policy before resolution
+    local effective_model="$CANONICAL_MODEL"
+    if [[ -n "${OPENCODE_MODEL:-}" && "${OPENCODE_MODEL:-}" != "$CANONICAL_MODEL" ]]; then
+        if [[ "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "1" || "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "true" ]]; then
+            effective_model="${OPENCODE_MODEL}"
+        else
+            # Log the blocked override attempt, but continue with canonical model
+            echo "[opencode-adapter] Ignoring OPENCODE_MODEL=${OPENCODE_MODEL} (override not allowed, using canonical)"
+            # Don't change effective_model - it stays as CANONICAL_MODEL
+        fi
+    fi
+    
+    model_result="$(adapter_resolve_model "$effective_model")"
     IFS='|' read -r probe_model selection_reason resolve_reason <<< "$model_result"
 
     if [[ -z "$probe_model" ]]; then
+        local policy
+        policy="$(profile_get_preflight_policy "model_unavailable" "error")"
         echo "MISSING ($CANONICAL_MODEL)"
-        echo "  ERROR: $resolve_reason"
-        errors=$((errors + 1))
+        if [[ "$policy" == "error" ]]; then
+            echo "  ERROR: $resolve_reason"
+            errors=$((errors + 1))
+        else
+            echo "  WARN: $resolve_reason"
+            warnings=$((warnings + 1))
+        fi
     else
         local probe_output
         probe_output="$(adapter_run_with_timeout 30 "$opencode_bin" run --model "$probe_model" --format json "Say READY" 2>&1)" || true
         if echo "$probe_output" | grep -qi "READY"; then
             echo "OK ($probe_model)"
         elif echo "$probe_output" | grep -qiE "unauthorized|forbidden|insufficient.*balance|quota|rate.?limit|429"; then
+            local policy
+            policy="$(profile_get_preflight_policy "auth_or_quota_blocked" "error")"
             echo "BLOCKED (auth/quota)"
-            echo "  ERROR: Model $probe_model available but auth/quota check failed"
-            echo "  ERROR_CODE=opencode_auth_or_quota_blocked severity=error action=refresh_auth_or_switch_provider"
-            errors=$((errors + 1))
+            if [[ "$policy" == "error" ]]; then
+                echo "  ERROR: Model $probe_model available but auth/quota check failed"
+                echo "  ERROR_CODE=opencode_auth_or_quota_blocked severity=error action=refresh_auth_or_switch_provider"
+                errors=$((errors + 1))
+            else
+                echo "  WARN: Model $probe_model available but auth/quota check failed"
+                warnings=$((warnings + 1))
+            fi
         else
+            local policy
+            policy="$(profile_get_preflight_policy "canonical_model_probe_timeout" "warn")"
             echo "TIMEOUT ($probe_model)"
-            echo "  WARN_CODE=opencode_probe_timeout severity=warn action=retry_or_continue"
-            warnings=$((warnings + 1))
+            if [[ "$policy" == "error" ]]; then
+                echo "  ERROR: Model probe timed out"
+                errors=$((errors + 1))
+            else
+                echo "  WARN_CODE=opencode_probe_timeout severity=warn action=retry_or_continue"
+                warnings=$((warnings + 1))
+            fi
         fi
     fi
 
@@ -176,12 +239,19 @@ adapter_preflight() {
     if command -v beads-mcp >/dev/null 2>&1; then
         echo "OK ($(command -v beads-mcp))"
     else
+        local policy
+        policy="$(profile_get_preflight_policy "beads_mcp_missing" "warn")"
         echo "MISSING"
-        echo "  WARN_CODE=opencode_beads_mcp_missing severity=warn action=install_beads_mcp_for_richer_context"
-        warnings=$((warnings + 1))
+        if [[ "$policy" == "error" ]]; then
+            echo "  ERROR: beads-mcp not found"
+            errors=$((errors + 1))
+        else
+            echo "  WARN_CODE=opencode_beads_mcp_missing severity=warn action=install_beads_mcp_for_richer_context"
+            warnings=$((warnings + 1))
+        fi
     fi
     
-    # Check 5: mise trust state (bd-cbsb.17 - for validation steps)
+    # Check 5: mise trust state (bd-cbsb.17, bd-8wdg.11)
     echo -n "mise trust: "
     if command -v mise >/dev/null 2>&1; then
         local trust_state
@@ -189,9 +259,16 @@ adapter_preflight() {
         if [[ -n "$trust_state" ]]; then
             echo "OK"
         else
+            local policy
+            policy="$(profile_get_preflight_policy "mise_untrusted" "warn")"
             echo "UNTRUSTED"
-            echo "  WARN_CODE=opencode_mise_untrusted severity=warn action=run_mise_trust_in_worktree"
-            warnings=$((warnings + 1))
+            if [[ "$policy" == "error" ]]; then
+                echo "  ERROR_CODE=opencode_mise_untrusted severity=error action=run_mise_trust_in_worktree"
+                errors=$((errors + 1))
+            else
+                echo "  WARN_CODE=opencode_mise_untrusted severity=warn action=run_mise_trust_in_worktree"
+                warnings=$((warnings + 1))
+            fi
         fi
     else
         echo "NOT_INSTALLED"
@@ -216,8 +293,32 @@ adapter_resolve_model() {
     local opencode_bin
     opencode_bin="$(adapter_find_opencode)" || return 1
 
-    local required="${preferred:-$CANONICAL_MODEL}"
+    # bd-8wdg.2: Check if model override is allowed
+    local requested_model="$preferred"
+    local override_used=false
+    local override_source="none"
+    
+    # If OPENCODE_MODEL is set and different from canonical, check override policy
+    if [[ -n "${OPENCODE_MODEL:-}" && "${OPENCODE_MODEL:-}" != "$CANONICAL_MODEL" ]]; then
+        if [[ "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "1" || "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "true" ]]; then
+            override_used=true
+            override_source="OPENCODE_MODEL"
+            requested_model="${OPENCODE_MODEL}"
+        else
+            # Log the blocked override attempt
+            echo "[opencode-adapter] BLOCKED model override attempt: OPENCODE_MODEL=${OPENCODE_MODEL} (override not allowed)" >&2
+            MODEL_OVERRIDE_AUDIT_LOG="blocked_env_override=${OPENCODE_MODEL}"
+        fi
+    fi
+
+    local required="${requested_model:-$CANONICAL_MODEL}"
+    
+    # Only canonical model is allowed (even with override, must be canonical)
     if [[ "$required" != "$CANONICAL_MODEL" ]]; then
+        if [[ "$override_used" == "true" ]]; then
+            echo "|unavailable|model override rejected: '$required' is not canonical model '$CANONICAL_MODEL'; only canonical model is allowed even with override"
+            return 1
+        fi
         echo "|unavailable|unsupported opencode model '$required'; only '$CANONICAL_MODEL' is allowed"
         return 1
     fi
@@ -225,7 +326,9 @@ adapter_resolve_model() {
     local available_models
     available_models="$(adapter_list_models_cached "$opencode_bin" || true)"
     if printf '%s\n' "$available_models" | grep -qxF "$CANONICAL_MODEL"; then
-        echo "$CANONICAL_MODEL|canonical|"
+        local selection_reason="canonical"
+        [[ "$override_used" == "true" ]] && selection_reason="canonical_with_override"
+        echo "$CANONICAL_MODEL|${selection_reason}|override_source=${override_source}"
         return 0
     fi
 
@@ -245,10 +348,24 @@ adapter_start() {
         return 1
     }
     
+    # bd-8wdg.2: Check model override policy before resolution
+    local effective_model_request="${OPENCODE_MODEL:-$CANONICAL_MODEL}"
+    local model_override_allowed="false"
+    if [[ "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "1" || "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "true" ]]; then
+        model_override_allowed="true"
+    fi
+    
+    # If OPENCODE_MODEL is set but override not allowed, ignore it and warn
+    if [[ -n "${OPENCODE_MODEL:-}" && "${OPENCODE_MODEL:-}" != "$CANONICAL_MODEL" && "$model_override_allowed" != "true" ]]; then
+        echo "[opencode-adapter] WARNING: ignoring OPENCODE_MODEL=${OPENCODE_MODEL} (override not allowed, using canonical)" >> "$log_file"
+        echo "model_override_blocked=true" >> "$log_file"
+        echo "blocked_model=${OPENCODE_MODEL}" >> "$log_file"
+        effective_model_request="$CANONICAL_MODEL"
+    fi
+    
     # Resolve strict canonical model (bd-cbsb.15)
-    local preferred_model="${OPENCODE_MODEL:-$CANONICAL_MODEL}"
     local model_result model selection_reason fallback_reason
-    model_result="$(adapter_resolve_model "$preferred_model")"
+    model_result="$(adapter_resolve_model "$effective_model_request")"
     IFS='|' read -r model selection_reason fallback_reason <<< "$model_result"
     
     if [[ -z "$model" ]]; then
@@ -257,6 +374,13 @@ adapter_start() {
         echo "ERROR: $fallback_reason" >&2
         echo "ERROR: Use provider cc-glm or gemini for this wave." >&2
         return 25
+    fi
+    
+    # bd-8wdg.2: Log override status for audit
+    if [[ -n "${OPENCODE_MODEL:-}" && "$model_override_allowed" == "true" ]]; then
+        echo "[opencode-adapter] MODEL_OVERRIDE_ALLOWED beads=$beads requested=${OPENCODE_MODEL} effective=$model" >> "$log_file"
+        echo "model_override_used=true" >> "$log_file"
+        echo "model_override_source=OPENCODE_MODEL" >> "$log_file"
     fi
 
     if [[ "${OPENCODE_EXECUTION_MODE}" == "attach" || "${OPENCODE_EXECUTION_MODE}" == "server" ]]; then
@@ -325,6 +449,8 @@ adapter_start() {
             printf 'pid=%s\n' "$pid"
             printf 'selected_model=%s\n' "$model"
             printf 'fallback_reason=%s\n' "${fallback_reason:-none}"
+            printf 'model_override_allowed=%s\n' "$model_override_allowed"
+            printf 'model_override_used=%s\n' "$( [[ -n "${OPENCODE_MODEL:-}" && "$model_override_allowed" == "true" ]] && echo true || echo false )"
             printf 'launch_mode=%s\n' "$launch_mode"
             printf 'execution_mode=%s\n' "$launch_mode"
             printf 'rc_file=%s\n' "$rc_file"
@@ -360,6 +486,8 @@ EOF
     printf 'pid=%s\n' "$pid"
     printf 'selected_model=%s\n' "$model"
     printf 'fallback_reason=%s\n' "${fallback_reason:-none}"
+    printf 'model_override_allowed=%s\n' "$model_override_allowed"
+    printf 'model_override_used=%s\n' "$( [[ -n "${OPENCODE_MODEL:-}" && "$model_override_allowed" == "true" ]] && echo true || echo false )"
     printf 'launch_mode=%s\n' "$launch_mode"
     printf 'execution_mode=%s\n' "$launch_mode"
     printf 'rc_file=%s\n' "$rc_file"

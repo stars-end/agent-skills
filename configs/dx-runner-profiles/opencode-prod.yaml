@@ -1,0 +1,50 @@
+# dx-runner profile: opencode-prod
+# Production-safe OpenCode dispatch with strict governance
+
+profile:
+  name: opencode-prod
+  description: Production-safe OpenCode dispatch with strict canonical model enforcement
+  version: "1.0.0"
+
+provider:
+  name: opencode
+  model: zhipuai-coding-plan/glm-5
+  allow_model_override: false
+  execution_mode: run
+  fallback_provider: cc-glm
+
+concurrency:
+  max_parallel: 2
+  queue_timeout_sec: 60
+
+preflight:
+  strict: true
+  policy:
+    # Critical checks that block start
+    opencode_binary_missing: error
+    model_unavailable: error
+    auth_or_quota_blocked: error
+    worktree_missing: error
+    # Warnings that become errors in prod
+    canonical_model_probe_timeout: error
+    mise_untrusted: error
+    beads_mcp_missing: warn
+
+timeouts:
+  max_runtime_minutes: 120
+  no_mutation_timeout_minutes: 30
+  stall_minutes: 20
+  first_output_grace_seconds: 300
+  first_mutation_grace_seconds: 600
+
+scope:
+  enforce_allowed_paths: true
+  allowed_paths_file: null
+  mutation_budget: null
+  file_budget: null
+
+gates:
+  baseline: optional
+  feature_key: required
+  commit_artifact: optional
+  railway_auth: optional

@@ -1,0 +1,43 @@
+# dx-runner profile: cc-glm-fallback
+# Reliability backstop profile for when OpenCode is unavailable
+
+profile:
+  name: cc-glm-fallback
+  description: Reliability backstop using Claude via Z.ai
+  version: "1.0.0"
+
+provider:
+  name: cc-glm
+  model: glm-5
+  allow_model_override: false
+  fallback_provider: null
+
+concurrency:
+  max_parallel: 2
+  queue_timeout_sec: 60
+
+preflight:
+  strict: true
+  policy:
+    auth_missing: error
+    token_file_error: error
+    provider_unavailable: error
+
+timeouts:
+  max_runtime_minutes: 180
+  no_mutation_timeout_minutes: 45
+  stall_minutes: 30
+  first_output_grace_seconds: 180
+  first_mutation_grace_seconds: 600
+
+scope:
+  enforce_allowed_paths: true
+  allowed_paths_file: null
+  mutation_budget: null
+  file_budget: null
+
+gates:
+  baseline: optional
+  feature_key: required
+  commit_artifact: optional
+  railway_auth: optional
