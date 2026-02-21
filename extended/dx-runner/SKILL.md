@@ -194,6 +194,7 @@ Google Gemini CLI with detached launcher hardening:
 - collision-safe launcher temp file creation (macOS/Linux)
 - real child PID tracking (not short-lived wrapper PID)
 - completion monitor + finalize `rc` grace window before no-rc classification
+- auth policy: OAuth session via `gemini login` is the only canonical route (API-key env vars are not accepted by preflight)
 
 ```bash
 dx-runner start --beads bd-xxx --provider gemini --prompt-file /tmp/task.prompt
