@@ -121,7 +121,7 @@ These requirements ensure the plan uses REAL failing instances, not synthetic de
 | bd-3umt.1 | Tasks admitted ONLY when mutation causes verified failing tests | No "instructional-only" tasks |
 | bd-3umt.1 | No `echo 'No test file'` fallback | Every task must have real test |
 | bd-3umt.1 | Apply `modifier.modify(entity)`, extract code from `BugRewrite.rewrite` | Real bug injection |
-| bd-3umt.1 | Use `RepoProfile.extract_entities_from_file()` (NOT nonexistent swesmith.utils) | Correct SWE-smith API |
+| bd-3umt.1 | Use `swesmith.bug_gen.adapters.get_entities_from_file[ext]` | Correct SWE-smith API |
 | bd-3umt.1 | Patch uses `a/` and `b/` prefixes for `patch -p1` compatibility | Patch applies correctly |
 | bd-3umt.1 | Task includes `mutated_code` field (NOT `original_code`) | Evaluator has mutation data |
 | bd-3umt.3 | Load/apply mutation BEFORE agent run | Evaluate on mutated state |
