@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# dx-wave - Safe operator wrapper for dx-runner (bd-8wdg.7)
+#
+# Provides a single entrypoint for production waves with:
+#   - Profile-first defaults
+#   - No inline env model overrides
+#   - Safe start/check/status/report/stop workflow
+#
+# Usage:
+#   dx-wave start --beads <id> --prompt-file <path> [--profile <name>]
+#   dx-wave check --beads <id>
+#   dx-wave status [--beads <id>]
+#   dx-wave report --beads <id>
+#   dx-wave stop --beads <id>
+#
+# Default profile: opencode-prod
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DX_RUNNER="${SCRIPT_DIR}/dx-runner"
+
+DEFAULT_PROFILE="opencode-prod"
+PROFILE="${DX_WAVE_PROFILE:-$DEFAULT_PROFILE}"
+
+usage() {
+    cat <<'EOF'
+dx-wave - Safe operator wrapper for dx-runner
+
+Usage:
+  dx-wave start --beads <id> --prompt-file <path> [--profile <name>] [--worktree <path>]
+  dx-wave check --beads <id> [--json]
+  dx-wave status [--beads <id>] [--json]
+  dx-wave report --beads <id> [--format json|markdown]
+  dx-wave stop --beads <id>
+  dx-wave profiles [--list]
+
+Options:
+  --profile <name>   Use specified profile (default: opencode-prod)
+  --beads <id>       Beads issue ID
+  --prompt-file <path> Path to prompt file
+  --worktree <path>  Worktree path
+  --json             JSON output
+  --format <fmt>     Report format (json|markdown)
+
+Environment:
+  DX_WAVE_PROFILE    Default profile (default: opencode-prod)
+
+Profiles:
+  opencode-prod    Production-safe OpenCode with strict governance
+  cc-glm-fallback  Reliability backstop using Claude via Z.ai
+  gemini-burst     Burst capacity using Gemini CLI
+
+Examples:
+  # Start a production wave
+  dx-wave start --beads bd-abc --prompt-file /tmp/task.prompt
+
+  # Use fallback profile
+  dx-wave start --beads bd-abc --prompt-file /tmp/task.prompt --profile cc-glm-fallback
+
+  # Check job status
+  dx-wave check --beads bd-abc
+
+  # Generate report
+  dx-wave report --beads bd-abc --format markdown
+EOF
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+    start)
+        # Profile-first: always use a profile, no inline model env
+        "$DX_RUNNER" start --profile "$PROFILE" "$@"
+        ;;
+    check)
+        "$DX_RUNNER" check "$@"
+        ;;
+    status)
+        "$DX_RUNNER" status "$@"
+        ;;
+    report)
+        "$DX_RUNNER" report "$@"
+        ;;
+    stop)
+        "$DX_RUNNER" stop "$@"
+        ;;
+    restart)
+        "$DX_RUNNER" restart "$@"
+        ;;
+    logs)
+        "$DX_RUNNER" logs "$@"
+        ;;
+    profiles)
+        "$DX_RUNNER" profiles "$@"
+        ;;
+    preflight)
+        "$DX_RUNNER" preflight --profile "$PROFILE" "$@"
+        ;;
+    -h|--help|help)
+        usage
+        exit 0
+        ;;
+    *)
+        echo "Unknown command: $cmd" >&2
+        usage
+        exit 2
+        ;;
+esac

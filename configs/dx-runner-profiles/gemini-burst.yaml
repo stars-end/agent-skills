@@ -1,0 +1,44 @@
+# dx-runner profile: gemini-burst
+# Burst capacity using Gemini CLI for parallel execution
+
+profile:
+  name: gemini-burst
+  description: Gemini CLI for parallel burst capacity
+  version: "1.0.0"
+
+provider:
+  name: gemini
+  model: gemini-3-flash-preview
+  allow_model_override: false
+  execution_mode: run
+  fallback_provider: cc-glm
+
+concurrency:
+  max_parallel: 3
+  queue_timeout_sec: 30
+
+preflight:
+  strict: true
+  policy:
+    gemini_binary_missing: error
+    auth_unavailable: error
+    model_unavailable: warn
+
+timeouts:
+  max_runtime_minutes: 90
+  no_mutation_timeout_minutes: 20
+  stall_minutes: 15
+  first_output_grace_seconds: 120
+  first_mutation_grace_seconds: 300
+
+scope:
+  enforce_allowed_paths: true
+  allowed_paths_file: null
+  mutation_budget: null
+  file_budget: null
+
+gates:
+  baseline: optional
+  feature_key: required
+  commit_artifact: optional
+  railway_auth: optional

@@ -2,11 +2,13 @@
 # opencode adapter for dx-runner
 #
 # Implements the adapter contract for OpenCode headless
-# Includes reliability fixes for bd-cbsb.15-.18:
+# Includes reliability fixes for bd-cbsb.15-.18 and bd-8wdg hardening:
 #   - Capability preflight with strict canonical model enforcement (bd-cbsb.15)
 #   - Permission handling (bd-cbsb.16)
 #   - No-op detection (bd-cbsb.17)
 #   - beads-mcp dependency check (bd-cbsb.18)
+#   - Model drift blocking unless explicit override (bd-8wdg.2)
+#   - Startup-aware health states (bd-8wdg.10)
 #
 # Required functions:
 #   adapter_start        - Start a job
@@ -20,9 +22,16 @@
 #
 # Exit codes:
 #   25 - Model unavailable (canonical model not found)
+#   28 - Model override blocked (drift protection)
 
 CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zhipuai-coding-plan/glm-5}"
 OPENCODE_EXECUTION_MODE="${OPENCODE_EXECUTION_MODE:-run}"
+
+# bd-8wdg.2: Model override policy
+# By default, OPENCODE_MODEL env var is IGNORED to prevent drift
+# Set DX_RUNNER_ALLOW_MODEL_OVERRIDE=1 or pass --allow-model-override to enable
+DX_RUNNER_ALLOW_MODEL_OVERRIDE="${DX_RUNNER_ALLOW_MODEL_OVERRIDE:-0}"
+MODEL_OVERRIDE_AUDIT_LOG=""
 
 adapter_run_with_timeout() {
     local seconds="$1"
@@ -216,8 +225,32 @@ adapter_resolve_model() {
     local opencode_bin
     opencode_bin="$(adapter_find_opencode)" || return 1
 
-    local required="${preferred:-$CANONICAL_MODEL}"
+    # bd-8wdg.2: Check if model override is allowed
+    local requested_model="$preferred"
+    local override_used=false
+    local override_source="none"
+    
+    # If OPENCODE_MODEL is set and different from canonical, check override policy
+    if [[ -n "${OPENCODE_MODEL:-}" && "${OPENCODE_MODEL:-}" != "$CANONICAL_MODEL" ]]; then
+        if [[ "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "1" || "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "true" ]]; then
+            override_used=true
+            override_source="OPENCODE_MODEL"
+            requested_model="${OPENCODE_MODEL}"
+        else
+            # Log the blocked override attempt
+            echo "[opencode-adapter] BLOCKED model override attempt: OPENCODE_MODEL=${OPENCODE_MODEL} (override not allowed)" >&2
+            MODEL_OVERRIDE_AUDIT_LOG="blocked_env_override=${OPENCODE_MODEL}"
+        fi
+    fi
+
+    local required="${requested_model:-$CANONICAL_MODEL}"
+    
+    # Only canonical model is allowed (even with override, must be canonical)
     if [[ "$required" != "$CANONICAL_MODEL" ]]; then
+        if [[ "$override_used" == "true" ]]; then
+            echo "|unavailable|model override rejected: '$required' is not canonical model '$CANONICAL_MODEL'; only canonical model is allowed even with override"
+            return 1
+        fi
         echo "|unavailable|unsupported opencode model '$required'; only '$CANONICAL_MODEL' is allowed"
         return 1
     fi
@@ -225,7 +258,9 @@ adapter_resolve_model() {
     local available_models
     available_models="$(adapter_list_models_cached "$opencode_bin" || true)"
     if printf '%s\n' "$available_models" | grep -qxF "$CANONICAL_MODEL"; then
-        echo "$CANONICAL_MODEL|canonical|"
+        local selection_reason="canonical"
+        [[ "$override_used" == "true" ]] && selection_reason="canonical_with_override"
+        echo "$CANONICAL_MODEL|${selection_reason}|override_source=${override_source}"
         return 0
     fi
 
@@ -245,10 +280,24 @@ adapter_start() {
         return 1
     }
     
+    # bd-8wdg.2: Check model override policy before resolution
+    local effective_model_request="${OPENCODE_MODEL:-$CANONICAL_MODEL}"
+    local model_override_allowed="false"
+    if [[ "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "1" || "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "true" ]]; then
+        model_override_allowed="true"
+    fi
+    
+    # If OPENCODE_MODEL is set but override not allowed, ignore it and warn
+    if [[ -n "${OPENCODE_MODEL:-}" && "${OPENCODE_MODEL:-}" != "$CANONICAL_MODEL" && "$model_override_allowed" != "true" ]]; then
+        echo "[opencode-adapter] WARNING: ignoring OPENCODE_MODEL=${OPENCODE_MODEL} (override not allowed, using canonical)" >> "$log_file"
+        echo "model_override_blocked=true" >> "$log_file"
+        echo "blocked_model=${OPENCODE_MODEL}" >> "$log_file"
+        effective_model_request="$CANONICAL_MODEL"
+    fi
+    
     # Resolve strict canonical model (bd-cbsb.15)
-    local preferred_model="${OPENCODE_MODEL:-$CANONICAL_MODEL}"
     local model_result model selection_reason fallback_reason
-    model_result="$(adapter_resolve_model "$preferred_model")"
+    model_result="$(adapter_resolve_model "$effective_model_request")"
     IFS='|' read -r model selection_reason fallback_reason <<< "$model_result"
     
     if [[ -z "$model" ]]; then
@@ -257,6 +306,13 @@ adapter_start() {
         echo "ERROR: $fallback_reason" >&2
         echo "ERROR: Use provider cc-glm or gemini for this wave." >&2
         return 25
+    fi
+    
+    # bd-8wdg.2: Log override status for audit
+    if [[ -n "${OPENCODE_MODEL:-}" && "$model_override_allowed" == "true" ]]; then
+        echo "[opencode-adapter] MODEL_OVERRIDE_ALLOWED beads=$beads requested=${OPENCODE_MODEL} effective=$model" >> "$log_file"
+        echo "model_override_used=true" >> "$log_file"
+        echo "model_override_source=OPENCODE_MODEL" >> "$log_file"
     fi
 
     if [[ "${OPENCODE_EXECUTION_MODE}" == "attach" || "${OPENCODE_EXECUTION_MODE}" == "server" ]]; then
@@ -325,6 +381,8 @@ adapter_start() {
             printf 'pid=%s\n' "$pid"
             printf 'selected_model=%s\n' "$model"
             printf 'fallback_reason=%s\n' "${fallback_reason:-none}"
+            printf 'model_override_allowed=%s\n' "$model_override_allowed"
+            printf 'model_override_used=%s\n' "$( [[ -n "${OPENCODE_MODEL:-}" && "$model_override_allowed" == "true" ]] && echo true || echo false )"
             printf 'launch_mode=%s\n' "$launch_mode"
             printf 'execution_mode=%s\n' "$launch_mode"
             printf 'rc_file=%s\n' "$rc_file"
@@ -360,6 +418,8 @@ EOF
     printf 'pid=%s\n' "$pid"
     printf 'selected_model=%s\n' "$model"
     printf 'fallback_reason=%s\n' "${fallback_reason:-none}"
+    printf 'model_override_allowed=%s\n' "$model_override_allowed"
+    printf 'model_override_used=%s\n' "$( [[ -n "${OPENCODE_MODEL:-}" && "$model_override_allowed" == "true" ]] && echo true || echo false )"
     printf 'launch_mode=%s\n' "$launch_mode"
     printf 'execution_mode=%s\n' "$launch_mode"
     printf 'rc_file=%s\n' "$rc_file"
