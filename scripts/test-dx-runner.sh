@@ -670,13 +670,13 @@ exit 0
 FAKEEOF
     chmod +x "$fake_gemini"
 
-    # Save original keys
+    # Save original keys (preflight is OAuth-only; env keys must not bypass auth checks)
     local orig_gemini_key="${GEMINI_API_KEY:-}"
     local orig_google_key="${GOOGLE_API_KEY:-}"
     unset GEMINI_API_KEY
     unset GOOGLE_API_KEY
-    
-    # Test 1: Fail when env key, CLI-auth, and OAuth probe all fail
+
+    # Test 1: Fail when CLI-auth and OAuth probe both fail.
     (
         export PATH="$tmp_bin:$PATH"
         export MOCK_AUTH_FAIL=true
@@ -690,15 +690,24 @@ FAKEEOF
         else
             exit 1
         fi
-    ) && pass "preflight fails when env key, CLI auth, and OAuth probe are all unavailable" || fail "preflight should fail when env key, CLI auth, and OAuth probe are all unavailable"
+    ) && pass "preflight fails when CLI auth and OAuth probe are unavailable" || fail "preflight should fail when CLI auth and OAuth probe are unavailable"
 
-    # Test 2: Pass via env key
+    # Test 2: Env key alone does not pass (OAuth-only policy)
     (
         export PATH="$tmp_bin:$PATH"
         export GEMINI_API_KEY="test-key"
+        export MOCK_AUTH_FAIL=true
+        export MOCK_OAUTH_FAIL=true
         source "$ADAPTERS_DIR/gemini.sh"
+        set +e
         adapter_preflight > /dev/null
-    ) && pass "preflight passes via env key" || fail "preflight should pass via env key"
+        rc=$?
+        if [[ "$rc" -gt 0 ]]; then
+            exit 0
+        else
+            exit 1
+        fi
+    ) && pass "preflight ignores API key env var under OAuth-only policy" || fail "preflight should not accept API key env var under OAuth-only policy"
 
     # Test 3: Pass via CLI auth probe
     (

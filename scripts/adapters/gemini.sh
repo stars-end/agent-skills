@@ -83,10 +83,7 @@ adapter_preflight() {
     # Check 2: Authentication
     echo -n "authentication: "
     local auth_ok=0
-    if [[ -n "${GEMINI_API_KEY:-}" || -n "${GOOGLE_API_KEY:-}" ]]; then
-        echo "OK (env key mode)"
-        auth_ok=1
-    elif [[ -n "$gemini_bin" ]]; then
+    if [[ -n "$gemini_bin" ]]; then
         # CLI-auth probe: use a non-interactive command that requires auth.
         if "$gemini_bin" --list-sessions >/dev/null 2>&1; then
             echo "OK (cli-auth mode)"
@@ -108,8 +105,8 @@ adapter_preflight() {
 
     if [[ "$auth_ok" -eq 0 ]]; then
         echo "FAILED"
-        echo "  ERROR_CODE=gemini_auth_missing severity=error action=gemini_login_or_set_api_key"
-        echo "  Action: Set API key or run 'gemini login'"
+        echo "  ERROR_CODE=gemini_auth_missing severity=error action=gemini_login_required"
+        echo "  Action: Run 'gemini login' to establish OAuth credentials"
         errors=$((errors + 1))
     fi
     
