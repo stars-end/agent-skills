@@ -1,4 +1,5 @@
 """Tests for evaluator."""
+
 import pytest
 from pathlib import Path
 from extended.gskill.lib.evaluator import SkillEvaluator, make_gepa_evaluator
@@ -18,6 +19,7 @@ def test_gepa_evaluator_signature():
 
     # Should accept (candidate, example=..., **kwargs)
     import inspect
+
     sig = inspect.signature(evaluator)
     params = list(sig.parameters.keys())
 
@@ -25,9 +27,12 @@ def test_gepa_evaluator_signature():
     assert "example" in params
 
 
-def test_evaluator_fails_fast_without_mutation():
+def test_evaluator_fails_fast_without_mutation(tmp_path):
     """Test evaluator fails fast when no mutation data available."""
-    evaluator = SkillEvaluator(Path("/tmp"))
+    # Create minimal repo structure to avoid slow copytree
+    (tmp_path / "foo.py").write_text("def foo(): pass")
+
+    evaluator = SkillEvaluator(tmp_path)
 
     # Task without mutation data
     task = {

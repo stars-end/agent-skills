@@ -1,4 +1,5 @@
 """Tests for skill optimizer."""
+
 import pytest
 from pathlib import Path
 from extended.gskill.lib.skill_optimizer import SkillOptimizer
@@ -33,8 +34,9 @@ def test_load_tasks_valid_file(tmp_path):
     opt = SkillOptimizer(Path("/tmp"))
 
     tasks_file = tmp_path / "tasks.jsonl"
-    tasks_file.write_text('{"id": "1", "target_file": "foo.py"}\n')
-    tasks_file.write_text('{"id": "2", "target_file": "bar.py"}\n')
+    tasks_file.write_text(
+        '{"id": "1", "target_file": "foo.py"}\n{"id": "2", "target_file": "bar.py"}\n'
+    )
 
     tasks = opt._load_tasks(tasks_file)
     assert len(tasks) == 2

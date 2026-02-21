@@ -1,6 +1,13 @@
 """Tests for task generator."""
+
 import pytest
 from pathlib import Path
+
+# Skip tests requiring swesmith if not installed
+pytest.importorskip(
+    "swesmith", reason="swesmith not installed - install from ~/SWE-smith"
+)
+
 from extended.gskill.lib.task_generator import TaskGenerator
 
 
