@@ -2184,6 +2184,57 @@ EOF
 }
 
 # ============================================================================
+# Test: No-Op Success Classification (bd-8wdg.9)
+# ============================================================================
+
+test_no_op_success_classification() {
+    echo "=== Testing No-Op Success Classification ==="
+    
+    local beads="test-no-op-success-$$"
+    local provider="cc-glm"
+    local dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+    
+    # Simulate a job that exited with 0 but had no mutations
+    cat > "$dir/${beads}.outcome" <<EOF
+beads=$beads
+provider=$provider
+state=exited_ok
+exit_code=0
+reason_code=outcome_exit_0
+mutations=0
+log_bytes=1024
+cpu_time_sec=30
+started_at=$(date -u -d '1 minute ago' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF
+    
+    # Check that health classifies this as no_op_success
+    local check_out
+    check_out="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null)" || true
+    
+    if echo "$check_out" | grep -q "no_op_success"; then
+        pass "no-op success (exit 0, no mutations) classified correctly"
+    else
+        # Check if it shows exit_zero_no_mutations in reason
+        if echo "$check_out" | grep -q "exit_zero_no_mutations"; then
+            pass "no-op success detected via reason code"
+        else
+            fail "expected no_op_success or exit_zero_no_mutations, got: $check_out"
+        fi
+    fi
+    
+    # Check next_action is correct
+    if echo "$check_out" | grep -q "redispatch_with_guardrails"; then
+        pass "no-op success has correct next_action"
+    else
+        warn "next_action for no-op: $check_out"
+    fi
+    
+    rm -f "$dir/${beads}".*
+}
+
+# ============================================================================
 # Test: Scope Guard (bd-8wdg.5)
 # ============================================================================
 
@@ -2347,6 +2398,7 @@ run_all_tests() {
     test_model_override_blocking
     test_manual_stop_semantics
     test_slow_start_detection
+    test_no_op_success_classification
     test_scope_guard
     test_evidence_gate
     test_dx_wave_wrapper

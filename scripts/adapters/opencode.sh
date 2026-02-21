@@ -101,6 +101,12 @@ adapter_preflight() {
     echo "cwd: $(pwd)"
     echo "execution mode: ${OPENCODE_EXECUTION_MODE}"
     echo "canonical model policy: ${CANONICAL_MODEL}"
+    
+    # bd-8wdg.4: Show profile context if loaded
+    if [[ -n "${PROFILE_NAME:-}" ]]; then
+        echo "profile: ${PROFILE_NAME}"
+        echo "profile strict: ${PROFILE_STRICT:-false}"
+    fi
 
     # Check 1: OpenCode binary (bd-cbsb.15)
     echo -n "opencode binary: "
@@ -109,10 +115,17 @@ adapter_preflight() {
     if [[ -n "$opencode_bin" ]]; then
         echo "OK ($opencode_bin)"
     else
+        # bd-8wdg.4: Use profile-based policy
+        local policy
+        policy="$(profile_get_preflight_policy "opencode_binary_missing" "error")"
         echo "MISSING"
-        echo "  ERROR: opencode CLI not found"
-        errors=$((errors + 1))
-        # Can't continue without binary
+        if [[ "$policy" == "error" ]]; then
+            echo "  ERROR: opencode CLI not found"
+            errors=$((errors + 1))
+        else
+            echo "  WARN: opencode CLI not found"
+            warnings=$((warnings + 1))
+        fi
         return $errors
     fi
     
@@ -126,9 +139,16 @@ adapter_preflight() {
     if [[ "$model_count" -gt 0 ]]; then
         echo "OK ($model_count models)"
     else
+        local policy
+        policy="$(profile_get_preflight_policy "model_unavailable" "error")"
         echo "NO_MODELS"
-        echo "  ERROR: No models available"
-        errors=$((errors + 1))
+        if [[ "$policy" == "error" ]]; then
+            echo "  ERROR: No models available"
+            errors=$((errors + 1))
+        else
+            echo "  WARN: No models available"
+            warnings=$((warnings + 1))
+        fi
     fi
     
     # Check 3: Canonical model probe with auth/quota (strict blocking)
@@ -138,23 +158,44 @@ adapter_preflight() {
     IFS='|' read -r probe_model selection_reason resolve_reason <<< "$model_result"
 
     if [[ -z "$probe_model" ]]; then
+        local policy
+        policy="$(profile_get_preflight_policy "model_unavailable" "error")"
         echo "MISSING ($CANONICAL_MODEL)"
-        echo "  ERROR: $resolve_reason"
-        errors=$((errors + 1))
+        if [[ "$policy" == "error" ]]; then
+            echo "  ERROR: $resolve_reason"
+            errors=$((errors + 1))
+        else
+            echo "  WARN: $resolve_reason"
+            warnings=$((warnings + 1))
+        fi
     else
         local probe_output
         probe_output="$(adapter_run_with_timeout 30 "$opencode_bin" run --model "$probe_model" --format json "Say READY" 2>&1)" || true
         if echo "$probe_output" | grep -qi "READY"; then
             echo "OK ($probe_model)"
         elif echo "$probe_output" | grep -qiE "unauthorized|forbidden|insufficient.*balance|quota|rate.?limit|429"; then
+            local policy
+            policy="$(profile_get_preflight_policy "auth_or_quota_blocked" "error")"
             echo "BLOCKED (auth/quota)"
-            echo "  ERROR: Model $probe_model available but auth/quota check failed"
-            echo "  ERROR_CODE=opencode_auth_or_quota_blocked severity=error action=refresh_auth_or_switch_provider"
-            errors=$((errors + 1))
+            if [[ "$policy" == "error" ]]; then
+                echo "  ERROR: Model $probe_model available but auth/quota check failed"
+                echo "  ERROR_CODE=opencode_auth_or_quota_blocked severity=error action=refresh_auth_or_switch_provider"
+                errors=$((errors + 1))
+            else
+                echo "  WARN: Model $probe_model available but auth/quota check failed"
+                warnings=$((warnings + 1))
+            fi
         else
+            local policy
+            policy="$(profile_get_preflight_policy "canonical_model_probe_timeout" "warn")"
             echo "TIMEOUT ($probe_model)"
-            echo "  WARN_CODE=opencode_probe_timeout severity=warn action=retry_or_continue"
-            warnings=$((warnings + 1))
+            if [[ "$policy" == "error" ]]; then
+                echo "  ERROR: Model probe timed out"
+                errors=$((errors + 1))
+            else
+                echo "  WARN_CODE=opencode_probe_timeout severity=warn action=retry_or_continue"
+                warnings=$((warnings + 1))
+            fi
         fi
     fi
 
@@ -185,12 +226,19 @@ adapter_preflight() {
     if command -v beads-mcp >/dev/null 2>&1; then
         echo "OK ($(command -v beads-mcp))"
     else
+        local policy
+        policy="$(profile_get_preflight_policy "beads_mcp_missing" "warn")"
         echo "MISSING"
-        echo "  WARN_CODE=opencode_beads_mcp_missing severity=warn action=install_beads_mcp_for_richer_context"
-        warnings=$((warnings + 1))
+        if [[ "$policy" == "error" ]]; then
+            echo "  ERROR: beads-mcp not found"
+            errors=$((errors + 1))
+        else
+            echo "  WARN_CODE=opencode_beads_mcp_missing severity=warn action=install_beads_mcp_for_richer_context"
+            warnings=$((warnings + 1))
+        fi
     fi
     
-    # Check 5: mise trust state (bd-cbsb.17 - for validation steps)
+    # Check 5: mise trust state (bd-cbsb.17, bd-8wdg.11)
     echo -n "mise trust: "
     if command -v mise >/dev/null 2>&1; then
         local trust_state
@@ -198,9 +246,16 @@ adapter_preflight() {
         if [[ -n "$trust_state" ]]; then
             echo "OK"
         else
+            local policy
+            policy="$(profile_get_preflight_policy "mise_untrusted" "warn")"
             echo "UNTRUSTED"
-            echo "  WARN_CODE=opencode_mise_untrusted severity=warn action=run_mise_trust_in_worktree"
-            warnings=$((warnings + 1))
+            if [[ "$policy" == "error" ]]; then
+                echo "  ERROR_CODE=opencode_mise_untrusted severity=error action=run_mise_trust_in_worktree"
+                errors=$((errors + 1))
+            else
+                echo "  WARN_CODE=opencode_mise_untrusted severity=warn action=run_mise_trust_in_worktree"
+                warnings=$((warnings + 1))
+            fi
         fi
     else
         echo "NOT_INSTALLED"

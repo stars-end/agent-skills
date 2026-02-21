@@ -307,6 +307,7 @@ This prevents silent model drift where operators accidentally use non-canonical 
 | `stalled` | No progress for N minutes | Restart |
 | `stopped` (bd-8wdg.3) | Manual stop via `dx-runner stop` | Review |
 | `no_op` | No heartbeat/mutation (bd-cbsb.17) | Investigate |
+| `no_op_success` (bd-8wdg.9) | Exit 0 but no mutations | Redispatch with guardrails |
 | `exited_ok` | Exited with code 0 | Review output |
 | `exited_err` | Exited with non-zero | Check logs |
 | `blocked` | Max retries exhausted | Manual intervention |

@@ -271,6 +271,7 @@ meta_set() {
 
 # Default profile configuration
 declare -A PROFILE_CONFIG=()
+declare -A PROFILE_PREFLIGHT_POLICY=()
 PROFILE_NAME=""
 PROFILE_STRICT=false
 
@@ -298,6 +299,8 @@ load_profile() {
     
     # Extract provider settings
     local provider_block=false
+    local preflight_block=false
+    local policy_block=false
     while IFS= read -r line; do
         # Skip comments and empty lines
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
@@ -306,9 +309,22 @@ load_profile() {
         # Detect sections
         if [[ "$line" =~ ^provider: ]]; then
             provider_block=true
+            preflight_block=false
+            policy_block=false
+            continue
+        elif [[ "$line" =~ ^preflight: ]]; then
+            preflight_block=true
+            provider_block=false
+            policy_block=false
+            continue
+        elif [[ "$line" =~ ^[[:space:]]*policy: ]] && [[ "$preflight_block" == true ]]; then
+            policy_block=true
             continue
         elif [[ "$line" =~ ^[a-z]+: ]] && [[ "$provider_block" == true ]] && [[ ! "$line" =~ ^[[:space:]] ]]; then
             provider_block=false
+        elif [[ "$line" =~ ^[a-z]+: ]] && [[ "$preflight_block" == true ]] && [[ ! "$line" =~ ^[[:space:]] ]]; then
+            preflight_block=false
+            policy_block=false
         fi
         
         # Extract key-value pairs
@@ -316,6 +332,11 @@ load_profile() {
             local key="${BASH_REMATCH[1]}"
             local value="${BASH_REMATCH[2]//\"/}"
             value="${value//\'/}"
+            
+            # bd-8wdg.4: Parse preflight.policy entries
+            if [[ "$policy_block" == true ]]; then
+                PROFILE_PREFLIGHT_POLICY["$key"]="$value"
+            fi
             
             case "$key" in
                 name|model|allow_model_override|execution_mode|fallback_provider)
@@ -382,6 +403,12 @@ profile_get_preflight_policy() {
     local check_code="$1"
     local default="${2:-warn}"
     
+    # bd-8wdg.4: Check profile-specific policy first
+    if [[ -n "${PROFILE_PREFLIGHT_POLICY[$check_code]:-}" ]]; then
+        echo "${PROFILE_PREFLIGHT_POLICY[$check_code]}"
+        return 0
+    fi
+    
     # In strict mode, escalate critical warnings to errors
     if [[ "$PROFILE_STRICT" == true ]]; then
         case "$check_code" in
@@ -392,6 +419,43 @@ profile_get_preflight_policy() {
         esac
     fi
     echo "$default"
+}
+
+# bd-8wdg.4: Helper for adapters to report check result based on profile policy
+# Usage: preflight_report_check <check_code> <status> <message> <error_var> <warn_var>
+# Returns: 0 if warning, 1 if error (for caller to increment counter)
+preflight_report_check() {
+    local check_code="$1"
+    local status="$2"  # ok, missing, failed, timeout, etc.
+    local message="$3"
+    local error_var="$4"
+    local warn_var="$5"
+    
+    if [[ "$status" == "ok" ]]; then
+        echo "OK ($message)"
+        return 0
+    fi
+    
+    local policy
+    policy="$(profile_get_preflight_policy "$check_code" "warn")"
+    
+    if [[ "$policy" == "error" ]]; then
+        echo "$status"
+        echo "  ERROR: $message"
+        echo "  ERROR_CODE=${check_code} severity=error"
+        if [[ -n "$error_var" ]]; then
+            eval "$error_var=\$(($error_var + 1))"
+        fi
+        return 1
+    else
+        echo "$status"
+        echo "  WARN: $message"
+        echo "  WARN_CODE=${check_code} severity=warn"
+        if [[ -n "$warn_var" ]]; then
+            eval "$warn_var=\$(($warn_var + 1))"
+        fi
+        return 0
+    fi
 }
 
 list_profiles() {
@@ -832,6 +896,10 @@ next_action_for_reason() {
         killed)
             echo "job_killed_review_logs_and_restart_if_needed"
             ;;
+        # bd-8wdg.9: No-op success (exit 0 but no mutations)
+        exit_zero_no_mutations|no_op_success)
+            echo "redispatch_with_guardrails_or_review_prompt_for_no_work"
+            ;;
         # bd-8wdg.10: Slow start actions
         slow_start|startup_scan_in_progress|startup_cpu_progress_no_output|startup_grace_no_output)
             echo "wait_for_startup_completion_or_check_logs_for_progress"
@@ -1159,15 +1227,28 @@ job_health_detail() {
             [[ "$olog" =~ ^[0-9]+$ ]] || olog=0
             [[ "$ocpu" =~ ^[0-9]+$ ]] || ocpu=0
             [[ "$opid" =~ ^[0-9]+$ ]] || opid=0
-            # bd-8wdg.3: Use explicit reason from outcome if available
+            
+            # bd-8wdg.3 + bd-8wdg.9: Use explicit reason from outcome if available
             if [[ -n "$oc_reason" ]]; then
-                if [[ "$oc_exit" -eq 0 && "$oc_reason" != "manual_stop" && "$oc_reason" != "killed" ]]; then
-                    printf "exited_ok|%s|%s|%s|%s|%s|0\n" "$oc_reason" "$omut" "$olog" "$ocpu" "$opid"
-                else
+                if [[ "$oc_reason" == "manual_stop" || "$oc_reason" == "killed" ]]; then
                     printf "stopped|%s|%s|%s|%s|%s|0\n" "$oc_reason" "$omut" "$olog" "$ocpu" "$opid"
+                elif [[ "$oc_exit" -eq 0 ]]; then
+                    # bd-8wdg.9: Check for no-op success (exit 0 but no mutations)
+                    if [[ "$omut" -eq 0 ]]; then
+                        printf "no_op_success|exit_zero_no_mutations|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
+                    else
+                        printf "exited_ok|%s|%s|%s|%s|%s|0\n" "$oc_reason" "$omut" "$olog" "$ocpu" "$opid"
+                    fi
+                else
+                    printf "exited_err|%s|%s|%s|%s|%s|0\n" "$oc_reason" "$omut" "$olog" "$ocpu" "$opid"
                 fi
             elif [[ "$oc_exit" -eq 0 ]]; then
-                printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
+                # bd-8wdg.9: Check for no-op success (exit 0 but no mutations)
+                if [[ "$omut" -eq 0 ]]; then
+                    printf "no_op_success|exit_zero_no_mutations|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
+                else
+                    printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
+                fi
             else
                 printf "exited_err|outcome_exit_nonzero|%s|%s|%s|%s|0\n" "$omut" "$olog" "$ocpu" "$opid"
             fi
@@ -1195,14 +1276,28 @@ job_health_detail() {
             [[ "$olog2" =~ ^[0-9]+$ ]] || olog2=0
             [[ "$ocpu2" =~ ^[0-9]+$ ]] || ocpu2=0
             [[ "$opid2" =~ ^[0-9]+$ ]] || opid2=0
+            
+            # bd-8wdg.3 + bd-8wdg.9: Use explicit reason from outcome if available
             if [[ -n "$oc_reason2" ]]; then
-                if [[ "$oc_exit2" -eq 0 && "$oc_reason2" != "manual_stop" && "$oc_reason2" != "killed" ]]; then
-                    printf "exited_ok|%s|%s|%s|%s|%s|0\n" "$oc_reason2" "$omut2" "$olog2" "$ocpu2" "$opid2"
-                else
+                if [[ "$oc_reason2" == "manual_stop" || "$oc_reason2" == "killed" ]]; then
                     printf "stopped|%s|%s|%s|%s|%s|0\n" "$oc_reason2" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                elif [[ "$oc_exit2" -eq 0 ]]; then
+                    # bd-8wdg.9: Check for no-op success (exit 0 but no mutations)
+                    if [[ "$omut2" -eq 0 ]]; then
+                        printf "no_op_success|exit_zero_no_mutations|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                    else
+                        printf "exited_ok|%s|%s|%s|%s|%s|0\n" "$oc_reason2" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                    fi
+                else
+                    printf "exited_err|%s|%s|%s|%s|%s|0\n" "$oc_reason2" "$omut2" "$olog2" "$ocpu2" "$opid2"
                 fi
             elif [[ "$oc_exit2" -eq 0 ]]; then
-                printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                # bd-8wdg.9: Check for no-op success (exit 0 but no mutations)
+                if [[ "$omut2" -eq 0 ]]; then
+                    printf "no_op_success|exit_zero_no_mutations|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                else
+                    printf "exited_ok|outcome_exit_0|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
+                fi
             else
                 printf "exited_err|outcome_exit_nonzero|%s|%s|%s|%s|0\n" "$omut2" "$olog2" "$ocpu2" "$opid2"
             fi
