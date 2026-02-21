@@ -154,7 +154,20 @@ adapter_preflight() {
     # Check 3: Canonical model probe with auth/quota (strict blocking)
     echo -n "canonical model probe: "
     local model_result probe_model selection_reason resolve_reason
-    model_result="$(adapter_resolve_model "${OPENCODE_MODEL:-$CANONICAL_MODEL}")"
+    
+    # bd-8wdg.2: Check model override policy before resolution
+    local effective_model="$CANONICAL_MODEL"
+    if [[ -n "${OPENCODE_MODEL:-}" && "${OPENCODE_MODEL:-}" != "$CANONICAL_MODEL" ]]; then
+        if [[ "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "1" || "$DX_RUNNER_ALLOW_MODEL_OVERRIDE" == "true" ]]; then
+            effective_model="${OPENCODE_MODEL}"
+        else
+            # Log the blocked override attempt, but continue with canonical model
+            echo "[opencode-adapter] Ignoring OPENCODE_MODEL=${OPENCODE_MODEL} (override not allowed, using canonical)"
+            # Don't change effective_model - it stays as CANONICAL_MODEL
+        fi
+    fi
+    
+    model_result="$(adapter_resolve_model "$effective_model")"
     IFS='|' read -r probe_model selection_reason resolve_reason <<< "$model_result"
 
     if [[ -z "$probe_model" ]]; then

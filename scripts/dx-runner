@@ -2436,8 +2436,6 @@ model_override_allowed=${ALLOW_MODEL_OVERRIDE:-0}
 allowed_paths_file=${ALLOWED_PATHS_FILE:-none}
 mutation_budget=${MUTATION_BUDGET:-none}
 EOF
-start_head_commit=${start_head_commit:-none}
-EOF
 
     if [[ -n "$switched_from" ]]; then
         echo "provider switch detected for beads=$BEADS: ${switched_from} -> ${PROVIDER}" >&2
@@ -3322,6 +3320,29 @@ scope_guard_eval() {
         
         # Check for files modified outside allowed paths
         if git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
+            local changed_files
+            
+            # bd-8wdg.5 fix: Get all changed files (committed, staged, unstaged)
+            # 1. Committed changes vs HEAD~1 (or empty tree for single-commit repos)
+            # 2. Staged changes (diff --cached)
+            # 3. Unstaged changes (diff)
+            local git_baseline="HEAD~1"
+            if ! git -C "$worktree" rev-parse "$git_baseline" >/dev/null 2>&1; then
+                # Single-commit repo: use empty tree as baseline
+                git_baseline="$(git -C "$worktree" hash-object -t tree /dev/null 2>/dev/null)" || git_baseline="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+            fi
+            
+            changed_files="$(
+                # Committed changes
+                git -C "$worktree" diff --name-only "$git_baseline" HEAD 2>/dev/null || true
+                # Staged changes
+                git -C "$worktree" diff --cached --name-only 2>/dev/null || true
+                # Unstaged changes
+                git -C "$worktree" diff --name-only 2>/dev/null || true
+                # Untracked files
+                git -C "$worktree" ls-files --others --exclude-standard 2>/dev/null || true
+            )"
+            
             while IFS= read -r file; do
                 [[ -n "$file" ]] || continue
                 checked_files=$((checked_files + 1))
@@ -3337,7 +3358,7 @@ scope_guard_eval() {
                     reason_code="path_outside_allowlist"
                     violations="${violations}${violations:+,}$file"
                 fi
-            done < <(git -C "$worktree" diff --name-only HEAD~1 2>/dev/null || true)
+            done <<< "$changed_files"
         fi
     fi
     

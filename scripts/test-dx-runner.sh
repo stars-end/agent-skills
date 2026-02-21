@@ -390,10 +390,11 @@ test_outcome_lifecycle() {
         fi
         local state_ok
         state_ok="$("$DX_RUNNER" check --beads "$beads_ok" --json 2>/dev/null | jq -r '.state')" || state_ok=""
-        if [[ "$state_ok" == "exited_ok" ]]; then
-            pass "no false process_exited_without_outcome on success"
+        # bd-8wdg.9: no_op_success is valid for exit=0 with no mutations
+        if [[ "$state_ok" == "exited_ok" || "$state_ok" == "no_op_success" ]]; then
+            pass "no false process_exited_without_outcome on success (state=$state_ok)"
         else
-            fail "expected exited_ok for success, got $state_ok"
+            fail "expected exited_ok or no_op_success for success, got $state_ok"
         fi
         local log_ok="/tmp/dx-runner/mock/${beads_ok}.log"
         if [[ -f "$log_ok" ]] && grep -q "READY_STDOUT" "$log_ok" && grep -q "READY_STDERR" "$log_ok"; then
@@ -2194,6 +2195,15 @@ test_no_op_success_classification() {
     local provider="cc-glm"
     local dir="/tmp/dx-runner/$provider"
     mkdir -p "$dir"
+    
+    # Create meta file (required for job lookup)
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+worktree=/tmp/agents
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+EOF
     
     # Simulate a job that exited with 0 but had no mutations
     cat > "$dir/${beads}.outcome" <<EOF
