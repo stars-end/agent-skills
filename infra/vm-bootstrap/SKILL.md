@@ -49,6 +49,7 @@ Verify and optionally install required tools for a standardized Linux developmen
 
 | Tool | Why | Verify |
 |------|-----|--------|
+| `beads-mcp` | Beads MCP server for OpenCode headless context | `beads-mcp --version` (via `pipx install beads-mcp`) |
 | `bv` | Beads graph insights | `bv --version` |
 | `playwright` | UI/E2E | `mise exec -- playwright --version` |
 | `tailscale` | cross-VM networking | `tailscale status` |

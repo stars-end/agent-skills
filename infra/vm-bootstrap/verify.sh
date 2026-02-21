@@ -287,6 +287,7 @@ main() {
     
     verify_optional "docker" "docker --version"
     verify_optional "tailscale" "tailscale version"
+    verify_optional "beads-mcp (OpenCode context)" "beads-mcp --version"
     verify_optional "bv (Beads Viewer)" "bv --version"
     verify_optional "playwright" "mise exec -- playwright --version"
     
