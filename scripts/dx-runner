@@ -3322,24 +3322,14 @@ scope_guard_eval() {
         if git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1; then
             local changed_files
             
-            # bd-8wdg.5 fix: Get all changed files (committed, staged, unstaged)
-            # 1. Committed changes vs HEAD~1 (or empty tree for single-commit repos)
-            # 2. Staged changes (diff --cached)
-            # 3. Unstaged changes (diff)
-            local git_baseline="HEAD~1"
-            if ! git -C "$worktree" rev-parse "$git_baseline" >/dev/null 2>&1; then
-                # Single-commit repo: use empty tree as baseline
-                git_baseline="$(git -C "$worktree" hash-object -t tree /dev/null 2>/dev/null)" || git_baseline="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
-            fi
-            
+            # bd-8wdg.5 fix: Only check CURRENT mutations (staged + unstaged + untracked)
+            # NOT historical committed changes - scope guard is about what THIS run changed
             changed_files="$(
-                # Committed changes
-                git -C "$worktree" diff --name-only "$git_baseline" HEAD 2>/dev/null || true
-                # Staged changes
+                # Staged changes (about to be committed)
                 git -C "$worktree" diff --cached --name-only 2>/dev/null || true
-                # Unstaged changes
+                # Unstaged changes (modified but not staged)
                 git -C "$worktree" diff --name-only 2>/dev/null || true
-                # Untracked files
+                # Untracked files (new files not in git)
                 git -C "$worktree" ls-files --others --exclude-standard 2>/dev/null || true
             )"
             
