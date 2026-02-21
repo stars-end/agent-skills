@@ -19,6 +19,8 @@ MAX_RETRIES=3
 
 # Ensure environment
 export BEADS_DIR="${BEADS_DIR:-$HOME/bd/.beads}"
+# Ensure Beads repo-id mismatch is ignored for centralized DB operations (bd-5wys)
+export BEADS_IGNORE_REPO_MISMATCH=1
 
 # Ensure directories exist
 mkdir -p "$(dirname "$LOG_FILE")"

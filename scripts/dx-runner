@@ -43,7 +43,10 @@ set -euo pipefail
 #   23 - No-op detected
 #   27 - Provider execution mode unsupported/misconfigured
 
-RUNNER_VERSION="1.4.0"
+RUNNER_VERSION="1.4.1"
+# Ensure Beads repo-id mismatch is ignored for centralized DB operations (bd-5wys)
+export BEADS_IGNORE_REPO_MISMATCH=1
+
 # Resolve symlink to get actual script directory
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 if [[ -L "$SCRIPT_SOURCE" ]]; then

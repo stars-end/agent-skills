@@ -11,6 +11,9 @@
 
 set -euo pipefail
 
+# Ensure Beads repo-id mismatch is ignored for centralized DB operations (bd-5wys)
+export BEADS_IGNORE_REPO_MISMATCH=1
+
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 REMOTE_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || echo "")"
 BRANCH="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo "")"
