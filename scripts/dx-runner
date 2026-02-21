@@ -1166,6 +1166,23 @@ rotate_outcome() {
     mv "$outcome_file" "${base_dir}/${base_name}.outcome.${n}"
 }
 
+wait_for_rc_file() {
+    local rc_file="$1"
+    local grace_sec="${2:-${DX_RUNNER_RC_GRACE_SEC:-5}}"
+    local deadline now
+    deadline=$(( $(date +%s) + grace_sec ))
+    while true; do
+        if [[ -f "$rc_file" ]]; then
+            return 0
+        fi
+        now="$(date +%s)"
+        if [[ "$now" -ge "$deadline" ]]; then
+            return 1
+        fi
+        sleep 0.2
+    done
+}
+
 check_commit_artifact() {
     local meta_file="$1"
     local worktree start_head current_head reported_commit
@@ -1356,7 +1373,7 @@ start_completion_monitor() {
 
         local exit_code=1
         local reason_code="monitor_no_rc_file"
-        if [[ -f "$rc_file" ]]; then
+        if wait_for_rc_file "$rc_file"; then
             exit_code="$(cat "$rc_file" 2>/dev/null || echo "1")"
             reason_code="$(classify_exit_reason "$provider" "$exit_code" "$log_file" "process_exit_with_rc")"
         else
@@ -1391,7 +1408,7 @@ finalize_exited_job() {
     if [[ ! -f "$OUTCOME_FILE" ]]; then
         local rc=1
         local reason="late_finalize_no_rc"
-        if [[ -f "$RC_FILE" ]]; then
+        if wait_for_rc_file "$RC_FILE"; then
             rc="$(cat "$RC_FILE" 2>/dev/null || echo "1")"
             reason="$(classify_exit_reason "$provider" "$rc" "$LOG_FILE" "late_finalize_from_rc_file")"
         else

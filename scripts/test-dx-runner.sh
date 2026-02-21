@@ -725,6 +725,155 @@ FAKEEOF
 }
 
 # ============================================================================
+# Test: Gemini Finalization Reliability (bd-mik2r1)
+# ============================================================================
+
+test_gemini_finalization_reliability() {
+    echo "=== Testing Gemini Finalization Reliability ==="
+
+    local tmp_bin
+    tmp_bin="$(mktemp -d)"
+    local fake_gemini="$tmp_bin/gemini"
+    cat > "$fake_gemini" <<'FAKEEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "--help" ]]; then
+  echo "--model MODEL  Specify model"
+  exit 0
+fi
+if [[ "${1:-}" == "--list-sessions" ]]; then
+  echo "default"
+  exit 0
+fi
+prompt=""
+for ((i=1; i<=$#; i++)); do
+  if [[ "${!i}" == "-p" ]]; then
+    j=$((i+1))
+    prompt="${!j:-}"
+  fi
+done
+echo "gemini-start"
+sleep 0.5
+if [[ "$prompt" == *"FAIL"* ]]; then
+  echo "simulated failure" >&2
+  exit 7
+fi
+echo "READY"
+exit 0
+FAKEEOF
+    chmod +x "$fake_gemini"
+
+    wait_for_outcome() {
+        local provider="$1"
+        local beads="$2"
+        local timeout_sec="${3:-20}"
+        local outcome="/tmp/dx-runner/${provider}/${beads}.outcome"
+        local deadline
+        deadline=$(( $(date +%s) + timeout_sec ))
+        while [[ "$(date +%s)" -lt "$deadline" ]]; do
+            [[ -f "$outcome" ]] && return 0
+            sleep 0.2
+        done
+        return 1
+    }
+
+    # Success path: must emit rc/outcome and never classify as *_no_rc
+    local beads_ok="test-gemini-ok-$$"
+    local prompt_ok
+    prompt_ok="$(mktemp)"
+    echo "Return exactly READY" > "$prompt_ok"
+    if PATH="$tmp_bin:$PATH" "$DX_RUNNER" start --provider gemini --beads "$beads_ok" --prompt-file "$prompt_ok" >/dev/null 2>&1; then
+        if wait_for_outcome "gemini" "$beads_ok" 25; then
+            local rc_file_ok="/tmp/dx-runner/gemini/${beads_ok}.rc"
+            local check_ok
+            check_ok="$(PATH="$tmp_bin:$PATH" "$DX_RUNNER" check --beads "$beads_ok" --json 2>/dev/null || true)"
+            if [[ -f "$rc_file_ok" ]] && [[ "$(cat "$rc_file_ok" 2>/dev/null || true)" == "0" ]]; then
+                pass "gemini success run writes rc=0"
+            else
+                fail "gemini success run missing rc=0"
+            fi
+            if echo "$check_ok" | jq -e '.state == "exited_ok"' >/dev/null 2>&1; then
+                pass "gemini success run finalizes as exited_ok"
+            else
+                fail "gemini success run did not finalize as exited_ok"
+            fi
+            if echo "$check_ok" | jq -e '.reason_code != "late_finalize_no_rc" and .reason_code != "monitor_no_rc_file"' >/dev/null 2>&1; then
+                pass "gemini success run avoids *_no_rc classifications"
+            else
+                fail "gemini success run hit *_no_rc classification"
+            fi
+        else
+            fail "gemini success run did not produce outcome in time"
+        fi
+    else
+        fail "gemini success start command failed"
+    fi
+
+    # Failing path: must emit rc/outcome with exited_err and no *_no_rc reason.
+    local beads_fail="test-gemini-fail-$$"
+    local prompt_fail
+    prompt_fail="$(mktemp)"
+    echo "FAIL" > "$prompt_fail"
+    if PATH="$tmp_bin:$PATH" "$DX_RUNNER" start --provider gemini --beads "$beads_fail" --prompt-file "$prompt_fail" >/dev/null 2>&1; then
+        if wait_for_outcome "gemini" "$beads_fail" 25; then
+            local rc_file_fail="/tmp/dx-runner/gemini/${beads_fail}.rc"
+            local check_fail
+            check_fail="$(PATH="$tmp_bin:$PATH" "$DX_RUNNER" check --beads "$beads_fail" --json 2>/dev/null || true)"
+            if [[ -f "$rc_file_fail" ]] && [[ "$(cat "$rc_file_fail" 2>/dev/null || true)" == "7" ]]; then
+                pass "gemini failing run writes rc=7"
+            else
+                fail "gemini failing run missing rc=7"
+            fi
+            if echo "$check_fail" | jq -e '.state == "exited_err"' >/dev/null 2>&1; then
+                pass "gemini failing run finalizes as exited_err"
+            else
+                fail "gemini failing run did not finalize as exited_err"
+            fi
+            if echo "$check_fail" | jq -e '.reason_code != "late_finalize_no_rc" and .reason_code != "monitor_no_rc_file"' >/dev/null 2>&1; then
+                pass "gemini failing run avoids *_no_rc classifications"
+            else
+                fail "gemini failing run hit *_no_rc classification"
+            fi
+        else
+            fail "gemini failing run did not produce outcome in time"
+        fi
+    else
+        fail "gemini failing start command failed"
+    fi
+
+    # Restart path: must not trigger mktemp collision and must finalize cleanly.
+    local beads_restart="test-gemini-restart-$$"
+    local prompt_restart
+    prompt_restart="$(mktemp)"
+    echo "Return exactly READY" > "$prompt_restart"
+    local restart_out
+    if PATH="$tmp_bin:$PATH" "$DX_RUNNER" start --provider gemini --beads "$beads_restart" --prompt-file "$prompt_restart" >/dev/null 2>&1; then
+        restart_out="$(PATH="$tmp_bin:$PATH" "$DX_RUNNER" restart --beads "$beads_restart" 2>&1 || true)"
+        if [[ "$restart_out" == *"mkstemp failed"* || "$restart_out" == *"File exists"* ]]; then
+            fail "gemini restart hit mktemp collision"
+        else
+            pass "gemini restart avoids mktemp collision"
+        fi
+        if wait_for_outcome "gemini" "$beads_restart" 25; then
+            local check_restart
+            check_restart="$(PATH="$tmp_bin:$PATH" "$DX_RUNNER" check --beads "$beads_restart" --json 2>/dev/null || true)"
+            if echo "$check_restart" | jq -e '.reason_code != "late_finalize_no_rc" and .reason_code != "monitor_no_rc_file"' >/dev/null 2>&1; then
+                pass "gemini restart run avoids *_no_rc classifications"
+            else
+                fail "gemini restart run hit *_no_rc classification"
+            fi
+        else
+            fail "gemini restart run did not produce outcome in time"
+        fi
+    else
+        fail "gemini restart seed start command failed"
+    fi
+
+    rm -rf "$tmp_bin" "$prompt_ok" "$prompt_fail" "$prompt_restart"
+    rm -f /tmp/dx-runner/gemini/"${beads_ok}".* /tmp/dx-runner/gemini/"${beads_fail}".* /tmp/dx-runner/gemini/"${beads_restart}".*
+}
+
+# ============================================================================
 # Test: Prune Stale Jobs
 # ============================================================================
 
@@ -1877,6 +2026,7 @@ run_all_tests() {
     test_restart_lifecycle
     test_model_resolution
     test_probe_model_flag
+    test_gemini_finalization_reliability
     test_gemini_adapter
     test_gemini_preflight_auth
     test_prune_stale_jobs
