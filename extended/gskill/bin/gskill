@@ -13,7 +13,12 @@ import sys
 import json
 from pathlib import Path
 
-# Add lib to path
+# Add repo root to path for extended.gskill imports
+repo_root = Path(__file__).parent.parent.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+# Also add lib for direct imports
 lib_path = Path(__file__).parent.parent / "lib"
 if str(lib_path) not in sys.path:
     sys.path.insert(0, str(lib_path))
