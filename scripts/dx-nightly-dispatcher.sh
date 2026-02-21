@@ -17,7 +17,11 @@ export BEADS_DIR="$HOME_DIR/bd/.beads"
 export PYTHONPATH="$REPO_ROOT"
 
 # 1Password service account for non-interactive auth (required for cron jobs)
-export OP_SERVICE_ACCOUNT_TOKEN_FILE="${OP_SERVICE_ACCOUNT_TOKEN_FILE:-$HOME_DIR/.config/systemd/user/op-macmini-token}"
+# Read token from file and export as OP_SERVICE_ACCOUNT_TOKEN (op CLI doesn't support _FILE suffix)
+OP_TOKEN_FILE="${OP_SERVICE_ACCOUNT_TOKEN_FILE:-$HOME_DIR/.config/systemd/user/op-macmini-token}"
+if [[ -f "$OP_TOKEN_FILE" ]]; then
+    export OP_SERVICE_ACCOUNT_TOKEN="$(cat "$OP_TOKEN_FILE")"
+fi
 
 # dx-runner configuration: find actual location in PATH
 if [ -z "${DX_RUNNER_PATH:-}" ]; then
