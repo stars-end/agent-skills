@@ -1196,6 +1196,234 @@ EOF
 }
 
 # ============================================================================
+# Test: Commit-Required Success Contract
+# ============================================================================
+
+test_commit_required_contract() {
+    echo "=== Testing Commit-Required Success Contract ==="
+
+    local adapter="$ADAPTERS_DIR/mock.sh"
+    create_mock_adapter "$adapter"
+
+    local beads="test-commit-contract-$$"
+    local prompt repo_dir
+    prompt="$(mktemp)"
+    repo_dir="$(mktemp -d /tmp/agents/test-commit-contract-XXXXXX)"
+    echo "READY" > "$prompt"
+
+    git -C "$repo_dir" init --quiet
+    git -C "$repo_dir" config user.email "test@example.com"
+    git -C "$repo_dir" config user.name "Test Runner"
+    echo "base" > "$repo_dir/base.txt"
+    git -C "$repo_dir" add base.txt
+    git -C "$repo_dir" commit -m "base" --quiet
+
+    if DX_RUNNER_REQUIRE_COMMIT_ARTIFACT=1 "$DX_RUNNER" start --beads "$beads" --provider mock --prompt-file "$prompt" --worktree "$repo_dir" >/dev/null 2>&1; then
+        for _ in {1..20}; do
+            [[ -f "/tmp/dx-runner/mock/${beads}.outcome" ]] && break
+            sleep 1
+        done
+        local report_json check_json
+        report_json="$("$DX_RUNNER" report --beads "$beads" --format json 2>/dev/null || true)"
+        check_json="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
+        if echo "$report_json" | jq -e '.outcome_reason_code=="no_commit_artifact" and .outcome_state=="failed" and (.exit_code|tostring)=="44"' >/dev/null 2>&1; then
+            pass "commit-required contract fails successful process without commit artifact"
+        else
+            fail "commit-required contract not enforced: $report_json"
+        fi
+        if echo "$check_json" | jq -e '.reason_code=="no_commit_artifact"' >/dev/null 2>&1; then
+            pass "check surfaces no_commit_artifact deterministically"
+        else
+            fail "check did not surface no_commit_artifact: $check_json"
+        fi
+    else
+        fail "start failed unexpectedly in commit contract test"
+    fi
+
+    rm -rf "$repo_dir"
+    rm -f "$prompt" "$adapter"
+    rm -f /tmp/dx-runner/mock/"${beads}".*
+}
+
+# ============================================================================
+# Test: Check JSON Includes Metric Telemetry
+# ============================================================================
+
+test_check_metrics_telemetry() {
+    echo "=== Testing Check Metric Telemetry ==="
+
+    local provider="mock-check"
+    local beads="test-check-metrics-$$"
+    local dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+selected_model=mock-model
+fallback_reason=none
+run_instance=ri-1
+host=test-host
+cwd=/tmp
+worktree=/tmp/agents
+EOF
+    cat > "$dir/${beads}.outcome" <<EOF
+beads=$beads
+provider=$provider
+exit_code=1
+state=failed
+reason_code=no_commit_artifact
+completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+duration_sec=3
+mutations=7
+log_bytes=321
+cpu_time_sec=4
+pid_age_sec=9
+selected_model=mock-model
+fallback_reason=none
+run_instance=ri-1
+host=test-host
+cwd=/tmp
+worktree=/tmp/agents
+EOF
+
+    local check_json
+    check_json="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
+    if echo "$check_json" | jq -e '.mutation_count==7 and .log_bytes==321 and .cpu_time_sec==4 and .pid_age_sec==9 and .reason_code=="no_commit_artifact"' >/dev/null 2>&1; then
+        pass "check json preserves finalized metric telemetry"
+    else
+        fail "check json missing metric telemetry: $check_json"
+    fi
+
+    rm -f "$dir/${beads}".*
+}
+
+# ============================================================================
+# Test: Railway Auth Preflight Requirement
+# ============================================================================
+
+test_railway_auth_preflight_requirement() {
+    echo "=== Testing Railway Auth Preflight Requirement ==="
+
+    local adapter="$ADAPTERS_DIR/mock.sh"
+    create_mock_adapter "$adapter"
+
+    local tmp_bin fake_railway out rc
+    tmp_bin="$(mktemp -d)"
+    fake_railway="$tmp_bin/railway"
+    cat > "$fake_railway" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "whoami" ]]; then
+  exit 1
+fi
+exit 0
+EOF
+    chmod +x "$fake_railway"
+
+    set +e
+    out="$(PATH="$tmp_bin:$PATH" DX_RUNNER_REQUIRE_RAILWAY_AUTH=1 DX_RUNNER_RAILWAY_REQUIRED_PROVIDERS=mock RAILWAY_SERVICE_FRONTEND_URL= RAILWAY_SERVICE_BACKEND_URL= RAILWAY_TOKEN= "$DX_RUNNER" preflight --provider mock 2>&1)"
+    rc=$?
+    set -e
+    if [[ "$rc" -ne 0 ]] && echo "$out" | grep -q "railway_"; then
+        pass "preflight blocks when railway auth/service context requirement is unmet"
+    else
+        fail "railway auth preflight requirement not enforced (rc=$rc): $out"
+    fi
+
+    rm -rf "$tmp_bin" "$adapter"
+}
+
+# ============================================================================
+# Test: OpenCode Attach Mode Fail-Fast
+# ============================================================================
+
+test_opencode_attach_mode_failfast() {
+    echo "=== Testing OpenCode Attach-Mode Fail-Fast ==="
+
+    local tmp_bin fake_op models_file prompt repo_dir beads out rc
+    tmp_bin="$(mktemp -d)"
+    fake_op="$tmp_bin/opencode"
+    models_file="$(mktemp)"
+    prompt="$(mktemp)"
+    repo_dir="$(mktemp -d /tmp/agents/test-attach-mode-XXXXXX)"
+    beads="test-opencode-attach-$$"
+    echo "zhipuai-coding-plan/glm-5" > "$models_file"
+    echo "READY" > "$prompt"
+    git -C "$repo_dir" init --quiet
+    git -C "$repo_dir" config user.email "test@example.com"
+    git -C "$repo_dir" config user.name "Test Runner"
+    echo "x" > "$repo_dir/a.txt"
+    git -C "$repo_dir" add a.txt
+    git -C "$repo_dir" commit -m "init" --quiet
+
+    cat > "$fake_op" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "models" ]]; then
+  cat "${FAKE_MODELS_FILE}"
+  exit 0
+fi
+if [[ "$1" == "run" && "$2" == "--help" ]]; then
+  echo "Usage: opencode run [message..]"
+  exit 0
+fi
+if [[ "$1" == "run" ]]; then
+  echo '{"type":"assistant","content":"READY"}'
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$fake_op"
+
+    set +e
+    out="$(PATH="$tmp_bin:$PATH" FAKE_MODELS_FILE="$models_file" OPENCODE_EXECUTION_MODE=attach OPENCODE_ATTACH_URL="http://127.0.0.1:4096" "$DX_RUNNER" start --beads "$beads" --provider opencode --prompt-file "$prompt" --worktree "$repo_dir" 2>&1)"
+    rc=$?
+    set -e
+    if [[ "$rc" -eq 21 ]] && echo "$out" | grep -q "opencode_attach_mode_unavailable"; then
+        pass "attach mode unsupported path fails fast with deterministic reason code"
+    else
+        fail "attach mode fail-fast missing (rc=$rc): $out"
+    fi
+
+    rm -rf "$tmp_bin" "$repo_dir"
+    rm -f "$models_file" "$prompt"
+    rm -f /tmp/dx-runner/opencode/"${beads}".*
+}
+
+# ============================================================================
+# Test: Completion Monitor Cleanup (No Orphan)
+# ============================================================================
+
+test_completion_monitor_cleanup() {
+    echo "=== Testing Completion Monitor Cleanup ==="
+
+    local adapter="$ADAPTERS_DIR/mock.sh"
+    create_mock_adapter "$adapter"
+    local beads="test-monitor-cleanup-$$"
+    local prompt
+    prompt="$(mktemp)"
+    echo "READY" > "$prompt"
+
+    if "$DX_RUNNER" start --beads "$beads" --provider mock --prompt-file "$prompt" >/dev/null 2>&1; then
+        for _ in {1..20}; do
+            [[ -f "/tmp/dx-runner/mock/${beads}.outcome" ]] && break
+            sleep 1
+        done
+        local mpid_file="/tmp/dx-runner/mock/${beads}.monitor.pid"
+        local pid_file="/tmp/dx-runner/mock/${beads}.pid"
+        if [[ ! -f "$pid_file" && ! -f "$mpid_file" ]]; then
+            pass "pid/monitor artifacts cleaned after completion"
+        else
+            fail "pid/monitor artifacts not cleaned after completion"
+        fi
+    else
+        fail "mock start failed for monitor cleanup test"
+    fi
+
+    rm -f "$adapter" "$prompt"
+    rm -f /tmp/dx-runner/mock/"${beads}".*
+}
+
+# ============================================================================
 # Test: Provider Concurrency Guardrail
 # ============================================================================
 
@@ -1637,7 +1865,12 @@ run_all_tests() {
     test_mutation_log_accounting
     test_capacity_classification
     test_stop_preserves_metrics
+    test_commit_required_contract
+    test_check_metrics_telemetry
     test_awaiting_finalize_taxonomy
+    test_railway_auth_preflight_requirement
+    test_opencode_attach_mode_failfast
+    test_completion_monitor_cleanup
     test_provider_concurrency_guardrail
     test_feature_key_validation
     test_precommit_flush_semantics

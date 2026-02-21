@@ -1,4 +1,4 @@
-# DX Runner Runbook (V1.3)
+# DX Runner Runbook (V1.4)
 
 Wave-based parallel dispatch with OpenCode (GLM-5) + Gemini.
 
@@ -8,6 +8,7 @@ Wave-based parallel dispatch with OpenCode (GLM-5) + Gemini.
 # Preflight checks
 dx-runner preflight --provider opencode
 dx-runner preflight --provider gemini
+dx-runner preflight --provider opencode --require-railway-auth
 
 # Beads gate (before wave)
 dx-runner beads-gate --repo /path/to/repo [--probe-id bd-xxx] [--write-probe]
@@ -15,6 +16,7 @@ dx-runner beads-gate --repo /path/to/repo [--probe-id bd-xxx] [--write-probe]
 # Start parallel jobs
 dx-runner start --beads bd-xxx --provider opencode --prompt-file /tmp/p.prompt
 dx-runner start --beads bd-yyy --provider gemini --prompt-file /tmp/q.prompt
+dx-runner start --beads bd-zzz --provider opencode --prompt-file /tmp/r.prompt --require-commit-artifact
 
 # Monitor
 dx-runner status [--json]
@@ -52,6 +54,20 @@ OpenCode CLI contract is grounded in official docs:
 - API credentials valid
 - Canonical model available: `zhipuai-coding-plan/glm-5`
 - If unavailable, route to `cc-glm` or `gemini`
+- Host/cwd context is emitted to aid multi-host debugging
+
+### Railway Auth Capability Gate (Optional, Strict)
+
+Use this when wave execution requires Railway shell/auth context:
+
+```bash
+dx-runner preflight --provider opencode --require-railway-auth
+```
+
+Blocking reason codes:
+- `railway_cli_missing`
+- `railway_auth_missing`
+- `railway_service_context_missing`
 
 ### 2. Beads Integrity Gate
 
@@ -113,6 +129,7 @@ dx-runner status --recent 10 --json
 for id in bd-task1 bd-task2 bd-task3 bd-task4; do
     while true; do
         state=$(dx-runner check --beads "$id" --json 2>/dev/null | jq -r '.state')
+        reason=$(dx-runner check --beads "$id" --json 2>/dev/null | jq -r '.reason_code')
         [[ "$state" == "exited_ok" || "$state" == "exited_err" ]] && break
         sleep 5
     done
@@ -127,9 +144,12 @@ done
 |------|---------|----------|
 | `opencode_model_unavailable` | Canonical model unavailable | Use gemini or cc-glm |
 | `opencode_model_unsupported` | Requested non-canonical model | Must use GLM-5 |
+| `opencode_attach_mode_unavailable` | Attach/server mode unsupported by local CLI/runtime | Use headless run mode or upgrade CLI |
+| `opencode_attach_missing_url` | Attach mode requested without URL | Set `OPENCODE_ATTACH_URL` or use run mode |
 | `opencode_binary_missing` | CLI not installed | Install opencode |
 | `opencode_auth_blocked` | Auth/quota issue | Check API key, quota |
 | `opencode_rate_limited` | Runtime rate/quota throttling | Backoff retry or switch provider |
+| `worktree_missing_for_opencode` | Missing/invalid worktree for OpenCode run | Pass valid `--worktree` task path |
 
 ### Gemini Failure Codes
 
@@ -139,6 +159,14 @@ done
 | `gemini_auth_missing` | No API key set | Set GEMINI_API_KEY |
 | `gemini_auth_blocked` | Invalid API key | Check credentials |
 | `gemini_capacity_exhausted` | Capacity/429 exhaustion | Backoff retry or switch to opencode/cc-glm |
+
+### Cross-Provider Failure Codes
+
+| Code | Meaning | Action |
+|------|---------|--------|
+| `no_commit_artifact` | Commit-required run exited with no new commit artifact | Verify commit stage and rerun with valid worktree |
+| `provider_concurrency_cap_exceeded` | Provider max parallel exceeded | Wait/switch provider |
+| `awaiting_finalize_monitor_active` | Process exited and monitor still finalizing | Wait briefly or run `dx-runner finalize` |
 
 ### Health States
 
@@ -181,6 +209,11 @@ worktree=/tmp/agents/bd-xga8.14.2/prime-radiant-ai
 dx-runner report --beads bd-xxx --format json
 dx-runner report --beads bd-xxx --format markdown
 ```
+
+`check --json` now includes:
+- `selected_model`, `fallback_reason`
+- `mutation_count`, `log_bytes`, `cpu_time_sec`, `pid_age_sec`, `log_age_sec`
+- `host`, `cwd`, `worktree`, `run_instance`
 
 Provider switch safety:
 - Reusing the same `beads` across providers is supported.
@@ -256,8 +289,12 @@ export DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES=30
 |----------|----------|-------------|
 | `OPENCODE_MODEL` | opencode | Override model (must be GLM-5) |
 | `OPENCODE_CANONICAL_MODEL` | opencode | Canonical model to prefer |
+| `OPENCODE_EXECUTION_MODE` | opencode | `run` (default) or `attach`/`server` (fail-fast if unsupported) |
+| `OPENCODE_ATTACH_URL` | opencode | Required when execution mode is `attach`/`server` |
 | `GEMINI_MODEL` | gemini | Override model (default: gemini-3-flash-preview) |
 | `GEMINI_API_KEY` | gemini | API key |
+| `DX_RUNNER_REQUIRE_COMMIT_ARTIFACT` | all | Enforce commit artifact contract on successful exit |
+| `DX_RUNNER_REQUIRE_RAILWAY_AUTH` | all | Enforce Railway auth/service-context preflight gate |
 | `GOOGLE_API_KEY` | gemini | Alternative API key |
 | `DX_RUNNER_MAX_RUNTIME_MINUTES` | all | Max job runtime before force-finalize |
 | `DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES` | all | No-mutation timeout |
