@@ -83,11 +83,12 @@ adapter_preflight() {
         if [[ "$ZAI_API_KEY" == op://* ]]; then
             if command -v op >/dev/null 2>&1; then
                 auth_source="ZAI_API_KEY (op://)"
-                if op read "$ZAI_API_KEY" >/dev/null 2>&1; then
+                # P1 fix: Add 30s timeout to op read to prevent hanging on macmini (bd-5wys.26)
+                if timeout 30 op read "$ZAI_API_KEY" >/dev/null 2>&1; then
                     auth_ok=true
                 else
-                    echo "OP_RESOLUTION_FAILED"
-                    echo "  ERROR: Cannot resolve op:// reference"
+                    echo "AUTH_PROBE_TIMEOUT"
+                    echo "  ERROR: op read timed out or failed for ZAI_API_KEY"
                     errors=$((errors + 1))
                 fi
             else
@@ -103,11 +104,12 @@ adapter_preflight() {
         # Try default op:// path
         if command -v op >/dev/null 2>&1; then
             auth_source="default op://"
-            if op read "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" >/dev/null 2>&1; then
+            # P1 fix: Add 30s timeout to op read to prevent hanging on macmini (bd-5wys.26)
+            if timeout 30 op read "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" >/dev/null 2>&1; then
                 auth_ok=true
             else
-                echo "NO_AUTH_SOURCE"
-                echo "  ERROR: No auth source configured and default op:// resolution failed"
+                echo "AUTH_PROBE_TIMEOUT"
+                echo "  ERROR: No auth source configured and default op:// resolution timed out or failed"
                 errors=$((errors + 1))
             fi
         else
@@ -209,12 +211,14 @@ adapter_probe_model() {
         auth_token="$CC_GLM_AUTH_TOKEN"
     elif [[ -n "${ZAI_API_KEY:-}" ]]; then
         if [[ "$ZAI_API_KEY" == op://* ]]; then
-            auth_token="$(op read "$ZAI_API_KEY" 2>/dev/null)" || return 1
+            # P1 fix: Add 30s timeout to op read (bd-5wys.26)
+            auth_token="$(timeout 30 op read "$ZAI_API_KEY" 2>/dev/null)" || return 1
         else
             auth_token="$ZAI_API_KEY"
         fi
     else
-        auth_token="$(op read "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" 2>/dev/null)" || return 1
+        # P1 fix: Add 30s timeout to op read (bd-5wys.26)
+        auth_token="$(timeout 30 op read "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" 2>/dev/null)" || return 1
     fi
     
     # Quick probe with timeout

@@ -425,12 +425,12 @@ preflight_check() {
       # op:// reference - check op CLI and try to resolve
       if command -v op >/dev/null 2>&1; then
         auth_source="ZAI_API_KEY (op://)"
-        # Try resolution (may fail if op not authenticated)
-        if op read "$ZAI_API_KEY" >/dev/null 2>&1; then
+        # P1 fix: Add 30s timeout to op read (bd-5wys.26)
+        if timeout 30 op read "$ZAI_API_KEY" >/dev/null 2>&1; then
           auth_ok=true
         else
-          echo "OP_RESOLUTION_FAILED"
-          echo "  ERROR: Cannot resolve op:// reference - op not authenticated or token expired"
+          echo "AUTH_PROBE_TIMEOUT"
+          echo "  ERROR: op read timed out or failed for ZAI_API_KEY"
           errors=$((errors + 1))
         fi
       else
@@ -445,11 +445,12 @@ preflight_check() {
   elif [[ -n "${CC_GLM_OP_URI:-}" ]]; then
     auth_source="CC_GLM_OP_URI"
     if command -v op >/dev/null 2>&1; then
-      if op read "$CC_GLM_OP_URI" >/dev/null 2>&1; then
+      # P1 fix: Add 30s timeout to op read (bd-5wys.26)
+      if timeout 30 op read "$CC_GLM_OP_URI" >/dev/null 2>&1; then
         auth_ok=true
       else
-        echo "OP_RESOLUTION_FAILED"
-        echo "  ERROR: Cannot resolve CC_GLM_OP_URI"
+        echo "AUTH_PROBE_TIMEOUT"
+        echo "  ERROR: op read timed out or failed for CC_GLM_OP_URI"
         errors=$((errors + 1))
       fi
     else
@@ -461,11 +462,12 @@ preflight_check() {
     # Try default op:// path
     if command -v op >/dev/null 2>&1; then
       auth_source="default op://"
-      if op read "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" >/dev/null 2>&1; then
+      # P1 fix: Add 30s timeout to op read (bd-5wys.26)
+      if timeout 30 op read "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" >/dev/null 2>&1; then
         auth_ok=true
       else
-        echo "NO_AUTH_SOURCE"
-        echo "  ERROR: No auth source configured and default op:// resolution failed"
+        echo "AUTH_PROBE_TIMEOUT"
+        echo "  ERROR: No auth source configured and default op:// resolution timed out or failed"
         echo "  Set CC_GLM_AUTH_TOKEN, ZAI_API_KEY, or CC_GLM_OP_URI"
         errors=$((errors + 1))
       fi

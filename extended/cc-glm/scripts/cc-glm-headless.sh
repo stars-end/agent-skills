@@ -292,8 +292,9 @@ _resolve_op_reference() {
 
   # Attempt to read from 1Password
   # Redirect stderr to suppress op's verbose error messages
+  # P1 fix: Add 30s timeout to op read (bd-5wys.26)
   local token
-  if ! token="$(op read "$ref" 2>/dev/null)"; then
+  if ! token="$(timeout 30 op read "$ref" 2>/dev/null)"; then
     _print_op_resolution_error "$ref"
     return 1
   fi

@@ -553,6 +553,49 @@ EOF
   setup_test_env
 }
 
+# Test: op resolution timeout (V3.4 regression for bd-5wys.26)
+test_op_timeout() {
+  echo ""
+  echo "=== Test: op resolution timeout (bd-5wys.26) ==="
+
+  setup_test_env
+
+  # Mock op that hangs
+  local fake_dir old_path
+  fake_dir="$(mktemp -d)"
+  old_path="$PATH"
+  cat > "${fake_dir}/op" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "read" ]]; then
+  sleep 100
+fi
+EOF
+  chmod +x "${fake_dir}/op"
+  export PATH="${fake_dir}:${old_path}"
+
+  export ZAI_API_KEY="op://dev/TestVault/test-field"
+
+  local start_time end_time duration output exit_code
+  start_time=$(date +%s)
+  set +e
+  # The script has 30s hardcoded timeout for op read.
+  output=$("$HEADLESS_SCRIPT" --prompt "test" 2>&1)
+  exit_code=$?
+  set -e
+  end_time=$(date +%s)
+  duration=$((end_time - start_time))
+
+  if [[ $exit_code -eq 10 ]] && [[ $duration -ge 30 ]] && [[ $duration -lt 45 ]]; then
+    pass "op resolution timed out correctly after ${duration}s"
+  else
+    fail "op resolution should timeout after 30s" "exit=$exit_code duration=${duration}s output=${output:0:200}"
+  fi
+
+  export PATH="$old_path"
+  rm -rf "$fake_dir"
+  setup_test_env
+}
+
 # Test: Missing claude CLI produces actionable error
 test_missing_claude_cli() {
   echo ""
@@ -1234,6 +1277,7 @@ test_strict_auth_disabled
 test_priority_order
 test_anthropic_env_exports
 test_debug_token_capture
+test_op_timeout
 test_missing_claude_cli
 
 # Run job runner tests
