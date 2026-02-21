@@ -831,6 +831,10 @@ class WaveOrchestrator:
         )
         if provider == "blocked":
             item.status, item.error = ItemStatus.BLOCKED, "Retry chain exhausted"
+            phase = item.phase or Phase.IMPLEMENT
+            self.artifacts.write_error_outcome(
+                item.beads_id, phase, item.attempt, "Retry chain exhausted"
+            )
             self.save_state()
             return False
         lease = LeaseLock(
@@ -975,12 +979,18 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
                     item.status, item.completed_at = ItemStatus.APPROVED, now_utc()
                     self._update_beads_progress(item)
             else:
-                item.status, item.error, item.completed_at = (
-                    ItemStatus.FAILED,
+                error_msg = (
                     outcome.get("error", "Implement failed")
                     if outcome
-                    else "No outcome",
+                    else "No outcome"
+                )
+                item.status, item.error, item.completed_at = (
+                    ItemStatus.FAILED,
+                    error_msg,
                     now_utc(),
+                )
+                self.artifacts.write_error_outcome(
+                    item.beads_id, Phase.IMPLEMENT, item.attempt, error_msg
                 )
                 self._update_ledger_completion(item, Phase.IMPLEMENT, "failed", outcome)
                 self._release_lease(item)
