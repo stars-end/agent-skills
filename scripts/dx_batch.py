@@ -16,13 +16,14 @@ try:
 except ImportError:
     HAS_JSONSCHEMA = False
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 DEFAULT_MAX_PARALLEL = 3
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_STALL_MINUTES = 15
 DEFAULT_LEASE_TTL_MINUTES = 120
 DEFAULT_RETRY_CHAIN = ["opencode", "cc-glm", "blocked"]
 ARTIFACT_BASE = Path("/tmp/dx-batch")
+DX_RUNNER_LOG_BASE = Path("/tmp/dx-runner")
 CONFIG_BASE = Path(__file__).parent.parent / "configs" / "dx-batch"
 SCHEMAS_DIR = CONFIG_BASE / "schemas"
 
@@ -76,6 +77,7 @@ class ItemState:
     verdict: Optional[Verdict] = None
     outcome_path: Optional[str] = None
     error: Optional[str] = None
+    dx_runner_beads_id: Optional[str] = None  # The actual beads ID passed to dx-runner (may have -review suffix)
 
     def to_dict(self):
         d = asdict(self)
@@ -363,17 +365,22 @@ class ProcessHygiene:
         try: os.kill(pid, 0); return True
         except OSError: return False
 
-    def kill_all_children(self, timeout_sec=10):
+    def kill_all_children(self, exclude_pids=None):
+        exclude_pids = exclude_pids or set()
         killed = 0
         for pid in list(self.child_pids):
+            if pid in exclude_pids:
+                continue
             try: os.kill(pid, signal.SIGTERM); killed += 1
             except OSError: pass
-        deadline = time.time() + timeout_sec
+        deadline = time.time() + 10
         while time.time() < deadline and self.child_pids:
             self._prune_dead_pids()
             if not self.child_pids: break
             time.sleep(0.5)
         for pid in list(self.child_pids):
+            if pid in exclude_pids:
+                continue
             try: os.kill(pid, signal.SIGKILL)
             except OSError: pass
         self._prune_dead_pids()
@@ -433,6 +440,30 @@ def parse_utc_epoch(ts):
     try: return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
     except ValueError: return 0.0
 
+def get_dx_runner_log_path(provider, beads_id):
+    """Get the path to dx-runner's provider log file."""
+    return DX_RUNNER_LOG_BASE / provider / f"{beads_id}.log"
+
+def read_dx_runner_log(provider, beads_id):
+    """Read dx-runner's provider log file content."""
+    log_path = get_dx_runner_log_path(provider, beads_id)
+    if not log_path.exists():
+        return None
+    try:
+        return log_path.read_text()
+    except OSError:
+        return None
+
+def bd_command(args, check=False):
+    """Run a bd command. Returns (success, stdout, stderr)."""
+    try:
+        result = subprocess.run(["bd"] + args, capture_output=True, text=True, timeout=60)
+        if check and result.returncode != 0:
+            return False, result.stdout, result.stderr
+        return result.returncode == 0, result.stdout, result.stderr
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        return False, "", str(e)
+
 class WaveOrchestrator:
     def __init__(self, wave_id, config=None):
         self.wave_id = wave_id
@@ -442,6 +473,7 @@ class WaveOrchestrator:
         self.hygiene = ProcessHygiene(self.config.max_parallel, wave_id)
         self.validator = ContractValidator()
         self.retry_policy = RetryPolicy(self.config.retry_chain, self.config.max_attempts)
+        self._leases = {}  # Track active leases by beads_id+attempt for cleanup
         self._shutdown_requested = False
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -536,13 +568,18 @@ class WaveOrchestrator:
             if not lease.force_release_if_stale() or not lease.acquire():
                 print(f"Could not acquire lease for {item.beads_id} attempt {item.attempt}", file=sys.stderr)
                 return False
+        # Track lease for cleanup
+        self._leases[f"{item.beads_id}+attempt{item.attempt}"] = lease
+        
         item.provider, item.phase, item.status, item.lease_key = provider, Phase.IMPLEMENT, ItemStatus.IMPLEMENTING, lease.lease_key
-        item.started_at, item.run_instance = now_utc(), f"{provider}-{uuid.uuid4().hex[:8]}"
+        item.started_at, item.run_instance, item.dx_runner_beads_id = now_utc(), f"{provider}-{uuid.uuid4().hex[:8]}", item.beads_id
         self.save_state()
+        
+        outcome_path = str(self.artifacts.get_item_outcome_path(item.beads_id, Phase.IMPLEMENT, item.attempt))
+        item.outcome_path = outcome_path
         ledger = Ledger(self.wave_id, item.beads_id)
         ledger.append_run({"provider": provider, "run_instance": item.run_instance, "attempt": item.attempt,
-            "state": "implementing", "started_at": item.started_at,
-            "outcome_path": str(self.artifacts.get_item_outcome_path(item.beads_id, Phase.IMPLEMENT, item.attempt))})
+            "state": "implementing", "started_at": item.started_at, "outcome_path": outcome_path})
         self._dispatch_implement(item)
         return True
 
@@ -551,16 +588,13 @@ class WaveOrchestrator:
         prompt_file = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.implement.prompt"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(prompt)
-        log_path = self.artifacts.get_item_log_path(item.beads_id, Phase.IMPLEMENT, item.attempt)
-        cmd = ["dx-runner", "start", "--beads", item.beads_id, "--provider", item.provider, "--prompt-file", str(prompt_file)]
-        log_file = open(log_path, "w")
+        cmd = ["dx-runner", "start", "--beads", item.dx_runner_beads_id, "--provider", item.provider, "--prompt-file", str(prompt_file)]
         try:
-            proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.hygiene.register_pid(proc.pid)
         except Exception as e:
-            log_file.write(f"Failed to start dx-runner: {e}\n")
-            log_file.close()
             item.status, item.error = ItemStatus.FAILED, str(e)
+            self._release_lease(item)
             self.save_state()
 
     def _generate_implement_prompt(self, item):
@@ -576,22 +610,55 @@ Requirements:
 Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON:"""
 
     def _check_item_progress(self, item):
+        # Use the actual beads ID passed to dx-runner
+        beads_to_check = item.dx_runner_beads_id or item.beads_id
         try:
-            result = subprocess.run(["dx-runner", "check", "--beads", item.beads_id, "--json"], capture_output=True, text=True, timeout=30)
-            if result.returncode == 0:
-                data = json.loads(result.stdout) if result.stdout.strip() else {}
-                state = data.get("state", "unknown")
-                if state in ("exited_ok", "exited_err"): self._handle_item_completion(item, data)
-                elif state == "stalled": self._handle_item_stalled(item, data)
+            result = subprocess.run(["dx-runner", "check", "--beads", beads_to_check, "--json"], 
+                capture_output=True, text=True, timeout=30)
+            # Handle both zero and non-zero return codes
+            data = {}
+            if result.stdout.strip():
+                try:
+                    data = json.loads(result.stdout)
+                except json.JSONDecodeError:
+                    pass
+            
+            state = data.get("state", "unknown")
+            
+            # Return code 0 with exited state means completion
+            if result.returncode == 0 and state in ("exited_ok", "exited_err"):
+                self._handle_item_completion(item, data)
+            # Return code 2 means stalled
+            elif result.returncode == 2 or state == "stalled":
+                self._handle_item_stalled(item, data)
+            # Return code 3 means error
+            elif result.returncode == 3 or state in ("exited_err", "blocked"):
+                self._handle_item_stalled(item, data)
+            # Check for no_op state
+            elif state == "no_op":
+                self._handle_item_stalled(item, {"reason_code": "no_op"})
         except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError): pass
 
     def _handle_item_completion(self, item, check_data):
         if item.phase == Phase.IMPLEMENT:
             outcome = self._parse_implement_outcome(item)
             if outcome and outcome.get("status") in ("completed", "partial"):
-                if self.config.require_review: self._start_review(item)
-                else: item.status, item.completed_at = ItemStatus.APPROVED, now_utc()
-            else: item.status, item.error, item.completed_at = ItemStatus.FAILED, outcome.get("error", "Implement failed") if outcome else "No outcome", now_utc()
+                # Update ledger with completion
+                self._update_ledger_completion(item, Phase.IMPLEMENT, "completed", outcome)
+                # Write outcome and update state
+                outcome_path = self.artifacts.write_outcome(item.beads_id, Phase.IMPLEMENT, item.attempt, outcome)
+                item.outcome_path = str(outcome_path)
+                # Release lease
+                self._release_lease(item)
+                if self.config.require_review: 
+                    self._start_review(item)
+                else: 
+                    item.status, item.completed_at = ItemStatus.APPROVED, now_utc()
+                    self._update_beads_progress(item)
+            else: 
+                item.status, item.error, item.completed_at = ItemStatus.FAILED, outcome.get("error", "Implement failed") if outcome else "No outcome", now_utc()
+                self._update_ledger_completion(item, Phase.IMPLEMENT, "failed", outcome)
+                self._release_lease(item)
             self.save_state()
         elif item.phase == Phase.REVIEW:
             outcome = self._parse_review_outcome(item)
@@ -602,55 +669,123 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
                 elif verdict == "REVISION_REQUIRED": item.status = ItemStatus.REVISION_REQUIRED
                 else: item.status = ItemStatus.BLOCKED
                 item.completed_at = now_utc()
-            else: item.status, item.error = ItemStatus.FAILED, "No review outcome"
+                # Update ledger
+                self._update_ledger_completion(item, Phase.REVIEW, verdict.lower(), outcome)
+                # Write outcome
+                outcome_path = self.artifacts.write_outcome(item.beads_id, Phase.REVIEW, item.attempt, outcome)
+                item.outcome_path = str(outcome_path)
+                # Release lease
+                self._release_lease(item)
+                # Update Beads
+                self._update_beads_progress(item)
+            else: 
+                item.status, item.error = ItemStatus.FAILED, "No review outcome"
+                self._update_ledger_completion(item, Phase.REVIEW, "failed", None)
+                self._release_lease(item)
             self.save_state()
 
+    def _release_lease(self, item):
+        """Release the lease for an item."""
+        key = f"{item.beads_id}+attempt{item.attempt}"
+        if key in self._leases:
+            try:
+                self._leases[key].release()
+            except Exception:
+                pass
+            del self._leases[key]
+
+    def _update_ledger_completion(self, item, phase, state, outcome):
+        """Append a completion record to the ledger."""
+        ledger = Ledger(self.wave_id, item.beads_id)
+        record = {
+            "provider": item.provider,
+            "run_instance": item.run_instance,
+            "attempt": item.attempt,
+            "phase": phase.value,
+            "state": state,
+            "started_at": item.started_at,
+            "completed_at": now_utc(),
+            "outcome_path": item.outcome_path or "",
+        }
+        if outcome:
+            record["outcome_summary"] = outcome.get("summary", "") if isinstance(outcome, dict) else ""
+        ledger.append_run(record)
+
+    def _update_beads_progress(self, item):
+        """Update Beads issue with progress."""
+        if item.status == ItemStatus.APPROVED:
+            success, _, _ = bd_command(["note", item.beads_id, "--message", f"dx-batch: completed with verdict {item.verdict.value if item.verdict else 'N/A'}"])
+            if not success:
+                # Non-blocking - just log
+                pass
+        elif item.status == ItemStatus.BLOCKED:
+            success, _, _ = bd_command(["note", item.beads_id, "--message", f"dx-batch: blocked - {item.error or 'unknown'}"])
+        elif item.status == ItemStatus.REVISION_REQUIRED:
+            success, _, _ = bd_command(["note", item.beads_id, "--message", f"dx-batch: revision required - {item.error or 'see review findings'}"])
+
     def _parse_implement_outcome(self, item):
-        log_path = self.artifacts.get_item_log_path(item.beads_id, Phase.IMPLEMENT, item.attempt)
-        if not log_path.exists(): return None
-        for line in reversed(log_path.read_text().split("\n")):
+        # Read from dx-runner's provider log, not our launcher log
+        if not item.provider:
+            return {"status": "failed", "error": "No provider set"}
+        log_content = read_dx_runner_log(item.provider, item.dx_runner_beads_id or item.beads_id)
+        if not log_content:
+            return {"status": "failed", "error": "No dx-runner log found"}
+        for line in reversed(log_content.split("\n")):
             if "CONTRACT:JSON:" in line:
                 try:
                     contract = json.loads(line.split("CONTRACT:JSON:", 1)[1].strip())
                     valid, errors = self.validator.validate_implement(contract)
                     if valid:
-                        self.artifacts.write_outcome(item.beads_id, Phase.IMPLEMENT, item.attempt, contract)
                         return contract
                 except json.JSONDecodeError: pass
         return {"status": "failed", "error": "No valid contract found"}
 
     def _parse_review_outcome(self, item):
-        log_path = self.artifacts.get_item_log_path(item.beads_id, Phase.REVIEW, item.attempt)
-        if not log_path.exists(): return None
-        for line in reversed(log_path.read_text().split("\n")):
+        # Read from dx-runner's provider log
+        provider = item.provider or "opencode"  # review uses primary provider
+        review_beads_id = f"{item.beads_id}-review"
+        log_content = read_dx_runner_log(provider, review_beads_id)
+        if not log_content:
+            return {"verdict": "BLOCKED", "findings": [{"type": "error", "message": "No dx-runner log found for review"}]}
+        for line in reversed(log_content.split("\n")):
             if "CONTRACT:JSON:" in line:
                 try:
                     contract = json.loads(line.split("CONTRACT:JSON:", 1)[1].strip())
                     valid, errors = self.validator.validate_review(contract)
                     if valid:
-                        self.artifacts.write_outcome(item.beads_id, Phase.REVIEW, item.attempt, contract)
                         return contract
                 except json.JSONDecodeError: pass
-        return {"verdict": "BLOCKED", "findings": [{"type": "error", "message": "No valid review contract"}]}
+        return {"verdict": "BLOCKED", "findings": [{"type": "error", "message": "No valid review contract found"}]}
 
     def _start_review(self, item):
         item.phase, item.status, item.started_at = Phase.REVIEW, ItemStatus.REVIEWING, now_utc()
+        # Set dx_runner_beads_id for review phase
+        item.dx_runner_beads_id = f"{item.beads_id}-review"
         self.save_state()
+        
         prompt = self._generate_review_prompt(item)
         prompt_file = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.review.prompt"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(prompt)
-        log_path = self.artifacts.get_item_log_path(item.beads_id, Phase.REVIEW, item.attempt)
+        
         provider, _ = self.retry_policy.get_provider_for_attempt(1)
-        cmd = ["dx-runner", "start", "--beads", f"{item.beads_id}-review", "--provider", provider, "--prompt-file", str(prompt_file)]
-        log_file = open(log_path, "w")
+        item.provider = provider
+        
+        # Append to ledger for review start
+        outcome_path = str(self.artifacts.get_item_outcome_path(item.beads_id, Phase.REVIEW, item.attempt))
+        item.outcome_path = outcome_path
+        ledger = Ledger(self.wave_id, item.beads_id)
+        ledger.append_run({"provider": provider, "run_instance": f"{provider}-review-{uuid.uuid4().hex[:8]}", 
+            "attempt": item.attempt, "phase": "review", "state": "reviewing", 
+            "started_at": item.started_at, "outcome_path": outcome_path})
+        
+        cmd = ["dx-runner", "start", "--beads", item.dx_runner_beads_id, "--provider", provider, "--prompt-file", str(prompt_file)]
         try:
-            proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.hygiene.register_pid(proc.pid)
         except Exception as e:
-            log_file.write(f"Failed to start review dx-runner: {e}\n")
-            log_file.close()
             item.status, item.error = ItemStatus.FAILED, f"Review dispatch failed: {e}"
+            self._release_lease(item)
             self.save_state()
 
     def _generate_review_prompt(self, item):
@@ -666,15 +801,26 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
     def _handle_item_stalled(self, item, check_data):
         if self.retry_policy.should_retry(item.attempt):
             item.status, item.error = ItemStatus.REVISION_REQUIRED, check_data.get("reason_code", "stalled")
-        else: item.status, item.error = ItemStatus.BLOCKED, "Stalled and max retries exceeded"
+        else: 
+            item.status, item.error = ItemStatus.BLOCKED, "Stalled and max retries exceeded"
+        self._release_lease(item)
+        self._update_beads_progress(item)
         self.save_state()
 
     def _is_wave_complete(self):
         return all(item.status in (ItemStatus.APPROVED, ItemStatus.BLOCKED, ItemStatus.CANCELLED, ItemStatus.FAILED) for item in self.state.items)
 
     def _cleanup_on_shutdown(self):
-        killed = self.hygiene.kill_all_children()
-        if killed: print(f"Killed {killed} child processes")
+        # Get current process PID to exclude from kill
+        my_pid = os.getpid()
+        self.hygiene.kill_all_children(exclude_pids={my_pid})
+        # Release all leases
+        for key, lease in list(self._leases.items()):
+            try:
+                lease.release()
+            except Exception:
+                pass
+        self._leases.clear()
 
     def cancel(self):
         self.load_state()
@@ -684,6 +830,7 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
             if item.status not in (ItemStatus.APPROVED, ItemStatus.BLOCKED, ItemStatus.CANCELLED, ItemStatus.FAILED):
                 item.status, item.completed_at = ItemStatus.CANCELLED, now_utc()
                 self.artifacts.write_cancel_outcome(item.beads_id, item.phase or Phase.IMPLEMENT, item.attempt, "wave_cancelled")
+                self._release_lease(item)
         self.state.status, self.state.completed_at = WaveStatus.CANCELLED, now_utc()
         self.save_state()
         return True
@@ -716,10 +863,17 @@ class Doctor:
                 "message": f"Stale lease for {lease.get('beads_id')}"})
         if LeaseLock.list_stale_leases(self.wave_id): result["recommendations"].append(f"Run 'dx-batch resume --wave-id {self.wave_id}' to recover")
         for item in state.items:
-            if item.status in (ItemStatus.IMPLEMENTING, ItemStatus.REVIEWING) and item.outcome_path:
-                if not Path(item.outcome_path).exists():
+            if item.status in (ItemStatus.IMPLEMENTING, ItemStatus.REVIEWING):
+                # Check for missing outcome file
+                if item.outcome_path and not Path(item.outcome_path).exists():
                     result["issues"].append({"type": "missing_outcome", "severity": "warning", "beads_id": item.beads_id,
                         "phase": item.phase.value if item.phase else None, "message": f"Missing outcome for {item.beads_id}"})
+                # Also check if dx-runner log exists
+                if item.provider and item.dx_runner_beads_id:
+                    log_path = get_dx_runner_log_path(item.provider, item.dx_runner_beads_id)
+                    if not log_path.exists():
+                        result["issues"].append({"type": "missing_dx_runner_log", "severity": "warning", 
+                            "beads_id": item.beads_id, "provider": item.provider, "message": f"No dx-runner log for {item.beads_id}"})
         stuck_items = [i for i in state.items if i.status in (ItemStatus.IMPLEMENTING, ItemStatus.REVIEWING)]
         if stuck_items and state.status == WaveStatus.RUNNING:
             result["issues"].append({"type": "potential_stuck", "severity": "info", "count": len(stuck_items),

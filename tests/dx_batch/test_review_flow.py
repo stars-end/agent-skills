@@ -1,4 +1,5 @@
 """Tests for separate review run + strict verdict."""
+
 import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -6,6 +7,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
 
 from dx_batch import ContractValidator, Phase, Verdict
@@ -19,11 +21,14 @@ class TestReviewFlow:
 
         valid_verdicts = ["APPROVED", "REVISION_REQUIRED", "BLOCKED"]
         for verdict in valid_verdicts:
+            findings = (
+                [] if verdict == "APPROVED" else [{"type": "minor", "message": "test"}]
+            )
             contract = {
                 "phase": "review",
                 "beads_id": "bd-v",
                 "verdict": verdict,
-                "findings": [],
+                "findings": findings,
                 "timestamp": "2026-02-21T00:00:00Z",
             }
             valid, errors = validator.validate_review(contract)
@@ -35,7 +40,7 @@ class TestReviewFlow:
                 "phase": "review",
                 "beads_id": "bd-v",
                 "verdict": verdict,
-                "findings": [],
+                "findings": [{"type": "minor", "message": "test"}],
                 "timestamp": "2026-02-21T00:00:00Z",
             }
             valid, errors = validator.validate_review(contract)
