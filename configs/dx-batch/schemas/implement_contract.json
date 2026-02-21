@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "implement_contract.json",
+  "title": "Implement Contract",
+  "description": "Contract for dx-batch implement phase output",
+  "type": "object",
+  "required": ["phase", "beads_id", "status", "artifacts", "timestamp"],
+  "properties": {
+    "phase": {"type": "string", "const": "implement"},
+    "beads_id": {"type": "string", "pattern": "^bd-[a-z0-9]+(\\.[a-z0-9]+)*$"},
+    "status": {"type": "string", "enum": ["completed", "partial", "failed", "no_op", "blocked"]},
+    "artifacts": {
+      "type": "object",
+      "required": ["files_changed", "commits"],
+      "properties": {
+        "files_changed": {"type": "array", "items": {"type": "string"}},
+        "commits": {"type": "array", "items": {"type": "object", "required": ["sha", "message"], "properties": {"sha": {"type": "string"}, "message": {"type": "string"}, "feature_key": {"type": "string"}}}},
+        "tests_passed": {"type": "boolean"},
+        "tests_output": {"type": "string"}
+      }
+    },
+    "summary": {"type": "string"},
+    "findings": {"type": "array", "items": {"type": "object", "required": ["type", "message"], "properties": {"type": {"type": "string", "enum": ["info", "warning", "error"]}, "message": {"type": "string"}, "file": {"type": "string"}, "line": {"type": "integer"}}}},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "duration_sec": {"type": "integer"}
+  },
+  "additionalProperties": false
+}

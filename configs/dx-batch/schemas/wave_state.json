@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "wave_state.json",
+  "title": "Wave State",
+  "description": "State for a dx-batch wave execution",
+  "type": "object",
+  "required": ["wave_id", "status", "items", "created_at", "config"],
+  "properties": {
+    "wave_id": {"type": "string"},
+    "status": {"type": "string", "enum": ["pending", "running", "paused", "completed", "failed", "cancelled"]},
+    "items": {"type": "array", "items": {"$ref": "#/definitions/item_state"}},
+    "config": {"$ref": "#/definitions/wave_config"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "stats": {"$ref": "#/definitions/wave_stats"},
+    "error": {"type": "string"}
+  },
+  "definitions": {
+    "item_state": {"type": "object", "required": ["beads_id", "status", "attempt"], "properties": {"beads_id": {"type": "string", "pattern": "^bd-[a-z0-9]+(\\.[a-z0-9]+)*$"}, "status": {"type": "string", "enum": ["pending", "implementing", "reviewing", "approved", "revision_required", "blocked", "failed", "cancelled"]}, "attempt": {"type": "integer", "minimum": 1}, "provider": {"type": "string"}, "run_instance": {"type": "string"}, "lease_key": {"type": "string"}, "phase": {"type": "string", "enum": ["implement", "review"]}, "started_at": {"type": "string", "format": "date-time"}, "completed_at": {"type": "string", "format": "date-time"}, "verdict": {"type": "string", "enum": ["APPROVED", "REVISION_REQUIRED", "BLOCKED"]}, "outcome_path": {"type": "string"}, "error": {"type": "string"}}},
+    "wave_config": {"type": "object", "properties": {"max_parallel": {"type": "integer", "default": 3}, "max_attempts": {"type": "integer", "default": 3}, "retry_chain": {"type": "array", "items": {"type": "string"}, "default": ["opencode", "cc-glm", "blocked"]}, "stall_minutes": {"type": "integer", "default": 15}, "lease_ttl_minutes": {"type": "integer", "default": 120}, "require_review": {"type": "boolean", "default": true}}},
+    "wave_stats": {"type": "object", "properties": {"total": {"type": "integer"}, "pending": {"type": "integer"}, "implementing": {"type": "integer"}, "reviewing": {"type": "integer"}, "approved": {"type": "integer"}, "revision_required": {"type": "integer"}, "blocked": {"type": "integer"}, "failed": {"type": "integer"}, "cancelled": {"type": "integer"}}}
+  },
+  "additionalProperties": false
+}

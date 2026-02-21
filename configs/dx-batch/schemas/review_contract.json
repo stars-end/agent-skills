@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "review_contract.json",
+  "title": "Review Contract",
+  "description": "Contract for dx-batch review phase output with strict verdict",
+  "type": "object",
+  "required": ["phase", "beads_id", "verdict", "findings", "timestamp"],
+  "properties": {
+    "phase": {"type": "string", "const": "review"},
+    "beads_id": {"type": "string", "pattern": "^bd-[a-z0-9]+(\\.[a-z0-9]+)*$"},
+    "verdict": {"type": "string", "enum": ["APPROVED", "REVISION_REQUIRED", "BLOCKED"]},
+    "findings": {"type": "array", "items": {"type": "object", "required": ["type", "message"], "properties": {"type": {"type": "string", "enum": ["critical", "major", "minor", "suggestion", "positive"]}, "message": {"type": "string"}, "file": {"type": "string"}, "line": {"type": "integer"}, "code_snippet": {"type": "string"}, "suggestion": {"type": "string"}}}},
+    "summary": {"type": "string"},
+    "coverage": {"type": "object", "properties": {"lines_changed": {"type": "integer"}, "lines_reviewed": {"type": "integer"}, "files_reviewed": {"type": "integer"}}},
+    "approvals": {"type": "array", "items": {"type": "object", "properties": {"criteria": {"type": "string"}, "passed": {"type": "boolean"}}}},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "duration_sec": {"type": "integer"},
+    "reviewer": {"type": "string"}
+  },
+  "additionalProperties": false
+}
