@@ -105,11 +105,36 @@ Internal (to be created):
 
 ## Acceptance Criteria
 
+### Core Requirements
 - [ ] Can generate 100+ tasks for prime-radiant-ai
 - [ ] Can run skill evolution loop (even if slow)
 - [ ] Produced skills improve agent pass rate by measurable amount
 - [ ] Skills are stored in repo-specific location
 - [ ] Process is reproducible and documented
+
+### Critical Planning-Level Requirements (bd-3umt Round 2)
+
+These requirements ensure the plan uses REAL failing instances, not synthetic descriptions:
+
+| Task | Requirement | Why Critical |
+|------|-------------|--------------|
+| bd-3umt.1 | Tasks admitted ONLY when mutation causes verified failing tests | No "instructional-only" tasks |
+| bd-3umt.1 | No `echo 'No test file'` fallback | Every task must have real test |
+| bd-3umt.1 | Apply `modifier.modify(entity)`, not just `modifier.explanation` | Real bug injection |
+| bd-3umt.3 | Load/apply mutation BEFORE agent run | Evaluate on mutated state |
+| bd-3umt.3 | Repo/task isolation with tempfile | Prevent cross-contamination |
+| bd-3umt.4 | Use `current_candidate` key for string candidates | Correct GEPA API |
+| bd-3umt.4 | Wire reflection template via `ReflectionConfig(reflection_prompt_template=...)` | Custom reflection enabled |
+| bd-3umt.5 | Template uses `<curr_param>`, `<side_info>` placeholders | GEPA compatibility |
+| bd-3umt.6/.7 | Exclude patterns use fnmatch (glob), NOT substring | Patterns actually work |
+| bd-3umt.10 | Tests set patterns BEFORE discover_targets() OR use defaults | No test/generator mismatch |
+
+### Validation Gates
+
+1. **Task Generator Validation**: Each task must fail its test when mutation is applied
+2. **Evaluator Validation**: Score reflects recovery from failing mutated instances
+3. **Exclude Validation**: `*/migrations/*` actually excludes migration files
+4. **Reflection Template Validation**: Template loaded and passed to GEPA config
 
 ## Review Checklist
 
