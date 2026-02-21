@@ -43,7 +43,12 @@ set -euo pipefail
 #   23 - No-op detected
 
 RUNNER_VERSION="1.3.0"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlink to get actual script directory
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+if [[ -L "$SCRIPT_SOURCE" ]]; then
+    SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 ADAPTERS_DIR="${SCRIPT_DIR}/adapters"
 
 # Default log directory (provider-specific subdirs)

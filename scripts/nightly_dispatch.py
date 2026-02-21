@@ -235,8 +235,8 @@ class NightlyDispatcher:
                 [
                     str(self.dx_runner_path),
                     "preflight",
-                    f"--provider={provider}",
-                    f"--model={model}",
+                    "--provider", provider,
+                    "--model", model,
                 ],
                 capture_output=True,
                 text=True,
@@ -445,10 +445,10 @@ class NightlyDispatcher:
                 [
                     str(self.dx_runner_path),
                     "start",
-                    f"--beads={beads_id}",
-                    f"--provider={provider}",
-                    f"--model={model}",
-                    f"--prompt-file={prompt_file}",
+                    "--beads", beads_id,
+                    "--provider", provider,
+                    "--model", model,
+                    "--prompt-file", str(prompt_file),
                 ],
                 capture_output=True,
                 text=True,
@@ -473,7 +473,7 @@ class NightlyDispatcher:
         """Check status of a dispatched job."""
         try:
             result = subprocess.run(
-                [str(self.dx_runner_path), "check", f"--beads={beads_id}"],
+                [str(self.dx_runner_path), "check", "--beads", beads_id],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -490,7 +490,7 @@ class NightlyDispatcher:
         """Stop a dispatched job."""
         try:
             subprocess.run(
-                [str(self.dx_runner_path), "stop", f"--beads={beads_id}"],
+                [str(self.dx_runner_path), "stop", "--beads", beads_id],
                 capture_output=True,
                 timeout=10,
             )
