@@ -63,3 +63,56 @@ class TestWaveE2E:
             orchestrator.save_state()
 
             assert not orchestrator._is_wave_complete()
+
+    def test_start_fails_when_exec_cap_exceeded(self, tmp_path):
+        with patch("dx_batch.ARTIFACT_BASE", tmp_path):
+            config = WaveConfig(exec_process_cap=1)
+            orchestrator = WaveOrchestrator("cap-test", config)
+            orchestrator.create_wave(["bd-cap"])
+
+            with patch("dx_batch.PreflightChecker.run", return_value=(True, {})), patch(
+                "dx_batch.PreflightChecker.get_first_available_provider",
+                return_value="opencode",
+            ), patch.object(orchestrator, "_run_runner_prune"), patch.object(
+                orchestrator.hygiene, "count_live_external_processes", return_value=(3, [1, 2, 3])
+            ):
+                started = orchestrator.start()
+
+            assert not started
+            assert orchestrator.state.status == WaveStatus.FAILED
+            assert "exec_saturation" in (orchestrator.state.error or "")
+
+    def test_start_runs_prune_before_loop(self, tmp_path):
+        with patch("dx_batch.ARTIFACT_BASE", tmp_path):
+            config = WaveConfig()
+            orchestrator = WaveOrchestrator("prune-test", config)
+            orchestrator.create_wave(["bd-prune"])
+
+            with patch("dx_batch.PreflightChecker.run", return_value=(True, {})), patch(
+                "dx_batch.PreflightChecker.get_first_available_provider",
+                return_value="opencode",
+            ), patch.object(
+                orchestrator, "_run_runner_prune"
+            ) as mock_prune, patch.object(
+                orchestrator.hygiene, "count_live_external_processes", return_value=(0, [])
+            ), patch.object(orchestrator, "_run_loop", return_value=True):
+                started = orchestrator.start()
+
+            assert started
+            assert mock_prune.call_count == 1
+
+    def test_run_loop_checks_doctor_before_dispatch(self, tmp_path):
+        with patch("dx_batch.ARTIFACT_BASE", tmp_path):
+            config = WaveConfig()
+            orchestrator = WaveOrchestrator("doctor-cycle-test", config)
+            orchestrator.create_wave(["bd-doctor-cycle"])
+            orchestrator.state.status = WaveStatus.RUNNING
+            orchestrator.save_state()
+
+            with patch.object(orchestrator, "_run_dispatch_cycle_checks", return_value=True) as mock_checks, patch.object(
+                orchestrator, "_is_wave_complete", return_value=True
+            ):
+                completed = orchestrator._run_loop()
+
+            assert completed
+            assert mock_checks.call_count == 1

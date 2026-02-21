@@ -23,6 +23,7 @@ DEFAULT_MAX_PARALLEL = 3
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_STALL_MINUTES = 15
 DEFAULT_LEASE_TTL_MINUTES = 120
+DEFAULT_EXEC_PROCESS_CAP = int(os.environ.get("DX_BATCH_EXEC_PROCESS_CAP", "60"))
 DEFAULT_RETRY_CHAIN = ["opencode", "cc-glm", "blocked"]
 ARTIFACT_BASE = Path("/tmp/dx-batch")
 DX_RUNNER_LOG_BASE = Path("/tmp/dx-runner")
@@ -68,6 +69,7 @@ class WaveConfig:
     retry_chain: list = field(default_factory=lambda: DEFAULT_RETRY_CHAIN.copy())
     stall_minutes: int = DEFAULT_STALL_MINUTES
     lease_ttl_minutes: int = DEFAULT_LEASE_TTL_MINUTES
+    exec_process_cap: int = DEFAULT_EXEC_PROCESS_CAP
     require_review: bool = True
 
 
@@ -577,6 +579,48 @@ class ProcessHygiene:
                     pid_file.unlink(missing_ok=True)
         return pruned
 
+    @staticmethod
+    def _read_pid_file(pid_file):
+        try:
+            content = pid_file.read_text().strip()
+        except OSError:
+            return None
+        if not content:
+            return None
+        if content.startswith("{"):
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError:
+                return None
+            pid = data.get("pid")
+            if isinstance(pid, int) and pid > 0:
+                return pid
+            return None
+        try:
+            pid = int(content.splitlines()[0].strip())
+            return pid if pid > 0 else None
+        except ValueError:
+            return None
+
+    def count_live_external_processes(self):
+        live_pids = set()
+        for pid in self.child_pids:
+            if self._is_pid_alive(pid):
+                live_pids.add(pid)
+
+        pid_files = []
+        if DX_RUNNER_LOG_BASE.exists():
+            pid_files.extend(DX_RUNNER_LOG_BASE.glob("*/*.pid"))
+        jobs_root = ARTIFACT_BASE / "jobs"
+        if jobs_root.exists():
+            pid_files.extend(jobs_root.glob("*/*.pid"))
+
+        for pid_file in pid_files:
+            pid = self._read_pid_file(pid_file)
+            if pid and self._is_pid_alive(pid):
+                live_pids.add(pid)
+        return len(live_pids), sorted(live_pids)
+
 
 class ArtifactManager:
     def __init__(self, wave_id):
@@ -771,6 +815,10 @@ class WaveOrchestrator:
                 self.save_state()
                 return False
             print(f"Warning: Some preflight checks failed. Using {provider}")
+        self._run_runner_prune()
+        if not self._enforce_exec_process_cap():
+            self.save_state()
+            return False
         self.state.status, self.state.started_at = WaveStatus.RUNNING, now_utc()
         self.save_state()
         try:
@@ -790,6 +838,9 @@ class WaveOrchestrator:
                 if item.status in (ItemStatus.IMPLEMENTING, ItemStatus.REVIEWING):
                     active_count += 1
                     self._check_item_progress(item)
+            if not self._run_dispatch_cycle_checks():
+                if self.state.status != WaveStatus.RUNNING:
+                    continue
             while (
                 self.hygiene.can_start_new() and active_count < self.config.max_parallel
             ):
@@ -811,6 +862,59 @@ class WaveOrchestrator:
             self.save_state()
             self._cleanup_on_shutdown()
         return False
+
+    def _run_runner_prune(self):
+        try:
+            subprocess.run(
+                ["dx-runner", "prune", "--json"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            # Prune is best-effort; preflight/cap checks still protect dispatch.
+            pass
+
+    def _enforce_exec_process_cap(self):
+        cap = max(1, int(self.config.exec_process_cap))
+        live_count, _ = self.hygiene.count_live_external_processes()
+        if live_count > cap:
+            self.state.status = WaveStatus.FAILED
+            self.state.error = (
+                f"exec_saturation: live_processes={live_count} cap={cap}; "
+                "run dx-runner prune and dx-batch doctor before retrying"
+            )
+            print(
+                (
+                    f"Exec saturation guard triggered: live_processes={live_count} "
+                    f"cap={cap}. Refusing new dispatches."
+                ),
+                file=sys.stderr,
+            )
+            return False
+        return True
+
+    def _run_dispatch_cycle_checks(self):
+        # Keep doctor active every cycle before launching any new items.
+        doctor_result = Doctor(self.wave_id).diagnose()
+        critical_issues = [
+            issue
+            for issue in doctor_result.get("issues", [])
+            if issue.get("severity") == "critical"
+        ]
+        if critical_issues:
+            first = critical_issues[0]
+            self.state.status = WaveStatus.FAILED
+            self.state.error = (
+                f"doctor_critical:{first.get('type', 'unknown')} "
+                f"{first.get('message', '')}".strip()
+            )
+            self.save_state()
+            return False
+        if not self._enforce_exec_process_cap():
+            self.save_state()
+            return False
+        return True
 
     def _get_next_item(self):
         for item in self.state.items:
@@ -1395,6 +1499,7 @@ def cmd_start(args):
         max_parallel=args.max_parallel or DEFAULT_MAX_PARALLEL,
         max_attempts=args.max_attempts or DEFAULT_MAX_ATTEMPTS,
         stall_minutes=args.stall_minutes or DEFAULT_STALL_MINUTES,
+        exec_process_cap=args.exec_process_cap or DEFAULT_EXEC_PROCESS_CAP,
         require_review=not args.no_review,
     )
     orchestrator = WaveOrchestrator(wave_id, config)
@@ -1513,6 +1618,12 @@ def main():
         type=int,
         default=DEFAULT_STALL_MINUTES,
         help="Stall threshold",
+    )
+    start_parser.add_argument(
+        "--exec-process-cap",
+        type=int,
+        default=DEFAULT_EXEC_PROCESS_CAP,
+        help="Hard cap for live dispatch/runner processes before refusing new wave dispatch",
     )
     start_parser.add_argument(
         "--no-review", action="store_true", help="Skip review phase"
