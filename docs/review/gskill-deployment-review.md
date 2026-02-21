@@ -120,9 +120,12 @@ These requirements ensure the plan uses REAL failing instances, not synthetic de
 |------|-------------|--------------|
 | bd-3umt.1 | Tasks admitted ONLY when mutation causes verified failing tests | No "instructional-only" tasks |
 | bd-3umt.1 | No `echo 'No test file'` fallback | Every task must have real test |
-| bd-3umt.1 | Apply `modifier.modify(entity)`, not just `modifier.explanation` | Real bug injection |
+| bd-3umt.1 | Apply `modifier.modify(entity)`, extract code from `BugRewrite.rewrite` | Real bug injection |
+| bd-3umt.1 | Use profile-based entity extraction (NOT `extract_entities` from procedural) | Correct SWE-smith API |
+| bd-3umt.1 | Patch uses RELATIVE paths for `patch -p1` compatibility | Patch applies correctly |
 | bd-3umt.3 | Load/apply mutation BEFORE agent run | Evaluate on mutated state |
 | bd-3umt.3 | Repo/task isolation with tempfile | Prevent cross-contamination |
+| bd-3umt.3 | Patch application uses `-p1` for relative path compatibility | Matches generator format |
 | bd-3umt.4 | Use `current_candidate` key for string candidates | Correct GEPA API |
 | bd-3umt.4 | Wire reflection template via `ReflectionConfig(reflection_prompt_template=...)` | Custom reflection enabled |
 | bd-3umt.5 | Template uses `<curr_param>`, `<side_info>` placeholders | GEPA compatibility |
