@@ -188,13 +188,21 @@ dx-runner start --beads bd-xxx --provider opencode --prompt-file /tmp/task.promp
 - Required: `zhipuai-coding-plan/glm-5`
 - If unavailable: fail fast and dispatch via `cc-glm` or `gemini`
 
-### gemini (Future Capacity)
+### gemini (Operational Lane)
 
-Google Gemini CLI. Basic implementation.
+Google Gemini CLI with detached launcher hardening:
+- collision-safe launcher temp file creation (macOS/Linux)
+- real child PID tracking (not short-lived wrapper PID)
+- completion monitor + finalize `rc` grace window before no-rc classification
 
 ```bash
 dx-runner start --beads bd-xxx --provider gemini --prompt-file /tmp/task.prompt
 ```
+
+Operator expectations for Gemini finalization:
+- normal completion: `state=exited_ok`, `reason_code=process_exit_with_rc|outcome_exit_0`
+- failure completion: `state=exited_err`, non-zero `exit_code` in outcome/report
+- if `reason_code=monitor_no_rc_file` or `late_finalize_no_rc`, treat as runner lifecycle defect and escalate
 
 ## Health States
 
@@ -210,6 +218,11 @@ dx-runner start --beads bd-xxx --provider gemini --prompt-file /tmp/task.prompt
 | `exited_err` | Exited with non-zero | Check logs |
 | `blocked` | Max retries exhausted | Manual intervention |
 | `missing` | No metadata found | Investigate |
+
+Failure taxonomy notes:
+- `process_exit_with_rc`: process exited and runner captured `rc` deterministically
+- `monitor_no_rc_file`: monitor could not find `rc` file within grace window (unexpected in healthy lane)
+- `late_finalize_no_rc`: late finalize path could not find `rc` file within grace window (unexpected in healthy lane)
 
 ## Job Artifacts
 
