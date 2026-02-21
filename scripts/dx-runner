@@ -41,8 +41,9 @@ set -euo pipefail
 #   21 - Preflight failed
 #   22 - Permission denied (non-worktree path)
 #   23 - No-op detected
+#   27 - Provider execution mode unsupported/misconfigured
 
-RUNNER_VERSION="1.3.0"
+RUNNER_VERSION="1.4.0"
 # Resolve symlink to get actual script directory
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 if [[ -L "$SCRIPT_SOURCE" ]]; then
@@ -143,6 +144,52 @@ join_by() {
 valid_feature_key() {
     local fk="$1"
     [[ "$fk" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]
+}
+
+is_truthy() {
+    local v="${1:-}"
+    [[ "$v" == "1" || "$v" == "true" || "$v" == "TRUE" || "$v" == "yes" || "$v" == "YES" ]]
+}
+
+requires_railway_auth() {
+    local provider="$1"
+    is_truthy "${REQUIRE_RAILWAY_AUTH:-${DX_RUNNER_REQUIRE_RAILWAY_AUTH:-0}}"
+}
+
+railway_auth_gate() {
+    local provider="${1:-}"
+    if ! requires_railway_auth "$provider"; then
+        echo "railway auth requirement: SKIP (provider=$provider)"
+        return 0
+    fi
+
+    echo -n "railway auth capability: "
+    if ! command -v railway >/dev/null 2>&1; then
+        echo "MISSING_CLI"
+        echo "  ERROR_CODE=railway_cli_missing severity=error action=install_railway_cli"
+        return 1
+    fi
+
+    local has_token=false has_service_ctx=false whoami_ok=false
+    [[ -n "${RAILWAY_TOKEN:-}" ]] && has_token=true
+    [[ -n "${RAILWAY_SERVICE_FRONTEND_URL:-}" || -n "${RAILWAY_SERVICE_BACKEND_URL:-}" ]] && has_service_ctx=true
+    if railway whoami >/dev/null 2>&1; then
+        whoami_ok=true
+    fi
+
+    if [[ "$has_token" == "true" || "$whoami_ok" == "true" ]] && [[ "$has_service_ctx" == "true" ]]; then
+        echo "OK (token/auth + service context present)"
+        return 0
+    fi
+
+    echo "MISSING_CONTEXT"
+    if [[ "$has_service_ctx" != "true" ]]; then
+        echo "  ERROR_CODE=railway_service_context_missing severity=error action=run_in_railway_shell_or_export_service_urls"
+    fi
+    if [[ "$has_token" != "true" && "$whoami_ok" != "true" ]]; then
+        echo "  ERROR_CODE=railway_auth_missing severity=error action=railway_login_or_export_RAILWAY_TOKEN"
+    fi
+    return 1
 }
 
 provider_max_parallel() {
@@ -579,6 +626,18 @@ next_action_for_reason() {
         provider_concurrency_cap_exceeded)
             echo "wait_for_provider_capacity_or_switch_provider"
             ;;
+        no_commit_artifact)
+            echo "verify_commit_stage_and_enable_commit_required_contract"
+            ;;
+        railway_auth_missing|railway_service_context_missing|railway_cli_missing)
+            echo "enter_railway_shell_or_configure_auth_before_dispatch"
+            ;;
+        opencode_attach_mode_unavailable|opencode_attach_missing_url)
+            echo "use_headless_run_or_provide_attach_url_with_supported_cli"
+            ;;
+        worktree_missing_for_opencode)
+            echo "pass_valid_worktree_or_run_from_task_worktree"
+            ;;
         *)
             echo "-"
             ;;
@@ -793,6 +852,8 @@ unified_preflight() {
     
     echo "=== Unified Preflight Check ==="
     echo "timestamp: $(now_utc)"
+    echo "host: $(host_short)"
+    echo "cwd: $(pwd)"
     [[ -n "$provider" ]] && echo "provider: $provider"
     
     # Check 1: Provider adapter exists
@@ -816,6 +877,13 @@ unified_preflight() {
             if ! adapter_preflight; then
                 errors=$((errors + 1))
             fi
+        fi
+    fi
+
+    # Railway auth capability gate (provider-aware)
+    if [[ -n "$provider" ]]; then
+        if ! railway_auth_gate "$provider"; then
+            errors=$((errors + 1))
         fi
     fi
     
@@ -1098,6 +1166,34 @@ rotate_outcome() {
     mv "$outcome_file" "${base_dir}/${base_name}.outcome.${n}"
 }
 
+check_commit_artifact() {
+    local meta_file="$1"
+    local worktree start_head current_head reported_commit
+
+    worktree="$(meta_get "$meta_file" "worktree" 2>/dev/null || true)"
+    start_head="$(meta_get "$meta_file" "start_head_commit" 2>/dev/null || true)"
+    [[ -n "$worktree" && -d "$worktree" ]] || { echo "worktree_missing"; return 1; }
+    git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1 || { echo "not_git_worktree"; return 1; }
+
+    current_head="$(git -C "$worktree" rev-parse HEAD 2>/dev/null || true)"
+    [[ -n "$current_head" ]] || { echo "head_unresolvable"; return 1; }
+
+    if [[ -n "$start_head" && "$start_head" != "none" && "$current_head" == "$start_head" ]]; then
+        echo "head_unchanged"
+        return 1
+    fi
+
+    reported_commit="$current_head"
+    if [[ -n "$start_head" && "$start_head" != "none" ]]; then
+        if ! git -C "$worktree" merge-base --is-ancestor "$start_head" "$current_head" >/dev/null 2>&1; then
+            echo "head_not_descendant"
+            return 1
+        fi
+    fi
+    echo "$reported_commit"
+    return 0
+}
+
 persist_outcome() {
     local beads="$1"
     local exit_code="$2"
@@ -1112,6 +1208,21 @@ persist_outcome() {
         state="killed"
     elif [[ "$exit_code" -eq 23 ]]; then
         state="no_op"
+    fi
+
+    local require_commit_artifact commit_check_result reported_commit
+    require_commit_artifact="$(meta_get "$meta_file" "require_commit_artifact" 2>/dev/null || echo "0")"
+    if [[ "$state" == "success" ]] && is_truthy "$require_commit_artifact"; then
+        commit_check_result="$(check_commit_artifact "$meta_file" 2>/dev/null || true)"
+        if [[ "$commit_check_result" =~ ^[a-f0-9]{40}$ ]]; then
+            reported_commit="$commit_check_result"
+            meta_set "$meta_file" "reported_commit" "$reported_commit"
+        else
+            state="failed"
+            exit_code=44
+            reason_code="no_commit_artifact"
+            reported_commit="-"
+        fi
     fi
 
     local duration_sec="-"
@@ -1154,6 +1265,10 @@ persist_outcome() {
     host="${host:-$(host_short)}"
     cwd="${cwd:-$(pwd)}"
     worktree="${worktree:--}"
+    if [[ -z "${reported_commit:-}" ]]; then
+        reported_commit="$(meta_get "$meta_file" "reported_commit" 2>/dev/null || true)"
+    fi
+    reported_commit="${reported_commit:--}"
 
     local snap_mutations=0 snap_log_bytes=0 snap_cpu=0 snap_pid_age=0
     if [[ "$provider" != "unknown" ]]; then
@@ -1193,6 +1308,7 @@ mutations=${snap_mutations:-0}
 log_bytes=${snap_log_bytes:-0}
 cpu_time_sec=${snap_cpu:-0}
 pid_age_sec=${snap_pid_age:-0}
+reported_commit=${reported_commit}
 EOF
 }
 
@@ -1515,6 +1631,8 @@ REASON_CODE=""
 EXIT_CODE=""
 PROBE_ID=""
 WRITE_PROBE=false
+REQUIRE_COMMIT_ARTIFACT="${DX_RUNNER_REQUIRE_COMMIT_ARTIFACT:-0}"
+REQUIRE_RAILWAY_AUTH="${DX_RUNNER_REQUIRE_RAILWAY_AUTH:-0}"
 
 MAX_RUNTIME_MINUTES="${DX_RUNNER_MAX_RUNTIME_MINUTES:-120}"
 NO_MUTATION_TIMEOUT_MINUTES="${DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES:-30}"
@@ -1638,6 +1756,14 @@ parse_common_args() {
                 WRITE_PROBE=true
                 shift
                 ;;
+            --require-commit-artifact)
+                REQUIRE_COMMIT_ARTIFACT=1
+                shift
+                ;;
+            --require-railway-auth)
+                REQUIRE_RAILWAY_AUTH=1
+                shift
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -1676,7 +1802,7 @@ Usage:
 
 Providers:
   cc-glm    Claude via Z.ai (reliability backstop)
-  opencode  OpenCode headless (primary throughput, canonical+allowlisted GLM-5)
+  opencode  OpenCode headless (primary throughput, strict canonical GLM-5)
   gemini    Gemini CLI (parallel capacity)
 
 Commands:
@@ -1711,6 +1837,11 @@ Exit Codes:
   24 Beads gate failed
   25 Model unavailable
   26 Provider concurrency cap exceeded
+  27 Provider execution mode unsupported/misconfigured
+
+Notable start/preflight options:
+  --require-commit-artifact  Enforce commit artifact on successful exit
+  --require-railway-auth     Enforce Railway auth + service context preflight
 
 Beads Gate Reason Codes:
   beads_ok              Gate passed
@@ -1769,8 +1900,12 @@ start_cmd() {
         exit 21
     fi
 
-    # Permission gate (bd-cbsb.16)
-    if [[ -n "$WORKTREE" ]]; then
+    # Resolve and pin worktree to avoid cwd drift/external_directory failures.
+    if [[ "$PROVIDER" == "opencode" || -n "$WORKTREE" ]]; then
+        WORKTREE="$(resolve_worktree "$BEADS" "$WORKTREE")"
+        [[ -d "$WORKTREE" ]] || { echo "worktree not found: $WORKTREE" >&2; exit 22; }
+
+        # Permission gate (bd-cbsb.16)
         local perm_result
         perm_result="$(check_permission_gate "$BEADS" "$WORKTREE")"
         if [[ "$perm_result" != OK* ]]; then
@@ -1801,6 +1936,10 @@ start_cmd() {
     local cwd
     cwd="$(pwd)"
     local switched_from=""
+    local start_head_commit=""
+    if git -C "$WORKTREE" rev-parse --git-dir >/dev/null 2>&1; then
+        start_head_commit="$(git -C "$WORKTREE" rev-parse HEAD 2>/dev/null || true)"
+    fi
     local existing_provider
     while IFS= read -r existing_provider; do
         [[ -n "$existing_provider" ]] || continue
@@ -1826,6 +1965,8 @@ run_instance=$run_instance
 host=$host
 cwd=$cwd
 provider_switch_from=${switched_from:-none}
+require_commit_artifact=${REQUIRE_COMMIT_ARTIFACT}
+start_head_commit=${start_head_commit:-none}
 EOF
 
     if [[ -n "$switched_from" ]]; then
@@ -1854,6 +1995,7 @@ EOF
             persist_outcome "$BEADS" "$adapter_rc" "$OUTCOME_FILE" "$META_FILE" "$start_reason"
             echo "provider start failed for $BEADS/$PROVIDER (reason_code=$start_reason)" >&2
             [[ "$start_reason" == "opencode_model_unavailable" ]] && exit 25
+            [[ "$start_reason" == "opencode_attach_mode_unavailable" || "$start_reason" == "opencode_attach_missing_url" ]] && exit 27
         fi
 
         echo "provider start failed for $BEADS/$PROVIDER" >&2
@@ -2113,20 +2255,36 @@ check_cmd() {
         exit 1
     fi
     
-    local detail state reason
+    local detail state reason mutation_count log_bytes cpu_time pid_age log_age
     detail="$(job_health_detail "$BEADS" "$((STALL_MINUTES * 60))")"
-    IFS='|' read -r state reason _ _ _ _ _ <<< "$detail"
+    IFS='|' read -r state reason mutation_count log_bytes cpu_time pid_age log_age <<< "$detail"
+    [[ "$mutation_count" =~ ^[0-9]+$ ]] || mutation_count=0
+    [[ "$log_bytes" =~ ^[0-9]+$ ]] || log_bytes=0
+    [[ "$cpu_time" =~ ^[0-9]+$ ]] || cpu_time=0
+    [[ "$pid_age" =~ ^[0-9]+$ ]] || pid_age=0
+    [[ "$log_age" =~ ^[0-9]+$ ]] || log_age=0
+    if [[ -f "$OUTCOME_FILE" && ( "$reason" == "outcome_exit_nonzero" || "$reason" == "outcome_exit_0" ) ]]; then
+        local outcome_reason
+        outcome_reason="$(meta_get "$OUTCOME_FILE" "reason_code" 2>/dev/null || true)"
+        [[ -n "$outcome_reason" ]] && reason="$outcome_reason"
+    fi
     
     if [[ "$OUTPUT_JSON" == "true" ]]; then
-        local j_host j_cwd j_worktree j_run_instance
+        local j_host j_cwd j_worktree j_run_instance j_model j_fallback
         local j_action
         j_host="$(meta_get "$META_FILE" "host" 2>/dev/null || echo "-")"
         j_cwd="$(meta_get "$META_FILE" "cwd" 2>/dev/null || echo "-")"
         j_worktree="$(meta_get "$META_FILE" "worktree" 2>/dev/null || echo "-")"
         j_run_instance="$(meta_get "$META_FILE" "run_instance" 2>/dev/null || echo "-")"
+        j_model="$(meta_get "$META_FILE" "selected_model" 2>/dev/null || echo "-")"
+        j_fallback="$(meta_get "$META_FILE" "fallback_reason" 2>/dev/null || echo "-")"
+        if [[ -f "$OUTCOME_FILE" ]]; then
+            j_model="$(meta_get "$OUTCOME_FILE" "selected_model" 2>/dev/null || echo "$j_model")"
+            j_fallback="$(meta_get "$OUTCOME_FILE" "fallback_reason" 2>/dev/null || echo "$j_fallback")"
+        fi
         j_action="$(next_action_for_reason "$reason")"
-        printf '{"beads":"%s","provider":"%s","state":"%s","reason_code":"%s","next_action":"%s","host":"%s","cwd":"%s","worktree":"%s","run_instance":"%s"}\n' \
-            "$BEADS" "${provider:-unknown}" "$state" "$reason" "$j_action" "$(json_escape "$j_host")" "$(json_escape "$j_cwd")" "$(json_escape "$j_worktree")" "$(json_escape "$j_run_instance")"
+        printf '{"beads":"%s","provider":"%s","state":"%s","reason_code":"%s","next_action":"%s","host":"%s","cwd":"%s","worktree":"%s","run_instance":"%s","selected_model":"%s","fallback_reason":"%s","mutation_count":%s,"log_bytes":%s,"cpu_time_sec":%s,"pid_age_sec":%s,"log_age_sec":%s}\n' \
+            "$BEADS" "${provider:-unknown}" "$state" "$reason" "$j_action" "$(json_escape "$j_host")" "$(json_escape "$j_cwd")" "$(json_escape "$j_worktree")" "$(json_escape "$j_run_instance")" "$(json_escape "$j_model")" "$(json_escape "$j_fallback")" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
     else
         echo "$BEADS: $state ($reason)"
         local action
@@ -2134,6 +2292,8 @@ check_cmd() {
         if [[ "$action" != "-" ]]; then
             echo "next_action=$action"
         fi
+        echo "selected_model=$(meta_get "$META_FILE" "selected_model" 2>/dev/null || echo -)"
+        echo "metrics mutations=$mutation_count log_bytes=$log_bytes cpu_time_sec=$cpu_time pid_age_sec=$pid_age log_age_sec=$log_age"
     fi
     
     case "$state" in
@@ -2354,7 +2514,7 @@ report_cmd() {
     [[ "$pid_age" =~ ^[0-9]+$ ]] || pid_age=0
     
     local retries="0" started_at="-" worktree="-" prompt_file="-" exit_code="-" duration="-" outcome_state="-" outcome_reason="-" selected_model="-" fallback_reason="-"
-    local host="-" cwd="-" run_instance="-" next_action="-"
+    local host="-" cwd="-" run_instance="-" next_action="-" reported_commit="-" require_commit_artifact="0"
     
     if [[ -f "$META_FILE" ]]; then
         retries="$(meta_get "$META_FILE" "retries")"
@@ -2366,6 +2526,8 @@ report_cmd() {
         host="$(meta_get "$META_FILE" "host")"
         cwd="$(meta_get "$META_FILE" "cwd")"
         run_instance="$(meta_get "$META_FILE" "run_instance")"
+        require_commit_artifact="$(meta_get "$META_FILE" "require_commit_artifact" 2>/dev/null || echo "0")"
+        reported_commit="$(meta_get "$META_FILE" "reported_commit" 2>/dev/null || echo "-")"
     fi
     
     if [[ -f "$OUTCOME_FILE" ]]; then
@@ -2379,6 +2541,7 @@ report_cmd() {
         cwd="$(meta_get "$OUTCOME_FILE" "cwd")"
         worktree="$(meta_get "$OUTCOME_FILE" "worktree")"
         run_instance="$(meta_get "$OUTCOME_FILE" "run_instance")"
+        reported_commit="$(meta_get "$OUTCOME_FILE" "reported_commit" 2>/dev/null || echo "$reported_commit")"
     fi
     [[ "$retries" =~ ^[0-9]+$ ]] || retries="0"
     [[ -n "$duration" ]] || duration="-"
@@ -2403,6 +2566,8 @@ report_cmd() {
   "outcome_reason_code": "${outcome_reason:--}",
   "selected_model": "${selected_model:--}",
   "fallback_reason": "${fallback_reason:--}",
+  "reported_commit": "${reported_commit:--}",
+  "require_commit_artifact": ${require_commit_artifact:-0},
   "next_action": "${next_action:--}",
   "host": "${host:--}",
   "cwd": "${cwd:--}",
@@ -2432,6 +2597,8 @@ EOF
 - Reason: ${outcome_reason:--}
 - Selected Model: ${selected_model:--}
 - Fallback Reason: ${fallback_reason:--}
+- Reported Commit: ${reported_commit:--}
+- Require Commit Artifact: ${require_commit_artifact:-0}
 - Next Action: ${next_action:--}
 
 ## Metrics

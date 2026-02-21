@@ -43,6 +43,11 @@ All operations follow a strict contract for consistency:
 | `prune` | **Maintenance**: Cleans up stale job records and PID files for completed or dead processes. |
 | `watchdog` | **Continuous Monitoring**: Orchestrates a loop of health checks and automated restarts across all active jobs. |
 
+Additional reliability contract (2026-02-21 hardening):
+- `check --json` must include metric telemetry (`mutation_count`, `log_bytes`, `cpu_time_sec`, `pid_age_sec`) plus host/worktree context.
+- Successful exit can be upgraded to deterministic failure (`reason_code=no_commit_artifact`) when commit-required mode is enabled.
+- OpenCode attach/server execution mode must either pass capability preflight or fail-fast with actionable reason codes.
+
 ## Provider Policy
 
 1. **Canonical Model Constraints**: 
@@ -52,6 +57,11 @@ All operations follow a strict contract for consistency:
    - Preflight failures are blocking. 
    - Permission violations (non-worktree paths) are blocking (Exit 22).
    - No-op detection (no mutation + no log activity) triggers a fail-fast exit (Exit 23).
+3. **Capability-Aware Preflight**:
+   - Railway auth/context gate is opt-in strict mode (`--require-railway-auth` or `DX_RUNNER_REQUIRE_RAILWAY_AUTH=1`).
+   - OpenCode attach/server mode requires explicit capability validation; unsupported modes fail before dispatch.
+4. **Worktree Scoping**:
+   - OpenCode dispatch must pin `--worktree` + `--dir` to avoid external_directory drift and ambiguous CWD behavior.
 
 ## Lifecycle/Outcome Artifacts Contract
 

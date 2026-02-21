@@ -22,6 +22,7 @@
 #   25 - Model unavailable (canonical model not found)
 
 CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zhipuai-coding-plan/glm-5}"
+OPENCODE_EXECUTION_MODE="${OPENCODE_EXECUTION_MODE:-run}"
 
 adapter_run_with_timeout() {
     local seconds="$1"
@@ -87,6 +88,11 @@ adapter_preflight() {
     local errors=0
     local warnings=0
     
+    echo "host: $(hostname 2>/dev/null | cut -d. -f1)"
+    echo "cwd: $(pwd)"
+    echo "execution mode: ${OPENCODE_EXECUTION_MODE}"
+    echo "canonical model policy: ${CANONICAL_MODEL}"
+
     # Check 1: OpenCode binary (bd-cbsb.15)
     echo -n "opencode binary: "
     local opencode_bin
@@ -106,7 +112,8 @@ adapter_preflight() {
     local models
     models="$(adapter_list_models_cached "$opencode_bin")" || true
     local model_count
-    model_count="$(echo "$models" | grep -cE "^[a-z]+/.+" || echo "0")"
+    model_count="$(printf '%s\n' "$models" | grep -cE "^[a-z0-9-]+/.+" 2>/dev/null || true)"
+    [[ "$model_count" =~ ^[0-9]+$ ]] || model_count=0
     if [[ "$model_count" -gt 0 ]]; then
         echo "OK ($model_count models)"
     else
@@ -140,6 +147,28 @@ adapter_preflight() {
             echo "  WARN_CODE=opencode_probe_timeout severity=warn action=retry_or_continue"
             warnings=$((warnings + 1))
         fi
+    fi
+
+    # Check 3b: execution mode capability contract
+    echo -n "execution mode capability: "
+    if [[ "${OPENCODE_EXECUTION_MODE}" == "run" ]]; then
+        echo "OK (headless run)"
+    elif [[ "${OPENCODE_EXECUTION_MODE}" == "attach" || "${OPENCODE_EXECUTION_MODE}" == "server" ]]; then
+        if ! "$opencode_bin" run --help 2>/dev/null | grep -q -- "--attach"; then
+            echo "UNSUPPORTED"
+            echo "  ERROR_CODE=opencode_attach_mode_unavailable severity=error action=use_run_mode_or_upgrade_opencode_cli"
+            errors=$((errors + 1))
+        elif [[ -z "${OPENCODE_ATTACH_URL:-}" ]]; then
+            echo "MISSING_URL"
+            echo "  ERROR_CODE=opencode_attach_missing_url severity=error action=export_OPENCODE_ATTACH_URL_or_use_run_mode"
+            errors=$((errors + 1))
+        else
+            echo "OK (attach url configured)"
+        fi
+    else
+        echo "INVALID_MODE"
+        echo "  ERROR_CODE=opencode_attach_mode_unavailable severity=error action=set_OPENCODE_EXECUTION_MODE_run"
+        errors=$((errors + 1))
     fi
     
     # Check 4: beads-mcp availability (bd-cbsb.18)
@@ -229,6 +258,23 @@ adapter_start() {
         echo "ERROR: Use provider cc-glm or gemini for this wave." >&2
         return 25
     fi
+
+    if [[ "${OPENCODE_EXECUTION_MODE}" == "attach" || "${OPENCODE_EXECUTION_MODE}" == "server" ]]; then
+        if ! "$opencode_bin" run --help 2>/dev/null | grep -q -- "--attach"; then
+            echo "reason_code=opencode_attach_mode_unavailable"
+            echo "ERROR: OpenCode CLI does not support attach mode on this host." >&2
+            return 27
+        fi
+        if [[ -z "${OPENCODE_ATTACH_URL:-}" ]]; then
+            echo "reason_code=opencode_attach_missing_url"
+            echo "ERROR: OPENCODE_ATTACH_URL is required for attach/server mode." >&2
+            return 27
+        fi
+    elif [[ "${OPENCODE_EXECUTION_MODE}" != "run" ]]; then
+        echo "reason_code=opencode_attach_mode_unavailable"
+        echo "ERROR: Unsupported OPENCODE_EXECUTION_MODE=${OPENCODE_EXECUTION_MODE}. Use run." >&2
+        return 27
+    fi
     
     # Log model selection for telemetry
     echo "[opencode-adapter] START beads=$beads model=$model reason=$selection_reason fallback=$fallback_reason" >> "$log_file"
@@ -240,10 +286,18 @@ adapter_start() {
         --model "$model"
         --format json
     )
+
+    if [[ "${OPENCODE_EXECUTION_MODE}" == "attach" || "${OPENCODE_EXECUTION_MODE}" == "server" ]]; then
+        cmd_args+=(--attach "${OPENCODE_ATTACH_URL}")
+    fi
     
     # Add worktree as working directory if specified (P0 fix: --dir not --cwd)
     if [[ -n "$worktree" && -d "$worktree" ]]; then
         cmd_args+=(--dir "$worktree")
+    else
+        echo "reason_code=worktree_missing_for_opencode"
+        echo "ERROR: worktree must be an existing directory for opencode dispatch." >&2
+        return 22
     fi
     
     # Read prompt from file
@@ -331,7 +385,7 @@ adapter_list_models() {
     opencode_bin="$(adapter_find_opencode)" || return 1
     
     # Parse plain provider/model lines (P0 fix)
-    "$opencode_bin" models 2>/dev/null | grep -E "^[a-z]+/.+" || true
+    "$opencode_bin" models 2>/dev/null | grep -E "^[a-z0-9-]+/.+" || true
 }
 
 adapter_stop() {
