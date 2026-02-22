@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""
+gskill CLI - Auto-learn skills for coding agents.
+
+Usage:
+    gskill generate-tasks --repo ~/my-repo --max-tasks 100
+    gskill evolve --repo ~/my-repo --max-calls 100
+    gskill evaluate --repo ~/my-repo --skill .gskill/learned/SKILL.md
+"""
+
+import argparse
+import sys
+import json
+from pathlib import Path
+
+# Add repo root to path for extended.gskill imports
+repo_root = Path(__file__).parent.parent.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+# Also add lib for direct imports
+lib_path = Path(__file__).parent.parent / "lib"
+if str(lib_path) not in sys.path:
+    sys.path.insert(0, str(lib_path))
+
+from task_generator import TaskGenerator
+from skill_optimizer import SkillOptimizer, run_skill_evolution
+from evaluator import SkillEvaluator, make_gepa_evaluator
+
+
+def cmd_generate_tasks(args):
+    """Generate tasks from repo."""
+    repo_path = Path(args.repo).expanduser()
+    output_path = Path(args.output) if args.output else repo_path / ".gskill" / "tasks.jsonl"
+
+    print(f"Generating tasks for {repo_path}...")
+    gen = TaskGenerator(repo_path, language=args.language)
+    gen.set_target_patterns(args.patterns if args.patterns else ["**/*.py"])
+    gen.set_exclude_patterns(args.exclude if args.exclude else ["*/migrations/*", "*/test_*"])
+
+    tasks = list(gen.generate_tasks(max_tasks=args.max_tasks))
+    gen.to_jsonl(tasks, output_path)
+
+    print(f"Generated {len(tasks)} tasks -> {output_path}")
+    return 0
+
+
+def cmd_evolve(args):
+    """Evolve skills using GEPA."""
+    repo_path = Path(args.repo).expanduser()
+    tasks_path = Path(args.tasks) if args.tasks else repo_path / ".gskill" / "tasks.jsonl"
+    output_path = Path(args.output) if args.output else repo_path / ".gskill" / "learned" / "SKILL.md"
+
+    if not tasks_path.exists():
+        print(f"Error: Tasks file not found: {tasks_path}")
+        print("Run 'gskill generate-tasks' first")
+        return 1
+
+    print(f"Evolving skills for {repo_path}...")
+    print(f"  Tasks: {tasks_path}")
+    print(f"  Output: {output_path}")
+    print(f"  Budget: {args.max_calls} evaluations")
+
+    result = run_skill_evolution(
+        repo_name=repo_path.name,
+        repo_path=repo_path,
+        tasks_path=tasks_path,
+        output_path=output_path,
+        max_metric_calls=args.max_calls,
+    )
+
+    print(f"Learned skill -> {result}")
+    return 0
+
+
+def cmd_evaluate(args):
+    """Evaluate a skill on tasks."""
+    repo_path = Path(args.repo).expanduser()
+    skill_path = Path(args.skill)
+
+    if not skill_path.exists():
+        print(f"Error: Skill file not found: {skill_path}")
+        return 1
+
+    skill_md = skill_path.read_text()
+    evaluator = SkillEvaluator(repo_path)
+
+    # Load tasks as DICTS from JSONL
+    tasks_path = Path(args.tasks) if args.tasks else repo_path / ".gskill" / "tasks.jsonl"
+    if not tasks_path.exists():
+        print(f"Error: Tasks file not found: {tasks_path}")
+        return 1
+
+    tasks = []
+    with open(tasks_path) as f:
+        for line in f:
+            if line.strip():
+                tasks.append(json.loads(line))
+
+    if not tasks:
+        print("No tasks found")
+        return 1
+
+    passed = 0
+    total = min(len(tasks), args.max_tasks)
+
+    for i, task in enumerate(tasks[:args.max_tasks]):
+        # Use DICT access
+        task_id = task.get('id', f'task-{i}')
+        try:
+            score, _ = evaluator.evaluate(skill_md, task)
+            if score > 0.5:
+                passed += 1
+            status = 'PASS' if score > 0.5 else 'FAIL'
+        except Exception as e:
+            status = f'ERROR: {e}'
+        print(f"  [{i+1}/{total}] {task_id}: {status}")
+
+    rate = 100 * passed / total if total > 0 else 0
+    print(f"Pass rate: {passed}/{total} ({rate:.1f}%)")
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description="gskill - Auto-learn skills for coding agents")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # generate-tasks
+    p_gen = subparsers.add_parser("generate-tasks", help="Generate tasks from repo")
+    p_gen.add_argument("--repo", "-r", required=True, help="Path to repository")
+    p_gen.add_argument("--output", "-o", help="Output JSONL path")
+    p_gen.add_argument("--language", "-l", default="python",
+                       choices=["python", "typescript", "javascript"])
+    p_gen.add_argument("--max-tasks", "-n", type=int, default=100)
+    p_gen.add_argument("--patterns", "-p", nargs="+", help="Target file patterns")
+    p_gen.add_argument("--exclude", "-e", nargs="+", help="Exclude patterns")
+    p_gen.set_defaults(func=cmd_generate_tasks)
+
+    # evolve
+    p_evo = subparsers.add_parser("evolve", help="Evolve skills using GEPA")
+    p_evo.add_argument("--repo", "-r", required=True, help="Path to repository")
+    p_evo.add_argument("--tasks", "-t", help="Path to tasks JSONL")
+    p_evo.add_argument("--output", "-o", help="Output SKILL.md path")
+    p_evo.add_argument("--max-calls", "-m", type=int, default=100,
+                       help="Max metric calls (budget)")
+    p_evo.set_defaults(func=cmd_evolve)
+
+    # evaluate
+    p_eval = subparsers.add_parser("evaluate", help="Evaluate skill on tasks")
+    p_eval.add_argument("--repo", "-r", required=True)
+    p_eval.add_argument("--skill", "-s", required=True, help="Path to SKILL.md")
+    p_eval.add_argument("--tasks", "-t", help="Path to tasks JSONL")
+    p_eval.add_argument("--max-tasks", "-n", type=int, default=10)
+    p_eval.set_defaults(func=cmd_evaluate)
+
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
