@@ -244,6 +244,17 @@ def generate_permission_config(worktree_path: str) -> dict:
             "pattern": "/home/*/.local/share/opencode/*",
             "action": "allow",
         },
+        # Standard temp paths for agents
+        {
+            "permission": "external_directory",
+            "pattern": "/tmp/agents/*",
+            "action": "allow",
+        },
+        {
+            "permission": "external_directory",
+            "pattern": "/tmp/dx-runner/*",
+            "action": "allow",
+        },
         # Default deny for other external_directory, allow everything else
         {"permission": "external_directory", "pattern": "*", "action": "deny"},
         {"permission": "*", "pattern": "*", "action": "allow"},
