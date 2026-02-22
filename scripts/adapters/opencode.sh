@@ -182,10 +182,46 @@ adapter_preflight() {
             warnings=$((warnings + 1))
         fi
     else
-        local probe_output
-        probe_output="$(adapter_run_with_timeout 30 "$opencode_bin" run --model "$probe_model" --format json "Say READY" 2>&1)" || true
+        local probe_output probe_rc
+        set +e
+        probe_output="$(adapter_run_with_timeout 30 "$opencode_bin" run --model "$probe_model" --format json "Say READY" 2>&1)"
+        probe_rc=$?
+        set -e
+
         if echo "$probe_output" | grep -qi "READY"; then
             echo "OK ($probe_model)"
+        elif echo "$probe_output" | grep -qiE "agent.*not.?found|agent\s+'[^']+'\s+not\s+found"; then
+            # bd-cbsb.15: Agent resolution failure - model exists but agent not configured
+            local policy agent_hint
+            policy="$(profile_get_preflight_policy "opencode_agent_resolution_failed" "error")"
+            echo "AGENT_RESOLUTION_FAILED ($probe_model)"
+            # Extract agent name if present
+            agent_hint="$(echo "$probe_output" | grep -oiE "agent\s+'[^']+'" | head -1 || true)"
+            if [[ "$policy" == "error" ]]; then
+                echo "  ERROR: Model $probe_model available but agent resolution failed"
+                [[ -n "$agent_hint" ]] && echo "  DETAIL: $agent_hint not configured for this provider"
+                echo "  ERROR_CODE=opencode_agent_resolution_failed severity=error action=configure_agent_for_model_or_switch_provider"
+                errors=$((errors + 1))
+            else
+                echo "  WARN: Model $probe_model available but agent resolution failed"
+                [[ -n "$agent_hint" ]] && echo "  DETAIL: $agent_hint not configured for this provider"
+                echo "  WARN_CODE=opencode_agent_resolution_failed severity=warn action=configure_agent_for_model_or_switch_provider"
+                warnings=$((warnings + 1))
+            fi
+        elif echo "$probe_output" | grep -qiE "ProviderModelNotFoundError|model.*not.?found|provider.*does.?not.*support|unsupported.*model"; then
+            # bd-cbsb.15: Provider doesn't recognize the model - configuration mismatch
+            local policy
+            policy="$(profile_get_preflight_policy "opencode_provider_model_mismatch" "error")"
+            echo "PROVIDER_MODEL_MISMATCH ($probe_model)"
+            if [[ "$policy" == "error" ]]; then
+                echo "  ERROR: Provider does not recognize model $probe_model"
+                echo "  ERROR_CODE=opencode_provider_model_mismatch severity=error action=verify_model_id_or_switch_provider"
+                errors=$((errors + 1))
+            else
+                echo "  WARN: Provider does not recognize model $probe_model"
+                echo "  WARN_CODE=opencode_provider_model_mismatch severity=warn action=verify_model_id_or_switch_provider"
+                warnings=$((warnings + 1))
+            fi
         elif echo "$probe_output" | grep -qiE "unauthorized|forbidden|insufficient.*balance|quota|rate.?limit|429"; then
             local policy
             policy="$(profile_get_preflight_policy "auth_or_quota_blocked" "error")"
@@ -203,10 +239,12 @@ adapter_preflight() {
             policy="$(profile_get_preflight_policy "canonical_model_probe_timeout" "warn")"
             echo "TIMEOUT ($probe_model)"
             if [[ "$policy" == "error" ]]; then
-                echo "  ERROR: Model probe timed out"
+                echo "  ERROR: Model probe timed out or returned unexpected response"
+                echo "  PROBE_OUTPUT: ${probe_output:0:200}"
                 errors=$((errors + 1))
             else
                 echo "  WARN_CODE=opencode_probe_timeout severity=warn action=retry_or_continue"
+                echo "  PROBE_OUTPUT: ${probe_output:0:200}"
                 warnings=$((warnings + 1))
             fi
         fi

@@ -376,11 +376,20 @@ Tracks heartbeat (tool invocations, mutations, log output). If no heartbeat for 
 
 ### Capability Preflight (bd-cbsb.15)
 
-OpenCode adapter:
-1. Checks preferred model availability
-2. Falls back through chain if unavailable
-3. Records selected model and failure reason
-4. Probes model health with timeout
+OpenCode adapter performs comprehensive capability validation before dispatch:
+1. Checks preferred model availability via `opencode models`
+2. Probes model with a lightweight request to verify it can execute
+3. Detects and classifies specific failure modes:
+   - **Agent resolution failed**: Model exists but agent not configured (`agent 'codex' not found`)
+   - **Provider model mismatch**: Provider doesn't recognize model (`ProviderModelNotFoundError`)
+   - **Auth/quota blocked**: Authentication or rate limiting issues
+4. Returns deterministic error codes with actionable next steps
+5. Records selected model and failure reason for telemetry
+
+Error codes:
+- `opencode_agent_resolution_failed`: Configure agent for model or switch provider
+- `opencode_provider_model_mismatch`: Verify model ID or switch provider
+- `opencode_auth_or_quota_blocked`: Refresh auth or switch provider
 
 ### beads-mcp Check (bd-cbsb.18)
 

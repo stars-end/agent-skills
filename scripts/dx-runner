@@ -868,6 +868,13 @@ next_action_for_reason() {
         opencode_model_unavailable)
             echo "use_cc_glm_or_gemini"
             ;;
+        # bd-cbsb.15: Capability preflight failures
+        opencode_agent_resolution_failed)
+            echo "configure_agent_for_model_or_switch_provider"
+            ;;
+        opencode_provider_model_mismatch)
+            echo "verify_model_id_or_switch_provider"
+            ;;
         awaiting_finalize_monitor_active)
             echo "wait_for_finalize_or_run_dx_runner_finalize"
             ;;

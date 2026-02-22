@@ -2364,6 +2364,120 @@ test_dx_wave_wrapper() {
     fi
 }
 
+# ============================================================================
+# Test: OpenCode Capability Preflight (bd-cbsb.15)
+# ============================================================================
+
+test_opencode_capability_preflight() {
+    echo "=== Testing OpenCode Capability Preflight (bd-cbsb.15) ==="
+
+    local tmp_bin fake_op models_file
+    tmp_bin="$(mktemp -d)"
+    fake_op="$tmp_bin/opencode"
+    models_file="$(mktemp)"
+    echo "zhipuai-coding-plan/glm-5" > "$models_file"
+
+    # Clear models cache to ensure fresh lookup
+    rm -f /tmp/dx-runner/opencode/.models_cache
+
+    # Create a helper script that provides the required functions from dx-runner
+    local helper_script="$tmp_bin/preflight_helper.sh"
+    cat > "$helper_script" <<'HELPER'
+#!/usr/bin/env bash
+# Mock profile_get_preflight_policy for testing
+profile_get_preflight_policy() {
+    local check_code="$1"
+    local default="${2:-warn}"
+    # For capability preflight tests, default to error for fail-fast behavior
+    case "$check_code" in
+        opencode_agent_resolution_failed|opencode_provider_model_mismatch|auth_or_quota_blocked)
+            echo "error"
+            ;;
+        *)
+            echo "$default"
+            ;;
+    esac
+}
+HELPER
+
+    # Test 1: Agent resolution failure detection
+    # Write fake opencode that simulates agent resolution failure
+    cat > "$fake_op" <<FAKEEOF
+#!/usr/bin/env bash
+if [[ "\$1" == "models" ]]; then
+  echo "zhipuai-coding-plan/glm-5"
+  exit 0
+fi
+if [[ "\$1" == "run" ]]; then
+  echo "ERROR: agent 'codex' not found" >&2
+  exit 1
+fi
+exit 0
+FAKEEOF
+    chmod +x "$fake_op"
+
+    local preflight_out
+    # Force PATH to use our fake opencode and disable cache
+    preflight_out="$(PATH="$tmp_bin:$PATH" OPENCODE_MODELS_CACHE_TTL_SEC=0 bash -c 'source "$1" && source "$2" && adapter_preflight' _ "$helper_script" "$ADAPTERS_DIR/opencode.sh" 2>&1)" || true
+
+    if echo "$preflight_out" | grep -qiE "agent.*resolution.*failed|AGENT_RESOLUTION_FAILED"; then
+        pass "capability preflight detects agent resolution failure"
+    else
+        fail "capability preflight should detect agent resolution failure: ${preflight_out:0:300}"
+    fi
+
+    # Test 2: Provider model mismatch detection
+    rm -f /tmp/dx-runner/opencode/.models_cache
+    cat > "$fake_op" <<FAKEEOF
+#!/usr/bin/env bash
+if [[ "\$1" == "models" ]]; then
+  echo "zhipuai-coding-plan/glm-5"
+  exit 0
+fi
+if [[ "\$1" == "run" ]]; then
+  echo "ProviderModelNotFoundError: model 'zhipuai-coding-plan/glm-5' not found" >&2
+  exit 1
+fi
+exit 0
+FAKEEOF
+    chmod +x "$fake_op"
+
+    preflight_out="$(PATH="$tmp_bin:$PATH" OPENCODE_MODELS_CACHE_TTL_SEC=0 bash -c 'source "$1" && source "$2" && adapter_preflight' _ "$helper_script" "$ADAPTERS_DIR/opencode.sh" 2>&1)" || true
+
+    if echo "$preflight_out" | grep -qiE "provider.*model.*mismatch|PROVIDER_MODEL_MISMATCH"; then
+        pass "capability preflight detects provider model mismatch"
+    else
+        fail "capability preflight should detect provider model mismatch: ${preflight_out:0:300}"
+    fi
+
+    # Test 3: Successful probe passes
+    rm -f /tmp/dx-runner/opencode/.models_cache
+    cat > "$fake_op" <<FAKEEOF
+#!/usr/bin/env bash
+if [[ "\$1" == "models" ]]; then
+  echo "zhipuai-coding-plan/glm-5"
+  exit 0
+fi
+if [[ "\$1" == "run" ]]; then
+  echo '{"type":"assistant","content":"READY"}'
+  exit 0
+fi
+exit 0
+FAKEEOF
+    chmod +x "$fake_op"
+
+    preflight_out="$(PATH="$tmp_bin:$PATH" OPENCODE_MODELS_CACHE_TTL_SEC=0 bash -c 'source "$1" && source "$2" && adapter_preflight' _ "$helper_script" "$ADAPTERS_DIR/opencode.sh" 2>&1)" || true
+
+    if echo "$preflight_out" | grep -qiE "canonical model probe.*OK"; then
+        pass "capability preflight passes for working model"
+    else
+        fail "capability preflight should pass for working model: ${preflight_out:0:300}"
+    fi
+
+    rm -rf "$tmp_bin" "$models_file"
+    rm -f /tmp/dx-runner/opencode/.models_cache
+}
+
 run_all_tests() {
     test_bash_syntax
     test_runner_commands
@@ -2402,7 +2516,10 @@ run_all_tests() {
     test_prune_stale_jobs
     test_dx_dispatch_shim
     test_dx_dispatch_shim_forwarding
-    
+
+    # bd-cbsb.15: Capability preflight tests
+    test_opencode_capability_preflight
+
     # bd-8wdg hardening tests
     test_profile_loading
     test_model_override_blocking
