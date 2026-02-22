@@ -250,6 +250,12 @@ adapter_preflight() {
         fi
     fi
 
+    # Check 3a: Agent resolution
+    echo -n "agent resolution: "
+    local probe_agent
+    probe_agent="$(adapter_resolve_agent "${OPENCODE_AGENT:-codex}")"
+    echo "OK ($probe_agent)"
+
     # Check 3b: execution mode capability contract
     echo -n "execution mode capability: "
     if [[ "${OPENCODE_EXECUTION_MODE}" == "run" ]]; then
@@ -326,6 +332,27 @@ adapter_preflight() {
     return $errors
 }
 
+adapter_resolve_agent() {
+    local preferred="${1:-codex}"
+    local opencode_bin
+    opencode_bin="$(adapter_find_opencode)" || { echo "build"; return 0; }
+    
+    local agents
+    agents="$( "$opencode_bin" agent list 2>/dev/null | grep -E "^[a-z0-9-]+" | cut -d' ' -f1 || echo "build" )"
+    
+    if echo "$agents" | grep -qxF "$preferred"; then
+        echo "$preferred"
+        return 0
+    fi
+    
+    if echo "$agents" | grep -qxF "build"; then
+        echo "build"
+        return 0
+    fi
+    
+    echo "$agents" | head -n 1 | tr -d ' '
+}
+
 adapter_resolve_model() {
     local preferred="$1"
     local opencode_bin
@@ -351,26 +378,33 @@ adapter_resolve_model() {
 
     local required="${requested_model:-$CANONICAL_MODEL}"
     
-    # Only canonical model is allowed (even with override, must be canonical)
-    if [[ "$required" != "$CANONICAL_MODEL" ]]; then
-        if [[ "$override_used" == "true" ]]; then
-            echo "|unavailable|model override rejected: '$required' is not canonical model '$CANONICAL_MODEL'; only canonical model is allowed even with override"
-            return 1
-        fi
-        echo "|unavailable|unsupported opencode model '$required'; only '$CANONICAL_MODEL' is allowed"
-        return 1
-    fi
-
     local available_models
     available_models="$(adapter_list_models_cached "$opencode_bin" || true)"
-    if printf '%s\n' "$available_models" | grep -qxF "$CANONICAL_MODEL"; then
-        local selection_reason="canonical"
-        [[ "$override_used" == "true" ]] && selection_reason="canonical_with_override"
-        echo "$CANONICAL_MODEL|${selection_reason}|override_source=${override_source}"
+    
+    # Try preferred first
+    if [[ -n "$required" ]] && echo "$available_models" | grep -qxF "$required"; then
+        echo "$required|preferred|override_source=${override_source}"
         return 0
     fi
+    
+    # Fallback chain
+    local fallbacks=(
+        "zhipuai-coding-plan/glm-5"
+        "zai-coding-plan/glm-5"
+        "zai/glm-5"
+        "opencode/glm-5-free"
+        "z-ai/glm5"
+        "zhipu/glm-4-flash"
+    )
+    
+    for fb in "${fallbacks[@]}"; do
+        if echo "$available_models" | grep -qxF "$fb"; then
+            echo "$fb|fallback|required $required not available"
+            return 0
+        fi
+    done
 
-    echo "|unavailable|canonical model '$CANONICAL_MODEL' unavailable; use cc-glm or gemini"
+    echo "|unavailable|canonical model '$CANONICAL_MODEL' and fallbacks unavailable; use cc-glm or gemini"
     return 1
 }
 
@@ -413,6 +447,10 @@ adapter_start() {
         echo "ERROR: Use provider cc-glm or gemini for this wave." >&2
         return 25
     fi
+
+    # Resolve agent (bd-cbsb.15)
+    local agent
+    agent="$(adapter_resolve_agent "${OPENCODE_AGENT:-codex}")"
     
     # bd-8wdg.2: Log override status for audit
     if [[ -n "${OPENCODE_MODEL:-}" && "$model_override_allowed" == "true" ]]; then
@@ -439,13 +477,14 @@ adapter_start() {
     fi
     
     # Log model selection for telemetry
-    echo "[opencode-adapter] START beads=$beads model=$model reason=$selection_reason fallback=$fallback_reason" >> "$log_file"
+    echo "[opencode-adapter] START beads=$beads model=$model agent=$agent reason=$selection_reason fallback=$fallback_reason" >> "$log_file"
     
     # Build command with worktree-only enforcement (bd-cbsb.16)
     local cmd_args=(
         "$opencode_bin"
         run
         --model "$model"
+        --agent "$agent"
         --format json
     )
 

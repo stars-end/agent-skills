@@ -480,30 +480,66 @@ EOF
     local r2
     rm -f /tmp/dx-runner/opencode/.models_cache
     r2="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12" || true)"
-    [[ "$r2" == "|unavailable|"* ]] && pass "model resolution fails when canonical model is missing" || fail "expected unavailable when canonical missing: $r2"
+    [[ "$r2" == zai-coding-plan/glm-5* ]] && pass "model resolution falls back when canonical model is missing" || fail "expected fallback to zai-coding-plan when canonical missing: $r2"
 
     local r3
     r3="$(adapter_resolve_model "zai-coding-plan/glm-5" "epyc12" || true)"
-    [[ "$r3" == "|unavailable|"* ]] && pass "model resolution rejects non-canonical requested models" || fail "expected non-canonical rejection: $r3"
+    [[ "$r3" == zai-coding-plan/glm-5* ]] && pass "model resolution accepts negotiated model" || fail "expected negotiated success: $r3"
 
-    # Start should fail with deterministic rc=25 and reason_code when canonical-only policy cannot be satisfied
+    # Start should succeed with fallback when canonical model is missing
     local prompt_file log_file start_out rc
     prompt_file="$(mktemp)"
     log_file="$(mktemp)"
     echo "READY" > "$prompt_file"
     set +e
     rm -f /tmp/dx-runner/opencode/.models_cache
-    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "/tmp" "$log_file" 2>/dev/null)"
+    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-fallback-$$" "$prompt_file" "/tmp" "$log_file" 2>/dev/null)"
     rc=$?
     set -e
-    if [[ "$rc" -eq 25 ]] && echo "$start_out" | grep -q "reason_code=opencode_model_unavailable"; then
-        pass "opencode start returns rc=25 with opencode_model_unavailable when canonical-only policy cannot be satisfied"
+    if [[ "$rc" -eq 0 ]] && echo "$start_out" | grep -q "selected_model=zai-coding-plan/glm-5"; then
+        pass "opencode start succeeds with fallback when canonical model cannot be satisfied"
     else
-        fail "expected rc=25 + reason_code for unavailable canonical-only model policy (rc=$rc, out=$start_out)"
+        fail "expected success + fallback for missing canonical model (rc=$rc, out=$start_out)"
     fi
 
     rm -rf "$tmp_bin" "$models_file" "$prompt_file" "$log_file"
     unset OPENCODE_MODELS_CACHE_TTL_SEC
+}
+
+# ============================================================================
+# Test: Agent Resolution
+# ============================================================================
+
+test_agent_resolution() {
+    echo "=== Testing Agent Resolution ==="
+
+    local tmp_bin
+    tmp_bin="$(mktemp -d)"
+    local fake_op="$tmp_bin/opencode"
+    cat > "$fake_op" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "agent" && "$2" == "list" ]]; then
+  echo "build (primary)"
+  echo "other-agent"
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$fake_op"
+
+    PATH="$tmp_bin:$PATH"
+    # shellcheck disable=SC1091
+    source "$ADAPTERS_DIR/opencode.sh"
+
+    local a1
+    a1="$(adapter_resolve_agent "codex")"
+    [[ "$a1" == "build" ]] && pass "agent resolution prefers build when codex is missing" || fail "expected build for missing codex: $a1"
+
+    local a2
+    a2="$(adapter_resolve_agent "other-agent")"
+    [[ "$a2" == "other-agent" ]] && pass "agent resolution accepts available agent" || fail "expected other-agent: $a2"
+
+    rm -rf "$tmp_bin"
 }
 
 # ============================================================================
@@ -2509,6 +2545,7 @@ run_all_tests() {
     test_precommit_flush_semantics
     test_restart_lifecycle
     test_model_resolution
+    test_agent_resolution
     test_probe_model_flag
     test_gemini_finalization_reliability
     test_gemini_adapter

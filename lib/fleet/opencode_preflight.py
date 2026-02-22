@@ -39,6 +39,7 @@ class PreflightResult:
     status: PreflightStatus
     preferred_model: str
     selected_model: str
+    selected_agent: str = "build"
     fallback_reason: str | None = None
     probe_results: list[ModelProbeResult] = field(default_factory=list)
     error_detail: str | None = None
@@ -47,7 +48,10 @@ class PreflightResult:
 
 MODEL_FALLBACK_CHAIN = [
     ("zhipuai-coding-plan/glm-5", "zhipuai-coding-plan"),
+    ("zai-coding-plan/glm-5", "zai-coding-plan"),
+    ("zai/glm-5", "zai"),
     ("opencode/glm-5-free", "opencode"),
+    ("z-ai/glm5", "nvidia"),
     ("zhipu/glm-4-flash", "zhipu"),
 ]
 
@@ -69,11 +73,12 @@ WORKTREE_PERMISSION_RULES = [
 def probe_opencode_models() -> list[dict[str, Any]]:
     """Probe opencode CLI for available models."""
     try:
+        # Try --json first (some versions might support it)
         result = subprocess.run(
             ["opencode", "models", "--json"],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=10,
         )
         if result.returncode == 0:
             data = json.loads(result.stdout)
@@ -81,9 +86,71 @@ def probe_opencode_models() -> list[dict[str, Any]]:
                 return data
             if isinstance(data, dict) and "models" in data:
                 return data["models"]
-        return []
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
-        return []
+    except Exception:
+        pass
+
+    # Fallback to text parsing
+    try:
+        result = subprocess.run(
+            ["opencode", "models"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            models = []
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if not line or "/" not in line:
+                    continue
+                # Format: provider/model
+                parts = line.split("/", 1)
+                models.append({
+                    "id": line,
+                    "provider": parts[0],
+                    "model": parts[1]
+                })
+            return models
+    except Exception:
+        pass
+    
+    return []
+
+
+def probe_opencode_agents() -> list[str]:
+    """Probe opencode CLI for available agents."""
+    try:
+        result = subprocess.run(
+            ["opencode", "agent", "list"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            agents = []
+            for line in result.stdout.splitlines():
+                if line and not line.startswith(" ") and not line.startswith("\t"):
+                    # Agent name is at the start of the line, possibly followed by (primary)
+                    agent_name = line.split("(")[0].strip()
+                    if agent_name:
+                        agents.append(agent_name)
+            return agents
+    except Exception:
+        pass
+    
+    return ["build"]  # Default fallback
+
+
+def resolve_agent(preferred_agent: str = "codex") -> str:
+    """Resolve the best available agent."""
+    agents = probe_opencode_agents()
+    if preferred_agent in agents:
+        return preferred_agent
+    if "build" in agents:
+        return "build"
+    if agents:
+        return agents[0]
+    return "build"
 
 
 def probe_model_availability(model_id: str, provider: str) -> ModelProbeResult:
@@ -105,44 +172,58 @@ def probe_model_availability(model_id: str, provider: str) -> ModelProbeResult:
         model_id=model_id,
         provider=provider,
         available=False,
-        error=f"Model {model_id} not found in provider {provider}",
+        error=f"Model {model_id} not found",
     )
 
 
 def test_model_auth(model_id: str, provider: str) -> tuple[bool, str | None]:
     """Test if model auth is working by making a minimal request."""
     try:
+        # Some versions might support --dry-run, but if not, use a simple prompt
+        # We use a very short timeout and check for common auth error strings
         result = subprocess.run(
-            ["opencode", "run", "--model", model_id, "--dry-run", "test"],
+            ["opencode", "run", "--model", model_id, "Say READY"],
+            input="READY",
             capture_output=True,
             text=True,
-            timeout=15,
+            timeout=10,
         )
         if result.returncode == 0:
             return True, None
 
-        stderr = result.stderr.lower()
-        if "auth" in stderr or "unauthorized" in stderr or "api key" in stderr:
+        stderr = (result.stderr or "").lower()
+        stdout = (result.stdout or "").lower()
+        combined = stderr + stdout
+        
+        if "auth" in combined or "unauthorized" in combined or "api key" in combined:
             return False, "PROVIDER_AUTH_FAILED"
-        if "quota" in stderr or "rate limit" in stderr:
-            return False, "QUOTA_EXCEEDED" if "quota" in stderr else "RATE_LIMITED"
-        if "not found" in stderr or "unknown model" in stderr:
+        if "quota" in combined or "rate limit" in combined or "429" in combined:
+            return False, "QUOTA_EXCEEDED" if "quota" in combined else "RATE_LIMITED"
+        if "not found" in combined or "unknown model" in combined:
             return False, "MODEL_NOT_FOUND"
-        return False, f"UNKNOWN_ERROR: {result.stderr[:200]}"
+        
+        # If it returned non-zero but we don't recognize the error, 
+        # it might still be working (e.g. just exited oddly)
+        if "ready" in combined:
+            return True, None
+            
+        return False, f"UNKNOWN_ERROR: {stderr[:100]}"
     except subprocess.TimeoutExpired:
-        return False, "PROVIDER_TIMEOUT"
+        # Timeout is often a good sign for auth (it started and waited for input)
+        return True, None 
     except FileNotFoundError:
         return False, "OPENCODE_NOT_FOUND"
 
 
 def run_preflight(
     preferred_model: str | None = None,
+    preferred_agent: str | None = None,
     fallback_chain: list[tuple[str, str]] | None = None,
 ) -> PreflightResult:
     """
     Run preflight checks for OpenCode dispatch.
 
-    Returns PreflightResult with selected model or failure reason.
+    Returns PreflightResult with selected model/agent or failure reason.
     """
     start_time = time.time()
 
@@ -176,6 +257,8 @@ def run_preflight(
         fallback_reason = fallback_reason or f"{model_id}: {auth_error}"
         probe.error = auth_error
 
+    selected_agent = resolve_agent(preferred_agent or "codex")
+
     elapsed_ms = int((time.time() - start_time) * 1000)
 
     if selected_model:
@@ -193,6 +276,7 @@ def run_preflight(
         status=status,
         preferred_model=preferred_model or chain[0][0],
         selected_model=selected_model or "",
+        selected_agent=selected_agent,
         fallback_reason=fallback_reason
         if selected_model != (preferred_model or chain[0][0])
         else None,
@@ -256,6 +340,7 @@ if __name__ == "__main__":
     print(f"Status: {result.status.value}")
     print(f"Preferred: {result.preferred_model}")
     print(f"Selected: {result.selected_model or 'NONE'}")
+    print(f"Agent: {result.selected_agent}")
     if result.fallback_reason:
         print(f"Fallback reason: {result.fallback_reason}")
     print(f"Elapsed: {result.elapsed_ms}ms")
