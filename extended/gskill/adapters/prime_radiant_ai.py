@@ -12,6 +12,7 @@ import fnmatch
 @dataclass
 class RepoAdapter:
     """Configuration for task generation on a specific repo."""
+
     name: str
     repo_path: Path
     language: str
@@ -19,6 +20,8 @@ class RepoAdapter:
     test_patterns: list[str]
     exclude_patterns: list[str]
     test_command_template: str
+    test_dirs: list[str] | None = None
+    test_mapping: dict[str, str] | None = None  # source_file -> test_file
 
     def matches_exclude(self, file_path: Path, repo_root: Path) -> bool:
         """Check if file matches any exclude pattern using glob matching."""
@@ -35,28 +38,32 @@ PRIME_RADIANT_ADAPTER = RepoAdapter(
     name="prime-radiant-ai",
     repo_path=Path("~/prime-radiant-ai").expanduser(),
     language="python",
-
     target_patterns=[
         "backend/services/*.py",
         "backend/api/v2/*.py",
         "backend/db/*.py",
     ],
-
     test_patterns=[
         "tests/test_*.py",
         "backend/tests/test_*.py",
     ],
-
     # GLOB patterns - these actually match paths
     exclude_patterns=[
-        "*/migrations/*",           # Matches backend/migrations/versions/xxx.py
-        "*/fixtures/*",             # Matches tests/fixtures/xxx.py
-        "*/debug_*.py",             # Matches any debug_ prefixed file
-        "*/apply_migration*.py",    # Matches migration scripts
-        "*/create_*.py",            # Matches setup scripts
+        "*/migrations/*",  # Matches backend/migrations/versions/xxx.py
+        "*/fixtures/*",  # Matches tests/fixtures/xxx.py
+        "*/debug_*.py",  # Matches any debug_ prefixed file
+        "*/apply_migration*.py",  # Matches migration scripts
+        "*/create_*.py",  # Matches setup scripts
     ],
-
     test_command_template="pytest {test_file} -v",
+    # Test directories to search
+    test_dirs=["tests", "backend/tests"],
+    # Explicit test mappings for non-standard naming
+    # Format: "backend/services/foo_service.py" -> "backend/tests/test_foo.py"
+    test_mapping={
+        # Add mappings here if needed, e.g.:
+        # "backend/services/health_service.py": "backend/tests/test_health.py",
+    },
 )
 
 
@@ -67,9 +74,11 @@ def get_prime_radiant_tasks(max_tasks: int = 100) -> list[dict]:
     gen = TaskGenerator(
         repo_path=PRIME_RADIANT_ADAPTER.repo_path,
         language=PRIME_RADIANT_ADAPTER.language,
+        test_dirs=PRIME_RADIANT_ADAPTER.test_dirs,
+        test_mapping=PRIME_RADIANT_ADAPTER.test_mapping,
     )
 
     gen.set_target_patterns(PRIME_RADIANT_ADAPTER.target_patterns)
     gen.set_exclude_patterns(PRIME_RADIANT_ADAPTER.exclude_patterns)
 
-    return list(gen.generate_tasks(max_tasks=max_tasks))
+    return [t.to_dict() for t in gen.generate_tasks(max_tasks=max_tasks)]

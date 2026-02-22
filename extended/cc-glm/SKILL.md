@@ -912,9 +912,8 @@ cc-glm-job.sh health --show-overrides
 - **Status**: Deprecation pending
 
 ### Feature-Key Format
-- **Issue**: `bd-epic.subtask` format rejected for large changes (190+ LOC)
-- **Workaround**: Pre-create Beads ID with `bd create`
-- **Hook expects**: `bd-xyz` format
+- **Dotted IDs**: `bd-epic.subtask` format is supported for all changes.
+- **Hook expects**: `bd-xyz` or `bd-xyz.n.m` format.
 
 ---
 
