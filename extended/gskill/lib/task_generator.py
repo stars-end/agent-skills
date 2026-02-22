@@ -18,6 +18,7 @@ import fnmatch
 @dataclass
 class Task:
     """A bug-fix task with mutation data."""
+
     id: str
     description: str
     repo_path: str
@@ -25,7 +26,7 @@ class Task:
     test_command: str
     setup_commands: list[str]
     mutation_patch: str  # The actual patch to apply
-    mutated_code: str    # The mutated code (for evaluator fallback)
+    mutated_code: str  # The mutated code (for evaluator fallback)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -38,13 +39,20 @@ class TaskGenerator:
     CRITICAL: Tasks are ONLY admitted when mutation causes verified failing tests.
     """
 
-    def __init__(self, repo_path: Path, language: str = "python"):
+    def __init__(
+        self,
+        repo_path: Path,
+        language: str = "python",
+        test_dirs: list[str] | None = None,
+        test_mapping: dict[str, str] | None = None,
+    ):
         self.repo_path = Path(repo_path)
         self.language = language.lower()
         self.target_patterns: list[str] = []
         self.exclude_patterns: list[str] = []
+        self.test_dirs = test_dirs or ["tests", "test", "backend/tests"]
+        self.test_mapping = test_mapping or {}  # source_file -> test_file
 
-        # Import SWE-smith modifiers
         from swesmith.bug_gen.procedural import MAP_EXT_TO_MODIFIERS
 
         ext_map = {
@@ -115,7 +123,7 @@ class TaskGenerator:
                 continue
 
             # CRITICAL: Extract mutated code from BugRewrite.rewrite field
-            if not bug_rewrite or not hasattr(bug_rewrite, 'rewrite'):
+            if not bug_rewrite or not hasattr(bug_rewrite, "rewrite"):
                 continue
 
             mutated_code = bug_rewrite.rewrite
@@ -150,7 +158,7 @@ class TaskGenerator:
                         shell=True,
                         cwd=str(tmp_repo),
                         capture_output=True,
-                        timeout=60
+                        timeout=60,
                     )
                 except subprocess.TimeoutExpired:
                     continue
@@ -192,12 +200,87 @@ class TaskGenerator:
         return entities
 
     def _find_test_file(self, source_file: Path) -> Path | None:
-        """Find corresponding test file - MUST exist."""
-        test_name = f"test_{source_file.stem}.py"
-        for test_dir in ["tests", "test", "backend/tests"]:
+        """
+        Find corresponding test file using multiple strategies.
+
+        Strategy order:
+        1. Explicit mapping (test_mapping)
+        2. Exact naming: test_{source}.py
+        3. Import-based discovery: scan test files for imports of source
+        """
+        rel_source = source_file.relative_to(self.repo_path)
+        source_stem = source_file.stem
+
+        # Strategy 1: Check explicit mapping
+        mapping_key = str(rel_source)
+        if mapping_key in self.test_mapping:
+            test_path = self.repo_path / self.test_mapping[mapping_key]
+            if test_path.exists():
+                return test_path
+
+        # Strategy 2: Exact naming convention (test_{source}.py)
+        test_name = f"test_{source_stem}.py"
+        for test_dir in self.test_dirs:
             test_path = self.repo_path / test_dir / test_name
             if test_path.exists():
                 return test_path
+
+        # Strategy 3: Import-based discovery
+        test_file = self._find_test_by_import(source_file)
+        if test_file:
+            return test_file
+
+        return None
+
+    def _find_test_by_import(self, source_file: Path) -> Path | None:
+        """
+        Find test file by scanning for imports of the source module.
+
+        Looks for patterns like:
+        - from services.risk_service import ...
+        - from backend.services.risk_service import ...
+        """
+        rel_source = source_file.relative_to(self.repo_path)
+        source_stem = source_file.stem
+
+        # Build possible import paths
+        parts = list(rel_source.parts[:-1])  # Directory parts, no filename
+        import_paths = []
+
+        # Full path import
+        module_path = ".".join(parts + [source_stem])
+        import_paths.append(module_path)
+
+        # Try without leading directories (common patterns)
+        if len(parts) > 0:
+            # e.g., services.risk_service (drop backend/)
+            short_path = ".".join(parts[-1:] + [source_stem])
+            import_paths.append(short_path)
+
+            # e.g., backend.services.risk_service
+            if len(parts) > 1:
+                medium_path = ".".join(parts[-2:] + [source_stem])
+                import_paths.append(medium_path)
+
+        # Scan test files for these imports
+        for test_dir in self.test_dirs:
+            test_dir_path = self.repo_path / test_dir
+            if not test_dir_path.exists():
+                continue
+
+            for test_file in test_dir_path.glob("test_*.py"):
+                try:
+                    content = test_file.read_text()
+                    for imp_path in import_paths:
+                        # Check for import patterns
+                        if (
+                            f"from {imp_path} import" in content
+                            or f"import {imp_path}" in content
+                        ):
+                            return test_file
+                except Exception:
+                    continue
+
         return None
 
     def _build_test_command(self, test_file: Path, entity_name: str) -> str:
@@ -212,6 +295,7 @@ class TaskGenerator:
         CRITICAL: Uses a/ and b/ prefixes for patch -p1 compatibility.
         """
         import difflib
+
         original_lines = original.splitlines(keepends=True)
         mutated_lines = mutated.splitlines(keepends=True)
 
@@ -220,16 +304,17 @@ class TaskGenerator:
 
         # CRITICAL: Add a/ and b/ prefixes for -p1 compatibility
         diff = difflib.unified_diff(
-            original_lines, mutated_lines,
+            original_lines,
+            mutated_lines,
             fromfile=f"a/{rel_path}",
-            tofile=f"b/{rel_path}"
+            tofile=f"b/{rel_path}",
         )
-        return ''.join(diff)
+        return "".join(diff)
 
     def to_jsonl(self, tasks: list[Task], output_path: Path):
         """Write tasks to JSONL for GEPA."""
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             for task in tasks:
-                f.write(json.dumps(task.to_dict()) + '\n')
+                f.write(json.dumps(task.to_dict()) + "\n")

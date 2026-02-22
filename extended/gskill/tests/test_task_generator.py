@@ -86,3 +86,62 @@ def test_task_to_dict():
     assert d["target_file"] == "foo.py"
     assert "mutation_patch" in d
     assert "mutated_code" in d
+
+
+def test_find_test_file_exact_naming(tmp_path):
+    """Test exact naming convention: test_{source}.py"""
+    (tmp_path / "services").mkdir()
+    (tmp_path / "services" / "foo_service.py").write_text("def foo(): pass")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_foo_service.py").write_text("def test_foo(): pass")
+
+    gen = TaskGenerator(tmp_path, language="python")
+    test_file = gen._find_test_file(tmp_path / "services" / "foo_service.py")
+
+    assert test_file is not None
+    assert test_file.name == "test_foo_service.py"
+
+
+def test_find_test_file_by_import(tmp_path):
+    """Test import-based discovery."""
+    (tmp_path / "services").mkdir()
+    (tmp_path / "services" / "bar_service.py").write_text("def bar(): pass")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_bar.py").write_text(
+        "from services.bar_service import bar\ndef test_bar(): pass"
+    )
+
+    gen = TaskGenerator(tmp_path, language="python")
+    test_file = gen._find_test_file(tmp_path / "services" / "bar_service.py")
+
+    assert test_file is not None
+    assert test_file.name == "test_bar.py"
+
+
+def test_find_test_file_explicit_mapping(tmp_path):
+    """Test explicit test mapping."""
+    (tmp_path / "services").mkdir()
+    (tmp_path / "services" / "weird_name.py").write_text("def weird(): pass")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_weird_custom.py").write_text("def test_weird(): pass")
+
+    gen = TaskGenerator(
+        tmp_path,
+        language="python",
+        test_mapping={"services/weird_name.py": "tests/test_weird_custom.py"},
+    )
+    test_file = gen._find_test_file(tmp_path / "services" / "weird_name.py")
+
+    assert test_file is not None
+    assert test_file.name == "test_weird_custom.py"
+
+
+def test_find_test_file_not_found(tmp_path):
+    """Test returns None when no test file found."""
+    (tmp_path / "services").mkdir()
+    (tmp_path / "services" / "orphan.py").write_text("def lonely(): pass")
+
+    gen = TaskGenerator(tmp_path, language="python")
+    test_file = gen._find_test_file(tmp_path / "services" / "orphan.py")
+
+    assert test_file is None
