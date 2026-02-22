@@ -900,6 +900,10 @@ next_action_for_reason() {
         exit_zero_no_mutations|no_op_success)
             echo "redispatch_with_guardrails_or_review_prompt_for_no_work"
             ;;
+        # bd-cbsb.17: Token stream without mutations (OpenCode headless no-op)
+        token_stream_no_mutations|no_heartbeat_no_mutation)
+            echo "stop_job_and_redispatch_with_explicit_action_requirements"
+            ;;
         # bd-8wdg.10: Slow start actions
         slow_start|startup_scan_in_progress|startup_cpu_progress_no_output|startup_grace_no_output)
             echo "wait_for_startup_completion_or_check_logs_for_progress"
@@ -1458,6 +1462,21 @@ job_health_detail() {
             printf "launching|no_output_within_grace|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
         fi
         return 0
+    fi
+
+    # bd-cbsb.17: No-op execution gate - detect token stream without mutations
+    # OpenCode headless can stream extensive message deltas for minutes but produce
+    # no file mutations. This guardrail detects that pattern when:
+    # - Log output is active (tokens streaming)
+    # - CPU is active (model processing)
+    # - NO mutations (no actual work being done)
+    # - Past mutation grace period (reasonable time to produce first mutation)
+    local mutation_noop_threshold="${MUTATION_NOOP_THRESHOLD_SEC:-600}"  # 10 min without mutations
+    if [[ "$log_bytes" -gt 0 && "$cpu_time" -gt 0 && "$mutation_count" -eq 0 ]]; then
+        if [[ "$in_mutation_grace" == false && "$pid_age" -ge "$mutation_noop_threshold" ]]; then
+            printf "no_op|token_stream_no_mutations|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+            return 0
+        fi
     fi
 
     if [[ -f "$META_FILE" ]]; then
