@@ -12,6 +12,7 @@ import fnmatch
 @dataclass
 class RepoAdapter:
     """Configuration for task generation on a specific repo."""
+
     name: str
     repo_path: Path
     language: str
@@ -19,6 +20,8 @@ class RepoAdapter:
     test_patterns: list[str]
     exclude_patterns: list[str]
     test_command_template: str
+    test_dirs: list[str] | None = None
+    test_mapping: dict[str, str] | None = None  # source_file -> test_file
 
     def matches_exclude(self, file_path: Path, repo_root: Path) -> bool:
         """Check if file matches any exclude pattern using glob matching."""
@@ -35,7 +38,6 @@ AFFORDABOT_ADAPTER = RepoAdapter(
     name="affordabot",
     repo_path=Path("~/affordabot").expanduser(),
     language="python",
-
     target_patterns=[
         "backend/services/scraper/*.py",
         "backend/services/extractors/*.py",
@@ -43,21 +45,22 @@ AFFORDABOT_ADAPTER = RepoAdapter(
         "backend/services/search_pipeline_service.py",
         "backend/services/source_service.py",
     ],
-
     test_patterns=[
         "tests/test_*.py",
         "backend/tests/test_*.py",
     ],
-
     # GLOB patterns - these actually match paths
     exclude_patterns=[
-        "*/verification/*",          # Matches any verification dir
-        "*/legacy/*",                # Matches any legacy dir
-        "scripts/verification/*",    # Specific verification scripts
-        "*/probe_*.py",              # Matches probe scripts
+        "*/verification/*",  # Matches any verification dir
+        "*/legacy/*",  # Matches any legacy dir
+        "scripts/verification/*",  # Specific verification scripts
+        "*/probe_*.py",  # Matches probe scripts
     ],
-
     test_command_template="pytest {test_file} -v",
+    # Test directories to search
+    test_dirs=["tests", "backend/tests"],
+    # Explicit test mappings for non-standard naming
+    test_mapping={},
 )
 
 
@@ -68,9 +71,11 @@ def get_affordabot_tasks(max_tasks: int = 100) -> list[dict]:
     gen = TaskGenerator(
         repo_path=AFFORDABOT_ADAPTER.repo_path,
         language=AFFORDABOT_ADAPTER.language,
+        test_dirs=AFFORDABOT_ADAPTER.test_dirs,
+        test_mapping=AFFORDABOT_ADAPTER.test_mapping,
     )
 
     gen.set_target_patterns(AFFORDABOT_ADAPTER.target_patterns)
     gen.set_exclude_patterns(AFFORDABOT_ADAPTER.exclude_patterns)
 
-    return list(gen.generate_tasks(max_tasks=max_tasks))
+    return [t.to_dict() for t in gen.generate_tasks(max_tasks=max_tasks)]
