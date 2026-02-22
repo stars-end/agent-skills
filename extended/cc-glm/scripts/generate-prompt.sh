@@ -226,9 +226,9 @@ validate_wave_fields() {
 }
 
 validate_beads_format() {
-  if [[ ! "$BEADS" =~ ^bd-[a-z0-9]+(\.[0-9]+)?$ ]]; then
+  if [[ ! "$BEADS" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
     echo "Warning: Beads ID format looks non-standard: '$BEADS'" >&2
-    echo "  Expected format: bd-xxxx or bd-xxxx.n" >&2
+    echo "  Expected format: bd-xxxx or bd-xxxx.n.m" >&2
   fi
 }
 
