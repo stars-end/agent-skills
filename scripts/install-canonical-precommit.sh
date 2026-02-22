@@ -173,6 +173,13 @@ exit 0
 HOOK
 
   chmod +x "$hooks_dir/commit-msg"
+
+  # Also update versioned .githooks if they exist (V8.1 pattern)
+  if [[ -d "$repo_root/.githooks" ]]; then
+    cp "$hooks_dir/pre-commit" "$repo_root/.githooks/pre-commit"
+    cp "$hooks_dir/commit-msg" "$repo_root/.githooks/commit-msg"
+    chmod +x "$repo_root/.githooks/pre-commit" "$repo_root/.githooks/commit-msg"
+  fi
 }
 
 for repo in "${CANONICAL_REPOS[@]}"; do

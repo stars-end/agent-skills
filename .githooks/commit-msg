@@ -4,15 +4,16 @@ set -euo pipefail
 COMMIT_MSG_FILE=$1
 COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
 
-# Skip if it's a merge commit or automated squash/fixup.
+# Skip if it's a merge commit or automated squash
 if echo "$COMMIT_MSG" | grep -q "^Merge "; then
   exit 0
 fi
+
 if echo "$COMMIT_MSG" | grep -q "^squash!" || echo "$COMMIT_MSG" | grep -q "^fixup!"; then
   exit 0
 fi
 
-# Skip if it's an auto-checkpoint commit.
+# Skip if it's an auto-checkpoint commit
 if echo "$COMMIT_MSG" | grep -q "^checkpoint:"; then
   exit 0
 fi
@@ -24,11 +25,11 @@ if ! echo "$COMMIT_MSG" | grep -q "Feature-Key:"; then
 ❌ COMMIT BLOCKED: Missing Feature-Key
 
 Every commit must include a Feature-Key trailer for traceability.
-  Example:
-    feat: your summary
+Example:
+  feat: your summary
 
-    Feature-Key: bd-f6fh
-    Agent: codex
+  Feature-Key: bd-123
+  Agent: claude-code
 
 EOF
   exit 1
@@ -41,15 +42,15 @@ if [[ -z "${FEATURE_KEY_VALUE:-}" ]]; then
 ❌ COMMIT BLOCKED: Invalid Feature-Key trailer
 
 Feature-Key trailer is present but empty.
-Expected format:
-  Feature-Key: bd-xxxx
-  Feature-Key: bd-xxxx.1
+Expected:
+  Feature-Key: bd-123
+  Feature-Key: bd-123.4
 
 EOF
   exit 1
 fi
 
-# Accept dotted child IDs (e.g., bd-5wys.10).
+# Dotted Beads IDs are valid (e.g., bd-5wys.10).
 if [[ ! "$FEATURE_KEY_VALUE" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
   cat >&2 <<EOF
 
@@ -57,10 +58,6 @@ if [[ ! "$FEATURE_KEY_VALUE" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
 
 Feature-Key must match:
   ^bd-[a-z0-9]+(\\.[a-z0-9]+)*$
-
-Examples:
-  Feature-Key: bd-5wys
-  Feature-Key: bd-5wys.10
 
 EOF
   exit 1
@@ -73,11 +70,11 @@ if ! echo "$COMMIT_MSG" | grep -q "Agent:"; then
 ❌ COMMIT BLOCKED: Missing Agent trailer
 
 Every commit must include an Agent trailer for attribution.
-  Example:
-    feat: your summary
+Example:
+  feat: your summary
 
-    Feature-Key: bd-f6fh
-    Agent: codex
+  Feature-Key: bd-123
+  Agent: claude-code
 
 EOF
   exit 1
