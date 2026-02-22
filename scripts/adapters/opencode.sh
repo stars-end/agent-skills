@@ -402,7 +402,32 @@ adapter_start() {
     
     # Log model selection for telemetry
     echo "[opencode-adapter] START beads=$beads model=$model reason=$selection_reason fallback=$fallback_reason" >> "$log_file"
-    
+
+    # bd-cbsb.16: Generate permission config to prevent auto-reject of canonical paths
+    local preflight_script
+    for candidate in \
+        "$HOME/agent-skills/lib/fleet/opencode_preflight.py" \
+        "/home/linuxbrew/.linuxbrew/lib/fleet/opencode_preflight.py" \
+        "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/../lib/fleet/opencode_preflight.py"
+    do
+        if [[ -f "$candidate" ]]; then
+            preflight_script="$candidate"
+            break
+        fi
+    done
+
+    if [[ -n "$preflight_script" ]] && command -v python3 >/dev/null 2>&1; then
+        echo "[opencode-adapter] Generating permission config for $worktree" >> "$log_file"
+        python3 -c "
+import sys
+sys.path.insert(0, '$(dirname "$preflight_script")/../..')
+from lib.fleet.opencode_preflight import write_permission_config
+write_permission_config('$worktree')
+" 2>> "$log_file" || echo "[opencode-adapter] WARN: permission config generation failed" >> "$log_file"
+    else
+        echo "[opencode-adapter] WARN: opencode_preflight.py not found, skipping permission config" >> "$log_file"
+    fi
+
     # Build command with worktree-only enforcement (bd-cbsb.16)
     local cmd_args=(
         "$opencode_bin"

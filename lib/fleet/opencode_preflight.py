@@ -53,11 +53,13 @@ MODEL_FALLBACK_CHAIN = [
 
 WORKTREE_PERMISSION_RULES = [
     {"permission": "external_directory", "pattern": "/tmp/agents/*", "action": "allow"},
-    {
-        "permission": "external_directory",
-        "pattern": "/home/*/agent-skills/*",
-        "action": "allow",
-    },
+    # Canonical repos (read-only per DX rules)
+    {"permission": "external_directory", "pattern": "/home/*/agent-skills/*", "action": "allow"},
+    {"permission": "external_directory", "pattern": "/home/*/prime-radiant-ai/*", "action": "allow"},
+    {"permission": "external_directory", "pattern": "/home/*/affordabot/*", "action": "allow"},
+    {"permission": "external_directory", "pattern": "/home/*/llm-common/*", "action": "allow"},
+    # OpenCode config/cache directories
+    {"permission": "external_directory", "pattern": "/home/*/.local/share/opencode/*", "action": "allow"},
     {"permission": "external_directory", "pattern": "*", "action": "deny"},
     {"permission": "*", "pattern": "*", "action": "allow"},
     {"permission": "question", "pattern": "*", "action": "deny"},
@@ -206,19 +208,43 @@ def generate_permission_config(worktree_path: str) -> dict:
     """
     Generate OpenCode permission config for headless execution.
 
-    Addresses bd-cbsb.16: Worktree-only path policy.
+    Addresses bd-cbsb.16: Worktree-only path policy with canonical repo read access.
     """
     rules = [
+        # Worktree (read-write)
         {
             "permission": "external_directory",
             "pattern": f"{worktree_path}/*",
             "action": "allow",
         },
+        # Canonical repos (read-only per DX rules - needed for git operations, context reads)
+        {
+            "permission": "external_directory",
+            "pattern": "/home/*/agent-skills/*",
+            "action": "allow",
+        },
+        {
+            "permission": "external_directory",
+            "pattern": "/home/*/prime-radiant-ai/*",
+            "action": "allow",
+        },
+        {
+            "permission": "external_directory",
+            "pattern": "/home/*/affordabot/*",
+            "action": "allow",
+        },
+        {
+            "permission": "external_directory",
+            "pattern": "/home/*/llm-common/*",
+            "action": "allow",
+        },
+        # OpenCode config/cache directories
         {
             "permission": "external_directory",
             "pattern": "/home/*/.local/share/opencode/*",
             "action": "allow",
         },
+        # Default deny for other external_directory, allow everything else
         {"permission": "external_directory", "pattern": "*", "action": "deny"},
         {"permission": "*", "pattern": "*", "action": "allow"},
         {"permission": "question", "pattern": "*", "action": "deny"},
