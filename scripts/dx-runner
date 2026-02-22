@@ -622,8 +622,11 @@ resolve_worktree() {
 
 check_mutations() {
     local beads="$1"
-    local provider
-    provider="$(find_provider_for_beads "$beads")"
+    local provider="${2:-}"
+    
+    if [[ -z "$provider" ]]; then
+        provider="$(find_provider_for_beads "$beads")"
+    fi
     job_paths "$beads" "$provider"
 
     local worktree
@@ -899,10 +902,6 @@ next_action_for_reason() {
         # bd-8wdg.9: No-op success (exit 0 but no mutations)
         exit_zero_no_mutations|no_op_success)
             echo "redispatch_with_guardrails_or_review_prompt_for_no_work"
-            ;;
-        # bd-cbsb.17: Token stream without mutations (OpenCode headless no-op)
-        token_stream_no_mutations|no_heartbeat_no_mutation)
-            echo "stop_job_and_redispatch_with_explicit_action_requirements"
             ;;
         # bd-8wdg.10: Slow start actions
         slow_start|startup_scan_in_progress|startup_cpu_progress_no_output|startup_grace_no_output)
@@ -1464,21 +1463,6 @@ job_health_detail() {
         return 0
     fi
 
-    # bd-cbsb.17: No-op execution gate - detect token stream without mutations
-    # OpenCode headless can stream extensive message deltas for minutes but produce
-    # no file mutations. This guardrail detects that pattern when:
-    # - Log output is active (tokens streaming)
-    # - CPU is active (model processing)
-    # - NO mutations (no actual work being done)
-    # - Past mutation grace period (reasonable time to produce first mutation)
-    local mutation_noop_threshold="${MUTATION_NOOP_THRESHOLD_SEC:-600}"  # 10 min without mutations
-    if [[ "$log_bytes" -gt 0 && "$cpu_time" -gt 0 && "$mutation_count" -eq 0 ]]; then
-        if [[ "$in_mutation_grace" == false && "$pid_age" -ge "$mutation_noop_threshold" ]]; then
-            printf "no_op|token_stream_no_mutations|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
-            return 0
-        fi
-    fi
-
     if [[ -f "$META_FILE" ]]; then
         local prev_cpu
         prev_cpu="$(meta_get "$META_FILE" "last_cpu_time")"
@@ -1493,6 +1477,21 @@ job_health_detail() {
     if [[ "$log_age" -gt "$stall_threshold" ]]; then
         printf "stalled|stale_log_and_no_cpu_progress|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
         return 0
+    fi
+
+    # bd-cbsb.17: Token stream without mutations gate (reporting)
+    # Even if log is active, if we've been running without mutations for too long, flag it.
+    local first_mutation_check first_check_epoch no_mut_sec now_epoch
+    first_mutation_check="$(meta_get "$MUTATION_FILE" "first_checked_at" 2>/dev/null || true)"
+    now_epoch="$(date +%s)"
+    if [[ "$mutation_count" -eq 0 && -n "$first_mutation_check" ]]; then
+        first_check_epoch="$(parse_utc_epoch "${first_mutation_check}" 2>/dev/null || echo "$now_epoch")"
+        no_mut_sec=$((now_epoch - first_check_epoch))
+        local no_mut_timeout_sec=$((NO_MUTATION_TIMEOUT_MINUTES * 60))
+        if [[ "$no_mut_sec" -gt "$no_mut_timeout_sec" ]]; then
+            printf "no_op|no_mutation_timeout|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
+            return 0
+        fi
     fi
 
     printf "healthy|recent_log_activity|%s|%s|%s|%s|%s\n" "$mutation_count" "$log_bytes" "$cpu_time" "$pid_age" "$log_age"
@@ -1716,6 +1715,7 @@ start_completion_monitor() {
     local log_file="$8"
 
     (
+        set +e
         local prev_log_bytes=0
         local prev_cpu=0
         local last_mutation_check=0
@@ -1737,12 +1737,30 @@ start_completion_monitor() {
             local now_epoch
             now_epoch="$(date +%s)"
             if [[ -f "$meta_file" && $((now_epoch - last_mutation_check)) -ge 10 ]]; then
-                local mutations
-                mutations="$(check_mutations "$beads")"
+                local mutations=0
+                mutations=$(check_mutations "$beads" "$provider")
                 if [[ "${mutations:-0}" -gt 0 ]]; then
                     write_heartbeat "$beads" "$provider" "mutation" "count=$mutations"
                 fi
                 last_mutation_check="$now_epoch"
+                
+                # bd-cbsb.17: Token stream without mutations gate
+                # If we've been running for too long without mutations, abort.
+                local timeout_result=""
+                timeout_result=$(check_timeout_conditions "$beads" "$provider" 2>/dev/null)
+                if [[ -n "$timeout_result" ]]; then
+                    local reason="${timeout_result%%|*}"
+                    echo "[bd-cbsb.17] No-op timeout detected ($reason). Aborting job $beads." >> "$log_file"
+                    if [[ "$pid" =~ ^[0-9]+$ ]]; then
+                        kill -TERM "$pid" 2>/dev/null || true
+                        sleep 2
+                        if ps -p "$pid" >/dev/null 2>&1; then
+                            kill -KILL "$pid" 2>/dev/null || true
+                        fi
+                    fi
+                    persist_outcome "$beads" 23 "$outcome_file" "$meta_file" "$reason"
+                    break
+                fi
             fi
             sleep 2
         done
@@ -1829,8 +1847,11 @@ force_finalize_job() {
 
 check_timeout_conditions() {
     local beads="$1"
-    local provider
-    provider="$(find_provider_for_beads "$beads")"
+    local provider="${2:-}"
+    
+    if [[ -z "$provider" ]]; then
+        provider="$(find_provider_for_beads "$beads")"
+    fi
     job_paths "$beads" "$provider"
     
     if [[ ! -f "$META_FILE" || ! -f "$PID_FILE" ]]; then
