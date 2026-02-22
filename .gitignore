@@ -41,3 +41,4 @@ tmp_*.js
 # Only ignore specific temp patterns observed:
 1iv
 1v
+worktrees/
