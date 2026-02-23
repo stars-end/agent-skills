@@ -24,8 +24,9 @@ link() {
 # Core control-plane CLIs
 # dx-runner is the canonical dispatch surface (bd-xga8.14.8)
 link "$AGENTS_ROOT/scripts/dx-runner" "$BIN_DIR/dx-runner"
-# dx-dispatch.py is the BREAK-GLASS compatibility shim (deprecated)
-link "$AGENTS_ROOT/scripts/dx-dispatch.py" "$BIN_DIR/dx-dispatch"
+# dx-dispatch is the compatibility shim that prefers dx-runner
+link "$AGENTS_ROOT/scripts/dx-dispatch" "$BIN_DIR/dx-dispatch"
+link "$AGENTS_ROOT/scripts/dx-dispatch.py" "$BIN_DIR/dx-dispatch.py"
 # fleet-dispatch.py consolidated into dx-dispatch.py (see archive/dispatch-legacy/)
 # link "$AGENTS_ROOT/scripts/fleet-dispatch.py" "$BIN_DIR/fleet-dispatch"
 link "$AGENTS_ROOT/scripts/worktree-setup.sh" "$BIN_DIR/worktree-setup.sh"
