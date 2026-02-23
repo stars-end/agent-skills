@@ -43,6 +43,8 @@ Paste this prefix at the top of every prompt you generate:
 2) **Worktree first**: `dx-worktree create <id> <repo>`
 3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
 4) If you are about to edit anything under `~/...`, STOP and move to a worktree.
+5) **Checkpoint cadence**: every ~60 min, commit with `checkpoint:` prefix and `git push` immediately (bypasses Feature-Key hook — no work lost if session dies)
+6) **Draft PR early**: open a draft PR after your FIRST real commit — do NOT wait until done
 ```
 
 Recommended ordering:
@@ -73,9 +75,13 @@ Every prompt should end with:
 ```markdown
 ## Done Gate (Mandatory)
 Do not claim complete until:
-- All work is pushed and draft PR(s) exist
+- All work is pushed and draft PR(s) exist (opened EARLY, not just at end)
 - `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
 ```
+
+> **Note on "draft PR early":** Worktrees at `/tmp/agents/…` are NOT covered by the cron
+> auto-checkpoint (which only runs on canonical clones). Opening a draft PR after the first
+> real commit is the worktree equivalent — it guarantees remote backup from hour 1, not hour N.
 
 ## Minimal PR Proof Bundle Template (Optional)
 
@@ -93,13 +99,15 @@ Use when a task is operational / infra:
 Use this when you need a heavier orchestration scaffold while still keeping the DX invariants:
 
 ```text
-you're a full-stack dev agent at a tiny fintech startup: 
+you're a full-stack dev agent at a tiny fintech startup:
 
 ## DX Global Constraints (Always-On)
 1) **NO WRITES** in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
 2) **Worktree first**: `dx-worktree create <id> <repo>`
 3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
 4) If you are about to edit anything under `~/...`, STOP and move to a worktree.
+5) **Checkpoint cadence**: every ~60 min, commit with `checkpoint:` prefix and `git push` immediately (bypasses Feature-Key hook — no work lost if session dies)
+6) **Draft PR early**: open a draft PR after your FIRST real commit — do NOT wait until done
 
 ## Objective
 [One sentence: what success means.]
@@ -122,7 +130,7 @@ Do not start implementation until this plan is written.
 
 ## Done Gate (Mandatory)
 Do not claim complete until:
-- All work is pushed and draft PR(s) exist
+- All work is pushed and draft PR(s) exist (opened EARLY, not just at end)
 - `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
 If blocked, explain which gate failed and the smallest next action to unblock.
 ```

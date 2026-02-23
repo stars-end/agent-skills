@@ -49,3 +49,47 @@ dx-worktree prune <repo>
 - Always work inside the returned workspace path.
 - If stuck: snapshot → cleanup → recreate.
 
+## Keep Your Work Safe (Backup Protocol)
+
+> **Critical**: Worktrees at `/tmp/agents/…` are NOT covered by the cron auto-checkpoint
+> (which only scans canonical clones `~/agent-skills`, `~/prime-radiant-ai`, etc.).
+> You are responsible for your own backup cadence.
+
+### Mandatory pattern for any session > 30 min
+
+**Step 1 — Open a draft PR after your first real commit (within the first hour)**
+
+```bash
+# After first meaningful commit:
+gh pr create --draft --title "bd-<id>: [WIP] <description>" \
+  --body "Work in progress. Draft — do not merge."
+```
+
+This creates a remote backup from hour 1. If your session dies, all pushed commits are safe.
+
+**Step 2 — Checkpoint commit every ~60 min**
+
+The `checkpoint:` prefix bypasses the Feature-Key/Agent hook enforcement:
+
+```bash
+git add -A
+git commit -m "checkpoint: <brief description of current state>"
+git push
+```
+
+This is not a "real" commit — it's a safety snapshot. Use it freely.
+
+**Step 3 — Push frequently**
+
+A commit that exists only locally is lost if the process dies. Always `git push` immediately
+after any checkpoint commit.
+
+### Cadence summary
+
+| When | Action |
+|------|--------|
+| After first real commit | `gh pr create --draft ...` |
+| Every ~60 min thereafter | `git commit -m "checkpoint: ..." && git push` |
+| Before any risky operation | `git commit -m "checkpoint: pre-<op>" && git push` |
+| At "done" | Convert draft PR to ready-for-review |
+
