@@ -49,3 +49,16 @@ dx-worktree prune <repo>
 - Always work inside the returned workspace path.
 - If stuck: snapshot → cleanup → recreate.
 
+## Keep Your Work Safe
+
+> **Policy (DX V8):** `auto-checkpoint` was removed — it conflicted with canonical pre-commit
+> hooks. The replacement is: commit your work, `worktree-push.sh` pushes it nightly (3:15 AM),
+> and `worktree-gc-v8.sh` prunes worktrees older than 48h. **Uncommitted work older than 48h
+> is considered stale and will be GC'd. This is intentional.** Commit or lose it.
+
+### Rules
+
+- **Open a draft PR after your first real commit** — makes work visible before the 3:15 AM push
+- **Commit at logical milestones** — not on a timer; `worktree-push.sh` handles the rest
+- **Uncommitted changes are your responsibility** — no cron will save them
+
