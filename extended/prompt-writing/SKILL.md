@@ -79,9 +79,10 @@ Do not claim complete until:
 - `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
 ```
 
-> **Note on "draft PR early":** Worktrees at `/tmp/agents/…` are NOT covered by the cron
-> auto-checkpoint (which only runs on canonical clones). Opening a draft PR after the first
-> real commit is the worktree equivalent — it guarantees remote backup from hour 1, not hour N.
+> **Note on "draft PR early":** Worktrees at `/tmp/agents/…` are NOT auto-committed.
+> `worktree-push.sh` (cron 3:15 AM) pushes committed branches nightly, but only if commits exist.
+> Opening a draft PR after the first real commit guarantees remote backup from hour 1, not 3 AM.
+> `checkpoint:` commits every ~60 min ensure the nightly push has something to push.
 
 ## Minimal PR Proof Bundle Template (Optional)
 

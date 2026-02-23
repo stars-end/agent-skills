@@ -51,9 +51,11 @@ dx-worktree prune <repo>
 
 ## Keep Your Work Safe (Backup Protocol)
 
-> **Critical**: Worktrees at `/tmp/agents/…` are NOT covered by the cron auto-checkpoint
-> (which only scans canonical clones `~/agent-skills`, `~/prime-radiant-ai`, etc.).
-> You are responsible for your own backup cadence.
+> **Critical**: Worktrees at `/tmp/agents/…` have one automatic safety net:
+> `worktree-push.sh` (cron 3:15 AM) pushes committed branches nightly.
+> But **uncommitted changes are not protected**. You must commit before sleeping.
+> The `AUTO_CHECKPOINT_IMPLEMENTATION.md` design exists but the cron is not installed.
+> You are responsible for committing regularly.
 
 ### Mandatory pattern for any session > 30 min
 
