@@ -49,49 +49,16 @@ dx-worktree prune <repo>
 - Always work inside the returned workspace path.
 - If stuck: snapshot → cleanup → recreate.
 
-## Keep Your Work Safe (Backup Protocol)
+## Keep Your Work Safe
 
-> **Critical**: Worktrees at `/tmp/agents/…` have one automatic safety net:
-> `worktree-push.sh` (cron 3:15 AM) pushes committed branches nightly.
-> But **uncommitted changes are not protected**. You must commit before sleeping.
-> The `AUTO_CHECKPOINT_IMPLEMENTATION.md` design exists but the cron is not installed.
-> You are responsible for committing regularly.
+> **Policy (DX V8):** `auto-checkpoint` was removed — it conflicted with canonical pre-commit
+> hooks. The replacement is: commit your work, `worktree-push.sh` pushes it nightly (3:15 AM),
+> and `worktree-gc-v8.sh` prunes worktrees older than 48h. **Uncommitted work older than 48h
+> is considered stale and will be GC'd. This is intentional.** Commit or lose it.
 
-### Mandatory pattern for any session > 30 min
+### Rules
 
-**Step 1 — Open a draft PR after your first real commit (within the first hour)**
-
-```bash
-# After first meaningful commit:
-gh pr create --draft --title "bd-<id>: [WIP] <description>" \
-  --body "Work in progress. Draft — do not merge."
-```
-
-This creates a remote backup from hour 1. If your session dies, all pushed commits are safe.
-
-**Step 2 — Checkpoint commit every ~60 min**
-
-The `checkpoint:` prefix bypasses the Feature-Key/Agent hook enforcement:
-
-```bash
-git add -A
-git commit -m "checkpoint: <brief description of current state>"
-git push
-```
-
-This is not a "real" commit — it's a safety snapshot. Use it freely.
-
-**Step 3 — Push frequently**
-
-A commit that exists only locally is lost if the process dies. Always `git push` immediately
-after any checkpoint commit.
-
-### Cadence summary
-
-| When | Action |
-|------|--------|
-| After first real commit | `gh pr create --draft ...` |
-| Every ~60 min thereafter | `git commit -m "checkpoint: ..." && git push` |
-| Before any risky operation | `git commit -m "checkpoint: pre-<op>" && git push` |
-| At "done" | Convert draft PR to ready-for-review |
+- **Open a draft PR after your first real commit** — makes work visible before the 3:15 AM push
+- **Commit at logical milestones** — not on a timer; `worktree-push.sh` handles the rest
+- **Uncommitted changes are your responsibility** — no cron will save them
 

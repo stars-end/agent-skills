@@ -43,8 +43,7 @@ Paste this prefix at the top of every prompt you generate:
 2) **Worktree first**: `dx-worktree create <id> <repo>`
 3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
 4) If you are about to edit anything under `~/...`, STOP and move to a worktree.
-5) **Checkpoint cadence**: every ~60 min, commit with `checkpoint:` prefix and `git push` immediately (bypasses Feature-Key hook — no work lost if session dies)
-6) **Draft PR early**: open a draft PR after your FIRST real commit — do NOT wait until done
+5) **Draft PR early**: open a draft PR after your FIRST real commit — do NOT wait until done
 ```
 
 Recommended ordering:
@@ -75,14 +74,13 @@ Every prompt should end with:
 ```markdown
 ## Done Gate (Mandatory)
 Do not claim complete until:
-- All work is pushed and draft PR(s) exist (opened EARLY, not just at end)
+- All work is committed, pushed, and draft PR(s) exist (opened EARLY, not just at end)
 - `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
 ```
 
-> **Note on "draft PR early":** Worktrees at `/tmp/agents/…` are NOT auto-committed.
-> `worktree-push.sh` (cron 3:15 AM) pushes committed branches nightly, but only if commits exist.
-> Opening a draft PR after the first real commit guarantees remote backup from hour 1, not 3 AM.
-> `checkpoint:` commits every ~60 min ensure the nightly push has something to push.
+> **Note on "draft PR early":** `worktree-push.sh` (3:15 AM) pushes committed branches nightly.
+> Opening a draft PR after the first real commit makes work visible before the nightly push runs.
+> Uncommitted worktree changes older than 48h are GC'd — commit or lose it (by design).
 
 ## Minimal PR Proof Bundle Template (Optional)
 
@@ -107,8 +105,7 @@ you're a full-stack dev agent at a tiny fintech startup:
 2) **Worktree first**: `dx-worktree create <id> <repo>`
 3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
 4) If you are about to edit anything under `~/...`, STOP and move to a worktree.
-5) **Checkpoint cadence**: every ~60 min, commit with `checkpoint:` prefix and `git push` immediately (bypasses Feature-Key hook — no work lost if session dies)
-6) **Draft PR early**: open a draft PR after your FIRST real commit — do NOT wait until done
+5) **Draft PR early**: open a draft PR after your FIRST real commit — do NOT wait until done
 
 ## Objective
 [One sentence: what success means.]
@@ -131,7 +128,7 @@ Do not start implementation until this plan is written.
 
 ## Done Gate (Mandatory)
 Do not claim complete until:
-- All work is pushed and draft PR(s) exist (opened EARLY, not just at end)
+- All work is committed, pushed, and draft PR(s) exist (opened EARLY, not just at end)
 - `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
 If blocked, explain which gate failed and the smallest next action to unblock.
 ```
