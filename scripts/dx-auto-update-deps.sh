@@ -15,6 +15,8 @@ exec >> "$LOG_FILE" 2>&1
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting dependency update..."
 
 cd /Users/fengning/prime-radiant-ai
-./scripts/maintenance/update-llm-common.sh
+
+export CI=true
+bash ./scripts/maintenance/update-llm-common.sh
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Dependency update complete"
