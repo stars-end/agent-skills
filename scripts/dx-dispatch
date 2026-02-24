@@ -69,9 +69,29 @@ if [[ ! -x "$DX_RUNNER" ]]; then
 fi
 
 case "${1:-}" in
-    --list|--status)
+    --list)
         [[ "$emit_deprecation" -eq 1 ]] && deprecation_warn "'$1' -> 'dx-runner status'"
-        shift || true
+        exec "$DX_RUNNER" status
+        ;;
+    --status)
+        shift
+        if [[ -n "${1:-}" && ! "$1" =~ ^- ]]; then
+            # Map common VM names to legacy Python status
+            case "$1" in
+                epyc6|macmini|epyc12|homedesktop-wsl|jules-cloud|local)
+                    [[ "$emit_deprecation" -eq 1 ]] && deprecation_warn "Falling back to legacy Python for VM status ($1)"
+                    if [[ -f "$PYTHON_SCRIPT" ]]; then
+                        python3 "$PYTHON_SCRIPT" --status "$@"
+                        exit $?
+                    fi
+                    ;;
+                bd-*)
+                    [[ "$emit_deprecation" -eq 1 ]] && deprecation_warn "'--status $1' -> 'dx-runner status --beads $1'"
+                    exec "$DX_RUNNER" status --beads "$1"
+                    ;;
+            esac
+        fi
+        [[ "$emit_deprecation" -eq 1 ]] && deprecation_warn "'--status' -> 'dx-runner status'"
         exec "$DX_RUNNER" status "$@"
         ;;
     --help|-h)

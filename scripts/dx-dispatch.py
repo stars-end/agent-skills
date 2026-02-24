@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from __future__ import annotations
 
 """
@@ -61,7 +61,16 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional, Any
 
 # Add lib to path for imports (use resolve() to follow symlinks)
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+repo_root = Path(__file__).resolve().parent.parent
+possible_roots = [repo_root, Path.home() / "agent-skills", Path.cwd()]
+fleet_found = False
+
+for root in possible_roots:
+    if (root / "lib" / "fleet").exists():
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        fleet_found = True
+        break
 
 # Type-only imports (not evaluated at runtime due to __future__ annotations)
 if TYPE_CHECKING:
@@ -74,12 +83,17 @@ try:
     from lib.fleet.backends.base import HealthStatus
 
     FLEET_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     FLEET_AVAILABLE = False
     FleetDispatcher = None  # type: ignore[misc,assignment]
     DispatchResult = None  # type: ignore[misc,assignment]
     HealthStatus = None  # type: ignore[misc,assignment]
-    print("Warning: lib/fleet not available, using legacy mode", file=sys.stderr)
+    print(f"Warning: lib/fleet not available ({e}), using legacy mode", file=sys.stderr)
+
+try:
+    from slack_sdk import WebClient
+except ImportError:
+    WebClient = None
 
 try:
     from slack_sdk import WebClient
@@ -632,7 +646,8 @@ def main():
 
     # Initialize FleetDispatcher
     if not FLEET_AVAILABLE:
-        log("lib/fleet not available. Please ensure it's installed.", "ERROR")
+        log("lib/fleet not available. This deprecated script requires lib/fleet from the agent-skills repo.", "ERROR")
+        log("Canonical alternative: Use dx-runner directly.", "INFO")
         sys.exit(1)
 
     dispatcher = FleetDispatcher()
