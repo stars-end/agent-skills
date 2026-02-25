@@ -84,6 +84,7 @@ Mandatory gates executed from epyc12 are captured below.
   - `which dx-runner dx-batch dx-wave dx-dispatch` -> all present in `/home/fengning/bin`
   - `readlink -f ~/bin/dx-batch` -> `/tmp/agents/bd-g2cw-runtime/agent-skills/scripts/dx-batch`
   - Preflight: `canonical model probe: OK (zhipuai-coding-plan/glm-5)`, `mise trust: N/A (no .mise target)`, `Preflight PASSED`
+  - Start path warning check: `MISE_WARN_PRESENT=0` (no false auto-remediation warning)
   - Early check: `state=healthy`, `reason_code=recent_log_activity`, `log_bytes=426`
   - Completed check/report: `state=no_op_success`, `reason_code=exit_zero_no_mutations`, `duration_sec=19`, `log_bytes=7091`
 
