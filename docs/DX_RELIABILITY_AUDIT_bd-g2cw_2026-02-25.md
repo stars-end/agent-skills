@@ -22,10 +22,12 @@ In-scope Beads:
 |---|---|---|---|
 | bd-g2cw.2 | Adopt saturation guard behavior into active path | Verified `dx-batch` cap/doctor gating + surfaced operator fallback in `dx-wave` | ✅ |
 | bd-g2cw.4 | Failure taxonomy visibility | Added `dx-batch check/report`, wave/item `reason_code`, and schema updates | ✅ |
-| bd-9hq0.2 | epyc12 missing `dx-batch` runtime tool | Updated `scripts/dx-ensure-bins.sh` to install `dx-batch`, `dx-wave`, and wrapper `dx-dispatch` | ✅ (code), rollout pending merge |
+| bd-9hq0.2 | epyc12 missing `dx-batch` runtime tool | Updated `scripts/dx-ensure-bins.sh` to install `dx-batch`, `dx-wave`, and wrapper `dx-dispatch` | ✅ |
 | bd-9hq0.6 | report/accounting drift | Preserved stronger prior metrics during manual stop before writing outcome | ✅ |
 | bd-9hq0.8 | home-cwd worktree auto-reject edge | Hardened worktree resolution and explicit `reason_code=worktree_missing` | ✅ |
 | bd-9hq0.4 | preflight `mise untrusted` noise | Scoped warning to concrete `.mise.toml` targets only | ✅ |
+| bd-9hq0.9 | start-time mise auto-remediation false warning | Gated remediation to concrete `.mise.toml` targets only; no warning on N/A cases | ✅ |
+| bd-9hq0.10 | bash 3.x cryptic failure path | Added explicit `bash >= 4` guard with actionable macOS guidance | ✅ |
 | bd-cbsb.27 | exec saturation runbook | Added runbook to `extended/dx-batch/SKILL.md` and `docs/DX_RUNNER_RUNBOOK.md` | ✅ |
 | bd-9hq0.1 | docs/workflow capability mismatch | Updated skill/runbook docs + host capability docs | ✅ |
 | bd-9hq0.3 | cross-host version/runtime drift | Added rollout validation + matrix evidence (see below) | ⚠️ Partial (auth limits on non-epyc12 hosts) |
@@ -66,32 +68,47 @@ In-scope Beads:
 - `PATH=/opt/homebrew/bin:$PATH scripts/test-dx-runner.sh`
   - Result: **152 passed, 1 failed**
   - Known pre-existing flaky: `gemini success run did not finalize as exited_ok`
+- `/bin/bash scripts/dx-runner --help`
+  - Result: exits with deterministic guidance `dx-runner requires bash >= 4 ...`
 
 ### epyc12 live dry-run
 Mandatory gates executed from epyc12 are captured below.
 
 #### Preflight and runtime checks
-- Command(s):
+- Commands:
+  - `AGENTS_ROOT=/tmp/agents/bd-g2cw-runtime/agent-skills scripts/dx-ensure-bins.sh`
   - `dx-runner preflight --provider opencode`
-  - `dx-runner start/check/status/report` dry-run cycle
-- Result: _Recorded after branch rollout to epyc12 worktree_
+  - `dx-runner start --beads bd-g2cw.901 --provider opencode --worktree /tmp/agents/bd-g2cw-runtime/agent-skills --prompt-file /tmp/bd-g2cw-live.prompt`
+  - `dx-runner check/status/report --beads bd-g2cw.901 --json`
+- Result (key output):
+  - `which dx-runner dx-batch dx-wave dx-dispatch` -> all present in `/home/fengning/bin`
+  - `readlink -f ~/bin/dx-batch` -> `/tmp/agents/bd-g2cw-runtime/agent-skills/scripts/dx-batch`
+  - Preflight: `canonical model probe: OK (zhipuai-coding-plan/glm-5)`, `mise trust: N/A (no .mise target)`, `Preflight PASSED`
+  - Early check: `state=healthy`, `reason_code=recent_log_activity`, `log_bytes=426`
+  - Completed check/report: `state=no_op_success`, `reason_code=exit_zero_no_mutations`, `duration_sec=19`, `log_bytes=7091`
 
 #### Saturation simulation
-- Command(s):
-  - `dx-batch start --items ... --exec-process-cap <small>`
-  - `dx-batch doctor --wave-id <id> --json`
-- Result: _Recorded after branch rollout to epyc12 worktree_
+- Commands:
+  - synthetic live PID creation + `dx-batch start --wave-id wave-bd-g2cw-sat-1771978695 --items bd-g2cw.sat1 --max-parallel 1 --no-review --exec-process-cap 1`
+  - `dx-batch check --wave-id wave-bd-g2cw-sat-1771978695 --json`
+  - `dx-batch report --wave-id wave-bd-g2cw-sat-1771978695 --format json`
+- Result (key output):
+  - start: `Exec saturation guard triggered: live_processes=2 cap=1. Refusing new dispatches.`
+  - check/report: `state=failed`, `reason_code=exec_saturation`, `next_action=run_dx_runner_prune_then_dx_batch_doctor`
 
 #### Stalled-job simulation
-- Command(s):
-  - synthetic stalled pid/log state + `dx-runner check`
-  - `dx-runner prune --json`
-- Result: _Recorded after branch rollout to epyc12 worktree_
+- Commands:
+  - `dx-runner start --beads bd-g2cw.stall2 ...` then hard-kill provider PID
+  - `dx-runner check --beads bd-g2cw.stall2 --json`
+  - synthetic stale metadata + `dx-runner prune --json`
+- Result (key output):
+  - post-kill check: `state=awaiting_finalize`, `reason_code=awaiting_finalize_monitor_active`
+  - stale prune: `{"checked":1,"pruned":1}` with stale PID ghost removed
 
 ## Host Capability Matrix (Current)
 | Host | `dx-runner` on PATH | `dx-batch` on PATH | `dx-wave` on PATH | `op` CLI | Verification |
 |---|---|---|---|---|---|
-| epyc12 | ❌ (before rollout) | ❌ (before rollout) | ❌ (before rollout) | ✅ (`op 2.32.1`) | ✅ direct |
+| epyc12 | ✅ (`/home/fengning/bin/dx-runner`) | ✅ (`/home/fengning/bin/dx-batch`) | ✅ (`/home/fengning/bin/dx-wave`) | ✅ (`op 2.32.1`) | ✅ direct |
 | macmini | unknown in this pass | unknown in this pass | unknown in this pass | unknown in this pass | ⚠️ SSH auth failure |
 | homedesktop-wsl | unknown in this pass | unknown in this pass | unknown in this pass | unknown in this pass | ⚠️ SSH timeout/no response |
 

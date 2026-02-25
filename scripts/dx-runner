@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Requires associative arrays used throughout this script.
+if [[ -z "${BASH_VERSION:-}" ]] || (( ${BASH_VERSINFO[0]:-0} < 4 )); then
+    echo "dx-runner requires bash >= 4 (found: ${BASH_VERSION:-unknown})." >&2
+    echo "On macOS, run with /opt/homebrew/bin/bash or ensure newer bash is first in PATH." >&2
+    exit 2
+fi
+
 # dx-runner (V2.0 - Unified Multi-Provider Dispatch Runner with Hardening)
 #
 # Canonical entrypoint for all agent dispatch with unified governance:
@@ -2402,17 +2409,23 @@ start_cmd() {
             exit 22
         fi
         
-        # bd-8wdg.11: Auto-remediate mise trust with proper status reporting
+        # bd-8wdg.11: Auto-remediate mise trust only for concrete .mise targets.
         if [[ "${DX_RUNNER_AUTO_TRUST_MISE:-1}" == "1" ]] && command -v mise >/dev/null 2>&1; then
-            local trust_before trust_after
-            trust_before="$(mise trust --show 2>/dev/null || true)"
-            if [[ -z "$trust_before" ]]; then
-                mise trust "$WORKTREE" >/dev/null 2>&1 || true
-                trust_after="$(mise trust --show 2>/dev/null || true)"
-                if [[ -n "$trust_after" ]]; then
-                    echo "[bd-8wdg.11] mise trust auto-remediated for $WORKTREE" >&2
-                else
-                    echo "[bd-8wdg.11] WARN: mise trust auto-remediation failed for $WORKTREE" >&2
+            local trust_target trust_before trust_after
+            trust_target=""
+            if [[ -d "$WORKTREE" && -f "$WORKTREE/.mise.toml" ]]; then
+                trust_target="$(cd "$WORKTREE" 2>/dev/null && pwd -P || true)"
+            fi
+            if [[ -n "$trust_target" ]]; then
+                trust_before="$(mise trust --show 2>/dev/null || true)"
+                if ! printf '%s\n' "$trust_before" | grep -Fqx "$trust_target"; then
+                    mise trust "$trust_target" >/dev/null 2>&1 || true
+                    trust_after="$(mise trust --show 2>/dev/null || true)"
+                    if printf '%s\n' "$trust_after" | grep -Fqx "$trust_target"; then
+                        echo "[bd-8wdg.11] mise trust auto-remediated for $trust_target" >&2
+                    else
+                        echo "[bd-8wdg.11] WARN: mise trust auto-remediation failed for $trust_target" >&2
+                    fi
                 fi
             fi
         fi
