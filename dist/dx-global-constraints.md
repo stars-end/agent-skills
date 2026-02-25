@@ -8,6 +8,19 @@
 - `~/affordabot`
 - `~/llm-common`
 
+### Canonical Beads Repository (MANDATORY)
+- **All Beads operations MUST run in**: `~/bd`
+- **Canonical Beads git remote MUST be**: `stars-end/bd` (usually `origin`)
+- **Never run Beads from product repos** (`~/prime-radiant-ai`, `~/agent-skills`, etc.)
+- **Never treat repo-local `.beads/` as canonical state**
+
+Quick check:
+```bash
+cd ~/bd
+git remote -v | head -2
+bd ready --limit 5
+```
+
 ### Enforcement
 **Primary**: Git pre-commit hook blocks commits when not in worktree
 **Safety net**: Daily sync to origin/master (non-destructive)

@@ -19,6 +19,11 @@ allowed-tools:
 
 Commit current work with Beads tracking + smart discovery handling + auto phase transitions.
 
+## Canonical Beads Location (P0 Rule)
+
+Run all `bd` commands from `~/bd` (canonical `stars-end/bd` repo).  
+Do not run Beads operations from the product repo checkout.
+
 ## Workflow
 
 ### 1. Set Beads Context
@@ -39,7 +44,7 @@ currentIssue=$(bd show <FEATURE_KEY> --json)
 
 If not found, auto-create as safety net:
 ```bash
-bd create --title <FEATURE_KEY> --type feature --priority 2 --desc "Auto-created during commit"
+bd create --title <FEATURE_KEY> --type feature --priority 2 --description "Auto-created during commit"
 ```
 
 **Note:** Issue should ideally exist BEFORE coding (Issue-First Development), but this prevents orphaned commits.

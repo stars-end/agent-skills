@@ -9,6 +9,17 @@ description: Check and fix common Beads workflow issues across all repos.
 
 Check and fix common Beads workflow issues across all repos.
 
+## Canonical Location (P0 Rule)
+
+Run this skill from the canonical Beads repo only:
+
+```bash
+cd ~/bd
+git remote -v | head -2   # must point to stars-end/bd
+```
+
+If current directory is not `~/bd`, switch first. Do not run `bd sync`/`bd export` from product repos.
+
 **Use when**:
 - Beads sync fails ("JSONL is newer than database", "Push to master blocked")
 - Unstaged .beads/issues.jsonl changes

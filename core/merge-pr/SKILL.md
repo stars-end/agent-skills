@@ -19,6 +19,10 @@ allowed-tools:
 
 Prepare PR for human merge via GitHub web UI (<30 seconds prep).
 
+## Canonical Beads Location (P0 Rule)
+
+Run all `bd` commands from `~/bd` only (canonical `stars-end/bd` repo), not from the product repo worktree.
+
 ## Purpose
 
 Final step in V3 workflow: commit → create PR → fix PR → **merge PR**

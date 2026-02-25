@@ -19,6 +19,17 @@ allowed-tools:
 
 Open GitHub PR with Beads integration (<10 seconds total).
 
+## Canonical Beads Location (P0 Rule)
+
+All `bd` commands in this workflow must run from `~/bd` (canonical `stars-end/bd` repo).
+
+```bash
+cd ~/bd
+git remote -v | head -2
+```
+
+Do not run Beads operations from the product repo checkout.
+
 ## Workflow
 
 ### 1. Extract and Validate Feature Key

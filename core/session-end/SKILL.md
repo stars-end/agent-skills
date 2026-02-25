@@ -17,6 +17,11 @@ allowed-tools:
 
 End session cleanly with Beads export, stats, and next work suggestion.
 
+## Canonical Beads Location (P0 Rule)
+
+Run `bd` commands from `~/bd` only (canonical `stars-end/bd` repo).  
+Do not run Beads sync/export from product repos.
+
 ## Workflow
 
 ### 1. Set Beads Context
