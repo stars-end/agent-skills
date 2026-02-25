@@ -43,6 +43,26 @@ class TestCLISmoke:
         assert result.returncode == 0
         assert "--wave-id" in result.stdout
 
+    def test_cli_check_help(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH), "check", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        assert "--wave-id" in result.stdout
+        assert "--json" in result.stdout
+
+    def test_cli_report_help(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH), "report", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        assert "--wave-id" in result.stdout
+        assert "--format" in result.stdout
+
     def test_cli_doctor_help(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPT_PATH), "doctor", "--help"],

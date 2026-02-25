@@ -252,22 +252,36 @@ adapter_preflight() {
     fi
     
     # Check 5: mise trust state (bd-cbsb.17, bd-8wdg.11)
+    # Noise policy: only evaluate trust when a concrete .mise-scoped target is in scope.
     echo -n "mise trust: "
     if command -v mise >/dev/null 2>&1; then
-        local trust_state
-        trust_state="$(mise trust --show 2>/dev/null)" || true
-        if [[ -n "$trust_state" ]]; then
-            echo "OK"
+        local trust_target=""
+        if [[ -n "${WORKTREE:-}" && -d "${WORKTREE:-}" && -f "${WORKTREE}/.mise.toml" ]]; then
+            trust_target="$(cd "$WORKTREE" 2>/dev/null && pwd -P || true)"
+        elif [[ -n "${DX_RUNNER_PREFLIGHT_WORKTREE:-}" && -d "${DX_RUNNER_PREFLIGHT_WORKTREE}" && -f "${DX_RUNNER_PREFLIGHT_WORKTREE}/.mise.toml" ]]; then
+            trust_target="$(cd "$DX_RUNNER_PREFLIGHT_WORKTREE" 2>/dev/null && pwd -P || true)"
+        elif [[ -f "$(pwd)/.mise.toml" ]]; then
+            trust_target="$(pwd -P)"
+        fi
+
+        if [[ -z "$trust_target" ]]; then
+            echo "N/A (no .mise target)"
         else
-            local policy
-            policy="$(profile_get_preflight_policy "mise_untrusted" "warn")"
-            echo "UNTRUSTED"
-            if [[ "$policy" == "error" ]]; then
-                echo "  ERROR_CODE=opencode_mise_untrusted severity=error action=run_mise_trust_in_worktree"
-                errors=$((errors + 1))
+            local trust_state
+            trust_state="$(mise trust --show 2>/dev/null || true)"
+            if printf '%s\n' "$trust_state" | grep -Fqx "$trust_target"; then
+                echo "OK ($trust_target)"
             else
-                echo "  WARN_CODE=opencode_mise_untrusted severity=warn action=run_mise_trust_in_worktree"
-                warnings=$((warnings + 1))
+                local policy
+                policy="$(profile_get_preflight_policy "mise_untrusted" "warn")"
+                echo "UNTRUSTED ($trust_target)"
+                if [[ "$policy" == "error" ]]; then
+                    echo "  ERROR_CODE=opencode_mise_untrusted severity=error action=run_mise_trust_in_worktree target=$trust_target"
+                    errors=$((errors + 1))
+                else
+                    echo "  WARN_CODE=opencode_mise_untrusted severity=warn action=run_mise_trust_in_worktree target=$trust_target"
+                    warnings=$((warnings + 1))
+                fi
             fi
         fi
     else
@@ -275,7 +289,7 @@ adapter_preflight() {
         echo "  WARN_CODE=opencode_mise_missing severity=warn action=install_mise_or_ignore_if_not_required"
         warnings=$((warnings + 1))
     fi
-    
+
     echo ""
     if [[ $errors -gt 0 ]]; then
         echo "=== Preflight FAILED ($errors error(s), $warnings warning(s)) ==="

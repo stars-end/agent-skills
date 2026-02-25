@@ -1,6 +1,6 @@
 # Cross-VM Verification Matrix (V8.3)
 
-**Last Updated:** 2026-02-18
+**Last Updated:** 2026-02-25
 **Authoritative Source:** `configs/fleet_hosts.yaml`
 
 This document provides a deterministic verification matrix for all canonical VMs, including authentication principals, tool presence, token paths, and cc-glm-headless resolution states.
@@ -41,12 +41,12 @@ This document provides a deterministic verification matrix for all canonical VMs
 | `git` | ✅ | ✅ | ✅ | ✅ |
 | `bd` (beads) | ✅ | ✅ | ✅ | ✅ |
 | `ru` (repo_updater) | ✅ | ✅ | ✅ | ✅ |
-| `op` CLI (1Password) | ✅ | ✅ | ❌ | ❌ |
+| `op` CLI (1Password) | ✅ | ✅ | ❌ | ✅ |
 | `claude` CLI | ✅ | ✅ | ✅ | ✅ |
 | `mise` | ✅ | ✅ | ✅ | ✅ |
 | `dcg` | ✅ | ✅ | ✅ | ✅ |
 
-**Note:** epyc6 and epyc12 lack `op` CLI. Use `op://` references resolved from other VMs or environment variables.
+**Note:** epyc6 lacks `op` CLI. epyc12 has `op` installed; validate token/session before production waves.
 
 ### 2.3 1Password Token Paths
 
@@ -55,7 +55,7 @@ This document provides a deterministic verification matrix for all canonical VMs
 | homedesktop-wsl | `~/.config/systemd/user/op-homedesktop-wsl-token` | ✅ Active |
 | macmini | `~/.config/systemd/user/op-macmini-token` | ✅ Active (legacy) |
 | epyc6 | N/A | ❌ No op CLI |
-| epyc12 | N/A | ❌ No op CLI |
+| epyc12 | `~/.config/systemd/user/op-epyc12-token` | ✅ Token file present |
 
 **Legacy Note:** macmini uses a hardcoded legacy path `op-macmini-token` in `cc-glm-headless.sh` for backward compatibility.
 

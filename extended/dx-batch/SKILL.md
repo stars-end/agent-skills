@@ -35,6 +35,16 @@ dx-batch start --items bd-aaa,bd-bbb,bd-ccc [--max-parallel 3] [--wave-id <id>]
 dx-batch start --items bd-aaa,bd-bbb --exec-process-cap 40
 ```
 
+### check
+```bash
+dx-batch check --wave-id <id> [--json]
+```
+
+### report
+```bash
+dx-batch report --wave-id <id> [--format json|markdown]
+```
+
 ### status
 ```bash
 dx-batch status --wave-id <id> [--json]
@@ -88,3 +98,30 @@ pytest -q /Users/fengning/agent-skills/tests/dx_batch
 - `dx-batch start` automatically runs `dx-runner prune` before queue start.
 - Every run-loop cycle performs a doctor check before launching new items.
 - If live dispatch/runner processes exceed cap, wave fails fast with `exec_saturation`.
+
+## Exec Saturation Incident Runbook (bd-cbsb.27)
+
+```bash
+# 1) Diagnose wave state + stale leases/pids
+dx-batch doctor --wave-id <wave-id> --json
+
+# 2) Prune stale dx-runner records
+dx-runner prune --json
+
+# 3) Re-run in degraded mode for containment
+dx-batch start --items <bd-a,bd-b,...> --max-parallel 1 --exec-process-cap 20
+```
+
+Stop conditions before redispatch:
+- `doctor` returns critical issues you cannot clear
+- `dx-runner prune` keeps reporting stale jobs repeatedly
+- external process count remains above cap after cleanup
+
+## Capability Fallback (dx-wave wrapper)
+
+- Preferred batch entrypoint: `dx-wave batch-start ...`
+- If `dx-batch` is unavailable on PATH, wrapper emits:
+  - `WARN_CODE=dx_batch_unavailable_fallback_runner`
+- Fallback behavior is deterministic:
+  - dispatch each beads item through `dx-runner start`
+  - preserve profile/provider policy

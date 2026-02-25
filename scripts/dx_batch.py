@@ -18,7 +18,7 @@ try:
 except ImportError:
     HAS_JSONSCHEMA = False
 
-VERSION = "1.0.1"
+VERSION = "1.1.0"
 DEFAULT_MAX_PARALLEL = 3
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_STALL_MINUTES = 15
@@ -87,6 +87,7 @@ class ItemState:
     verdict: Optional[Verdict] = None
     outcome_path: Optional[str] = None
     error: Optional[str] = None
+    reason_code: Optional[str] = None
     dx_runner_beads_id: Optional[str] = (
         None  # The actual beads ID passed to dx-runner (may have -review suffix)
     )
@@ -136,6 +137,7 @@ class WaveState:
     completed_at: Optional[str] = None
     stats: Optional[WaveStats] = None
     error: Optional[str] = None
+    reason_code: Optional[str] = None
 
     def to_dict(self):
         return {
@@ -149,6 +151,7 @@ class WaveState:
             "completed_at": self.completed_at,
             "stats": asdict(self.stats) if self.stats else None,
             "error": self.error,
+            "reason_code": self.reason_code,
         }
 
     @classmethod
@@ -176,6 +179,7 @@ class WaveState:
             completed_at=d.get("completed_at"),
             stats=stats,
             error=d.get("error"),
+            reason_code=d.get("reason_code"),
         )
 
     def compute_stats(self):
@@ -446,12 +450,20 @@ class PreflightChecker:
                 text=True,
                 timeout=60,
             )
+            combined_output = "\n".join(
+                [proc.stdout.strip(), proc.stderr.strip()]
+            ).strip()
             if proc.returncode == 0:
                 result["available"] = True
             else:
+                reason = "preflight_failed"
+                for line in combined_output.splitlines():
+                    if "reason_code=" in line:
+                        reason = line.split("reason_code=", 1)[1].strip()
+                        break
                 result["error"], result["reason_code"] = (
-                    proc.stderr.strip() or proc.stdout.strip(),
-                    "preflight_failed",
+                    combined_output,
+                    normalize_reason_code(reason, "preflight_failed"),
                 )
         except subprocess.TimeoutExpired:
             result["error"], result["reason_code"] = (
@@ -709,6 +721,69 @@ def now_utc():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def normalize_reason_code(value: Optional[str], default: str) -> str:
+    if not value:
+        return default
+    return value.strip().lower().replace(" ", "_")
+
+
+def derive_wave_reason_code(state: WaveState) -> str:
+    if state.reason_code:
+        return normalize_reason_code(state.reason_code, "wave_unknown")
+    if state.status == WaveStatus.PENDING:
+        return "wave_pending"
+    if state.status == WaveStatus.RUNNING:
+        return "wave_running"
+    if state.status == WaveStatus.PAUSED:
+        return "wave_paused"
+    if state.status == WaveStatus.COMPLETED:
+        return "wave_completed"
+    if state.status == WaveStatus.CANCELLED:
+        return "wave_cancelled"
+    if state.status == WaveStatus.FAILED:
+        return "wave_failed"
+    return "wave_unknown"
+
+
+def derive_item_reason_code(item: ItemState) -> str:
+    if item.reason_code:
+        return normalize_reason_code(item.reason_code, "unknown")
+    if item.status == ItemStatus.APPROVED:
+        return "approved"
+    if item.status == ItemStatus.BLOCKED:
+        return "blocked"
+    if item.status == ItemStatus.REVISION_REQUIRED:
+        return "revision_required"
+    if item.status == ItemStatus.FAILED:
+        return "failed"
+    if item.status == ItemStatus.CANCELLED:
+        return "cancelled"
+    if item.status == ItemStatus.IMPLEMENTING:
+        return "implementing"
+    if item.status == ItemStatus.REVIEWING:
+        return "reviewing"
+    return "pending"
+
+
+def derive_wave_next_action(state: WaveState) -> str:
+    if state.status == WaveStatus.RUNNING:
+        return "monitor_wave_until_terminal"
+    if state.status == WaveStatus.PAUSED:
+        return "run_dx_batch_resume"
+    if state.status == WaveStatus.FAILED:
+        reason = derive_wave_reason_code(state)
+        if reason.startswith("exec_saturation"):
+            return "run_dx_runner_prune_then_dx_batch_doctor"
+        if reason.startswith("doctor_critical"):
+            return "run_dx_batch_doctor_and_resolve_critical"
+        return "inspect_wave_error_and_recover"
+    if state.status == WaveStatus.CANCELLED:
+        return "review_outcomes_before_restart"
+    if state.status == WaveStatus.COMPLETED:
+        return "review_report_and_close_items"
+    return "start_or_resume_wave"
+
+
 def parse_utc_epoch(ts):
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
@@ -799,9 +874,11 @@ class WaveOrchestrator:
     def start(self):
         self.load_state()
         if self.state.status == WaveStatus.COMPLETED:
+            self.state.reason_code = "wave_completed"
             return True
         if self.state.status == WaveStatus.RUNNING:
             print(f"Wave {self.wave_id} already running", file=sys.stderr)
+            self.state.reason_code = "wave_already_running"
             return False
         preflight = PreflightChecker(self.config.retry_chain)
         all_passed, results = preflight.run()
@@ -812,19 +889,23 @@ class WaveOrchestrator:
                     WaveStatus.FAILED,
                     "No providers available",
                 )
+                self.state.reason_code = "no_provider_available"
                 self.save_state()
                 return False
+            self.state.reason_code = "preflight_degraded"
             print(f"Warning: Some preflight checks failed. Using {provider}")
         self._run_runner_prune()
         if not self._enforce_exec_process_cap():
             self.save_state()
             return False
         self.state.status, self.state.started_at = WaveStatus.RUNNING, now_utc()
+        self.state.reason_code = "wave_running"
         self.save_state()
         try:
             return self._run_loop()
         except Exception as e:
             self.state.status, self.state.error = WaveStatus.FAILED, str(e)
+            self.state.reason_code = "orchestrator_exception"
             self.save_state()
             return False
 
@@ -854,11 +935,13 @@ class WaveOrchestrator:
                     WaveStatus.COMPLETED,
                     now_utc(),
                 )
+                self.state.reason_code = "wave_completed"
                 self.save_state()
                 return True
             time.sleep(5)
         if self._shutdown_requested:
             self.state.status = WaveStatus.PAUSED
+            self.state.reason_code = "wave_paused_signal"
             self.save_state()
             self._cleanup_on_shutdown()
         return False
@@ -880,6 +963,7 @@ class WaveOrchestrator:
         live_count, _ = self.hygiene.count_live_external_processes()
         if live_count > cap:
             self.state.status = WaveStatus.FAILED
+            self.state.reason_code = "exec_saturation"
             self.state.error = (
                 f"exec_saturation: live_processes={live_count} cap={cap}; "
                 "run dx-runner prune and dx-batch doctor before retrying"
@@ -905,6 +989,9 @@ class WaveOrchestrator:
         if critical_issues:
             first = critical_issues[0]
             self.state.status = WaveStatus.FAILED
+            self.state.reason_code = (
+                f"doctor_critical_{first.get('type', 'unknown')}"
+            )
             self.state.error = (
                 f"doctor_critical:{first.get('type', 'unknown')} "
                 f"{first.get('message', '')}".strip()
@@ -935,6 +1022,7 @@ class WaveOrchestrator:
         )
         if provider == "blocked":
             item.status, item.error = ItemStatus.BLOCKED, "Retry chain exhausted"
+            item.reason_code = "retry_chain_exhausted"
             phase = item.phase or Phase.IMPLEMENT
             self.artifacts.write_error_outcome(
                 item.beads_id, phase, item.attempt, "Retry chain exhausted"
@@ -1009,6 +1097,7 @@ class WaveOrchestrator:
             self.hygiene.register_pid(proc.pid)
         except Exception as e:
             item.status, item.error = ItemStatus.FAILED, str(e)
+            item.reason_code = "dispatch_failed"
             self.artifacts.write_error_outcome(
                 item.beads_id, Phase.IMPLEMENT, item.attempt, str(e)
             )
@@ -1078,9 +1167,11 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
                 # Release lease
                 self._release_lease(item)
                 if self.config.require_review:
+                    item.reason_code = "implement_completed_pending_review"
                     self._start_review(item)
                 else:
                     item.status, item.completed_at = ItemStatus.APPROVED, now_utc()
+                    item.reason_code = "approved_no_review"
                     self._update_beads_progress(item)
             else:
                 error_msg = (
@@ -1093,6 +1184,7 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
                     error_msg,
                     now_utc(),
                 )
+                item.reason_code = "implement_contract_missing_or_invalid"
                 self.artifacts.write_error_outcome(
                     item.beads_id, Phase.IMPLEMENT, item.attempt, error_msg
                 )
@@ -1106,10 +1198,13 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
                 item.verdict = Verdict(verdict)
                 if verdict == "APPROVED":
                     item.status = ItemStatus.APPROVED
+                    item.reason_code = "approved"
                 elif verdict == "REVISION_REQUIRED":
                     item.status = ItemStatus.REVISION_REQUIRED
+                    item.reason_code = "revision_required"
                 else:
                     item.status = ItemStatus.BLOCKED
+                    item.reason_code = "blocked"
                 item.completed_at = now_utc()
                 # Update ledger
                 self._update_ledger_completion(
@@ -1126,6 +1221,7 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
                 self._update_beads_progress(item)
             else:
                 item.status, item.error = ItemStatus.FAILED, "No review outcome"
+                item.reason_code = "review_contract_missing_or_invalid"
                 self._update_ledger_completion(item, Phase.REVIEW, "failed", None)
                 self._release_lease(item)
             self.save_state()
@@ -1149,6 +1245,7 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
             "attempt": item.attempt,
             "phase": phase.value,
             "state": state,
+            "reason_code": derive_item_reason_code(item),
             "started_at": item.started_at,
             "completed_at": now_utc(),
             "outcome_path": item.outcome_path or "",
@@ -1297,6 +1394,7 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
             self.hygiene.register_pid(proc.pid)
         except Exception as e:
             item.status, item.error = ItemStatus.FAILED, f"Review dispatch failed: {e}"
+            item.reason_code = "review_dispatch_failed"
             self.artifacts.write_error_outcome(
                 item.beads_id,
                 Phase.REVIEW,
@@ -1318,6 +1416,7 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
 
     def _handle_item_stalled(self, item, check_data):
         reason = check_data.get("reason_code", "stalled")
+        item.reason_code = normalize_reason_code(reason, "stalled")
         if self.retry_policy.should_retry(item.attempt):
             item.status, item.error = (
                 ItemStatus.REVISION_REQUIRED,
@@ -1379,6 +1478,7 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
                 )
                 self._release_lease(item)
         self.state.status, self.state.completed_at = WaveStatus.CANCELLED, now_utc()
+        self.state.reason_code = "wave_cancelled"
         self.save_state()
         return True
 
@@ -1391,6 +1491,7 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
             )
             return False
         self.state.status = WaveStatus.RUNNING
+        self.state.reason_code = "wave_running"
         self.save_state()
         return self._run_loop()
 
@@ -1519,16 +1620,75 @@ def cmd_status(args):
         return 1
     state = WaveState.from_dict(json.loads(state_file.read_text()))
     state.compute_stats()
+    wave_reason = derive_wave_reason_code(state)
+    next_action = derive_wave_next_action(state)
     if args.json:
-        print(json.dumps(state.to_dict(), indent=2))
+        payload = state.to_dict()
+        payload["reason_code"] = wave_reason
+        payload["next_action"] = next_action
+        payload["items"] = [
+            {**item.to_dict(), "reason_code": derive_item_reason_code(item)}
+            for item in state.items
+        ]
+        print(json.dumps(payload, indent=2))
     else:
         print(f"Wave: {wave_id}")
         print(f"Status: {state.status.value}")
+        print(f"Reason: {wave_reason}")
+        print(f"Next Action: {next_action}")
         print(f"Items: {len(state.items)}")
         if state.stats:
             print(
                 f"  Approved: {state.stats.approved}\n  Blocked: {state.stats.blocked}\n  Pending: {state.stats.pending}"
             )
+    return 0
+
+
+def cmd_check(args):
+    wave_id = args.wave_id
+    if not wave_id:
+        print("Error: --wave-id required", file=sys.stderr)
+        return 1
+    state_file = ArtifactManager(wave_id).get_state_file()
+    if not state_file.exists():
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "wave_id": wave_id,
+                        "state": "missing",
+                        "reason_code": "wave_not_found",
+                        "next_action": "create_or_verify_wave_id",
+                    }
+                )
+            )
+        else:
+            print(f"wave {wave_id} missing reason_code=wave_not_found")
+        return 3
+    state = WaveState.from_dict(json.loads(state_file.read_text()))
+    state.compute_stats()
+    wave_reason = derive_wave_reason_code(state)
+    next_action = derive_wave_next_action(state)
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "wave_id": wave_id,
+                    "state": state.status.value,
+                    "reason_code": wave_reason,
+                    "next_action": next_action,
+                    "stats": asdict(state.stats) if state.stats else {},
+                }
+            )
+        )
+    else:
+        print(
+            f"wave={wave_id} state={state.status.value} reason_code={wave_reason} next_action={next_action}"
+        )
+    if state.status in (WaveStatus.FAILED, WaveStatus.CANCELLED):
+        return 3
+    if state.status == WaveStatus.PAUSED:
+        return 2
     return 0
 
 
@@ -1586,6 +1746,85 @@ def cmd_doctor(args):
     return 0 if not result.get("issues") else 1
 
 
+def cmd_report(args):
+    wave_id = args.wave_id
+    if not wave_id:
+        print("Error: --wave-id required", file=sys.stderr)
+        return 1
+    state_file = ArtifactManager(wave_id).get_state_file()
+    if not state_file.exists():
+        print(f"Wave {wave_id} not found", file=sys.stderr)
+        return 1
+
+    state = WaveState.from_dict(json.loads(state_file.read_text()))
+    state.compute_stats()
+    wave_reason = derive_wave_reason_code(state)
+    next_action = derive_wave_next_action(state)
+
+    items = []
+    for item in state.items:
+        items.append(
+            {
+                "beads_id": item.beads_id,
+                "status": item.status.value,
+                "reason_code": derive_item_reason_code(item),
+                "attempt": item.attempt,
+                "provider": item.provider,
+                "phase": item.phase.value if item.phase else None,
+                "verdict": item.verdict.value if item.verdict else None,
+                "run_instance": item.run_instance,
+                "outcome_path": item.outcome_path,
+                "error": item.error,
+                "started_at": item.started_at,
+                "completed_at": item.completed_at,
+            }
+        )
+
+    payload = {
+        "wave_id": wave_id,
+        "state": state.status.value,
+        "reason_code": wave_reason,
+        "next_action": next_action,
+        "created_at": state.created_at,
+        "started_at": state.started_at,
+        "completed_at": state.completed_at,
+        "stats": asdict(state.stats) if state.stats else {},
+        "items": items,
+    }
+
+    if args.format == "json":
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    print(f"# dx-batch Report: {wave_id}")
+    print("")
+    print(f"- State: {state.status.value}")
+    print(f"- Reason Code: {wave_reason}")
+    print(f"- Next Action: {next_action}")
+    print(f"- Created: {state.created_at or '-'}")
+    print(f"- Started: {state.started_at or '-'}")
+    print(f"- Completed: {state.completed_at or '-'}")
+    print("")
+    if state.stats:
+        print("## Stats")
+        print(f"- Total: {state.stats.total}")
+        print(f"- Pending: {state.stats.pending}")
+        print(f"- Implementing: {state.stats.implementing}")
+        print(f"- Reviewing: {state.stats.reviewing}")
+        print(f"- Approved: {state.stats.approved}")
+        print(f"- Revision Required: {state.stats.revision_required}")
+        print(f"- Blocked: {state.stats.blocked}")
+        print(f"- Failed: {state.stats.failed}")
+        print(f"- Cancelled: {state.stats.cancelled}")
+        print("")
+    print("## Items")
+    for item in items:
+        print(
+            f"- {item['beads_id']}: status={item['status']} reason_code={item['reason_code']} attempt={item['attempt']} provider={item['provider'] or '-'} verdict={item['verdict'] or '-'}"
+        )
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="dx-batch: Deterministic orchestration over dx-runner",
@@ -1633,12 +1872,27 @@ def main():
     status_parser.add_argument("--wave-id", required=True, help="Wave ID")
     status_parser.add_argument("--json", action="store_true", help="JSON output")
     status_parser.set_defaults(func=cmd_status)
+    check_parser = subparsers.add_parser(
+        "check", help="Check wave health (reason_code + next_action)"
+    )
+    check_parser.add_argument("--wave-id", required=True, help="Wave ID")
+    check_parser.add_argument("--json", action="store_true", help="JSON output")
+    check_parser.set_defaults(func=cmd_check)
     resume_parser = subparsers.add_parser("resume", help="Resume a paused wave")
     resume_parser.add_argument("--wave-id", required=True, help="Wave ID")
     resume_parser.set_defaults(func=cmd_resume)
     cancel_parser = subparsers.add_parser("cancel", help="Cancel a running wave")
     cancel_parser.add_argument("--wave-id", required=True, help="Wave ID")
     cancel_parser.set_defaults(func=cmd_cancel)
+    report_parser = subparsers.add_parser("report", help="Generate wave report")
+    report_parser.add_argument("--wave-id", required=True, help="Wave ID")
+    report_parser.add_argument(
+        "--format",
+        choices=["json", "markdown"],
+        default="json",
+        help="Report format",
+    )
+    report_parser.set_defaults(func=cmd_report)
     doctor_parser = subparsers.add_parser("doctor", help="Diagnose wave issues")
     doctor_parser.add_argument("--wave-id", required=True, help="Wave ID")
     doctor_parser.add_argument("--json", action="store_true", help="JSON output")
