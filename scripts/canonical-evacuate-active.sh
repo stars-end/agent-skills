@@ -468,9 +468,13 @@ process_repo() {
 
   cd "$repo_path"
 
-  if ! git fetch origin master --quiet 2>>"$FETCH_ERR_LOG"; then
-    log "WARNING: $repo fetch failed; continuing with possibly stale refs"
-  fi
+  # Note: No fetch here. Refs are updated by:
+  #   - fetch-* cron jobs (every 20-30 min)
+  #   - reconcile cron job (every 2h)
+  # The 'behind' count may be slightly stale but evacuation logic is safe:
+  #   - 'ahead' count is purely local (doesn't need fetch)
+  #   - reset --hard origin/master happens AFTER rescue push
+  # Removing this fetch also eliminates race condition with reconcile.
 
   local porcelain
   porcelain="$(git status --porcelain 2>/dev/null || true)"

@@ -161,6 +161,9 @@ sync_sibling() {
     return 1
   fi
 
+  # Prune stale worktrees before attempting creation (fixes recurring failures)
+  (cd "$repo_path" && git worktree prune 2>/dev/null) || true
+
   # Ensure worktree exists for automation
   if [[ ! -d "$wt_path" ]]; then
     log "Creating worktree for $repo at $wt_path..."
