@@ -292,11 +292,13 @@ mcp__plugin_beads_beads__close(
 Either no issues have the label, or you're not in a Beads-enabled repo.
 
 ```bash
-# Check Beads is initialized
-ls .beads/issues.jsonl
+# Check canonical Beads health
+cd ~/bd
+bd dolt test --json
+bd status --json
 
-# Check for labeled issues
-grep "jules-ready" .beads/issues.jsonl
+# Then inspect candidate open issues
+bd list --status open
 ```
 
 ### "'jules' CLI not found"

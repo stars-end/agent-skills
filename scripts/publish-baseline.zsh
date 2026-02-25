@@ -13,7 +13,7 @@ mkdir -p "$DIST_DIR"
 
 # 1. Generate Global Constraints (Layer A subset)
 cat > "$CONSTRAINTS_FILE" <<EOF
-# DX Global Constraints (V8.3)
+# DX Global Constraints (V8.4)
 <!-- AUTO-GENERATED - DO NOT EDIT -->
 
 ## 1) Canonical Repository Rules
@@ -35,6 +35,16 @@ cd /tmp/agents/bd-xxxx/repo-name
 # Work here
 \`\`\`
 
+## 1.5) Canonical Beads Contract (V8.4)
+- **Canonical Beads repo is always \`~/bd\`** (remote must be \`stars-end/bd\`).
+- **Never run mutating Beads commands from app repos** (\`~/prime-radiant-ai\`, \`~/agent-skills\`, etc.) unless explicitly using a documented override.
+- **Backend must be Dolt server mode** for multi-VM/multi-agent reliability.
+- **Before dispatch**: verify \`bd dolt test --json\` succeeds and Beads service is active on the host.
+- **Host service contract**:
+  - Linux canonical VMs: \`systemctl --user is-active beads-dolt.service\`
+  - macOS canonical host: \`launchctl print gui/\$(id -u)/com.starsend.beads-dolt\`
+- **Source-of-truth runbook**: \`~/agent-skills/docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md\`
+
 ## 2) V8 DX Automation Rules
 1. **No auto-merge**: never enable auto-merge on PRs — humans merge
 2. **No PR factory**: one PR per meaningful unit of work
@@ -45,9 +55,10 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **PR title must include a Feature-Key**: include \`bd-<beads-id>\` somewhere in the title (e.g. \`bd-f6fh: ...\`)
 - **PR body must include Agent**: add a line like \`Agent: <agent-id>\`
 
-## 4) Delegation Rule (V8.3 - Batch by Outcome)
+## 4) Delegation Rule (V8.4 - Batch by Outcome)
 - **Primary rule**: batch by outcome, not by file. One agent per coherent change set.
 - **Default parallelism**: 2 agents, scale to 3-4 only when independent and stable.
+- **Dispatch threshold**: implement directly for scoped work estimated under 60 minutes; dispatch only for >=60 minute, clearly parallelizable outcomes.
 - **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
 - **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
 - **See Section 6** for detailed parallel orchestration patterns.
@@ -86,6 +97,16 @@ dx-runner start --provider opencode --beads bd-xxx --prompt-file /tmp/p.prompt
 # Shared monitoring/reporting
 dx-runner status --json
 dx-runner check --beads bd-xxx --json
+\`\`\`
+
+**Canonical batch orchestrator: dx-batch (orchestration-only over dx-runner)**
+
+\`\`\`bash
+# Execute implement -> review waves with deterministic ledger/contracts
+dx-batch start --items bd-aaa,bd-bbb --max-parallel 2
+
+# Diagnose stuck waves
+dx-batch doctor --wave-id <wave-id> --json
 \`\`\`
 
 **Direct OpenCode lane (advanced, non-governed)**
@@ -304,7 +325,7 @@ extract_skill() {
     ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     
     # Example
-    local example=$(grep -E "^\s*(bd |dx-|/skill )" "$skill_file" | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | cut -c1-60 || echo "")
+    local example=$(grep -E "^\s*(bd |dx-|/skill )" "$skill_file" | grep -v "bd sync" | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | cut -c1-60 || echo "")
     if [[ -z "$example" ]]; then
         example="—"
     else

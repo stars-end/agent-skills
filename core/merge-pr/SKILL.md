@@ -133,7 +133,7 @@ if [ "$STATUS" != "closed" ]; then
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
   echo "Issues should be closed at PR creation time, not merge time."
-  echo "This ensures JSONL merges atomically with code (no post-merge mutations)."
+  echo "This ensures Beads state is finalized before merge (no post-merge tracker mutations)."
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "Recovery options:"
@@ -141,14 +141,14 @@ if [ "$STATUS" != "closed" ]; then
   echo ""
   echo "Option 1: Close issue now (less ideal but works)"
   echo "  bd close $FEATURE_KEY --reason \"Closing before merge in PR #$PR_NUMBER\""
-  echo "  bd sync && git push"
+  echo "  (cd ~/bd && bd dolt test --json && bd status --json)"
   echo "  # Then retry merge"
   echo ""
   echo "Option 2: Close and recreate PR (atomic pattern)"
   echo "  bd close $FEATURE_KEY --reason \"Work complete, ready for review\""
-  echo "  bd sync && git push"
+  echo "  (cd ~/bd && bd dolt test --json && bd status --json)"
   echo "  gh pr close $PR_NUMBER"
-  echo "  gh pr create  # Creates new PR with JSONL already closed"
+  echo "  gh pr create  # Creates new PR after Beads state is validated"
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "Future prevention:"
@@ -161,14 +161,14 @@ if [ "$STATUS" != "closed" ]; then
 fi
 
 echo "✅ Beads issue already closed (status: $STATUS)"
-echo "   → JSONL will merge atomically with code"
+echo "   → Beads state is already finalized before merge"
 echo ""
 ```
 
 **Why verify instead of close:**
 - **Structural fix:** Issues closed at PR creation (create-pull-request skill)
-- **Atomic merge:** JSONL already on feature branch when PR created
-- **No post-merge mutations:** Never need to modify JSONL on master
+- **Deterministic readiness:** issue is already closed before merge
+- **No post-merge tracker work:** avoids merge-time status churn
 - **Prevents hook conflicts:** All Beads state changes on feature branch
 - **Clear workflow:** Closed = "ready to ship", Open = "work in progress"
 
@@ -247,8 +247,8 @@ git log --oneline -20 | grep -q "$MERGE_COMMIT"
 # Delete local feature branch (remote already deleted via web UI)
 git branch -d feature-$FEATURE_KEY 2>/dev/null || echo "Branch already deleted"
 
-# Sync Beads (imports closure from git)
-bd sync
+# Verify canonical Beads health after merge
+(cd ~/bd && bd dolt test --json && bd status --json)
 ```
 
 ### 7.5. Auto-Cache Docs to Serena (If Docs Exist)
@@ -342,9 +342,9 @@ Ready for next feature.
 
 ### With Beads
 - **Verifies issue already closed** (closed at PR creation time by create-pull-request skill)
-- **JSONL already in PR** (merged atomically with code)
-- **Syncs after merge** (imports from master)
-- **No post-merge mutations** (prevents hook conflicts on master)
+- **Issue already closed before merge** (no merge-time status edits)
+- **Verifies backend health after merge** (canonical `~/bd` checks)
+- **No post-merge tracker mutations** (prevents state drift)
 
 ### With create-pull-request
 - **Completes lifecycle:** create-pull-request → fix-pr-feedback → merge-pr
@@ -389,7 +389,7 @@ Ready for next feature.
 4. **Wait for confirmation** - Don't assume merge happened
 5. **Verify merge** - Check PR state before cleanup
 6. **Sync Beads after** - Import closure from master
-7. **Atomic merge pattern** - JSONL merges with code (no post-merge mutations)
+7. **Pre-merge closure pattern** - issue already closed before merge, no post-merge tracker mutations
 
 ## What This Skill Does
 
@@ -409,7 +409,7 @@ Ready for next feature.
 ❌ Skip user confirmation (always waits for "merged" confirmation)
 ❌ **Close Beads issue** (already closed at PR creation time by create-pull-request skill)
 ❌ Push to master (never, pre-push hook blocks)
-❌ Modify JSONL on master (never - atomic merge pattern prevents this)
+❌ Perform merge-time tracker mutations on master
 
 ## Anti-Patterns
 
@@ -418,7 +418,7 @@ Ready for next feature.
 ❌ Auto-merging without human confirmation
 ❌ Skipping working tree check
 ❌ Not verifying merge succeeded before cleanup
-❌ Modifying JSONL on master (causes hook conflicts)
+❌ Changing Beads status only after merge
 
 ## Example Scenarios
 
@@ -504,20 +504,20 @@ AI:
 
    Why this matters:
    Issues should be closed at PR creation time, not merge time.
-   This ensures JSONL merges atomically with code.
+   This ensures Beads state is finalized before merge.
 
    Recovery options:
 
    Option 1: Close issue now (less ideal but works)
      bd close bd-xyz --reason 'Closing before merge in PR #200'
-     bd sync && git push
+     (cd ~/bd && bd dolt test --json && bd status --json)
      # Then retry merge
 
    Option 2: Close and recreate PR (atomic pattern)
      bd close bd-xyz --reason 'Work complete, ready for review'
-     bd sync && git push
+     (cd ~/bd && bd dolt test --json && bd status --json)
      gh pr close 200
-     gh pr create  # Creates new PR with JSONL already closed
+     gh pr create  # Creates new PR after Beads state validation
 
    Future prevention:
    When creating PRs, use create-pull-request skill which asks:

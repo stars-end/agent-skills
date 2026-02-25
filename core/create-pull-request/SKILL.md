@@ -2,7 +2,7 @@
 name: create-pull-request
 description: |
   Create GitHub pull request with atomic Beads issue closure. MUST BE USED for opening PRs.
-  Asks if work is complete - if YES, closes Beads issue BEFORE creating PR (JSONL merges atomically with code).
+  Asks if work is complete - if YES, closes Beads issue BEFORE creating PR.
   If NO, creates draft PR with issue still open. Automatically links Beads tracking and includes Feature-Key.
   Use when user wants to open a PR, submit work for review, merge into master, or prepare for deployment,
   or when user mentions "ready for review", "create PR", "open PR", "merge conflicts", "CI checks needed",
@@ -109,96 +109,33 @@ make build
 if fails: exit 1
 ```
 
-### 2.4. Sync with Master (Prevent JSONL Conflicts)
+### 2.4. Verify Base Branch + Canonical Beads Health
 
-**Before creating PR, merge master to prevent conflicts:**
+**Before creating PR, ensure branch freshness and Beads availability:**
 
 ```bash
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🔄 SYNCING WITH MASTER"
+echo "🔄 PRE-PR CHECKS"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Fetch latest master
+# Fetch latest master/main to reduce merge conflict risk
 git fetch origin master
 
-# Check if .beads/issues.jsonl exists and has diverged
-if [ -f .beads/issues.jsonl ]; then
-  JSONL_DIVERGED=$(git diff origin/master...HEAD -- .beads/issues.jsonl | wc -l)
-
-  if [ "$JSONL_DIVERGED" -gt 0 ]; then
-    echo "⚠️  Beads JSONL has diverged from master ($JSONL_DIVERGED lines)"
-    echo "   Merging master now to prevent PR conflicts..."
-    echo ""
-
-    # Merge master (union merge auto-applies for JSONL)
-    if git merge origin/master --no-edit; then
-      echo "✅ Merged master successfully (clean merge)"
-    else
-      # Check if only JSONL has conflicts
-      CONFLICT_FILES=$(git diff --name-only --diff-filter=U)
-
-      if [ "$CONFLICT_FILES" = ".beads/issues.jsonl" ]; then
-        echo "✅ Auto-resolving JSONL conflict with union merge..."
-
-        # Union merge: keep all lines from both sides
-        git checkout --union .beads/issues.jsonl
-        git add .beads/issues.jsonl
-        git commit --no-edit -m "chore: Auto-merge JSONL (union strategy)
-
-Feature-Key: ${FEATURE_KEY}
-Agent: claude-code
-Role: create-pull-request-skill"
-
-        echo "✅ JSONL conflict resolved automatically"
-      else
-        echo "❌ Multiple files have conflicts, aborting auto-merge"
-        echo "   Conflict files:"
-        echo "$CONFLICT_FILES"
-        echo ""
-        echo "Please resolve conflicts manually, then run this skill again"
-        git merge --abort
-        exit 1
-      fi
-    fi
-
-    # Run bd sync to import merged JSONL
-    if command -v bd >/dev/null 2>&1; then
-      echo "Running bd sync to import merged JSONL..."
-      bd sync --import-only
-    fi
-
-    # Push merged changes
-    echo "Pushing merged changes..."
-    git push
-
-    echo ""
-    echo "✅ Synced with master, JSONL conflicts prevented"
-    echo ""
-  else
-    echo "✅ JSONL already in sync with master"
-    echo ""
-  fi
-else
-  echo "ℹ️  No Beads JSONL file, skipping sync check"
-  echo ""
+# Optional: merge latest master now if behind
+if ! git merge-base --is-ancestor origin/master HEAD; then
+  echo "⚠️  Branch is behind origin/master. Merge/rebase before PR for cleaner review."
 fi
+
+# Canonical Beads health check
+(cd ~/bd && bd dolt test --json && bd status --json)
 ```
 
 **Why this is critical:**
-- **Prevents PR conflicts:** Merges master BEFORE creating PR
-- **Union merge strategy:** Auto-resolves JSONL conflicts (keeps all lines)
-- **Multi-agent safety:** Works across VMs (each agent syncs independently)
-- **Complements GitHub Action:** Proactive prevention (skill) + reactive fallback (action)
-
-**What happens:**
-1. Check if JSONL diverged from master
-2. If yes: Merge master automatically
-3. If conflict: Auto-resolve with union merge (JSONL only)
-4. Run `bd sync --import-only` to update local database
-5. Push merged changes
-6. Continue with PR creation
+- **Prevents avoidable PR conflicts:** catches branch drift early
+- **Prevents false-ready PRs:** confirms tracker connectivity before closure/linking
+- **Matches fleet contract:** uses canonical `~/bd` Dolt backend checks
 
 ### 2.5. Ask if Work is Complete (CRITICAL)
 
@@ -225,17 +162,14 @@ echo ""
 echo "Closing Beads issue ${FEATURE_KEY}..."
 bd close ${FEATURE_KEY} --reason "Work complete, ready for review in PR"
 
-# Export and commit JSONL to feature branch
-echo "Syncing Beads state to feature branch..."
-bd sync
-
-# Push to include JSONL in PR
-echo "Pushing branch with JSONL..."
+# Verify canonical Beads health and push branch updates
+(cd ~/bd && bd dolt test --json && bd status --json)
+echo "Pushing feature branch updates..."
 git push
 
 echo ""
-echo "✅ Issue closed and JSONL committed to feature branch"
-echo "   → JSONL will merge atomically with code"
+echo "✅ Issue closed in canonical Beads backend"
+echo "✅ Feature branch pushed for review"
 echo ""
 ```
 
@@ -250,9 +184,8 @@ DRAFT_FLAG="--draft"
 ```
 
 **Why this is critical:**
-- **Atomic merge:** JSONL closes issue on feature branch → merges with code
-- **No post-merge mutations:** Never need to modify JSONL on master
-- **Prevents hook conflicts:** All Beads state changes happen on feature branch
+- **Deterministic state:** issue is explicitly marked done before review
+- **No post-merge tracker work:** avoids merge-time bookkeeping drift
 - **Clear workflow:** Close issue = "ready to ship", open issue = "work in progress"
 
 ### 2.6. Validate Docs (Epics/Features Only)
@@ -345,7 +278,7 @@ gh pr create
 
 $(if [ -z "$DRAFT_FLAG" ]; then echo "Closes: bd-{ID}"; else echo "Related: bd-{ID} (in progress)"; fi)
 
-See: `.beads/issues.jsonl` (line with id: bd-{ID})
+Beads record: `bd show bd-{ID}`
 
 ## Documentation
 
@@ -391,7 +324,7 @@ gh pr create
 
 **Epic:** bd-{ID} (remains open for future work)
 
-See: `.beads/issues.jsonl`
+Beads record: `bd show bd-{ID}`
 
 ## Documentation
 

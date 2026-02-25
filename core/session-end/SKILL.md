@@ -1,11 +1,11 @@
 ---
 name: session-end
 description: |
-  End Claude Code session with Beads sync and summary. MUST BE USED when user says they're done, ending session, or logging off.
-  Guarantees Beads export to git, shows session stats, and suggests next ready work. Handles cleanup and context saving.
+  End Claude Code session with Beads health verification and summary. MUST BE USED when user says they're done, ending session, or logging off.
+  Verifies canonical Beads connectivity, shows session stats, and suggests next ready work. Handles cleanup and context saving.
   Use when user says "goodbye", "bye", "done for now", "logging off",
   or when user mentions end-of-session, session termination, cleanup, context saving,
-  bd sync, or export operations.
+  Beads checks, Dolt status, or export operations.
 tags: [workflow, beads, session, cleanup]
 allowed-tools:
   - mcp__plugin_beads_beads__*
@@ -15,7 +15,7 @@ allowed-tools:
 
 # Session End
 
-End session cleanly with Beads export, stats, and next work suggestion.
+End session cleanly with Beads health checks, stats, and next work suggestion.
 
 ## Workflow
 
@@ -24,18 +24,19 @@ End session cleanly with Beads export, stats, and next work suggestion.
 mcp__plugin_beads_beads__set_context(workspace_root="/path/to/project")
 ```
 
-### 2. Force Beads Sync
-**CRITICAL:** Beads auto-sync has 30s debounce. Session end requires explicit sync.
+### 2. Verify Canonical Beads Health
+**CRITICAL:** confirm Beads is reachable before ending session context.
 
 ```bash
-bd sync
+cd ~/bd
+bd dolt test --json
+bd status --json
 ```
 
 **What this does:**
-- Exports all changes to `.beads/issues.jsonl`
-- Commits changes to git
-- Pushes to remote (if configured)
-- Guarantees persistence across sessions
+- Confirms Dolt server connectivity
+- Confirms issue summary is queryable
+- Prevents silent session-end on broken tracker state
 
 ### 3. Get Session Stats
 ```
@@ -85,7 +86,7 @@ Current Work:
   bd-xpi.5 (in_progress): Implementation Part 2
   Epic: bd-xpi (DX_V3_BEADS_INTEGRATION)
 
-✅ Beads synced to git
+✅ Beads connectivity verified
 ✅ Canonicals verified clean
 
 📍 Next Session:
@@ -99,8 +100,8 @@ Say "bd ready" to see full ready work queue
 
 ## Best Practices
 
-- **Always call at session end** - Guarantees Beads persistence
-- **Don't skip sync** - Auto-sync may not fire before session terminates
+- **Always call at session end** - Catches tracker outages before context loss
+- **Don't skip health checks** - Prevents silent drift on broken Beads service
 - **Review stats** - Understand what was accomplished
 - **Note next work** - Reduces context switching overhead in next session
 - **Git status clean** - Commit all work before session-end
@@ -120,6 +121,6 @@ Say "bd ready" to see full ready work queue
 
 - ❌ Create new issues (use beads-workflow for that)
 - ❌ Commit code (use sync-feature-branch first)
-- ❌ Close ongoing work (only syncs state)
+- ❌ Close ongoing work (only validates state + summarizes)
 
 **Philosophy:** Clean exits + Context preservation + Ready for next session

@@ -3,6 +3,7 @@ name: beads-workflow
 description: |
   Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations.
   Handles full epic→branch→work lifecycle, dependencies, and ready task queries.
+  Uses centralized Beads at ~/bd with Dolt server mode for canonical multi-VM reliability.
   Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies,
   or when user mentions "create issue", "track work", "bd create", "find ready tasks",
   issue management, dependencies, work tracking, or Beads workflow operations.
@@ -31,6 +32,19 @@ Beads provides persistent task memory across sessions, enabling:
 - Discovering and filing new work during implementation
 - Finding ready tasks with no blockers
 - Managing dependencies between issues
+
+## Canonical Contract
+
+- Canonical Beads repo is `~/bd` (remote `stars-end/bd`).
+- Canonical backend is Dolt server mode.
+- Run Beads mutations from `~/bd` by default; app repos should use worktrees for code and reference Beads IDs.
+- Before dispatch waves, verify:
+
+```bash
+cd ~/bd
+bd dolt test --json
+bd status --json
+```
 
 ## When to Use This Skill
 
@@ -246,10 +260,10 @@ bd dep bd-discovered-bug bd-parent-feature --type discovered-from
 - `dx-status.sh` - Shows database and variable configuration
 
 **Manual Tools:**
-- `bd-sync-safe` - Deterministic sync script (symlinked to `~/bin/`)
-- `bd-import-safe` - Manual chunked import for large JSONL files
+- `bd-doctor` - Diagnose/repair canonical Beads connectivity and lock issues
+- `beads-dolt-fleet` - Fleet-wide convergence and service health operations
 
-**When invoked:** Large imports, database recovery, environment bootstrap
+**When invoked:** Database recovery, fleet convergence, environment bootstrap
 
 **See also:** `~/agent-skills/docs/BEADS_DX_QUICK_REFERENCE.md`
 
@@ -315,18 +329,13 @@ bd dep bd-discovered-bug bd-parent-feature --type discovered-from
 - Prevents duplicate linking
 - Use when: PR created (called by create-pull-request skill)
 
-## Git Hooks Integration
+## Service Integration
 
-**Pre-commit hook (.githooks/pre-commit):**
-- Auto-flushes Beads database to `.beads/issues.jsonl`
-- Stages JSONL files
-- Zero-lag sync before commit
+**Canonical runtime service:**
+- Linux canonical VMs: `systemctl --user status beads-dolt.service`
+- macOS canonical host: `launchctl print gui/$(id -u)/com.starsend.beads-dolt`
 
-**Post-merge hook (.githooks/post-merge):**
-- Auto-imports JSONL changes after pull/merge
-- Keeps local database in sync
-
-**Result:** Beads database stays synchronized with git automatically.
+**Result:** Beads availability is managed as a host service, not per-repo JSONL sync hooks.
 
 ## Workflow Patterns
 
@@ -496,25 +505,20 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 - Check: `which bd`
 - Ensure `~/bin` or `scripts/` in PATH
 
-**Database out of sync:**
-- Run: `bd sync`
-- Check: `git status .beads/issues.jsonl`
-- Verify git hooks installed
+**Beads service unavailable or stale:**
+- Run: `cd ~/bd && bd dolt test --json`
+- Check: `cd ~/bd && bd status --json`
+- Verify host service is active (`beads-dolt.service` on Linux or launchd agent on macOS)
 
 **Issue not found:**
 - List all: `bd list --status open`
 - Check ID format: `bd-abc123` (not just abc123)
 - Verify beads initialized: `ls .beads/`
 
-**Import hangs on large JSONL files (500+ issues):** ⚠️ **RESOLVED**
-- **Status**: Resolved via [stars-end/agent-skills#147](https://github.com/stars-end/agent-skills/pull/147)
-- **Symptom**: `bd import -i issues.jsonl --no-daemon` hangs for 5+ minutes
-- **Cause**: SQLite transaction scaling during dependency graph construction
-- **Solutions**:
-  - **Automation**: Use DX tooling (`dx-hydrate.sh`, `dx-check.sh`)
-  - **Manual**: Use `bd-import-safe issues.jsonl` (symlinked to `~/bin/`)
-- **Documentation**: `~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md`
-- **Upstream**: https://github.com/steveyeggie/beads/issues/1629
+**Dolt lock contention (`database ... is locked`):**
+- Ensure only one Dolt server process is using `~/bd/.beads/dolt` on the host
+- Restart managed service (`systemctl --user restart beads-dolt.service` on Linux)
+- Re-check with `cd ~/bd && bd dolt test --json`
 
 ---
 

@@ -85,31 +85,12 @@ Check:
 - **Status:** Must be `open`
 - **Assignee:** Suggest `claude-code` if unassigned
 
-### 2. Verify Beads in Master
+### 2. Verify Canonical Beads Health
 
-**Critical:** Cloud needs latest Beads state.
+**Critical:** Cloud prompts must reference current state from canonical `~/bd`.
 
 ```bash
-# Export current state
-bd export --force
-
-# Check for uncommitted changes
-git status .beads/issues.jsonl
-```
-
-**If uncommitted changes exist:**
-```
-⚠️ Beads JSONL has uncommitted changes!
-
-Cloud sessions will NOT see these issues unless they're in master.
-
-REQUIRED STEPS:
-1. Commit: git add .beads/issues.jsonl && git commit -m "chore: Update Beads issues"
-2. Push: git push origin master
-3. Verify: GitHub shows .beads/issues.jsonl updated
-4. THEN start cloud sessions
-
-Why: Cloud clones master branch, needs committed Beads state.
+(cd ~/bd && bd dolt test --json && bd status --json)
 ```
 
 ### 3. Identify Context Skills for Each Issue
@@ -449,24 +430,22 @@ You must:
 3. Or re-scope issues to be independent
 ```
 
-### Uncommitted Beads State
+### Unhealthy Beads State
 
-**If `.beads/issues.jsonl` has uncommitted changes:**
+**If canonical Beads health checks fail:**
 
 ```
-⚠️ Cloud sessions need committed Beads state!
+⚠️ Cloud sessions need healthy canonical Beads state!
 
-Current: .beads/issues.jsonl modified locally
-Problem: Cloud clones master, won't see your local issues
+Current: `bd dolt test --json` failed
+Problem: prompts may reference stale/unavailable tracker data
 
 REQUIRED STEPS:
-1. git add .beads/issues.jsonl
-2. git commit -m "chore: Update Beads state for cloud sessions"
-3. git push origin master
-4. Verify: Check GitHub shows updated .beads/issues.jsonl
-5. THEN paste cloud prompts
+1. Repair Beads service on host (`bd-doctor` / runbook)
+2. Verify: `(cd ~/bd && bd dolt test --json && bd status --json)`
+3. THEN paste cloud prompts
 
-Why: Cloud sessions clone master branch on startup.
+Why: cloud prompts should be generated from current canonical tracker state.
 ```
 
 ## Iterative Work Pattern
