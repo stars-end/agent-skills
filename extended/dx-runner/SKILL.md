@@ -369,6 +369,12 @@ Allowed prefixes:
 ```
 
 Non-worktree paths are rejected with exit code 22.
+If no safe worktree can be inferred (for example launching from `$HOME` without
+`--worktree` and no prior beads metadata), runner exits with:
+
+```
+reason_code=worktree_missing
+```
 
 ### No-op Detection (bd-cbsb.17)
 
@@ -442,6 +448,12 @@ Or if remediation fails:
 mise trust: UNTRUSTED
   WARN_CODE=opencode_mise_untrusted severity=warn action=run_mise_trust_in_worktree
 ```
+
+Preflight noise policy:
+- `opencode_mise_untrusted` is emitted only when a concrete `.mise.toml` target
+  is in scope.
+- Otherwise preflight reports:
+  - `mise trust: N/A (no .mise target)`
 
 ## Migration from Legacy Tools
 
@@ -548,12 +560,18 @@ dx-wave profiles
 
 # Show help
 dx-wave --help
+
+# Preferred batch entrypoint
+dx-wave batch-start --items bd-a,bd-b --prompt-file /tmp/task.prompt
 ```
 
 Key differences from direct `dx-runner`:
 - Requires `--profile` (defaults to `opencode-prod`)
 - Enforces profile-first workflow
 - Simplified interface for wave operators
+- Includes deterministic batch fallback:
+  - Emits `WARN_CODE=dx_batch_unavailable_fallback_runner`
+  - Falls back to per-item `dx-runner start` dispatch
 
 ## Related
 

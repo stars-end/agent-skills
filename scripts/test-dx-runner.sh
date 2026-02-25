@@ -1805,6 +1805,52 @@ EOF
 }
 
 # ============================================================================
+# Test: Worktree Resolution Guard (home-cwd external_directory edge)
+# ============================================================================
+
+test_worktree_resolution_guard() {
+    echo "=== Testing Worktree Resolution Guard ==="
+
+    local tmp_bin fake_op models_file prompt beads out rc run_dir
+    tmp_bin="$(mktemp -d)"
+    fake_op="$tmp_bin/opencode"
+    models_file="$(mktemp)"
+    prompt="$(mktemp)"
+    beads="test-worktree-guard-$$"
+    run_dir="$(mktemp -d)"
+    echo "zhipuai-coding-plan/glm-5" > "$models_file"
+    echo "READY" > "$prompt"
+
+    cat > "$fake_op" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "models" ]]; then
+  cat "${FAKE_MODELS_FILE}"
+  exit 0
+fi
+if [[ "$1" == "run" ]]; then
+  echo '{"type":"assistant","content":"READY"}'
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$fake_op"
+
+    set +e
+    out="$(cd "$run_dir" && PATH="$tmp_bin:$PATH" FAKE_MODELS_FILE="$models_file" "$DX_RUNNER" start --beads "$beads" --provider opencode --prompt-file "$prompt" 2>&1)"
+    rc=$?
+    set -e
+    if [[ "$rc" -eq 22 ]] && echo "$out" | grep -q "reason_code=worktree_missing"; then
+        pass "start fails with explicit worktree_missing when launched from non-git cwd without --worktree"
+    else
+        fail "worktree guard missing or incorrect (rc=$rc out=$out)"
+    fi
+
+    rm -rf "$tmp_bin" "$run_dir"
+    rm -f "$models_file" "$prompt"
+    rm -f /tmp/dx-runner/opencode/"${beads}".*
+}
+
+# ============================================================================
 # Test: Adapter Contract Parity (bd-xga8.14.3)
 # ============================================================================
 
@@ -2373,6 +2419,7 @@ run_all_tests() {
     test_adapter_stop_parity
     test_governance_gates
     test_start_preflight
+    test_worktree_resolution_guard
     test_beads_gate
     test_beads_gate_json_schema
     test_health_states

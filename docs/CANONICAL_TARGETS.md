@@ -75,9 +75,9 @@ sudo tailscale up --ssh
 | `git` | ✅ | ✅ | ✅ | ✅ |
 | `bd` (beads) | ✅ | ✅ | ✅ | ✅ |
 | `ru` (repo_updater) | ✅ | ✅ | ✅ | ✅ |
-| `op` (1Password CLI) | ✅ | ✅ | ❌ | ❌ |
+| `op` (1Password CLI) | ✅ | ✅ | ❌ | ✅ |
 
-**Note:** epyc6 lacks `jq`. Scripts deployed there should use grep-based JSON parsing or avoid jq dependency. epyc6 and epyc12 lack `op` CLI - use environment variables for secrets.
+**Note:** epyc6 lacks `jq`. Scripts deployed there should use grep-based JSON parsing or avoid jq dependency. epyc6 lacks `op` CLI; epyc12 has `op` installed and should use host token/session checks in preflight.
 
 ### Secret Cache Locations
 

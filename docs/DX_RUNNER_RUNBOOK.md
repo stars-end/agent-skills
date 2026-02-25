@@ -249,6 +249,26 @@ Prune handles:
 - Dead processes (exited without outcome)
 - Ghost entries from crashed runs
 
+## dx-batch Saturation Incident Playbook
+
+When batch waves fail with `exec_saturation`, use this deterministic recovery flow:
+
+```bash
+# 1) Diagnose wave-level issues and stale leases
+dx-batch doctor --wave-id <wave-id> --json
+
+# 2) Prune stale dx-runner jobs and pid ghosts
+dx-runner prune --json
+
+# 3) Re-dispatch in degraded mode while host pressure clears
+dx-batch start --items <bd-a,bd-b,...> --max-parallel 1 --exec-process-cap 20
+```
+
+Stop conditions before retry:
+- `dx-batch doctor` reports unresolved critical issues
+- `dx-runner prune` repeatedly returns stale entries
+- external live-process count remains above cap after cleanup
+
 ## When to Fallback to cc-glm
 
 Use cc-glm provider when:

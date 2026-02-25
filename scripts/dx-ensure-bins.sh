@@ -24,8 +24,17 @@ link() {
 # Core control-plane CLIs
 # dx-runner is the canonical dispatch surface (bd-xga8.14.8)
 link "$AGENTS_ROOT/scripts/dx-runner" "$BIN_DIR/dx-runner"
-# dx-dispatch.py is the BREAK-GLASS compatibility shim (deprecated)
-link "$AGENTS_ROOT/scripts/dx-dispatch.py" "$BIN_DIR/dx-dispatch"
+# dx-batch is the orchestration plane over dx-runner (bd-cbsb.25)
+link "$AGENTS_ROOT/scripts/dx-batch" "$BIN_DIR/dx-batch"
+# dx-wave is the profile-first operator wrapper for safe dispatch
+link "$AGENTS_ROOT/scripts/dx-wave" "$BIN_DIR/dx-wave"
+# dx-dispatch shell shim is canonical compatibility entrypoint.
+# Fall back to the legacy Python implementation only if shell shim is missing.
+if [[ -x "$AGENTS_ROOT/scripts/dx-dispatch" ]]; then
+  link "$AGENTS_ROOT/scripts/dx-dispatch" "$BIN_DIR/dx-dispatch"
+else
+  link "$AGENTS_ROOT/scripts/dx-dispatch.py" "$BIN_DIR/dx-dispatch"
+fi
 # fleet-dispatch.py consolidated into dx-dispatch.py (see archive/dispatch-legacy/)
 # link "$AGENTS_ROOT/scripts/fleet-dispatch.py" "$BIN_DIR/fleet-dispatch"
 link "$AGENTS_ROOT/scripts/worktree-setup.sh" "$BIN_DIR/worktree-setup.sh"
@@ -34,27 +43,27 @@ link "$AGENTS_ROOT/scripts/dx-status.sh" "$BIN_DIR/dx-status"
 link "$AGENTS_ROOT/scripts/dx-check.sh" "$BIN_DIR/dx-check"
 link "$AGENTS_ROOT/scripts/dx-doctor.sh" "$BIN_DIR/dx-doctor"
 
-	# Fleet visibility + toolchain consistency
-	link "$AGENTS_ROOT/scripts/dx-fleet-status.sh" "$BIN_DIR/dx-fleet-status"
-	link "$AGENTS_ROOT/scripts/dx-toolchain.sh" "$BIN_DIR/dx-toolchain"
-	link "$AGENTS_ROOT/scripts/dx-triage.sh" "$BIN_DIR/dx-triage"
-	link "$AGENTS_ROOT/scripts/dx-janitor.sh" "$BIN_DIR/dx-janitor"
-	link "$AGENTS_ROOT/scripts/dx-sweeper.sh" "$BIN_DIR/dx-sweeper"
-	link "$AGENTS_ROOT/scripts/dx-verify-clean.sh" "$BIN_DIR/dx-verify-clean"
-	link "$AGENTS_ROOT/scripts/dx-worktree-gc.sh" "$BIN_DIR/dx-worktree-gc"
-	link "$AGENTS_ROOT/scripts/dx-delegate.sh" "$BIN_DIR/dx-delegate"
+# Fleet visibility + toolchain consistency
+link "$AGENTS_ROOT/scripts/dx-fleet-status.sh" "$BIN_DIR/dx-fleet-status"
+link "$AGENTS_ROOT/scripts/dx-toolchain.sh" "$BIN_DIR/dx-toolchain"
+link "$AGENTS_ROOT/scripts/dx-triage.sh" "$BIN_DIR/dx-triage"
+link "$AGENTS_ROOT/scripts/dx-janitor.sh" "$BIN_DIR/dx-janitor"
+link "$AGENTS_ROOT/scripts/dx-sweeper.sh" "$BIN_DIR/dx-sweeper"
+link "$AGENTS_ROOT/scripts/dx-verify-clean.sh" "$BIN_DIR/dx-verify-clean"
+link "$AGENTS_ROOT/scripts/dx-worktree-gc.sh" "$BIN_DIR/dx-worktree-gc"
+link "$AGENTS_ROOT/scripts/dx-delegate.sh" "$BIN_DIR/dx-delegate"
 
-	# Beads helpers (used across repos)
-	link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
-	link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
-	link "$AGENTS_ROOT/scripts/bd-sync-safe.sh" "$BIN_DIR/bd-sync-safe"
+# Beads helpers (used across repos)
+link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
+link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
+link "$AGENTS_ROOT/scripts/bd-sync-safe.sh" "$BIN_DIR/bd-sync-safe"
 
-	# Skills plane helpers
-	link "$AGENTS_ROOT/scripts/dx-agents-skills-install.sh" "$BIN_DIR/dx-agents-skills-install"
-	link "$AGENTS_ROOT/scripts/dx-codex-skills-install.sh" "$BIN_DIR/dx-codex-skills-install"
-	link "$AGENTS_ROOT/extended/cc-glm/scripts/cc-glm-headless.sh" "$BIN_DIR/cc-glm-headless"
+# Skills plane helpers
+link "$AGENTS_ROOT/scripts/dx-agents-skills-install.sh" "$BIN_DIR/dx-agents-skills-install"
+link "$AGENTS_ROOT/scripts/dx-codex-skills-install.sh" "$BIN_DIR/dx-codex-skills-install"
+link "$AGENTS_ROOT/extended/cc-glm/scripts/cc-glm-headless.sh" "$BIN_DIR/cc-glm-headless"
 
-	# Existing tool: run
-	link "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"
+# Existing tool: run
+link "$AGENTS_ROOT/tools/run" "$BIN_DIR/run"
 
 echo "✅ ensured ~/bin tools"

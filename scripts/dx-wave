@@ -19,9 +19,33 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DX_RUNNER="${SCRIPT_DIR}/dx-runner"
+DX_BATCH_LOCAL="${SCRIPT_DIR}/dx-batch"
 
 DEFAULT_PROFILE="opencode-prod"
 PROFILE="${DX_WAVE_PROFILE:-$DEFAULT_PROFILE}"
+
+resolve_dx_batch() {
+    if [[ -x "$DX_BATCH_LOCAL" ]]; then
+        echo "$DX_BATCH_LOCAL"
+        return 0
+    fi
+    if command -v dx-batch >/dev/null 2>&1; then
+        command -v dx-batch
+        return 0
+    fi
+    return 1
+}
+
+has_flag() {
+    local flag="$1"
+    shift
+    for arg in "$@"; do
+        if [[ "$arg" == "$flag" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 usage() {
     cat <<'EOF'
@@ -29,6 +53,11 @@ dx-wave - Safe operator wrapper for dx-runner
 
 Usage:
   dx-wave start --beads <id> --prompt-file <path> [--profile <name>] [--worktree <path>]
+  dx-wave batch-start --items <id1,id2,...> --prompt-file <path> [--profile <name>] [--worktree <path>]
+  dx-wave batch-status --wave-id <id> [--json]
+  dx-wave batch-resume --wave-id <id>
+  dx-wave batch-cancel --wave-id <id>
+  dx-wave batch-doctor --wave-id <id> [--json]
   dx-wave check --beads <id> [--json]
   dx-wave status [--beads <id>] [--json]
   dx-wave report --beads <id> [--format json|markdown]
@@ -46,6 +75,9 @@ Options:
 Environment:
   DX_WAVE_PROFILE    Default profile (default: opencode-prod)
 
+Warning codes:
+  dx_batch_unavailable_fallback_runner  dx-batch missing; dispatch degraded to dx-runner lane
+
 Profiles:
   opencode-prod    Production-safe OpenCode with strict governance
   cc-glm-fallback  Reliability backstop using Claude via Z.ai
@@ -61,9 +93,89 @@ Examples:
   # Check job status
   dx-wave check --beads bd-abc
 
+  # Start a batch wave (preferred)
+  dx-wave batch-start --items bd-a,bd-b,bd-c --prompt-file /tmp/task.prompt
+
   # Generate report
   dx-wave report --beads bd-abc --format markdown
 EOF
+}
+
+runner_start() {
+    if has_flag --profile "$@"; then
+        "$DX_RUNNER" start "$@"
+    else
+        "$DX_RUNNER" start --profile "$PROFILE" "$@"
+    fi
+}
+
+batch_start() {
+    local dx_batch_bin=""
+    if dx_batch_bin="$(resolve_dx_batch)"; then
+        exec "$dx_batch_bin" start "$@"
+    fi
+
+    local items="" prompt_file="" provider="" worktree=""
+    local passthrough=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --items) items="${2:-}"; shift 2 ;;
+            --prompt-file) prompt_file="${2:-}"; shift 2 ;;
+            --provider) provider="${2:-}"; shift 2 ;;
+            --worktree) worktree="${2:-}"; shift 2 ;;
+            *)
+                passthrough+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$items" || -z "$prompt_file" ]]; then
+        echo "batch-start fallback requires --items and --prompt-file" >&2
+        return 2
+    fi
+    if [[ ! -f "$prompt_file" ]]; then
+        echo "prompt file not found: $prompt_file" >&2
+        return 1
+    fi
+
+    echo "WARN_CODE=dx_batch_unavailable_fallback_runner" >&2
+    echo "WARN: dx-batch is unavailable on PATH. Falling back to deterministic dx-runner dispatch." >&2
+
+    local rc=0
+    local IFS=','
+    for beads_id in $items; do
+        beads_id="${beads_id// /}"
+        [[ -n "$beads_id" ]] || continue
+        local cmd=("$DX_RUNNER" start --beads "$beads_id" --prompt-file "$prompt_file")
+        if [[ -n "$provider" ]]; then
+            cmd+=(--provider "$provider")
+        else
+            cmd+=(--profile "$PROFILE")
+        fi
+        if [[ -n "$worktree" ]]; then
+            cmd+=(--worktree "$worktree")
+        fi
+        if [[ ${#passthrough[@]} -gt 0 ]]; then
+            cmd+=("${passthrough[@]}")
+        fi
+        if ! "${cmd[@]}"; then
+            rc=1
+        fi
+    done
+    return "$rc"
+}
+
+batch_passthrough() {
+    local subcmd="$1"
+    shift
+    local dx_batch_bin=""
+    if dx_batch_bin="$(resolve_dx_batch)"; then
+        exec "$dx_batch_bin" "$subcmd" "$@"
+    fi
+    echo "WARN_CODE=dx_batch_unavailable_fallback_runner" >&2
+    echo "WARN: dx-batch unavailable; no equivalent for '$subcmd'. Use dx-runner status/check/report directly." >&2
+    return 4
 }
 
 cmd="${1:-}"
@@ -71,8 +183,22 @@ shift || true
 
 case "$cmd" in
     start)
-        # Profile-first: always use a profile, no inline model env
-        "$DX_RUNNER" start --profile "$PROFILE" "$@"
+        runner_start "$@"
+        ;;
+    batch-start)
+        batch_start "$@"
+        ;;
+    batch-status)
+        batch_passthrough status "$@"
+        ;;
+    batch-resume)
+        batch_passthrough resume "$@"
+        ;;
+    batch-cancel)
+        batch_passthrough cancel "$@"
+        ;;
+    batch-doctor)
+        batch_passthrough doctor "$@"
         ;;
     check)
         "$DX_RUNNER" check "$@"
@@ -96,7 +222,11 @@ case "$cmd" in
         "$DX_RUNNER" profiles "$@"
         ;;
     preflight)
-        "$DX_RUNNER" preflight --profile "$PROFILE" "$@"
+        if has_flag --profile "$@"; then
+            "$DX_RUNNER" preflight "$@"
+        else
+            "$DX_RUNNER" preflight --profile "$PROFILE" "$@"
+        fi
         ;;
     -h|--help|help)
         usage

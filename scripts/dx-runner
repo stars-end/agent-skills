@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Requires associative arrays used throughout this script.
+if [[ -z "${BASH_VERSION:-}" ]] || (( ${BASH_VERSINFO[0]:-0} < 4 )); then
+    echo "dx-runner requires bash >= 4 (found: ${BASH_VERSION:-unknown})." >&2
+    echo "On macOS, run with /opt/homebrew/bin/bash or ensure newer bash is first in PATH." >&2
+    exit 2
+fi
+
 # dx-runner (V2.0 - Unified Multi-Provider Dispatch Runner with Hardening)
 #
 # Canonical entrypoint for all agent dispatch with unified governance:
@@ -603,17 +610,62 @@ list_providers_for_beads() {
 resolve_worktree() {
     local beads="$1"
     local from_flag="${2:-}"
+    local prompt_file="${3:-}"
     local resolved="$from_flag"
+
+    # 1) Explicit flag wins.
+    if [[ -n "$resolved" && -d "$resolved" ]]; then
+        printf '%s' "$resolved"
+        return 0
+    fi
+
+    # 2) Existing run metadata for this beads id.
     if [[ -z "$resolved" && -n "$beads" ]]; then
         local provider
-        provider="$(find_provider_for_beads "$beads")"
-        job_paths "$beads" "$provider"
-        resolved="$(meta_get "$META_FILE" "worktree" 2>/dev/null || true)"
+        provider="$(find_provider_for_beads "$beads" 2>/dev/null || true)"
+        if [[ -n "$provider" ]]; then
+            job_paths "$beads" "$provider"
+            resolved="$(meta_get "$META_FILE" "worktree" 2>/dev/null || true)"
+            if [[ -n "$resolved" && -d "$resolved" ]]; then
+                printf '%s' "$resolved"
+                return 0
+            fi
+        fi
     fi
-    if [[ -z "$resolved" ]]; then
+
+    # 3) Infer from prompt file ancestry if it is under a git worktree.
+    if [[ -z "$resolved" && -n "$prompt_file" && -f "$prompt_file" ]]; then
+        local candidate
+        candidate="$(cd "$(dirname "$prompt_file")" 2>/dev/null && pwd -P || true)"
+        while [[ -n "$candidate" && "$candidate" != "/" ]]; do
+            if git -C "$candidate" rev-parse --git-dir >/dev/null 2>&1; then
+                resolved="$candidate"
+                break
+            fi
+            candidate="$(dirname "$candidate")"
+        done
+        if [[ -n "$resolved" && -d "$resolved" ]]; then
+            printf '%s' "$resolved"
+            return 0
+        fi
+    fi
+
+    # 4) Explicit environment default (for non-interactive launchers).
+    if [[ -z "$resolved" && -n "${DX_RUNNER_DEFAULT_WORKTREE:-}" && -d "${DX_RUNNER_DEFAULT_WORKTREE}" ]]; then
+        resolved="$DX_RUNNER_DEFAULT_WORKTREE"
+        printf '%s' "$resolved"
+        return 0
+    fi
+
+    # 5) Current directory only if it is a git worktree.
+    if git -C "$(pwd)" rev-parse --git-dir >/dev/null 2>&1; then
         resolved="$(pwd)"
+        printf '%s' "$resolved"
+        return 0
     fi
-    printf '%s' "$resolved"
+
+    # No safe worktree resolved.
+    printf ''
 }
 
 # ============================================================================
@@ -2342,8 +2394,12 @@ start_cmd() {
 
     # Resolve and pin worktree to avoid cwd drift/external_directory failures.
     if [[ "$PROVIDER" == "opencode" || -n "$WORKTREE" ]]; then
-        WORKTREE="$(resolve_worktree "$BEADS" "$WORKTREE")"
-        [[ -d "$WORKTREE" ]] || { echo "worktree not found: $WORKTREE" >&2; exit 22; }
+        WORKTREE="$(resolve_worktree "$BEADS" "$WORKTREE" "$PROMPT_FILE")"
+        if [[ -z "$WORKTREE" || ! -d "$WORKTREE" ]]; then
+            echo "reason_code=worktree_missing" >&2
+            echo "worktree resolution failed for beads=$BEADS (cwd=$(pwd)); pass --worktree /tmp/agents/<beads>/<repo>" >&2
+            exit 22
+        fi
 
         # Permission gate (bd-cbsb.16)
         local perm_result
@@ -2353,17 +2409,23 @@ start_cmd() {
             exit 22
         fi
         
-        # bd-8wdg.11: Auto-remediate mise trust with proper status reporting
+        # bd-8wdg.11: Auto-remediate mise trust only for concrete .mise targets.
         if [[ "${DX_RUNNER_AUTO_TRUST_MISE:-1}" == "1" ]] && command -v mise >/dev/null 2>&1; then
-            local trust_before trust_after
-            trust_before="$(mise trust --show 2>/dev/null || true)"
-            if [[ -z "$trust_before" ]]; then
-                mise trust "$WORKTREE" >/dev/null 2>&1 || true
-                trust_after="$(mise trust --show 2>/dev/null || true)"
-                if [[ -n "$trust_after" ]]; then
-                    echo "[bd-8wdg.11] mise trust auto-remediated for $WORKTREE" >&2
-                else
-                    echo "[bd-8wdg.11] WARN: mise trust auto-remediation failed for $WORKTREE" >&2
+            local trust_target trust_before trust_after
+            trust_target=""
+            if [[ -d "$WORKTREE" && -f "$WORKTREE/.mise.toml" ]]; then
+                trust_target="$(cd "$WORKTREE" 2>/dev/null && pwd -P || true)"
+            fi
+            if [[ -n "$trust_target" ]]; then
+                trust_before="$(mise trust --show 2>/dev/null || true)"
+                if ! printf '%s\n' "$trust_before" | grep -Fqx "$trust_target"; then
+                    mise trust "$trust_target" >/dev/null 2>&1 || true
+                    trust_after="$(mise trust --show 2>/dev/null || true)"
+                    if printf '%s\n' "$trust_after" | grep -Fqx "$trust_target"; then
+                        echo "[bd-8wdg.11] mise trust auto-remediated for $trust_target" >&2
+                    else
+                        echo "[bd-8wdg.11] WARN: mise trust auto-remediation failed for $trust_target" >&2
+                    fi
                 fi
             fi
         fi
@@ -2805,6 +2867,23 @@ stop_cmd() {
     
     stop_job_internal "$BEADS" "$provider"
     
+    # Preserve previously finalized metrics if they are higher/truthier than the new snapshot.
+    if [[ -f "$OUTCOME_FILE" ]]; then
+        local prev_mut prev_log prev_cpu prev_pid_age
+        prev_mut="$(meta_get "$OUTCOME_FILE" "mutations" 2>/dev/null || echo 0)"
+        prev_log="$(meta_get "$OUTCOME_FILE" "log_bytes" 2>/dev/null || echo 0)"
+        prev_cpu="$(meta_get "$OUTCOME_FILE" "cpu_time_sec" 2>/dev/null || echo 0)"
+        prev_pid_age="$(meta_get "$OUTCOME_FILE" "pid_age_sec" 2>/dev/null || echo 0)"
+        [[ "$prev_mut" =~ ^[0-9]+$ ]] || prev_mut=0
+        [[ "$prev_log" =~ ^[0-9]+$ ]] || prev_log=0
+        [[ "$prev_cpu" =~ ^[0-9]+$ ]] || prev_cpu=0
+        [[ "$prev_pid_age" =~ ^[0-9]+$ ]] || prev_pid_age=0
+        if [[ "$prev_mut" -gt "$snap_mutations" ]]; then snap_mutations="$prev_mut"; fi
+        if [[ "$prev_log" -gt "$snap_log_bytes" ]]; then snap_log_bytes="$prev_log"; fi
+        if [[ "$prev_cpu" -gt "$snap_cpu" ]]; then snap_cpu="$prev_cpu"; fi
+        if [[ "$prev_pid_age" -gt "$snap_pid_age" ]]; then snap_pid_age="$prev_pid_age"; fi
+    fi
+
     # bd-8wdg.3: Persist outcome with manual_stop reason and captured metrics
     persist_outcome "$BEADS" 137 "$OUTCOME_FILE" "$META_FILE" "manual_stop"
     
