@@ -249,6 +249,66 @@ provider_running_count() {
     echo "$count"
 }
 
+canonical_beads_repo_path() {
+    local path="${BEADS_REPO_PATH:-$HOME/bd}"
+    # Expand leading ~ for deterministic comparisons.
+    if [[ "$path" == "~/"* ]]; then
+        path="$HOME/${path#~/}"
+    fi
+    printf '%s' "$path"
+}
+
+canonical_pwd() {
+    local path="${1:-.}"
+    if [[ -d "$path" ]]; then
+        (cd "$path" >/dev/null 2>&1 && pwd -P) || printf '%s' "$path"
+    else
+        printf '%s' "$path"
+    fi
+}
+
+require_canonical_beads_cwd() {
+    local command="${1:-}"
+    if is_truthy "${DX_ALLOW_NON_CANONICAL_BD_CWD:-0}"; then
+        return 0
+    fi
+    local canonical_repo
+    canonical_repo="$(canonical_beads_repo_path)"
+    local canonical_pwd_now canonical_repo_abs
+    canonical_pwd_now="$(canonical_pwd ".")"
+    canonical_repo_abs="$(canonical_pwd "$canonical_repo")"
+
+    if [[ -z "$canonical_repo_abs" || ! -d "$canonical_repo_abs" ]]; then
+        echo "beads cwd gate failed: canonical repo missing at ${canonical_repo}" >&2
+        echo "Remediation: clone/fix Beads repo at ${canonical_repo}" >&2
+        return 1
+    fi
+
+    if [[ "$canonical_pwd_now" != "$canonical_repo_abs" ]]; then
+        echo "beads cwd gate failed: command '${command}' must run from canonical Beads repo" >&2
+        echo "Current cwd: $canonical_pwd_now" >&2
+        echo "Required cwd: $canonical_repo_abs" >&2
+        echo "Remediation: cd \"$canonical_repo_abs\" && dx-runner ${command} ..." >&2
+        return 1
+    fi
+    return 0
+}
+
+run_bd_locked() {
+    local beads_repo
+    beads_repo="$(canonical_beads_repo_path)"
+    local lock_dir="$beads_repo/.beads"
+    local lock_file="$lock_dir/.dx-bd-mutation.lock"
+    mkdir -p "$lock_dir"
+    (
+        flock -w "${DX_BEADS_LOCK_WAIT_SEC:-10}" 9 || {
+            echo "failed to acquire Beads lock: $lock_file" >&2
+            exit 1
+        }
+        cd "$beads_repo" && bd "$@"
+    ) 9>"$lock_file"
+}
+
 strip_ansi() {
     sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' 2>/dev/null || cat
 }
@@ -1199,6 +1259,15 @@ unified_preflight() {
             echo "  ERROR: Adapter not found: $adapter"
             errors=$((errors + 1))
         fi
+    fi
+
+    # Check 1.5: Canonical Beads cwd integrity
+    echo -n "beads cwd integrity: "
+    if require_canonical_beads_cwd "preflight"; then
+        echo "OK"
+    else
+        echo "FAILED"
+        errors=$((errors + 1))
     fi
     
     # Provider-specific preflight
@@ -3643,7 +3712,7 @@ finalize_cmd() {
 # ============================================================================
 
 beads_gate_eval() {
-    local repo_path="${1:-$(pwd)}"
+    local repo_path="${1:-$(canonical_beads_repo_path)}"
     local probe_id="${2:-}"
     local do_write_probe="${3:-false}"
     
@@ -3699,7 +3768,7 @@ beads_gate_eval() {
     
     # 3. DB connectivity check
     local status_output
-    if ! status_output="$(cd "$repo_path" && bd status 2>&1)"; then
+    if ! status_output="$(run_bd_locked status 2>&1)"; then
         reason_code="beads_db_error"
         details="bd status failed: ${status_output:-no output}"
         db_status="error"
@@ -3713,7 +3782,7 @@ beads_gate_eval() {
     if [[ -n "$probe_id" ]]; then
         repo_id_db="unavailable:probe_pending"
         local show_output
-        if show_output="$(cd "$repo_path" && bd show "$probe_id" 2>&1)"; then
+        if show_output="$(run_bd_locked show "$probe_id" 2>&1)"; then
             repo_id_db="$(echo "$show_output" | grep -oE 'repo[-_]?id[=:][[:space:]]*[a-zA-Z0-9_-]+' | head -1 | sed 's/.*[=:][[:space:]]*//' || true)"
             if [[ -z "$repo_id_db" ]]; then
                 repo_id_db="unavailable:field_missing"
@@ -3741,7 +3810,7 @@ beads_gate_eval() {
     if [[ "$do_write_probe" == "true" && -n "$probe_id" ]]; then
         local write_ts write_result
         write_ts="gate-test-$(date +%Y%m%d%H%M%S)"
-        if ! write_result="$(cd "$repo_path" && bd comments add "$probe_id" "$write_ts" 2>&1)"; then
+        if ! write_result="$(run_bd_locked comments add "$probe_id" "$write_ts" 2>&1)"; then
             reason_code="beads_write_blocked"
             details="Write probe failed: ${write_result:-no output}"
             printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
@@ -3797,6 +3866,14 @@ beads_gate_cmd() {
 # ============================================================================
 # MAIN
 # ============================================================================
+
+case "$CMD" in
+    start|status|check|health|stop|restart|prune|report|preflight|watchdog|finalize|beads-gate|baseline-gate|integrity-gate|feature-key-gate|evidence-gate|scope-gate)
+        if ! require_canonical_beads_cwd "$CMD"; then
+            exit 24
+        fi
+        ;;
+esac
 
 case "$CMD" in
     start) start_cmd "$@" ;;

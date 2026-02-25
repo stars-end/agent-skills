@@ -29,6 +29,11 @@ ARTIFACT_BASE = Path("/tmp/dx-batch")
 DX_RUNNER_LOG_BASE = Path("/tmp/dx-runner")
 CONFIG_BASE = Path(__file__).parent.parent / "configs" / "dx-batch"
 SCHEMAS_DIR = CONFIG_BASE / "schemas"
+BEADS_REPO_PATH = Path(
+    os.environ.get("BEADS_REPO_PATH", str(Path.home() / "bd"))
+).expanduser()
+BEADS_LOCK_FILE = BEADS_REPO_PATH / ".beads" / ".dx-bd-mutation.lock"
+MIN_BD_VERSION = os.environ.get("DX_MIN_BD_VERSION", "0.49.4")
 
 
 class ItemStatus(str, Enum):
@@ -791,6 +796,57 @@ def parse_utc_epoch(ts):
         return 0.0
 
 
+def _parse_semver(version: str) -> tuple:
+    cleaned = (version or "").strip().split("-", 1)[0]
+    parts = cleaned.split(".")
+    nums = []
+    for part in parts[:3]:
+        try:
+            nums.append(int(part))
+        except ValueError:
+            nums.append(0)
+    while len(nums) < 3:
+        nums.append(0)
+    return tuple(nums)
+
+
+def _check_bd_version() -> tuple[bool, str]:
+    try:
+        result = subprocess.run(
+            ["bd", "--version"], capture_output=True, text=True, timeout=10
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        return False, f"bd_version_check_failed:{exc}"
+
+    if result.returncode != 0:
+        msg = result.stderr.strip() or result.stdout.strip() or "unknown"
+        return False, f"bd_version_command_failed:{msg}"
+
+    version = (result.stdout.strip().split()[-1] if result.stdout.strip() else "").strip()
+    if _parse_semver(version) < _parse_semver(MIN_BD_VERSION):
+        return False, f"bd_version_too_old:{version}<min:{MIN_BD_VERSION}"
+    return True, version
+
+
+def ensure_canonical_beads_cwd() -> tuple[bool, str]:
+    if os.environ.get("DX_ALLOW_NON_CANONICAL_BD_CWD", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        return True, ""
+    required = BEADS_REPO_PATH.resolve()
+    current = Path.cwd().resolve()
+    if not required.exists():
+        return False, f"beads_repo_missing:{required}"
+    if current != required:
+        return (
+            False,
+            f"beads_non_canonical_cwd: current={current} required={required}. Run: cd {required}",
+        )
+    return True, ""
+
+
 def get_dx_runner_log_path(provider, beads_id):
     """Get the path to dx-runner's provider log file."""
     return DX_RUNNER_LOG_BASE / provider / f"{beads_id}.log"
@@ -809,10 +865,17 @@ def read_dx_runner_log(provider, beads_id):
 
 def bd_command(args, check=False):
     """Run a bd command. Returns (success, stdout, stderr)."""
+    BEADS_LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
     try:
-        result = subprocess.run(
-            ["bd"] + args, capture_output=True, text=True, timeout=60
-        )
+        with open(BEADS_LOCK_FILE, "a+", encoding="utf-8") as lockf:
+            fcntl.flock(lockf.fileno(), fcntl.LOCK_EX)
+            result = subprocess.run(
+                ["bd"] + args,
+                cwd=str(BEADS_REPO_PATH),
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
         if check and result.returncode != 0:
             return False, result.stdout, result.stderr
         return result.returncode == 0, result.stdout, result.stderr
@@ -1521,6 +1584,38 @@ class Doctor:
             return result
         state = WaveState.from_dict(json.loads(state_file.read_text()))
         result["status"] = state.status.value
+
+        cwd_ok, cwd_msg = ensure_canonical_beads_cwd()
+        if not cwd_ok:
+            result["issues"].append(
+                {
+                    "type": "beads_non_canonical_cwd",
+                    "severity": "critical",
+                    "message": cwd_msg,
+                }
+            )
+
+        ver_ok, ver_detail = _check_bd_version()
+        if not ver_ok:
+            result["issues"].append(
+                {
+                    "type": "bd_version_out_of_policy",
+                    "severity": "critical",
+                    "message": ver_detail,
+                }
+            )
+
+        legacy_db = BEADS_REPO_PATH / ".beads" / "beads.db"
+        canonical_db = BEADS_REPO_PATH / ".beads" / "bd.db"
+        if legacy_db.exists() and canonical_db.exists():
+            result["issues"].append(
+                {
+                    "type": "beads_db_ambiguity",
+                    "severity": "critical",
+                    "message": f"Both DB files exist: {legacy_db} and {canonical_db}",
+                }
+            )
+
         for lease in LeaseLock.list_stale_leases(self.wave_id):
             result["issues"].append(
                 {
@@ -1591,6 +1686,10 @@ class Doctor:
 
 
 def cmd_start(args):
+    cwd_ok, cwd_msg = ensure_canonical_beads_cwd()
+    if not cwd_ok:
+        print(cwd_msg, file=sys.stderr)
+        return 1
     wave_id = args.wave_id or f"wave-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     items = args.items.split(",") if args.items else []
     if not items:
@@ -1610,6 +1709,10 @@ def cmd_start(args):
 
 
 def cmd_status(args):
+    cwd_ok, cwd_msg = ensure_canonical_beads_cwd()
+    if not cwd_ok:
+        print(cwd_msg, file=sys.stderr)
+        return 1
     wave_id = args.wave_id
     if not wave_id:
         print("Error: --wave-id required", file=sys.stderr)
@@ -1645,6 +1748,10 @@ def cmd_status(args):
 
 
 def cmd_check(args):
+    cwd_ok, cwd_msg = ensure_canonical_beads_cwd()
+    if not cwd_ok:
+        print(cwd_msg, file=sys.stderr)
+        return 1
     wave_id = args.wave_id
     if not wave_id:
         print("Error: --wave-id required", file=sys.stderr)
@@ -1693,6 +1800,10 @@ def cmd_check(args):
 
 
 def cmd_resume(args):
+    cwd_ok, cwd_msg = ensure_canonical_beads_cwd()
+    if not cwd_ok:
+        print(cwd_msg, file=sys.stderr)
+        return 1
     wave_id = args.wave_id
     if not wave_id:
         print("Error: --wave-id required", file=sys.stderr)
@@ -1707,6 +1818,10 @@ def cmd_resume(args):
 
 
 def cmd_cancel(args):
+    cwd_ok, cwd_msg = ensure_canonical_beads_cwd()
+    if not cwd_ok:
+        print(cwd_msg, file=sys.stderr)
+        return 1
     wave_id = args.wave_id
     if not wave_id:
         print("Error: --wave-id required", file=sys.stderr)
@@ -1721,6 +1836,10 @@ def cmd_cancel(args):
 
 
 def cmd_doctor(args):
+    cwd_ok, cwd_msg = ensure_canonical_beads_cwd()
+    if not cwd_ok:
+        print(cwd_msg, file=sys.stderr)
+        return 1
     wave_id = args.wave_id
     if not wave_id:
         print("Error: --wave-id required", file=sys.stderr)

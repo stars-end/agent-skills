@@ -1,89 +1,88 @@
-#!/bin/bash
-# bd-doctor check - Verify Beads workflow health
+#!/usr/bin/env bash
+# bd-doctor check - canonical Beads health checks for Dolt + ~/bd workflow
 
-set -e
+set -euo pipefail
 
-echo "🔍 Beads Doctor - Health Check"
+BEADS_REPO="${BEADS_REPO_PATH:-$HOME/bd}"
+EXPECTED_REMOTE_SUBSTR="${BEADS_REPO_REMOTE_SUBSTR:-stars-end/bd}"
+MIN_BD_VERSION="${DX_MIN_BD_VERSION:-0.49.4}"
 
-ISSUES_FOUND=0
+ISSUES=0
 
-# Check 1: JSONL timestamp skew (most common issue)
-echo ""
-echo "📋 Checking Beads JSONL sync..."
-if bd sync --dry-run 2>&1 | grep -q "JSONL is newer"; then
-  echo "⚠️  JSONL timestamp skew detected"
-  echo "   Cause: Daemon auto-exported between your changes and sync"
-  echo "   Fix: bd export --force (resolves timing issue)"
-  ISSUES_FOUND=$((ISSUES_FOUND + 1))
-elif bd sync --dry-run 2>&1 | grep -q "Pushing directly to master is blocked"; then
-  echo "⚠️  Attempting to push JSONL to protected branch"
-  echo "   Cause: Running bd sync on master branch"
-  echo "   Fix: Use 'bd export --force' on master (no push), or switch to feature branch"
-  ISSUES_FOUND=$((ISSUES_FOUND + 1))
-else
-  echo "✅ Beads JSONL in sync with database"
+fail() {
+  echo "❌ $1"
+  ISSUES=$((ISSUES + 1))
+}
+
+warn() {
+  echo "⚠️  $1"
+}
+
+pass() {
+  echo "✅ $1"
+}
+
+echo "🔍 Beads Doctor (canonical mode)"
+echo "repo: $BEADS_REPO"
+
+if [[ ! -d "$BEADS_REPO/.git" ]]; then
+  fail "Canonical repo missing at $BEADS_REPO"
+  echo "   Remediation: git clone git@github.com:stars-end/bd.git $BEADS_REPO"
 fi
 
-# Check 2: Unstaged JSONL changes
-echo ""
-echo "📋 Checking for unstaged Beads changes..."
-# Check for unstaged changes only (second character is M or D)
-if git status --porcelain 2>/dev/null | grep "^.M .beads/issues.jsonl" || \
-   git status --porcelain 2>/dev/null | grep "^.D .beads/issues.jsonl"; then
-  echo "⚠️  .beads/issues.jsonl has unstaged changes"
-  echo "   Stage with: git add .beads/issues.jsonl"
-  ISSUES_FOUND=$((ISSUES_FOUND + 1))
+if [[ "$(pwd -P)" != "$(cd "$BEADS_REPO" 2>/dev/null && pwd -P || echo MISSING)" ]]; then
+  fail "Must run from canonical Beads repo"
+  echo "   Remediation: cd $BEADS_REPO"
 else
-  echo "✅ No unstaged Beads changes"
+  pass "Running from canonical repo"
 fi
 
-# Check 3: Branch/Issue alignment
-echo ""
-echo "📋 Checking branch/issue alignment..."
-BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
-if [[ $BRANCH =~ ^feature-bd-([a-z0-9]+) ]]; then
-  ISSUE_ID="${BASH_REMATCH[1]}"
-  if bd show "bd-$ISSUE_ID" &>/dev/null; then
-    echo "✅ Branch feature-bd-$ISSUE_ID matches Beads issue bd-$ISSUE_ID"
+if command -v bd >/dev/null 2>&1; then
+  BD_VERSION="$(bd --version 2>/dev/null | awk '{print $NF}' | head -1 || true)"
+  if [[ -n "$BD_VERSION" ]]; then
+    if [[ "$(printf '%s\n' "$MIN_BD_VERSION" "$BD_VERSION" | sort -V | head -1)" != "$MIN_BD_VERSION" ]]; then
+      fail "bd version too old: $BD_VERSION (minimum $MIN_BD_VERSION)"
+    else
+      pass "bd version OK: $BD_VERSION"
+    fi
   else
-    echo "⚠️  On branch feature-bd-$ISSUE_ID but issue bd-$ISSUE_ID not found"
-    echo "   Possible causes:"
-    echo "   - Issue was closed/deleted"
-    echo "   - Working on wrong branch"
-    echo "   - Need to create issue: bd create \"Task name\" --type task"
-    ISSUES_FOUND=$((ISSUES_FOUND + 1))
-  fi
-elif [[ $BRANCH == "master" ]] || [[ $BRANCH == "main" ]]; then
-  echo "ℹ️  On $BRANCH branch (no Beads issue expected)"
-else
-  echo "ℹ️  On non-Beads branch: $BRANCH (custom branch, no issue tracking)"
-fi
-
-# Check 4: Feature-Key trailer in recent commits
-echo ""
-echo "📋 Checking Feature-Key trailers..."
-RECENT_COMMIT=$(git log -1 --format=%B 2>/dev/null || echo "")
-if [[ -n "$RECENT_COMMIT" ]] && ! echo "$RECENT_COMMIT" | grep -q "Feature-Key:"; then
-  # Only warn if on feature branch
-  if [[ $BRANCH =~ ^feature- ]]; then
-    echo "⚠️  Recent commit missing Feature-Key trailer"
-    echo "   Use sync-feature-branch skill for proper commit format"
-    ISSUES_FOUND=$((ISSUES_FOUND + 1))
-  else
-    echo "✅ Not on feature branch (Feature-Key not required)"
+    warn "Could not parse bd version"
   fi
 else
-  echo "✅ Feature-Key trailer present or not required"
+  fail "bd CLI not found in PATH"
 fi
 
-echo ""
-echo "═══════════════════════════════════════"
-if [[ $ISSUES_FOUND -eq 0 ]]; then
-  echo "✅ All Beads checks passed! Healthy workflow."
+REMOTE_URL="$(git -C "$BEADS_REPO" remote get-url origin 2>/dev/null || true)"
+if [[ -z "$REMOTE_URL" ]]; then
+  fail "origin remote missing in $BEADS_REPO"
+elif [[ "$REMOTE_URL" != *"$EXPECTED_REMOTE_SUBSTR"* ]]; then
+  fail "origin remote mismatch: $REMOTE_URL"
+  echo "   Expected to contain: $EXPECTED_REMOTE_SUBSTR"
+else
+  pass "origin remote OK: $REMOTE_URL"
+fi
+
+if [[ -f "$BEADS_REPO/.beads/beads.db" && -f "$BEADS_REPO/.beads/bd.db" ]]; then
+  fail "DB ambiguity detected: both .beads/beads.db and .beads/bd.db exist"
+  echo "   Remediation: archive/remove .beads/beads.db"
+else
+  pass "No DB ambiguity (.beads/bd.db is canonical)"
+fi
+
+if command -v bd >/dev/null 2>&1; then
+  if bd doctor --json 2>/dev/null | grep -q '"status":"error"'; then
+    fail "bd doctor reports hard errors"
+    echo "   Remediation: run ~/.agent/skills/bd-doctor/fix.sh"
+  else
+    pass "bd doctor reports no hard errors"
+  fi
+fi
+
+if [[ $ISSUES -eq 0 ]]; then
+  echo "✅ Beads doctor check passed"
   exit 0
-else
-  echo "❌ Found $ISSUES_FOUND Beads issue(s)"
-  echo ""
-  echo "Run: ~/.agent/skills/bd-doctor/fix.sh    # to auto-fix"
-  exit 1
 fi
+
+echo "❌ Found $ISSUES issue(s)"
+echo "Run: ~/.agent/skills/bd-doctor/fix.sh"
+exit 1
