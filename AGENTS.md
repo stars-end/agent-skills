@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 9b41a7c78c19a94a8320db93ceacda0c5041e01a -->
-<!-- Last updated: 2026-02-25 11:26:05 UTC -->
+<!-- Source SHA: 790fc3190bc645e3b852afaa7076aac474019f6f -->
+<!-- Last updated: 2026-02-25 12:35:43 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -34,8 +34,10 @@ cd /tmp/agents/bd-xxxx/repo-name
 
 ## 1.5) Canonical Beads Contract (V8.4)
 - **Canonical Beads repo is always `~/bd`** (remote must be `stars-end/bd`).
+- **Run `dx-runner` / `dx-batch` control-plane commands from `~/bd`**.
 - **Never run mutating Beads commands from app repos** (`~/prime-radiant-ai`, `~/agent-skills`, etc.) unless explicitly using a documented override.
 - **Backend must be Dolt server mode** for multi-VM/multi-agent reliability.
+- **Legacy macOS `io.agentskills.ru` LaunchAgent is disabled by policy** (use cron/systemd schedules only).
 - **Before dispatch**: verify `bd dolt test --json` succeeds and Beads service is active on the host.
 - **Host service contract**:
   - Linux canonical VMs: `systemctl --user is-active beads-dolt.service`

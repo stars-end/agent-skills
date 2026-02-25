@@ -1,0 +1,56 @@
+name: DX Tooling
+
+on:
+  pull_request:
+    paths:
+      - "scripts/dx-runner"
+      - "scripts/dx-batch"
+      - "scripts/dx_batch.py"
+      - "scripts/dx-wave"
+      - "scripts/bd-sync-safe.sh"
+      - "scripts/dx-check.sh"
+      - "scripts/dx-disable-ru-launchagent.sh"
+      - "health/bd-doctor/**"
+      - "tests/dx_batch/**"
+      - "tests/test_dx_wave_fallback.py"
+      - ".github/workflows/dx-tooling.yml"
+  push:
+    branches: [master]
+    paths:
+      - "scripts/dx-runner"
+      - "scripts/dx-batch"
+      - "scripts/dx_batch.py"
+      - "scripts/dx-wave"
+      - "scripts/bd-sync-safe.sh"
+      - "scripts/dx-check.sh"
+      - "scripts/dx-disable-ru-launchagent.sh"
+      - "health/bd-doctor/**"
+      - "tests/dx_batch/**"
+      - "tests/test_dx_wave_fallback.py"
+      - ".github/workflows/dx-tooling.yml"
+
+jobs:
+  shell-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax checks
+        run: |
+          bash -n scripts/dx-runner
+          bash -n scripts/dx-wave
+          bash -n scripts/bd-sync-safe.sh
+          bash -n scripts/dx-check.sh
+          bash -n scripts/dx-disable-ru-launchagent.sh
+          bash -n health/bd-doctor/check.sh
+          bash -n health/bd-doctor/fix.sh
+  dx-batch-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test deps
+        run: pip install pytest jsonschema
+      - name: Run dx-batch focused tests
+        run: pytest -q tests/dx_batch tests/test_dx_wave_fallback.py

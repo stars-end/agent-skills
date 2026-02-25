@@ -37,8 +37,10 @@ cd /tmp/agents/bd-xxxx/repo-name
 
 ## 1.5) Canonical Beads Contract (V8.4)
 - **Canonical Beads repo is always \`~/bd\`** (remote must be \`stars-end/bd\`).
+- **Run \`dx-runner\` / \`dx-batch\` control-plane commands from \`~/bd\`**.
 - **Never run mutating Beads commands from app repos** (\`~/prime-radiant-ai\`, \`~/agent-skills\`, etc.) unless explicitly using a documented override.
 - **Backend must be Dolt server mode** for multi-VM/multi-agent reliability.
+- **Legacy macOS \`io.agentskills.ru\` LaunchAgent is disabled by policy** (use cron/systemd schedules only).
 - **Before dispatch**: verify \`bd dolt test --json\` succeeds and Beads service is active on the host.
 - **Host service contract**:
   - Linux canonical VMs: \`systemctl --user is-active beads-dolt.service\`

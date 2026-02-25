@@ -51,6 +51,26 @@ if [[ -d ".beads" ]]; then
     rm -rf .beads
 fi
 
+needs_fix=0
+
+# macOS hygiene: disable legacy ru LaunchAgent if present (bd-f5rw)
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    if launchctl print "gui/$(id -u)/io.agentskills.ru" >/dev/null 2>&1 || [[ -f "$HOME/Library/LaunchAgents/io.agentskills.ru.plist" ]]; then
+        echo -e "${YELLOW}⚠️  Legacy ru LaunchAgent detected (io.agentskills.ru).${RESET}"
+        if [[ "${DX_AUTO_DISABLE_RU_LAUNCHAGENT:-1}" == "1" ]]; then
+            if "${SCRIPT_DIR}/dx-disable-ru-launchagent.sh"; then
+                echo -e "${GREEN}✅ Disabled legacy ru LaunchAgent.${RESET}"
+            else
+                echo -e "${RED}❌ Failed to disable legacy ru LaunchAgent.${RESET}"
+                needs_fix=1
+            fi
+        else
+            echo "   Run: ${SCRIPT_DIR}/dx-disable-ru-launchagent.sh"
+            needs_fix=1
+        fi
+    fi
+fi
+
 # Freshness Check for AGENTS.md
 if [ -f "AGENTS.local.md" ]; then
     get_hash() {
@@ -76,7 +96,6 @@ if [ -f "AGENTS.local.md" ]; then
     fi
 fi
 
-needs_fix=0
 if ! "${SCRIPT_DIR}/dx-status.sh"; then
     needs_fix=1
 fi
