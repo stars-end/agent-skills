@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: afdaef56466071d5a4406d6dee6b64dad3db3b7b -->
-<!-- Last updated: 2026-02-23 13:13:16 UTC -->
+<!-- Source SHA: 9b41a7c78c19a94a8320db93ceacda0c5041e01a -->
+<!-- Last updated: 2026-02-25 11:26:05 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -13,7 +13,7 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
 
-# DX Global Constraints (V8.3)
+# DX Global Constraints (V8.4)
 <!-- AUTO-GENERATED - DO NOT EDIT -->
 
 ## 1) Canonical Repository Rules
@@ -35,6 +35,16 @@ cd /tmp/agents/bd-xxxx/repo-name
 # Work here
 ```
 
+## 1.5) Canonical Beads Contract (V8.4)
+- **Canonical Beads repo is always `~/bd`** (remote must be `stars-end/bd`).
+- **Never run mutating Beads commands from app repos** (`~/prime-radiant-ai`, `~/agent-skills`, etc.) unless explicitly using a documented override.
+- **Backend must be Dolt server mode** for multi-VM/multi-agent reliability.
+- **Before dispatch**: verify `bd dolt test --json` succeeds and Beads service is active on the host.
+- **Host service contract**:
+  - Linux canonical VMs: `systemctl --user is-active beads-dolt.service`
+  - macOS canonical host: `launchctl print gui/$(id -u)/com.starsend.beads-dolt`
+- **Source-of-truth runbook**: `~/agent-skills/docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md`
+
 ## 2) V8 DX Automation Rules
 1. **No auto-merge**: never enable auto-merge on PRs — humans merge
 2. **No PR factory**: one PR per meaningful unit of work
@@ -45,9 +55,10 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **PR title must include a Feature-Key**: include `bd-<beads-id>` somewhere in the title (e.g. `bd-f6fh: ...`)
 - **PR body must include Agent**: add a line like `Agent: <agent-id>`
 
-## 4) Delegation Rule (V8.3 - Batch by Outcome)
+## 4) Delegation Rule (V8.4 - Batch by Outcome)
 - **Primary rule**: batch by outcome, not by file. One agent per coherent change set.
 - **Default parallelism**: 2 agents, scale to 3-4 only when independent and stable.
+- **Dispatch threshold**: implement directly for scoped work estimated under 60 minutes; dispatch only for >=60 minute, clearly parallelizable outcomes.
 - **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
 - **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
 - **See Section 6** for detailed parallel orchestration patterns.
@@ -86,6 +97,16 @@ dx-runner start --provider opencode --beads bd-xxx --prompt-file /tmp/p.prompt
 # Shared monitoring/reporting
 dx-runner status --json
 dx-runner check --beads bd-xxx --json
+```
+
+**Canonical batch orchestrator: dx-batch (orchestration-only over dx-runner)**
+
+```bash
+# Execute implement -> review waves with deterministic ledger/contracts
+dx-batch start --items bd-aaa,bd-bbb --max-parallel 2
+
+# Diagnose stuck waves
+dx-batch doctor --wave-id <wave-id> --json
 ```
 
 **Direct OpenCode lane (advanced, non-governed)**
@@ -190,16 +211,16 @@ Notes:
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-| **beads-workflow** | Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations. Handles full epic→branch→work lifecycle, dependencies, and ready task queries. Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies, or when user mentions "create issue", "track work", "bd create", "find ready tasks", issue management, dependencies, work tracking, or Beads workflow operations. | `bd create --title "Impl: OAuth" --type feature --dep "bd-res` | workflow, beads, issue-tracking, git |
-| **create-pull-request** | Create GitHub pull request with atomic Beads issue closure. MUST BE USED for opening PRs. Asks if work is complete - if YES, closes Beads issue BEFORE creating PR (JSONL merges atomically with code). If NO, creates draft PR with issue still open. Automatically links Beads tracking and includes Feature-Key. Use when user wants to open a PR, submit work for review, merge into master, or prepare for deployment, or when user mentions "ready for review", "create PR", "open PR", "merge conflicts", "CI checks needed", "branch ahead of master", PR creation, opening pull requests, deployment preparation, or submitting for team review. | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, github, pr, beads, review |
+| **beads-workflow** | Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations. Handles full epic→branch→work lifecycle, dependencies, and ready task queries. Uses centralized Beads at ~/bd with Dolt server mode for canonical multi-VM reliability. Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies, or when user mentions "create issue", "track work", "bd create", "find ready tasks", issue management, dependencies, work tracking, or Beads workflow operations. | `bd dolt test --json` | workflow, beads, issue-tracking, git |
+| **create-pull-request** | Create GitHub pull request with atomic Beads issue closure. MUST BE USED for opening PRs. Asks if work is complete - if YES, closes Beads issue BEFORE creating PR. If NO, creates draft PR with issue still open. Automatically links Beads tracking and includes Feature-Key. Use when user wants to open a PR, submit work for review, merge into master, or prepare for deployment, or when user mentions "ready for review", "create PR", "open PR", "merge conflicts", "CI checks needed", "branch ahead of master", PR creation, opening pull requests, deployment preparation, or submitting for team review. | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, github, pr, beads, review |
 | **database-quickref** | Quick reference for Railway Postgres operations. Use when user asks to check database, run queries, verify data, inspect tables, or mentions psql, postgres, database, "check the db", "validate data". | — | database, postgres, railway, psql |
 | **feature-lifecycle** | A suite of skills to manage the full development lifecycle from start to finish. - `start-feature`: Initializes a new feature branch, docs, and story. - `sync-feature`: Saves work with CI checks. - `finish-feature`: Verifies and creates a pull request. | — | workflow, git, feature, beads, dx |
 | **finish-feature** | Complete epic with cleanup and archiving, or verify feature already closed. MUST BE USED when finishing epics/features. For epics: Verifies children closed, archives docs, closes epic. For features/tasks/bugs: Verifies already closed (from PR creation), archives docs. Non-epic issues must be closed at PR creation time (atomic merge pattern). Use when user says "I'm done with this epic", "finish the feature", "finish this epic", "archive this epic", or when user mentions epic completion, cleanup, archiving, feature finalization, or closing work. | `bd close bd-abc.2 --reason 'Completed'` | workflow, beads, cleanup, archiving |
 | **fix-pr-feedback** | Address PR feedback with iterative refinement. MUST BE USED when fixing PR issues. Supports auto-detection (CI failures, code review) and manual triage (user reports bugs). Creates Beads issues for all problems, fixes systematically. Use when user says "fix the PR", "i noticed bugs", "ci failures", or "codex review found issues", or when user mentions CI failures, review comments, failing tests, PR iterations, bug fixes, feedback loops, or systematic issue resolution. | `bd show <FEATURE_KEY>` | workflow, pr, beads, debugging, iteration |
 | **issue-first** | Enforce Issue-First pattern by creating Beads tracking issue BEFORE implementation. MUST BE USED for all implementation work. Classifies work type (epic/feature/task/bug/chore), determines priority (0-4), finds parent in hierarchy, creates issue, then passes control to implementation. Use when starting implementation work, or when user mentions "no tracking issue", "missing Feature-Key", work classification, creating features, building new systems, beginning development, or implementing new functionality. | — | workflow, beads, issue-tracking, implementation |
-| **merge-pr** | Prepare PR for merge and guide human to merge via GitHub web UI. MUST BE USED when user wants to merge a PR. Verifies CI passing, verifies Beads issue already closed (from PR creation), and provides merge instructions. Issue closure happens at PR creation time (create-pull-request skill), NOT at merge time. Use when user says "merge the PR", "merge it", "merge this", "ready to merge", "merge to master", or when user mentions CI passing, approved reviews, ready-to-merge state, ready to ship, merge, deployment, PR completion, or shipping code. | `bd sync` | workflow, pr, github, merge, deployment |
+| **merge-pr** | Prepare PR for merge and guide human to merge via GitHub web UI. MUST BE USED when user wants to merge a PR. Verifies CI passing, verifies Beads issue already closed (from PR creation), and provides merge instructions. Issue closure happens at PR creation time (create-pull-request skill), NOT at merge time. Use when user says "merge the PR", "merge it", "merge this", "ready to merge", "merge to master", or when user mentions CI passing, approved reviews, ready-to-merge state, ready to ship, merge, deployment, PR completion, or shipping code. | `bd close bd-xyz --reason 'Closing before merge in PR #200'` | workflow, pr, github, merge, deployment |
 | **op-secrets-quickref** | Quick reference for 1Password service account auth and secret management. Use for: API keys, tokens, service accounts, op:// references, or auth failures in non-interactive contexts (cron, systemd, CI). Triggers: ZAI_API_KEY, OP_SERVICE_ACCOUNT_TOKEN, 1Password, "where do secrets live", auth failure, 401, permission denied. | — | secrets, auth, token, 1password, op-cli, dx, env, railway |
-| **session-end** | End Claude Code session with Beads sync and summary. MUST BE USED when user says they're done, ending session, or logging off. Guarantees Beads export to git, shows session stats, and suggests next ready work. Handles cleanup and context saving. Use when user says "goodbye", "bye", "done for now", "logging off", or when user mentions end-of-session, session termination, cleanup, context saving, bd sync, or export operations. | `bd sync, or export operations.` | workflow, beads, session, cleanup |
+| **session-end** | End Claude Code session with Beads health verification and summary. MUST BE USED when user says they're done, ending session, or logging off. Verifies canonical Beads connectivity, shows session stats, and suggests next ready work. Handles cleanup and context saving. Use when user says "goodbye", "bye", "done for now", "logging off", or when user mentions end-of-session, session termination, cleanup, context saving, Beads checks, Dolt status, or export operations. | `bd dolt test --json` | workflow, beads, session, cleanup |
 | **sync-feature-branch** | Commit current work to feature branch with Beads metadata tracking and git integration. MUST BE USED for all commit operations. Handles Feature-Key trailers, Beads status updates, and optional quick linting before commit. Use when user wants to save progress, commit changes, prepare work for review, sync local changes, or finalize current work, or when user mentions "uncommitted changes", "git status shows changes", "Feature-Key missing", commit operations, saving work, git workflows, or syncing changes. | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, git, beads, commit |
 | **tech-lead-handoff** | Create comprehensive handoff for tech lead review with Beads epic sync, committed docs, and self-contained prompt. MUST BE USED when completing investigation, incident analysis, or feature planning that needs tech lead approval. Use when user says "handoff", "tech lead review", "review this", "create handoff", or after completing significant work. | `bd show <epic-id>` | workflow, handoff, review, beads, documentation |
 
@@ -212,12 +233,13 @@ Notes:
 | **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode |
 | **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
 | **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with dx-runner as canonical governance surface, OpenCode as primary execution lane, and cc-glm as reliability backstop. dx-dispatch is break-glass only. | — |  |
-| **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | `bd sync` |  |
+| **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | `bd dolt test --json` |  |
 | **dx-batch** | Deterministic orchestration over dx-runner for autonomous implement->review waves. Orchestrates 2-3 parallel tasks across 15-20 Beads items with strict lease locking, persistent ledger, and machine-readable contracts. Use for batch execution of implementation tasks with automatic review cycles. | `dx-batch start --items bd-aaa,bd-bbb,bd-ccc [--max-parallel ` | workflow, orchestration, batch, dx-runner, governance, parallel |
 | **dx-runner** | Canonical unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, or gemini providers with unified preflight, gates, and failure taxonomy. Use when dispatching agent tasks, running headless jobs, or managing parallel agent sessions. | `dx-runner start --beads bd-xxx --provider cc-glm --prompt-fi` | workflow, dispatch, governance, multi-provider, automation |
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |
 | **gskill** | Auto-learn repository-specific skills for coding agents using SWE-smith  GEPA. Generates synthetic tasks and evolves skills through reflective optimization. Use when you want to improve agent performance on a specific repository. | — | skill-learning, gepa, swe-smith, optimization, auto-ml |
-| **jules-dispatch** | Dispatches work to Jules agents via the CLI. Automatically generates context-rich prompts from Beads issues and spawns async sessions. Use when user says "send to jules", "assign to jules", "dispatch task", or "run in cloud". | — | workflow, jules, cloud, automation, dx |
+| **impeccable** | Design skills for AI coding tools. Create distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Includes 7 reference guides and 17 design commands. Use when building web components, pages, artifacts, posters, or applications. Keywords: frontend, design, UI, UX, typography, color, motion, interaction, responsive, audit, polish | — | design, frontend, ui, ux, typography, color, motion, accessibility |
+| **jules-dispatch** | Dispatches work to Jules agents via the CLI. Automatically generates context-rich prompts from Beads issues and spawns async sessions. Use when user says "send to jules", "assign to jules", "dispatch task", or "run in cloud". | `bd dolt test --json` | workflow, jules, cloud, automation, dx |
 | **lint-check** | Run quick linting checks on changed files. MUST BE USED when user wants to check code quality. Fast validation (<5s) following V3 trust-environments philosophy. Use when user says "lint my code", "check formatting", or "run linters", or when user mentions uncommitted changes, pre-commit state, formatting issues, code quality, style checks, validation, prettier, eslint, pylint, or ruff. | — | workflow, quality, linting, validation |
 | **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | `dx-runner start --provider opencode --beads bd-xxx --prompt-` | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |
 | **parallelize-cloud-work** | Delegate independent work to Claude Code Web cloud sessions for parallel execution. Generates comprehensive session prompts with context exploration guidance, verifies Beads state, provides tracking commands. Use when user says "parallelize work to cloud", "start cloud sessions", or needs to execute multiple independent tasks simultaneously, or when user mentions cloud sessions, cloud prompts, delegate to cloud, Claude Code Web, generate session prompts, parallel execution, or asks "how do I use cloud sessions". | `bd show <issue-id>` | workflow, cloud, parallelization, dx |
@@ -233,7 +255,8 @@ Notes:
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-| **bd-doctor** | Check and fix common Beads workflow issues across all repos. | `bd export --force` |  |
+| **bd-doctor** | Diagnose and repair Beads reliability issues in canonical Dolt server mode (`~/bd`) across hosts. | `bd dolt test --json` | health, beads, dolt, reliability, fleet |
+| **beads-dolt-fleet** | Fleet-level Beads Dolt operations for canonical hosts (verify, converge, and recover shared `~/bd` state). | — | health, beads, dolt, fleet, vm |
 | **dx-cron** | Monitor and manage dx-* system cron jobs and their logs.  MUST BE USED when user asks "is the cron running", "show me cron logs", or "status of dx jobs". | — | health, auth, audit, cron, monitoring |
 | **lockfile-doctor** | Check and fix lockfile drift across Poetry (Python) and pnpm (Node.js) projects. | — |  |
 | **mcp-doctor** | Warn-only health check for canonical MCP configuration and related DX tooling. Strict mode is opt-in via MCP_DOCTOR_STRICT=1. | — | dx, mcp, health, verification |

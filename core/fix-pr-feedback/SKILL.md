@@ -177,7 +177,7 @@ bugs = [
 **Type: Merge Conflict**
 - Pattern: mergeable = false
 - Priority: 0 (critical, blocks everything)
-- Example: "Merge conflict in .beads/issues.jsonl"
+- Example: "Beads backend unavailable on dispatch host"
 
 **Type: Bot Suggestion**
 - Pattern: Bot comment with improvement suggestion
@@ -292,8 +292,10 @@ make lint-fast
 # 4. Close child issue BEFORE commit
 bd close ${childIssue.id} --reason "Fixed"
 
-# 5. Force flush to JSONL (don't wait for debounce)
-bd sync --flush-only
+# 5. Verify canonical Beads health
+cd ~/bd
+bd dolt test --json
+bd status --json
 
 # 6. AUTO-COMMIT with child Feature-Key (inline, not "commit my work")
 git add -A

@@ -51,9 +51,10 @@ git status
 # 2. Create WIP branch with timestamp
 git checkout -b wip/$(hostname)-$(date +%Y-%m-%d)-$(basename "$PWD")
 
-# 3. If .beads/issues.jsonl is modified, sync Beads first
-if git status --porcelain | grep -q ".beads/issues.jsonl"; then
-  bd sync
+# 3. If operating in canonical Beads repo, verify Beads health first
+if [[ "$(git rev-parse --show-toplevel)" = "$HOME/bd" ]]; then
+  bd dolt test --json
+  bd status --json
 fi
 
 # 4. Add all changes and commit
@@ -89,25 +90,20 @@ This naming convention:
 
 ## Beads Integration
 
-**CRITICAL:** If `.beads/issues.jsonl` has been modified, you MUST run `bd sync` before creating the snapshot commit.
+**CRITICAL:** Beads mutations should run in canonical `~/bd`, not app repositories.
 
-Why? Beads tracks issues in JSONL format and syncs them via git. If you commit changes to `issues.jsonl` without syncing:
-- You may create merge conflicts with other agents
-- You may lose issue updates from the remote
-- The Beads state may become inconsistent
-
-The safe flow for Beads-tracked repos:
+Safe flow:
 
 ```bash
-# 1. Check if .beads/issues.jsonl is modified
-git status --porcelain | grep ".beads/issues.jsonl"
+# 1. If snapshotting ~/bd itself, verify Beads backend health
+if [[ "$(git rev-parse --show-toplevel)" = "$HOME/bd" ]]; then
+  bd dolt test --json
+  bd status --json
+fi
 
-# 2. If modified, sync Beads FIRST
-bd sync
-
-# 3. Then proceed with WIP snapshot
+# 2. Then proceed with WIP snapshot
 git add -A
-git commit -m "wip: snapshot after Beads sync"
+git commit -m "wip: snapshot with Beads health verified"
 git push -u origin HEAD
 ```
 
@@ -124,15 +120,12 @@ git rev-parse --show-toplevel
 git log -1
 # Should show the most recent commit. If it fails, HEAD is corrupted.
 
-# 3. If .beads/issues.jsonl exists, verify it's valid JSONL
-if [[ -f .beads/issues.jsonl ]]; then
-  jq empty .beads/issues.jsonl 2>/dev/null || echo "JSONL corrupted"
+# 3. If this is ~/bd, verify Dolt backend connectivity
+if [[ "$(git rev-parse --show-toplevel)" = "$HOME/bd" ]]; then
+  bd dolt test --json || echo "Beads backend unreachable"
 fi
 
-# 4. Force-reimport Beads state (if needed)
-bd import -i .beads/issues.jsonl --force
-
-# 5. If git is severely damaged, consider:
+# 4. If git is severely damaged, consider:
 #    - Cloning fresh from origin
 #    - Manually copying uncommitted work from backup
 #    - Consulting git fsck output for recovery hints
@@ -154,7 +147,7 @@ Options:
 The script:
 1. Checks if the repo is dirty
 2. Creates a WIP branch with timestamp
-3. Detects and syncs Beads if needed
+3. Detects canonical Beads repo and verifies Dolt health if needed
 4. Commits all changes
 5. Pushes to origin
 6. Returns to the previous branch (or main/master)
@@ -163,7 +156,7 @@ Exit codes:
 - `0`: Success (snapshot created and pushed)
 - `1`: Repository is already clean (no snapshot needed)
 - `2`: Git operation failed
-- `3`: Beads sync failed (if .beads/issues.jsonl was modified)
+- `3`: Beads health check failed (when snapshotting `~/bd`)
 
 ## Best Practices
 
@@ -281,19 +274,19 @@ If your repo DOES use Beads, install it:
 npm install -g @beadshq/beads-cli
 ```
 
-### ".beads/issues.jsonl: parse error"
+### "bd dolt test" fails
 
-The Beads JSONL file is corrupted. Try:
+The Beads backend service is unavailable or unhealthy. Try:
 
 ```bash
-# 1. Validate the file
-jq empty .beads/issues.jsonl
+# Linux hosts
+systemctl --user restart beads-dolt.service
 
-# 2. If it's corrupted, restore from git
-git restore .beads/issues.jsonl
+# macOS host
+launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt
 
-# 3. Or re-import from a clean state
-bd import -i .beads/issues.jsonl --force
+# Re-test
+cd ~/bd && bd dolt test --json && bd status --json
 ```
 
 ## Related Documentation

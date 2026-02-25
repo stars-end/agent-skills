@@ -23,7 +23,7 @@ Create self-contained handoff for tech lead review with guaranteed visibility.
 ## Purpose
 
 Ensures tech lead can review your work without needing access to your local environment:
-- Beads epics synced to external repo
+- Beads epics verified in canonical `~/bd` backend
 - Investigation docs committed and pushed to GitHub
 - Self-contained prompt with all context included
 
@@ -76,17 +76,14 @@ bd create --title "<title>" --type epic --priority 1
 
 Ensure subtasks exist with clear descriptions.
 
-### 2. Sync Beads to External Repo
+### 2. Verify Beads in Canonical Repo
 
 ```bash
-# Export to JSONL in external repo
-bd sync
-
-# Verify export
-cat ~/bd/.beads/issues.jsonl | grep "<epic-id>"
+(cd ~/bd && bd dolt test --json && bd status --json)
+(cd ~/bd && bd show <epic-id>)
 ```
 
-**Tech lead access:** Tech lead can import via `bd import` or view JSONL directly.
+**Tech lead access:** Tech lead can run `cd ~/bd && bd show <epic-id>` directly.
 
 ### 3. Create Investigation Document
 
@@ -234,7 +231,7 @@ Output the handoff prompt:
 2. <Decision 2>
 
 ### How to View
-- **Beads:** `bd import` then `bd show bd-xxxx`
+- **Beads:** `cd ~/bd && bd show bd-xxxx`
 - **Docs:** Check docs/investigations/ in repo
 - **PR:** <link if applicable>
 ```
@@ -245,8 +242,8 @@ Output the handoff prompt:
 # 1. Verify worktree
 pwd | grep -q "/tmp/agents" || { echo "Use worktree!"; exit 1; }
 
-# 2. Sync Beads
-bd sync
+# 2. Verify Beads
+(cd ~/bd && bd dolt test --json && bd show bd-xxxx)
 
 # 3. Check git status
 git status
@@ -276,7 +273,7 @@ EOF
 ## Integration Points
 
 ### With Beads
-- Syncs epics to external JSONL
+- Verifies epics in canonical `~/bd` backend
 - Provides importable issue data
 - Links docs to issue tracking
 
@@ -293,7 +290,7 @@ EOF
 
 ### Do
 
-✅ Always run `bd sync` before handoff
+✅ Always verify `bd dolt test --json` before handoff
 ✅ Include GitHub permalinks to docs
 ✅ Keep summary under 10 lines
 ✅ List specific decisions needed
@@ -310,7 +307,7 @@ EOF
 
 ✅ Verifies worktree context (V8.3)
 ✅ Verifies Beads epic with subtasks
-✅ Syncs Beads to external JSONL repo
+✅ Verifies Beads state in canonical `~/bd` repo
 ✅ Creates investigation document in repo
 ✅ Creates handoff summary document
 ✅ Commits and pushes all docs
@@ -331,7 +328,7 @@ User: "create handoff for the eodhd cron investigation"
 
 AI executes:
 1. bd show bd-e6cd  # Verify epic exists
-2. bd sync          # Export to ~/bd/.beads/
+2. (cd ~/bd && bd dolt test --json && bd show bd-xxxx)
 3. Verify docs/investigations/2026-02-14-eodhd-cron-failure-analysis.md
 4. Verify docs/investigations/TECHLEAD-REVIEW-eodhd-cron-failure.md
 5. git add docs/investigations/

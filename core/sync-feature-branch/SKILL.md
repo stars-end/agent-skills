@@ -71,9 +71,11 @@ Close child issue BEFORE commit:
 bd close $childIssueId --reason "Fixed"
 ```
 
-Force flush to JSONL:
+Verify canonical Beads health:
 ```bash
-bd sync --flush-only
+cd ~/bd
+bd dolt test --json
+bd status --json
 ```
 
 Commit with child Feature-Key:
