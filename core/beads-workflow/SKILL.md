@@ -18,6 +18,17 @@ allowed-tools:
 
 AI-supervised issue tracking with git-backed distributed database.
 
+## Canonical Location (P0 Rule)
+
+All `bd` commands must run from the canonical Beads repo:
+
+```bash
+cd ~/bd
+git remote -v | head -2   # must point to stars-end/bd
+```
+
+Do not run Beads operations from product repos and do not treat repo-local `.beads/` as canonical.
+
 **Prefix note:** Examples use the Beads prefix for this repo (e.g., bd-xyz). If you are working in another repository, substitute that repo's issue ID prefix everywhere `{issue-id}` is shown (branch names, Feature-Key trailers, dependency IDs).
 
 **References:**
@@ -59,13 +70,13 @@ Beads provides persistent task memory across sessions, enabling:
 bd create --title "Impl: OAuth" --type feature --dep "bd-research-task"
 
 # Add dependency to existing issue
-bd dep bd-new-feature bd-required-api --type blocks
+bd dep add bd-new-feature bd-required-api --type blocks
 
 # Discovery: I found a bug while working on a feature
-bd dep bd-discovered-bug bd-parent-feature --type discovered-from
+bd dep add bd-discovered-bug bd-parent-feature --type discovered-from
 
 # Epic subtask
-bd dep bd-subtask bd-epic --type parent-child
+bd dep add bd-subtask bd-epic --type parent-child
 ```
 
 ### Dependency Types
@@ -100,7 +111,7 @@ bd-context
 
 # 2. Create epic
 # Use bd create with JSON or flags
-bd create --title "AUTHENTICATION_SYSTEM" --type epic --priority 1 --desc "OAuth + JWT..."
+bd create --title "AUTHENTICATION_SYSTEM" --type epic --priority 1 --description "OAuth + JWT..."
 
 # Output: Created issue bd-xyz (AUTHENTICATION_SYSTEM)
 
@@ -144,7 +155,7 @@ echo "✅ Created epic bd-xyz with phase tasks"
 bd-context
 
 # 2. Create feature
-bd create --title "OAUTH_LOGIN_BUTTON" --type feature --priority 2 --desc "Single OAuth login component..."
+bd create --title "OAUTH_LOGIN_BUTTON" --type feature --priority 2 --description "Single OAuth login component..."
 # Output: Created issue bd-abc
 
 # 3. Create and checkout branch

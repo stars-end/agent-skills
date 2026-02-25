@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: afdaef56466071d5a4406d6dee6b64dad3db3b7b -->
-<!-- Last updated: 2026-02-23 13:13:16 UTC -->
+<!-- Source SHA: 9b41a7c78c19a94a8320db93ceacda0c5041e01a -->
+<!-- Last updated: 2026-02-24 20:22:43 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -22,6 +22,19 @@ Support a startup founder balancing high-leverage technical work and family resp
 - `~/prime-radiant-ai`
 - `~/affordabot`
 - `~/llm-common`
+
+### Canonical Beads Repository (MANDATORY)
+- **All Beads operations MUST run in**: `~/bd`
+- **Canonical Beads git remote MUST be**: `stars-end/bd` (usually `origin`)
+- **Never run Beads from product repos** (`~/prime-radiant-ai`, `~/agent-skills`, etc.)
+- **Never treat repo-local `.beads/` as canonical state**
+
+Quick check:
+```bash
+cd ~/bd
+git remote -v | head -2
+bd ready --limit 5
+```
 
 ### Enforcement
 **Primary**: Git pre-commit hook blocks commits when not in worktree
@@ -217,6 +230,7 @@ Notes:
 | **dx-runner** | Canonical unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, or gemini providers with unified preflight, gates, and failure taxonomy. Use when dispatching agent tasks, running headless jobs, or managing parallel agent sessions. | `dx-runner start --beads bd-xxx --provider cc-glm --prompt-fi` | workflow, dispatch, governance, multi-provider, automation |
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |
 | **gskill** | Auto-learn repository-specific skills for coding agents using SWE-smith  GEPA. Generates synthetic tasks and evolves skills through reflective optimization. Use when you want to improve agent performance on a specific repository. | — | skill-learning, gepa, swe-smith, optimization, auto-ml |
+| **impeccable** | Design skills for AI coding tools. Create distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Includes 7 reference guides and 17 design commands. Use when building web components, pages, artifacts, posters, or applications. Keywords: frontend, design, UI, UX, typography, color, motion, interaction, responsive, audit, polish | — | design, frontend, ui, ux, typography, color, motion, accessibility |
 | **jules-dispatch** | Dispatches work to Jules agents via the CLI. Automatically generates context-rich prompts from Beads issues and spawns async sessions. Use when user says "send to jules", "assign to jules", "dispatch task", or "run in cloud". | — | workflow, jules, cloud, automation, dx |
 | **lint-check** | Run quick linting checks on changed files. MUST BE USED when user wants to check code quality. Fast validation (<5s) following V3 trust-environments philosophy. Use when user says "lint my code", "check formatting", or "run linters", or when user mentions uncommitted changes, pre-commit state, formatting issues, code quality, style checks, validation, prettier, eslint, pylint, or ruff. | — | workflow, quality, linting, validation |
 | **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | `dx-runner start --provider opencode --beads bd-xxx --prompt-` | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |

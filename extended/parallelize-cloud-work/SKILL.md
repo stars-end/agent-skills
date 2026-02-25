@@ -9,6 +9,15 @@ tags: [workflow, cloud, parallelization, dx]
 
 **Purpose:** Generate comprehensive prompts for Claude Code Web cloud sessions with strong context exploration guidance.
 
+## Canonical Beads Location (P0 Rule)
+
+All Beads commands in this workflow run from `~/bd` (canonical `stars-end/bd`):
+
+```bash
+cd ~/bd
+git remote -v | head -2
+```
+
 ## Activation
 
 **Triggers:**
@@ -90,6 +99,8 @@ Check:
 **Critical:** Cloud needs latest Beads state.
 
 ```bash
+cd ~/bd
+
 # Export current state
 bd export --force
 
