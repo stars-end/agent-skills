@@ -5,6 +5,9 @@ Wave-based parallel dispatch with OpenCode (GLM-5) + Gemini.
 ## Quick Reference
 
 ```bash
+# Canonical control-plane cwd (required)
+cd ~/bd
+
 # Preflight checks
 dx-runner preflight --provider opencode
 dx-runner preflight --provider gemini

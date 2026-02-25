@@ -16,6 +16,7 @@ LOCK_DIR="$HOME/.dx-state/locks/bd-sync.lock"
 BEADS_REPO="$HOME/bd"
 MAX_LOCK_WAIT_SECONDS=120
 MAX_RETRIES=3
+MIN_BD_VERSION="${DX_MIN_BD_VERSION:-0.49.4}"
 
 # Ensure environment
 export BEADS_DIR="${BEADS_DIR:-$HOME/bd/.beads}"
@@ -61,6 +62,23 @@ if [[ ! -d "$BEADS_REPO/.git" ]]; then
 fi
 
 cd "$BEADS_REPO"
+
+# Resolve storage ambiguity that causes intermittent import/sync failures.
+if [[ -f "$BEADS_REPO/.beads/beads.db" && -f "$BEADS_REPO/.beads/bd.db" ]]; then
+    log "❌ Refusing sync: both .beads/beads.db and .beads/bd.db exist"
+    log "   Remediation: keep only canonical .beads/bd.db, archive/remove beads.db"
+    exit 1
+fi
+
+if command -v bd >/dev/null 2>&1; then
+    BD_VERSION="$(bd --version 2>/dev/null | awk '{print $NF}' | head -1 || true)"
+    if [[ -n "$BD_VERSION" ]]; then
+        if [[ "$(printf '%s\n' "$MIN_BD_VERSION" "$BD_VERSION" | sort -V | head -1)" != "$MIN_BD_VERSION" ]]; then
+            log "❌ bd version too old: ${BD_VERSION} (minimum ${MIN_BD_VERSION})"
+            exit 1
+        fi
+    fi
+fi
 
 # Helper for jitter backoff
 backoff() {
@@ -114,6 +132,11 @@ while [[ $attempt -le $MAX_RETRIES ]]; do
     # Push
     log "Pushing changes..."
     if git push; then
+        # Post-sync verification: fail only on doctor hard errors.
+        if bd doctor --json 2>/dev/null | grep -q '"status":"error"'; then
+            log "❌ bd doctor reported hard errors after sync"
+            exit 1
+        fi
         log "✅ Sync successful"
         exit 0
     else
