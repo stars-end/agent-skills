@@ -24,15 +24,14 @@
 export CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
 
 export CANONICAL_VMS=(
-  "feng@epyc6:linux:Primary Linux dev host (this machine)"
-  "feng@epyc12:linux:Secondary Linux dev host"
+  "feng@epyc12:linux:Primary Linux dev host"
   "fengning@homedesktop-wsl:linux:WSL2 on Windows - Linux dev environment"
   "fengning@macmini:macos:macOS Dev machine"
 )
 
 # Shorthand access to primary targets
-export CANONICAL_VM_PRIMARY="feng@epyc6"
-export CANONICAL_VM_LINUX2="feng@epyc12"
+export CANONICAL_VM_PRIMARY="feng@epyc12"
+export CANONICAL_VM_LINUX="feng@epyc12"
 export CANONICAL_VM_WSL="fengning@homedesktop-wsl"
 export CANONICAL_VM_MACOS="fengning@macmini"
 
@@ -90,8 +89,8 @@ detect_host_key() {
     return 0
   fi
 
-  # Default Linux host is epyc6
-  echo "epyc6"
+  # Default Linux host is epyc12
+  echo "epyc12"
 }
 
 export CANONICAL_HOST_KEY="$(detect_host_key)"
@@ -105,10 +104,6 @@ case "$CANONICAL_HOST_KEY" in
   macmini)
     export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" )
     export CANONICAL_OPTIONAL_REPOS=( "affordabot" "llm-common" )
-    ;;
-  epyc6)
-    export CANONICAL_REQUIRED_REPOS=( "agent-skills" )
-    export CANONICAL_OPTIONAL_REPOS=( "prime-radiant-ai" "affordabot" "llm-common" )
     ;;
   epyc12)
     export CANONICAL_REQUIRED_REPOS=( "agent-skills" )
@@ -130,10 +125,6 @@ case "$CANONICAL_HOST_KEY" in
     export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "op" "railway" "ru" )
     export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" )
     ;;
-  epyc6)
-    export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "railway" "ru" )
-    export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" "op" )
-    ;;
   epyc12)
     export CANONICAL_REQUIRED_TOOLS=( "bd" "dcg" "gh" "mise" "railway" "ru" )
     export CANONICAL_OPTIONAL_TOOLS=( "cass" "jules" "op" )
@@ -147,19 +138,12 @@ esac
 # ------------------------------------------------------------
 # Tool Availability Notes (per-host quirks)
 # ------------------------------------------------------------
-# epyc6: No jq (no sudo access). Scripts should use grep-based JSON parsing.
-# epyc6: User is 'feng' not 'fengning'.
-# epyc6: May not be directly reachable - use homedesktop-wsl as jump host.
 # epyc12: User is 'fengning'. Direct SSH access available. dcg v0.2.15 installed.
-
-export CANONICAL_MISSING_TOOLS_EPYC6=( "jq" )
 
 # ------------------------------------------------------------
 # SSH Connectivity
 # ------------------------------------------------------------
-# Not all VMs can reach each other directly. Use jump hosts when needed.
-# From VPS/cloud: Use homedesktop-wsl as jump to reach epyc6
-#   ssh -J fengning@homedesktop-wsl feng@epyc6
+# All canonical VMs are directly reachable via Tailscale SSH.
 
 export CANONICAL_JUMP_HOST="fengning@homedesktop-wsl"
 
@@ -239,26 +223,14 @@ ssh_canonical_vm() {
 deploy_to_all_vms() {
   local src="$1"
   local dest="$2"
-  local base
-  base="$(basename "$src")"
-  local tmp="/tmp/agentskills-deploy-$base-$$"
 
   echo "Deploying $src to all canonical VMs..."
 
   # Direct targets
-  for target in "fengning@homedesktop-wsl" "fengning@macmini"; do
+  for target in "feng@epyc12" "fengning@homedesktop-wsl" "fengning@macmini"; do
     echo "  → $target"
     scp "$src" "$target:$dest" 2>/dev/null && echo "    ✅" || echo "    ❌ Failed"
   done
-
-  # epyc6 via jump host (use homedesktop-wsl as the transfer point)
-  echo "  → feng@epyc6 (via jump)"
-  if scp "$src" "fengning@homedesktop-wsl:$tmp" 2>/dev/null; then
-    ssh fengning@homedesktop-wsl "scp '$tmp' 'feng@epyc6:$dest' && rm -f '$tmp'" 2>/dev/null \
-      && echo "    ✅" || echo "    ❌ Failed"
-  else
-    echo "    ❌ Failed (could not copy to jump host)"
-  fi
 }
 
 # Export functions for use in subshells
