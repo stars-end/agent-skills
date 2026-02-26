@@ -238,6 +238,19 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
 
+### Founder Cognitive Load Policy (Binary)
+Applies to all changes except ones explicitly impacting Railway production environment.
+
+Required decision:
+- \`ALL_IN_NOW\`
+- \`DEFER_TO_P2_PLUS\`
+- \`CLOSE_AS_NOT_WORTH_IT\`
+
+Rules:
+- No burn-in, phased cutover, or transition periods.
+- No required founder monitoring post-merge.
+- If it needs ongoing manual oversight, it is not P0/P1: defer to P2+ or close.
+
 EOF
 
 # Append constraints to baseline
@@ -256,6 +269,19 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not expand scope unless asked
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
+
+### Founder Cognitive Load Policy (Binary)
+Applies to all changes except ones explicitly impacting Railway production environment.
+
+Required decision:
+- \`ALL_IN_NOW\`
+- \`DEFER_TO_P2_PLUS\`
+- \`CLOSE_AS_NOT_WORTH_IT\`
+
+Rules:
+- No burn-in, phased cutover, or transition periods.
+- No required founder monitoring post-merge.
+- If it needs ongoing manual oversight, it is not P0/P1: defer to P2+ or close.
 
 EOF
 
