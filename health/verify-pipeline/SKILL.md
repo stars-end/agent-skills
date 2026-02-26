@@ -236,7 +236,66 @@ make smoke-e2e
 2. Increase timeouts for cold starts
 3. Add retry logic for flaky external services
 
-## Best Practices
+## Frontend Gate Mode
+
+**For frontend-only PRs, use deterministic visual verification:**
+
+### Route Matrix Command
+
+```bash
+# Run Playwright route verification
+pnpm --filter frontend test:visual
+
+# Or specific viewport
+pnpm --filter frontend test:visual:desktop
+pnpm --filter frontend test:visual:mobile
+```
+
+### Runtime Error Capture
+
+```bash
+# Run with console capture
+pnpm --filter frontend test:e2e -- --grep "route" --reporter=list 2>&1 | tee runtime-errors.log
+
+# Check for blocking patterns
+grep -iE "unexpected application error|clerkprovider|unhandled|typeerror" runtime-errors.log && echo "BLOCKING ERRORS FOUND" || echo "No blocking errors"
+```
+
+### Artifact Paths
+
+| Artifact | Path |
+|----------|------|
+| Visual snapshots | `frontend/e2e/visual/__snapshots__/` |
+| Playwright report | `frontend/playwright-report/` |
+| Lighthouse results | `frontend/.lighthouseci/` |
+| Runtime logs | `runtime-errors.log` |
+
+### Frontend Gate Command Contract
+
+```bash
+# Full frontend gate
+make verify-frontend || {
+  echo "Frontend gate failed. Check artifacts:"
+  echo "  - frontend/e2e/visual/__snapshots__/*.diff.png"
+  echo "  - frontend/playwright-report/"
+  exit 1
+}
+```
+
+### Integration with Evidence Contract
+
+After running frontend gate, include in PR body:
+
+```markdown
+## Frontend Evidence
+- Visual tests: PASS
+- Runtime errors: 0
+- Artifacts: [link to CI run]
+```
+
+**Template:** `~/agent-skills/templates/frontend-evidence-contract.md`
+
+ ## Best Practices
 
 - **Always run from root** (where Makefile is).
 - **Prefer `make` targets** over direct python scripts (`python scripts/...`).

@@ -189,5 +189,44 @@ References:
 - `~/agent-skills/extended/cc-glm/SKILL.md`
 
 Notes:
-- PR metadata enforcement exists to keep squash merges ergonomic.
-- If unsure what to use for Agent, use platform id (see `DX_AGENT_ID.md`).
+ - PR metadata enforcement exists to keep squash merges ergonomic.
+ - If unsure what to use for Agent, use platform id (see `DX_AGENT_ID.md`).
+
+## 7) Frontend Evidence Contract (Required for UI/UX Claims)
+
+When changing frontend files, agents MUST provide evidence before PR-ready state:
+
+### Route Matrix Verification
+Test routes in two modes:
+- **no-cookie mode**: `/`, `/sign-in`, `/sign-up`, `/demo`
+- **bypass-cookie mode**: `/v2`, `/brokerage`
+
+### Runtime Health Requirements
+- No "Unexpected Application Error" on page
+- No console errors containing: `clerk`, `ClerkProvider`, `Unhandled`, `TypeError`
+- Clean page render for all tested routes
+
+### Evidence Integrity
+- PR URL must be valid (not `/pull/new`)
+- Commit SHA must match current HEAD
+- Changed file/line mapping must match diff
+- Claims cannot contradict screenshots/logs
+
+### Tooling Requirement
+Use BOTH for verification:
+1. **Playwright MCP** - Screenshots, navigation, a11y checks
+2. **Chrome DevTools MCP** - Console capture, perf traces
+
+### Required PR Body Fields (Frontend Changes)
+```markdown
+## Frontend Evidence
+| Route | Desktop | Mobile | Status |
+|-------|---------|--------|--------|
+| / | ✅ | ✅ | Pass |
+
+- Console errors: 0
+- PR URL: [valid URL]
+- Commit SHA: [hash]
+```
+
+**Template:** `~/agent-skills/templates/frontend-evidence-contract.md`

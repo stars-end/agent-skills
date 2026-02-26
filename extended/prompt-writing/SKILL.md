@@ -132,3 +132,53 @@ Do not claim complete until:
 - `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
 If blocked, explain which gate failed and the smallest next action to unblock.
 ```
+
+## Frontend Verification Appendix (For UI/UX Tasks)
+
+**When task involves frontend changes, append this section:**
+
+```markdown
+## Frontend Verification (If UI Changes)
+
+If you modify any frontend files, you MUST:
+
+### 1. Route Matrix
+Run Playwright visual tests and capture screenshots:
+```bash
+pnpm --filter frontend test:visual
+```
+
+Fill in the route matrix:
+| Route | Desktop | Mobile | Console Errors |
+|-------|---------|--------|----------------|
+| / | [pass/fail] | [pass/fail] | [count] |
+| /sign-in | [pass/fail] | [pass/fail] | [count] |
+
+### 2. Runtime Health
+Check for blocking patterns:
+- [ ] No "Unexpected Application Error"
+- [ ] No `ClerkProvider` errors
+- [ ] No `Unhandled` in console
+- [ ] No `TypeError` in console
+
+### 3. Evidence Integrity
+- [ ] PR URL is valid (not `/pull/new`)
+- [ ] Commit SHA matches HEAD
+- [ ] Screenshots match claims
+
+### 4. Required PR Body Section
+```markdown
+## Frontend Evidence
+| Route | Desktop | Mobile | Status |
+|-------|---------|--------|--------|
+| / | ✅ | ✅ | Pass |
+
+- Console errors: 0
+- PR URL: [url]
+- Commit SHA: [sha]
+```
+
+**Full template:** `~/agent-skills/templates/frontend-evidence-contract.md`
+```
+
+**Usage:** Add this appendix when delegating UI/UX work to ensure evidence contract compliance.
