@@ -8,7 +8,7 @@
 
 | What You Need | Where It Lives | How to Get It |
 |---------------|----------------|---------------|
-| Dev environment vars | Railway | `railway shell` (automatic) |
+| Dev environment vars | Railway | `railway shell` or `railway run -p <project-id> -e <env> -s <service> -- <cmd>` |
 | Frontend URL | Railway | `$RAILWAY_SERVICE_FRONTEND_URL` |
 | Backend URL | Railway | `$RAILWAY_SERVICE_BACKEND_URL` |
 | API keys | 1Password | `op://dev/Agent-Secrets-Production/<FIELD>` |
@@ -62,7 +62,7 @@ op read "op://dev/Agent-Secrets-Production/ANTHROPIC_AUTH_TOKEN"
 
 ## 3. Railway Environment Variables Section
 
-These variables are **automatically available** in `railway shell`:
+These variables are available via Railway context (`railway shell` or `railway run -p/-e/-s -- <cmd>`):
 
 | Variable | Description |
 |----------|-------------|
@@ -72,11 +72,14 @@ These variables are **automatically available** in `railway shell`:
 | `DATABASE_URL` | PostgreSQL connection string |
 | `RAILWAY_ENVIRONMENT` | Current Railway environment (production/staging) |
 
-### Usage in Railway Shell
+### Usage in Railway Context
 
 ```bash
-# Connect to Railway shell
+# Option A: Connect interactive Railway shell
 railway shell
+
+# Option B: Worktree-safe one-shot command
+railway run -p <project-id> -e dev -s backend -- env | grep RAILWAY_SERVICE
 
 # Variables are automatically available
 echo $RAILWAY_SERVICE_FRONTEND_URL
@@ -170,7 +173,7 @@ op item list --vault dev
 
 ## Related Documentation
 
-- **ENV_SOURCES_CONTRACT.md** - Three sources of truth (op-only, Railway CLI, Railway shell)
+- **ENV_SOURCES_CONTRACT.md** - Three sources of truth (op-only, Railway CLI, Railway context)
 - **SECRET_MANAGEMENT.md** - Safe CLI usage patterns and migration guide
 - **1PASSWORD_MULTI_ITEM_ARCHITECTURE.md** - Per-service item structure
 - **SERVICE_ACCOUNTS.md** - Service account configuration

@@ -99,9 +99,9 @@ See project-specific docs for detailed configuration.
 | **Manual Deployments** | | |
 | `railway up` (interactive) | Railway CLI login | ❌ No |
 | **Automated Workflows** | | |
-| CI/CD deployment | Railway shell context | ✅ Yes (must have RAILWAY_TOKEN) |
-| `scripts/deploy.sh` | Railway shell context | ✅ Yes (must have RAILWAY_TOKEN) |
-| Automated status checks | Railway shell context | ✅ Yes (must have RAILWAY_TOKEN) |
+| CI/CD deployment | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_TOKEN) |
+| `scripts/deploy.sh` | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_TOKEN) |
+| Automated status checks | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_TOKEN) |
 | **Systemd Services** | | |
 | opencode.service | op-only (LoadCredentialEncrypted) | N/A |
 | slack-coordinator.service | op-only (LoadCredentialEncrypted) | N/A |
@@ -118,7 +118,7 @@ See project-specific docs for detailed configuration.
 Scripts MUST declare their environment source requirements:
 ```bash
 #!/usr/bin/env bash
-# ENV_SOURCES: op-only, Railway shell context
+# ENV_SOURCES: op-only, Railway context
 set -euo pipefail
 
 # Fail hard if Railway token required but not set
@@ -164,7 +164,7 @@ ANTHROPIC_AUTH_TOKEN="your-hardcoded-token-here"  # NEVER DO THIS
 
 ### Manual Verification Checklist
 - [ ] Script declares ENV_SOURCES in header comment
-- [ ] Script fails hard when Railway shell context required but missing
+- [ ] Script fails hard when Railway context is required but missing
 - [ ] Script uses op:// or op run for ALL secrets
 - [ ] Script contains NO hardcoded secret values (verify with `secret-scan.sh --fail`)
 

@@ -41,6 +41,12 @@ railway status 2>/dev/null || {
 **Quick Fix:**
 ```bash
 railway login
+# Interactive context:
+railway shell
+
+# Worktree/automation-safe context (no local link required):
+railway run -p <project-id> -e dev -s backend -- env | grep RAILWAY_SERVICE
+
 # Or for CI/automation, set RAILWAY_TOKEN from 1Password:
 export RAILWAY_TOKEN=$(op read "op://dev/Railway-Delivery/token")
 ```
@@ -61,7 +67,7 @@ if [[ ${#MISSING_URLS[@]} -gt 0 ]]; then
   echo "  These are required for verify-* commands to work."
   echo ""
   echo "Quick Fix:"
-  echo "  railway shell --command 'env | grep RAILWAY_SERVICE'"
+  echo "  railway run -p <project-id> -e dev -s backend -- env | grep RAILWAY_SERVICE"
   exit 1
 fi
 ```
@@ -73,7 +79,7 @@ fi
 **Quick Fix:**
 ```bash
 # Check what URL variables are available
-railway shell
+railway run -p <project-id> -e dev -s backend -- env | grep RAILWAY_SERVICE
 
 # Or set manually from Railway dashboard:
 # Project > Service > Settings > Domains > Copy URL
@@ -101,8 +107,8 @@ fi
 
 **Quick Fix:**
 ```bash
-# TEST_AUTH_BYPASS_SECRET is a Railway env var - use railway shell
-railway shell
+# TEST_AUTH_BYPASS_SECRET is a Railway env var
+railway run -p <project-id> -e dev -s backend -- env | grep TEST_AUTH_BYPASS_SECRET
 
 # Or verify it's set in Railway (if not, check Railway dashboard)
 railway variables | grep TEST_AUTH_BYPASS_SECRET
@@ -110,11 +116,14 @@ railway variables | grep TEST_AUTH_BYPASS_SECRET
 
 ## Quick Fix Reference
 
-All pre-flight failures can be diagnosed/fixed via Railway shell:
+All pre-flight failures can be diagnosed/fixed via Railway context:
 
 ```bash
 # Open interactive Railway shell
 railway shell
+
+# OR run targeted checks from worktree
+railway run -p <project-id> -e dev -s backend -- env | grep -E "RAILWAY_SERVICE|TEST_AUTH"
 
 # Inside shell, check environment
 env | grep RAILWAY
@@ -153,7 +162,7 @@ fi
 echo ""
 if [[ $ERRORS -gt 0 ]]; then
   echo "Pre-flight FAILED with $ERRORS error(s)"
-  echo "Run 'railway shell' to diagnose and fix"
+  echo "Run 'railway shell' OR 'railway run -p <id> -e <env> -s <svc> -- <cmd>' to diagnose and fix"
   exit 1
 else
   echo "Pre-flight PASSED - ready to deploy"
