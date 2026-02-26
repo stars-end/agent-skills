@@ -8,14 +8,12 @@ This document defines the single source of truth for canonical VMs, IDEs, and co
 |------|-----|-------------|------------|
 | homedesktop-wsl | Linux (WSL2) | Primary Linux dev environment | `fengning@homedesktop-wsl` |
 | macmini | macOS | macOS Dev machine | `fengning@macmini` |
-| epyc6 | Linux | Primary Linux dev host | `feng@epyc6` |
-| epyc12 | Linux | Secondary Linux dev host | `fengning@epyc12` |
+| epyc12 | Linux | Primary Linux dev host | `fengning@epyc12` |
 
 **For detailed verification matrix (auth principals, tool presence, token paths, cc-glm-headless state), see [CROSS_VM_VERIFICATION_MATRIX.md](./CROSS_VM_VERIFICATION_MATRIX.md).**
 
 **IMPORTANT: SSH Username Variations**
 - SSH targets use **username@host** format because usernames vary across machines
-- epyc6 uses `feng@` while WSL/macOS use `fengning@`
 - **Always use full `username@host` syntax** when SSH'ing between VMs
 - Bare hostnames (e.g., `ssh homedesktop-wsl`) rely on SSH config which may not be configured on all machines
 - Example: `ssh fengning@homedesktop-wsl "ru --version"` (CORRECT)
@@ -23,24 +21,14 @@ This document defines the single source of truth for canonical VMs, IDEs, and co
 
 ### SSH Connectivity Matrix
 
-Not all VMs can directly reach each other. Use this matrix for cross-VM operations:
+All canonical VMs can reach each other directly via Tailscale SSH.
 
-| From → To | homedesktop-wsl | macmini | epyc6 | epyc12 |
-|-----------|-----------------|---------|-------|--------|
-| **homedesktop-wsl** | - | ✅ Direct | ✅ Direct (`feng@epyc6`) | ✅ Direct |
-| **macmini** | ✅ Direct | - | ❌ Use jump | ✅ Direct |
-| **epyc6** | ✅ Direct | ✅ Direct | - | ✅ Direct |
-| **epyc12** | ✅ Direct | ✅ Direct | ✅ Direct | - |
-| **VPS/cloud** | ✅ Direct | ✅ Direct | ❌ Use jump | ✅ Direct |
-
-**Jump Host Pattern** (when direct SSH fails):
-```bash
-# From VPS/cloud to epyc6, jump through homedesktop-wsl:
-ssh fengning@homedesktop-wsl 'ssh feng@epyc6 "command here"'
-
-# Or use ProxyJump:
-ssh -J fengning@homedesktop-wsl feng@epyc6
-```
+| From → To | homedesktop-wsl | macmini | epyc12 |
+|-----------|-----------------|---------|--------|
+| **homedesktop-wsl** | - | ✅ Direct | ✅ Direct |
+| **macmini** | ✅ Direct | - | ✅ Direct |
+| **epyc12** | ✅ Direct | ✅ Direct | - |
+| **VPS/cloud** | ✅ Direct | ✅ Direct | ✅ Direct |
 
 ### Tailscale SSH (Standard for Canonical VMs)
 
@@ -63,21 +51,18 @@ sudo tailscale up --ssh
 |------|-------------------|----------|
 | homedesktop-wsl | `100.109.231.123` | `fengning@` |
 | macmini | `100.117.177.18` | `fengning@` |
-| epyc6 | `100.101.113.91` | `feng@` |
 | epyc12 | (check `tailscale status`) | `fengning@` |
 
 ### Per-VM Tool Availability
 
-| Tool | homedesktop-wsl | macmini | epyc6 | epyc12 |
-|------|-----------------|---------|-------|--------|
-| `jq` | ✅ | ✅ | ❌ (no sudo) | ✅ |
-| `curl` | ✅ | ✅ | ✅ | ✅ |
-| `git` | ✅ | ✅ | ✅ | ✅ |
-| `bd` (beads) | ✅ | ✅ | ✅ | ✅ |
-| `ru` (repo_updater) | ✅ | ✅ | ✅ | ✅ |
-| `op` (1Password CLI) | ✅ | ✅ | ❌ | ✅ |
-
-**Note:** epyc6 lacks `jq`. Scripts deployed there should use grep-based JSON parsing or avoid jq dependency. epyc6 lacks `op` CLI; epyc12 has `op` installed and should use host token/session checks in preflight.
+| Tool | homedesktop-wsl | macmini | epyc12 |
+|------|-----------------|---------|--------|
+| `jq` | ✅ | ✅ | ✅ |
+| `curl` | ✅ | ✅ | ✅ |
+| `git` | ✅ | ✅ | ✅ |
+| `bd` (beads) | ✅ | ✅ | ✅ |
+| `ru` (repo_updater) | ✅ | ✅ | ✅ |
+| `op` (1Password CLI) | ✅ | ✅ | ✅ |
 
 ### Secret Cache Locations
 
@@ -92,7 +77,6 @@ All VMs use the same tiered secret cache structure:
 |----|----------|------------------|
 | homedesktop-wsl | `/home/fengning` | `/home/fengning/.config/secret-cache/secrets.env` |
 | macmini | `/Users/fengning` | `/Users/fengning/.config/secret-cache/secrets.env` |
-| epyc6 | `/home/feng` | `/home/feng/.config/secret-cache/secrets.env` |
 | epyc12 | `/home/fengning` | `/home/fengning/.config/secret-cache/secrets.env` |
 
 **Permissions:** `chmod 700 ~/.config/secret-cache && chmod 600 ~/.config/secret-cache/secrets.env`
@@ -111,12 +95,9 @@ All VMs use the same tiered secret cache structure:
 
 ```bash
 # Deploy a script to all canonical VMs:
-for target in "fengning@homedesktop-wsl" "fengning@macmini"; do
+for target in "feng@epyc12" "fengning@homedesktop-wsl" "fengning@macmini"; do
   scp ~/.local/bin/my-script.sh "$target:~/.local/bin/"
 done
-
-# epyc6 may need jump host:
-ssh fengning@homedesktop-wsl 'scp ~/.local/bin/my-script.sh feng@epyc6:~/.local/bin/'
 ```
 
 ## Canonical Git Trunk
@@ -127,7 +108,7 @@ ssh fengning@homedesktop-wsl 'scp ~/.local/bin/my-script.sh feng@epyc6:~/.local/
 
 ### Environment Variables
 
-- `CANONICAL_VM_LINUX` = `fengning@homedesktop-wsl`
+- `CANONICAL_VM_LINUX` = `fengning@epyc12`
 - `CANONICAL_VM_MACOS` = `fengning@macmini`
 
 ## Canonical IDE Set

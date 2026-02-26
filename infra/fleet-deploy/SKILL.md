@@ -1,7 +1,7 @@
 ---
 name: fleet-deploy
 description: |
-  Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12).
+  Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc12).
   MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs.
   Uses configs/fleet_hosts.yaml as authoritative source for SSH targets, with dx-runner governance.
 tags: [fleet, deploy, vm, canonical, dx-runner, ssh, infrastructure]
@@ -19,7 +19,7 @@ Deploy changes across all canonical VMs from a single source of truth.
 ## Purpose
 
 Standardize fleet-wide deployment using `configs/fleet_hosts.yaml` as the authoritative
-registry. Eliminates hardcoded SSH targets and user confusion (e.g., `feng@epyc6` vs `fengning@Fengs-Mac-mini-3.local`).
+registry. Eliminates hardcoded SSH targets and user confusion.
 
 ## When to Use This Skill
 
@@ -45,8 +45,7 @@ registry. Eliminates hardcoded SSH targets and user confusion (e.g., `feng@epyc6
 |----|------------|-----|----------|
 | macmini | fengning@Fengs-Mac-mini-3.local | macos | Captain, macOS builds |
 | homedesktop-wsl | fengning@homedesktop-wsl | linux | Primary dev, DCG |
-| epyc6 | feng@epyc6 | linux | GPU, ML training |
-| epyc12 | fengning@epyc12 | linux | Secondary Linux |
+| epyc12 | fengning@epyc12 | linux | Primary Linux |
 
 **Note:** Always use `hosts[vm].ssh` from YAML - never reconstruct `user@vm`.
 
@@ -84,7 +83,7 @@ python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
 import yaml, subprocess, sys, os
 yaml_path = os.path.expanduser(sys.argv[1]) if sys.argv[1].startswith('~') else sys.argv[1]
 hosts = yaml.safe_load(open(yaml_path))['hosts']
-for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+for name in ['macmini', 'homedesktop-wsl', 'epyc12']:
     h = hosts[name]
     print(f"=== {name} ({h['ssh']}) ===")
     subprocess.run(['ssh', h['ssh'], 'cd ~/agent-skills && git pull'])
@@ -95,7 +94,7 @@ PY
 ```bash
 # Note: Use SSH directly or dx-runner for remote operations
 # The shell shim dx-dispatch forwards to dx-runner with deprecation warnings
-ssh feng@epyc6 "cd ~/agent-skills && git pull && make install"
+ssh feng@epyc12 "cd ~/agent-skills && git pull && make install"
 ssh fengning@homedesktop-wsl "cd ~/agent-skills && git pull"
 ssh fengning@macmini "cd ~/agent-skills && git pull"
 ```
@@ -106,8 +105,8 @@ ssh fengning@macmini "cd ~/agent-skills && git pull"
 python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
 import yaml, subprocess, sys, os
 yaml_path = os.path.expanduser(sys.argv[1])
-h = yaml.safe_load(open(yaml_path))['hosts']['epyc6']
-subprocess.run(['scp', '~/agent-skills/scripts/new-script.sh', f"{h['ssh']}:~/agent-skills/scripts/"])
+h = yaml.safe_load(open(yaml_path))['hosts']['epyc12']
+    subprocess.run(['scp', '~/agent-skills/scripts/new-script.sh', f"{h['ssh']}:~/agent-skills/scripts/"])
 PY
 ```
 
@@ -119,7 +118,7 @@ python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
 import yaml, subprocess, sys, os
 yaml_path = os.path.expanduser(sys.argv[1])
 hosts = yaml.safe_load(open(yaml_path))['hosts']
-for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+for name in ['macmini', 'homedesktop-wsl', 'epyc12']:
     ssh_target = hosts[name]['ssh']
     subprocess.run(['ssh', ssh_target, 'bash -s'], input='''
 if ! crontab -l 2>/dev/null | grep -q "my-new-cron-job"; then
@@ -142,7 +141,7 @@ python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
 import yaml, subprocess, sys, os
 yaml_path = os.path.expanduser(sys.argv[1])
 hosts = yaml.safe_load(open(yaml_path))['hosts']
-for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+for name in ['macmini', 'homedesktop-wsl', 'epyc12']:
     ssh_target = hosts[name]['ssh']
     result = subprocess.run(['ssh', ssh_target, 'ls ~/agent-skills/scripts/my-script.sh 2>/dev/null && echo OK || echo MISSING'],
                           capture_output=True, text=True)
@@ -156,7 +155,7 @@ PY
 ```bash
 # Using canonical-targets.sh (no PyYAML)
 source ~/agent-skills/scripts/canonical-targets.sh
-echo "${CANONICAL_VM_PRIMARY}"   # feng@epyc6
+echo "${CANONICAL_VM_PRIMARY}"   # feng@epyc12
 echo "${CANONICAL_VM_MACOS}"     # fengning@macmini
 ```
 
@@ -175,7 +174,7 @@ PY
 
 ### Parallel deploy with SSH
 ```bash
-ssh feng@epyc6 "cd ~/agent-skills && git pull" &
+ssh feng@epyc12 "cd ~/agent-skills && git pull" &
 ssh fengning@homedesktop-wsl "cd ~/agent-skills && git pull" &
 ssh fengning@macmini "cd ~/agent-skills && git pull" &
 wait
@@ -188,7 +187,7 @@ echo "All VMs updated"
 ```bash
 source ~/agent-skills/scripts/canonical-targets.sh
 echo "${CANONICAL_VMS[@]}"
-# Output: feng@epyc6:linux:... fengning@macmini:macos:...
+# Output: feng@epyc12:linux:... fengning@macmini:macos:...
 
 # Deploy to all VMs
 for entry in "${CANONICAL_VMS[@]}"; do
@@ -203,7 +202,7 @@ done
 dx-runner start --provider opencode --beads bd-xyz --prompt-file /tmp/prompt.md
 
 # For remote operations, use SSH directly
-ssh feng@epyc6 "command"
+ssh feng@epyc12 "command"
 ```
 
 ## Best Practices
@@ -236,7 +235,7 @@ python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
 import yaml, subprocess, sys, os
 yaml_path = os.path.expanduser(sys.argv[1])
 hosts = yaml.safe_load(open(yaml_path))['hosts']
-for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+for name in ['macmini', 'homedesktop-wsl', 'epyc12']:
     ssh_target = hosts[name]['ssh']
     print(f"Deploying to {name}...")
     subprocess.run(['ssh', ssh_target, 'cd ~/agent-skills && git pull && chmod +x scripts/canonical-evacuate-active.sh'])
@@ -247,7 +246,7 @@ python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
 import yaml, subprocess, sys, os
 yaml_path = os.path.expanduser(sys.argv[1])
 hosts = yaml.safe_load(open(yaml_path))['hosts']
-for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+for name in ['macmini', 'homedesktop-wsl', 'epyc12']:
     result = subprocess.run(['ssh', hosts[name]['ssh'], 'ls -la ~/agent-skills/scripts/canonical-evacuate-active.sh'],
                           capture_output=True, text=True)
     print(f"{name}: {'OK' if result.returncode == 0 else 'MISSING'}")
@@ -260,7 +259,7 @@ python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
 import yaml, subprocess, sys, os
 yaml_path = os.path.expanduser(sys.argv[1])
 hosts = yaml.safe_load(open(yaml_path))['hosts']
-for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
+for name in ['macmini', 'homedesktop-wsl', 'epyc12']:
     ssh_target = hosts[name]['ssh']
     subprocess.run(['ssh', ssh_target, 'bash -s'], input='''
 if ! crontab -l 2>/dev/null | grep -q "canonical-evacuate-active"; then

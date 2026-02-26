@@ -490,7 +490,82 @@ gh pr view: mergeable = false
 ❌ Batching multiple fixes in one commit
 ❌ Not linking child issues to parent
 
-## Safety Guardrails
+## Contradiction Triage (Frontend/UI PRs)
+
+**For PRs with frontend changes, check for evidence contradictions:**
+
+### Step 1: Gather Evidence
+
+```bash
+# Check for runtime crashes
+gh pr view <PR_NUMBER> --json comments -q '.comments[].body' | grep -i "error\|crash\|fail"
+
+# Check CI logs for frontend failures
+gh run list --branch $(git branch --show-current) --limit 1 --json conclusion,status
+
+# Look for visual regression failures
+gh run view --log 2>/dev/null | grep -i "visual\|screenshot\|diff" || true
+```
+
+### Step 2: Detect Contradictions
+
+**Contradiction patterns:**
+
+| Claim | Evidence | Verdict |
+|-------|----------|---------|
+| "UI works" | Screenshot shows crash | 🔴 BLOCKED |
+| "No errors" | Console shows TypeError | 🔴 BLOCKED |
+| "Routes pass" | CI shows route failures | 🔴 BLOCKED |
+| "Tests pass" | CI shows test failures | 🔴 BLOCKED |
+| "Clean render" | Screenshot shows broken layout | 🟡 WARNING |
+
+### Step 3: Escalate Contradictions
+
+If contradiction detected:
+
+```bash
+# Force PR back to blocked state
+echo "🚨 CONTRADICTION DETECTED"
+echo ""
+echo "Claim: [what PR claims]"
+echo "Evidence: [what evidence shows]"
+echo ""
+echo "Required action:"
+echo "1. Fix the runtime issue"
+echo "2. Update evidence to match reality"
+echo "3. Re-run verification"
+
+# Create blocking child issue
+bd create "Blocker: Evidence contradicts claims in PR #${PR_NUMBER}" \
+  --type bug \
+  --priority 0 \
+  --description "PR claims [X] but evidence shows [Y]"
+```
+
+**Template for contradiction report:**
+
+```markdown
+## 🚨 Contradiction Detected
+
+**PR Claim:** [What the PR description claims]
+**Evidence Found:** [What the logs/screenshots actually show]
+
+**Impact:** Cannot proceed with merge until contradiction resolved.
+
+**Required Actions:**
+1. Fix the underlying issue
+2. Update evidence to reflect reality
+3. Re-run verification with both Playwright MCP + Chrome DevTools MCP
+```
+
+### Why Contradiction Triage Matters
+
+- Prevents "looks good" rubber-stamp approvals
+- Catches claims that don't match reality
+- Enforces evidence-first approach
+- Reduces post-merge rollbacks
+
+ ## Safety Guardrails
 
 **Before auto-fixing:**
 - Check issue complexity (simple vs architectural)

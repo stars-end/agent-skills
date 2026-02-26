@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 6598b8f9bb493ba0df3bbc772ab2134327271d1e -->
-<!-- Last updated: 2026-02-26 06:23:20 UTC -->
+<!-- Source SHA: 5bbf654d46207c6f953a1f8a7dbb17be62a31559 -->
+<!-- Last updated: 2026-02-26 07:47:20 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -12,19 +12,6 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not expand scope unless asked
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
-
-### Founder Cognitive Load Policy (Binary)
-Applies to all changes except ones explicitly impacting Railway production environment.
-
-Required decision:
-- `ALL_IN_NOW`
-- `DEFER_TO_P2_PLUS`
-- `CLOSE_AS_NOT_WORTH_IT`
-
-Rules:
-- No burn-in, phased cutover, or transition periods.
-- No required founder monitoring post-merge.
-- If it needs ongoing manual oversight, it is not P0/P1: defer to P2+ or close.
 
 # DX Global Constraints (V8.4)
 <!-- AUTO-GENERATED - DO NOT EDIT -->
@@ -87,7 +74,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **Railway CLI token**: `op://dev/Railway-Delivery/token` for CI/automation.
 - **Quick reference**: use the `op-secrets-quickref` skill.
 
-## 6) Parallel Agent Orchestration (V8.3)
+## 6) Parallel Agent Orchestration (V8.4)
 
 ### Pattern: Plan-First, Batch-Second, Commit-Only
 
@@ -220,8 +207,66 @@ References:
 - `~/agent-skills/extended/cc-glm/SKILL.md`
 
 Notes:
-- PR metadata enforcement exists to keep squash merges ergonomic.
-- If unsure what to use for Agent, use platform id (see `DX_AGENT_ID.md`).
+ - PR metadata enforcement exists to keep squash merges ergonomic.
+ - If unsure what to use for Agent, use platform id (see `DX_AGENT_ID.md`).
+
+## 7) Frontend Evidence Contract (Required for UI/UX Claims)
+
+When changing frontend files in `~/prime-radiant-ai`, agents MUST follow this workflow:
+
+### Pre-PR Workflow
+```bash
+# 1. Build and verify
+pnpm --filter frontend build
+pnpm --filter frontend type-check
+pnpm --filter frontend lint:css
+
+# 2. Run visual regression (start preview first)
+pnpm --filter frontend preview --port 5173 &
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual
+
+# 3. If baselines need update, justify and commit
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
+```
+
+### Route Matrix Verification
+- **no-cookie mode**: `/`, `/sign-in`, `/sign-up`
+- **bypass-cookie mode**: `/v2`, `/brokerage` (if auth bypass available)
+
+### Runtime Health Requirements
+- No "Unexpected Application Error" on page
+- No console errors containing: `clerk`, `ClerkProvider`, `Unhandled`, `TypeError`
+- Clean page render for all tested routes
+
+### CI Workflows (Auto-triggered)
+- `.github/workflows/visual-quality.yml` - Stylelint + Visual Regression
+- `.github/workflows/lighthouse.yml` - Performance budgets
+
+### Required PR Body Section
+```markdown
+## Frontend Evidence
+
+### Route Matrix
+| Route | Desktop | Mobile | Status |
+|-------|---------|--------|--------|
+| / | ✅ | ✅ | Pass |
+
+### Runtime Health
+- Console errors: 0
+- Unexpected Application Error: No
+
+### Evidence
+- Commit SHA: [hash]
+- Visual tests: [X] passed
+```
+
+**Full Template:** `~/agent-skills/templates/frontend-evidence-contract.md`
+
+### Pass/Fail Criteria
+- ✅ Visual tests pass (or baselines updated with justification)
+- ✅ CI checks green (Stylelint, Visual Regression, Lighthouse)
+- ❌ Missing evidence section blocks PR
+- ❌ Evidence contradicts claims blocks PR
 
 ---
 
@@ -292,10 +337,10 @@ Notes:
 | **canonical-targets** | Single source of truth for canonical VMs, canonical IDEs, and canonical trunk branch. Use this to keep dx-status, mcp-doctor, and setup scripts aligned across machines. | — | dx, ide, vm, canonical, targets |
 | **devops-dx** | GitHub/Railway housekeeping for CI env/secret management and DX maintenance. Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, or fixing CI failures due to missing env. | — | devops, github, auth, env, secrets, ci, railway |
 | **dx-alerts** | Lightweight “news wire” for DX changes and breakages, posted to Slack (no MCP required). | — |  |
-| **fleet-deploy** | Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12). MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs. Uses configs/fleet_hosts.yaml as authoritative source for SSH targets, with dx-runner governance. | `dx-runner start --provider opencode --beads bd-xyz --prompt-` | fleet, deploy, vm, canonical, dx-runner, ssh, infrastructure |
+| **fleet-deploy** | Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc12). MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs. Uses configs/fleet_hosts.yaml as authoritative source for SSH targets, with dx-runner governance. | `dx-runner start --provider opencode --beads bd-xyz --prompt-` | fleet, deploy, vm, canonical, dx-runner, ssh, infrastructure |
 | **github-runner-setup** | GitHub Actions self-hosted runner setup and maintenance. Use when setting up dedicated runner users, migrating runners from personal accounts, troubleshooting runner issues, or implementing runner isolation. Covers systemd services, environment isolation, and skills plane integration. | — | github-actions, devops, runner, systemd, infrastructure |
 | **vm-bootstrap** | Linux VM bootstrap verification skill. MUST BE USED when setting up new VMs or verifying environment. Supports modes: check (warn-only), install (operator-confirmed), strict (CI-ready). Enforces Linux-only  mise as canonical; honors preference brew→npm (with apt fallback). Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, op, bd, dcg, ru, tmux, rg. Handles optional tools as warnings: tailscale, playwright, docker, bv. Never prints/seeds secrets; never stores tokens in repo/YAML; Railway vars only for app runtime env. Safe on dirty repos (refuses and points to dirty-repo-bootstrap skill, or snapshots WIP branch). Keywords: vm, bootstrap, setup, mise, toolchain, linux, environment, provision, verify, new vm | — | dx, tooling, setup, linux |
-| **multi-agent-dispatch** | Cross-VM task dispatch with dx-runner as canonical governance runner and OpenCode as primary execution lane. dx-dispatch is a BREAK-GLASS compatibility shim for remote fanout when dx-runner is unavailable. EPYC6 is currently disabled - see enablement gate. | `dx-dispatch is a BREAK-GLASS compatibility shim for remote f` | workflow, dispatch, dx-runner, governance, cross-vm |
+| **multi-agent-dispatch** | Cross-VM task dispatch with dx-runner as canonical governance runner and OpenCode as primary execution lane. dx-dispatch is a BREAK-GLASS compatibility shim for remote fanout when dx-runner is unavailable. | `dx-dispatch is a BREAK-GLASS compatibility shim for remote f` | workflow, dispatch, dx-runner, governance, cross-vm |
 
 
 ## Railway Deployment
