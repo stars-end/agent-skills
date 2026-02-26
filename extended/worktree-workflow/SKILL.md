@@ -30,6 +30,10 @@ dx-worktree create <beads-id> <repo>
 
 Returns a path you can `cd` into.
 
+For Railway-linked repos, this also seeds `.dx/railway-context.env` and attempts a
+non-interactive `railway link` in the worktree so `railway status` / `railway run`
+work without falling back to canonical repo directories.
+
 ### Cleanup a task workspace
 
 ```bash
@@ -61,4 +65,3 @@ dx-worktree prune <repo>
 - **Open a draft PR after your first real commit** — makes work visible before the 3:15 AM push
 - **Commit at logical milestones** — not on a timer; `worktree-push.sh` handles the rest
 - **Uncommitted changes are your responsibility** — no cron will save them
-

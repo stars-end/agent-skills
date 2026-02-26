@@ -74,7 +74,7 @@ If `supabase db push` fails with "Remote migration versions not found" (Drift), 
 1. Ensure `DATABASE_URL` is set in Railway (required for CLI).
 2. Run repair to sync registry with local files:
    ```bash
-   # In Railway shell
+   # In Railway context (`railway shell` or `railway run -p/-e/-s`)
    supabase migration repair --status applied <version_id>
    # Or for batch:
    supabase migration repair --status applied 20251129... 20251204...
@@ -108,7 +108,7 @@ If `supabase db push` fails with "Remote migration versions not found" (Drift), 
 
 **1. Identify what's in the registry:**
 ```bash
-# In Railway shell
+# In Railway context (`railway shell` or `railway run -p/-e/-s`)
 railway run supabase migration list
 # OR query the registry directly
 railway run -- psql "$DATABASE_URL" -c \

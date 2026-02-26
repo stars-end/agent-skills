@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 790fc3190bc645e3b852afaa7076aac474019f6f -->
-<!-- Last updated: 2026-02-25 12:35:43 UTC -->
+<!-- Source SHA: 3a35a9783f6abe34e6db38fb0b45ac54d377d50a -->
+<!-- Last updated: 2026-02-25 19:59:14 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -62,8 +62,11 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
 - **See Section 6** for detailed parallel orchestration patterns.
 
-## 5) Secrets + Env Sources (V8.3 - Railway Context Mandatory)
-- **Railway shell is MANDATORY for dev work**: provides `RAILWAY_SERVICE_FRONTEND_URL`, `RAILWAY_SERVICE_BACKEND_URL`, and all env vars.
+## 5) Secrets + Env Sources (V8.4 - Railway Context Mandatory)
+- **Railway context is MANDATORY for dev work**:
+  - interactive: `railway shell`
+  - worktree/automation-safe: `railway run -p <project-id> -e <env> -s <service> -- <cmd>`
+- **Do not require canonical repo cwd for Railway context**; worktrees are first-class.
 - **API keys**: `op://dev/Agent-Secrets-Production/<FIELD>` (transitional, see SECRETS_INDEX.md).
 - **Railway CLI token**: `op://dev/Railway-Delivery/token` for CI/automation.
 - **Quick reference**: use the `op-secrets-quickref` skill.
@@ -263,7 +266,7 @@ Notes:
 | **skills-doctor** | Validate that the current VM has the right `agent-skills` installed for the repo you’re working in. | — |  |
 | **ssh-key-doctor** | Fast, deterministic SSH health check for canonical VMs (no hangs, no secrets). Warn-only by default; strict mode is opt-in. **DEPRECATED for canonical VM access**: Use Tailscale SSH instead. This skill remains useful for non-Tailscale SSH (external servers, GitHub, etc.). | — | dx, ssh, verification, deprecated |
 | **toolchain-health** | Validate Python toolchain alignment between mise, Poetry, and pyproject. Use when changing Python versions, editing pyproject.toml, or seeing Poetry/mise version solver errors. Invokes /toolchain-health to check: - .mise.toml python tool version - pyproject.toml python constraint - Poetry env python interpreter Keywords: python version, mise, poetry, toolchain, env use, lock, install | — | dx, tooling, python |
-| **verify-pipeline** | Run project verification checks using standard Makefile targets. Use when user says "verify pipeline", "check my work", "run tests", or "validate changes". Wraps `make verify-pipeline` (E2E), `make verify-analysis` (Logic), or `make verify-all`. Ensures environment constraints (e.g. Railway Shell) are met. | — | workflow, testing, verification, makefile, railway |
+| **verify-pipeline** | Run project verification checks using standard Makefile targets. Use when user says "verify pipeline", "check my work", "run tests", or "validate changes". Wraps `make verify-pipeline` (E2E), `make verify-analysis` (Logic), or `make verify-all`. Ensures environment constraints (Railway context) are met. | — | workflow, testing, verification, makefile, railway |
 
 
 ## Infrastructure
