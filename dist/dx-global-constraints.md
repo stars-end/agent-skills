@@ -50,13 +50,16 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
 - **See Section 6** for detailed parallel orchestration patterns.
 
-## 5) Secrets + Env Sources (V8.3 - Railway Context Mandatory)
-- **Railway shell is MANDATORY for dev work**: provides `RAILWAY_SERVICE_FRONTEND_URL`, `RAILWAY_SERVICE_BACKEND_URL`, and all env vars.
+## 5) Secrets + Env Sources (V8.4 - Railway Context Mandatory)
+- **Railway context is MANDATORY for dev work**:
+  - interactive: `railway shell`
+  - worktree/automation-safe: `railway run -p <project-id> -e <env> -s <service> -- <cmd>`
+- **Do not require canonical repo cwd for Railway context**; worktrees are first-class.
 - **API keys**: `op://dev/Agent-Secrets-Production/<FIELD>` (transitional, see SECRETS_INDEX.md).
 - **Railway CLI token**: `op://dev/Railway-Delivery/token` for CI/automation.
 - **Quick reference**: use the `op-secrets-quickref` skill.
 
-## 6) Parallel Agent Orchestration (V8.3)
+## 6) Parallel Agent Orchestration (V8.4)
 
 ### Pattern: Plan-First, Batch-Second, Commit-Only
 
