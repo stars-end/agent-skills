@@ -132,3 +132,59 @@ Do not claim complete until:
 - `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
 If blocked, explain which gate failed and the smallest next action to unblock.
 ```
+
+## Frontend Verification Appendix (For UI/UX Tasks in prime-radiant-ai)
+
+**When task involves frontend changes in prime-radiant-ai, append this section:**
+
+```markdown
+## Frontend Verification (If UI Changes)
+
+If you modify any frontend files, you MUST:
+
+### 1. Build and Start Preview
+```bash
+pnpm --filter frontend build
+pnpm --filter frontend preview --port 5173 &
+sleep 3
+```
+
+### 2. Run Visual Regression
+```bash
+# Must use VISUAL_BASE_URL to avoid port conflict with webServer
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual
+```
+
+### 3. If Tests Fail
+- Check if change is intentional
+- If intentional: `VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update`
+- Commit baselines with justification
+
+### 4. Run Stylelint
+```bash
+pnpm --filter frontend lint:css
+```
+
+### 5. Required PR Body Section
+```markdown
+## Frontend Evidence
+
+### Route Matrix
+| Route | Desktop | Mobile | Status |
+|-------|---------|--------|--------|
+| / | ✅ | ✅ | Pass |
+
+### Evidence
+- Commit SHA: [sha]
+- Visual tests: [X] passed
+- Stylelint: PASS
+```
+
+### CI Auto-Runs
+- `visual-quality.yml` - Stylelint + Visual Regression
+- `lighthouse.yml` - Performance budgets
+
+**Full template:** `~/agent-skills/templates/frontend-evidence-contract.md`
+```
+
+**Usage:** Add this appendix when delegating UI/UX work to ensure evidence contract compliance.

@@ -370,9 +370,70 @@ bd update <FEATURE_KEY> status=in_progress --external-ref "PR#${PR_NUMBER}"
 
 Check status: gh pr view {PR_NUMBER}
 Test in dev: dev.yourapp.com/pr-{PR_NUMBER}
+ ```
+
+### 2.7. Frontend Evidence Contract (If Frontend Files Changed)
+
+**When frontend files are modified in prime-radiant-ai, enforce evidence contract:**
+
+```bash
+# Check if frontend files changed
+FRONTEND_CHANGES=$(git diff origin/master --name-only | grep -E "^frontend/" | head -1)
+
+if [ -n "$FRONTEND_CHANGES" ]; then
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "🎨 FRONTEND EVIDENCE CONTRACT"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "Frontend changes detected. Before PR-ready:"
+  echo ""
+  echo "1. Run visual regression:"
+  echo "   pnpm --filter frontend build"
+  echo "   pnpm --filter frontend preview --port 5173 &"
+  echo "   VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual"
+  echo ""
+  echo "2. If baselines change, update and justify:"
+  echo "   VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update"
+  echo ""
+  echo "3. Add '## Frontend Evidence' section to PR body"
+  echo ""
+  echo "Template: ~/agent-skills/templates/frontend-evidence-contract.md"
+  echo ""
+fi
 ```
 
-## Best Practices
+**Required PR body section for frontend changes:**
+
+```markdown
+## Frontend Evidence
+
+### Route Matrix
+| Route | Desktop | Mobile | Status |
+|-------|---------|--------|--------|
+| / | ✅ | ✅ | Pass |
+| /sign-in | ✅ | ✅ | Pass |
+
+### Runtime Health
+- Console errors: 0
+- Unexpected Application Error: No
+
+### Evidence
+- Commit SHA: [hash]
+- Visual tests: [X] passed
+- CI workflows: [links]
+```
+
+**CI will auto-run:**
+- `visual-quality.yml` (Stylelint + Visual Regression)
+- `lighthouse.yml` (Performance budgets)
+
+**Why this matters:**
+- Prevents false-positive "looks good" approvals
+- Catches visual regressions before merge
+- CI validates automatically - trust the pipeline
+
+ ## Best Practices
 
 - **Create Beads issue if missing** - Never block on missing metadata
 - **Use gh CLI** - More reliable than API calls

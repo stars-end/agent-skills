@@ -4,7 +4,7 @@ description: |
   Run project verification checks using standard Makefile targets.
   Use when user says "verify pipeline", "check my work", "run tests", or "validate changes".
   Wraps `make verify-pipeline` (E2E), `make verify-analysis` (Logic), or `make verify-all`.
-  Ensures environment constraints (Railway context) are met.
+  Ensures environment constraints (e.g. Railway Shell) are met.
 tags: [workflow, testing, verification, makefile, railway]
 allowed-tools:
   - Bash(make verify-*)
@@ -52,20 +52,17 @@ Check if Railway environment is configured:
 if [ -n "$RAILWAY_ENVIRONMENT" ] || [ -n "$RAILWAY_TOKEN" ]; then
   echo "✅ Railway context detected"
 else
-  echo "⚠️ No Railway context - run 'railway shell' or use 'railway run -p <id> -e <env> -s <svc> -- <cmd>'"
+  echo "⚠️ No Railway context - run 'railway shell' or set RAILWAY_TOKEN"
 fi
 ```
 
 **How to fix:**
 ```bash
-# Option 1: Interactive shell (recommended for manual debugging)
+# Option 1: Interactive shell (recommended for local dev)
 railway shell
 
-# Option 2: Worktree-safe command execution (no local railway link needed)
-railway run -p <project-id> -e dev -s backend -- make verify-pipeline
-
-# Option 3: Use dx wrapper from this repo
-~/agent-skills/scripts/dx-railway-run.sh -- make verify-pipeline
+# Option 2: Set token from 1Password (for CI/automation)
+export RAILWAY_TOKEN=$(op read "op://dev/Railway-Delivery/token")
 ```
 
 ### 2. Dev Server Check
@@ -118,12 +115,12 @@ pnpm install
 |--------|-------------|-------------|----------|
 | `verify-gate` | Pre-merge gate (lint + unit + smoke) | Local/CI | ~2 min |
 | `verify-dev` | Development verification (no DB) | Local | ~30 sec |
-| `verify-pipeline` | E2E RAG Pipeline (requires DB) | Railway context | ~5 min |
-| `verify-analysis` | Legislation Logic (Integration) | Railway context | ~3 min |
+| `verify-pipeline` | E2E RAG Pipeline (requires DB) | Railway Shell | ~5 min |
+| `verify-analysis` | Legislation Logic (Integration) | Railway Shell | ~3 min |
 | `verify-auth` | Auth Config validation | Local/Railway | ~1 min |
-| `verify-all` | All verification targets | Railway context | ~10 min |
+| `verify-all` | All verification targets | Railway Shell | ~10 min |
 | `smoke-api` | API health check smoke test | Local/Railway | ~10 sec |
-| `smoke-e2e` | End-to-end smoke test | Railway context | ~1 min |
+| `smoke-e2e` | End-to-end smoke test | Railway Shell | ~1 min |
 | `ci` | Full CI pipeline | CI only | ~15 min |
 
 ### Target Selection Guide
@@ -199,7 +196,7 @@ make smoke-e2e
 ❌ Verification Failed:
    - Pipeline: DB Connection Error
 
-   Tip: Check Railway context (`railway run -p/-e/-s` or `railway shell`) and .env variables.
+   Tip: Check your Railway Shell connection or .env variables.
 ```
 
 ## Troubleshooting
@@ -207,9 +204,9 @@ make smoke-e2e
 | Error Message | Cause | Fix |
 |--------------|-------|-----|
 | `uismoke not found` | Missing test dependencies | `poetry install` |
-| `TEST_AUTH_BYPASS_SECRET not found` | Running outside Railway context | `railway run -p <id> -e dev -s backend -- <cmd>` or `railway shell` |
+| `TEST_AUTH_BYPASS_SECRET not found` | Running outside Railway context | `railway shell` or set env var |
 | `Connection refused localhost:8000` | Dev server not running | `make dev` |
-| `RAILWAY_SERVICE_FRONTEND_URL empty` | Missing Railway service URL | Use `railway run -p <id> -e dev -s backend -- <cmd>` or `railway shell` |
+| `RAILWAY_SERVICE_FRONTEND_URL empty` | Missing Railway service URL | `railway shell` (env only available in Railway) |
 | `psycopg2.OperationalError` | DB not accessible | Check Railway DB status: `railway status` |
 | `ModuleNotFoundError: app` | Wrong working directory | Run from project root |
 | `poetry.lock out of sync` | Lockfile drift | `poetry lock --no-update` |
@@ -219,7 +216,7 @@ make smoke-e2e
 
 ### Common Scenarios
 
-**Scenario: "Works locally but fails in Railway context"**
+**Scenario: "Works locally but fails in Railway Shell"**
 
 1. Check environment parity:
    ```bash
@@ -239,7 +236,71 @@ make smoke-e2e
 2. Increase timeouts for cold starts
 3. Add retry logic for flaky external services
 
-## Best Practices
+## Frontend Gate Mode (prime-radiant-ai)
+
+**For frontend-only PRs in prime-radiant-ai, use visual verification:**
+
+### Step 1: Build and Start Preview
+
+```bash
+# Build frontend
+pnpm --filter frontend build
+
+# Start preview server (background)
+pnpm --filter frontend preview --port 5173 &
+sleep 3
+```
+
+### Step 2: Run Visual Regression
+
+```bash
+# Run visual tests (VISUAL_BASE_URL skips webServer startup)
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual
+```
+
+### Step 3: Check Stylelint
+
+```bash
+pnpm --filter frontend lint:css
+```
+
+### Step 4: If Tests Fail
+
+```bash
+# Check if change is intentional
+# If so, update baselines:
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
+
+# Commit new baselines
+git add frontend/e2e/visual/__snapshots__/
+```
+
+### Artifact Paths
+
+| Artifact | Path |
+|----------|------|
+| Visual snapshots | `frontend/e2e/visual/__snapshots__/` |
+| Playwright report | `frontend/playwright-report/` (on failure) |
+| Lighthouse results | `frontend/.lighthouseci/` |
+
+### CI Integration
+
+CI auto-runs these workflows on frontend changes:
+- `visual-quality.yml` → Stylelint + Visual Regression
+- `lighthouse.yml` → Performance budgets
+
+### Evidence for PR Body
+
+```markdown
+## Frontend Evidence
+- Visual tests: [X] passed
+- Stylelint: PASS
+- Commit SHA: [hash]
+```
+
+**Full Template:** `~/agent-skills/templates/frontend-evidence-contract.md`
+
+ ## Best Practices
 
 - **Always run from root** (where Makefile is).
 - **Prefer `make` targets** over direct python scripts (`python scripts/...`).
