@@ -236,29 +236,43 @@ make smoke-e2e
 2. Increase timeouts for cold starts
 3. Add retry logic for flaky external services
 
-## Frontend Gate Mode
+## Frontend Gate Mode (prime-radiant-ai)
 
-**For frontend-only PRs, use deterministic visual verification:**
+**For frontend-only PRs in prime-radiant-ai, use visual verification:**
 
-### Route Matrix Command
+### Step 1: Build and Start Preview
 
 ```bash
-# Run Playwright route verification
-pnpm --filter frontend test:visual
+# Build frontend
+pnpm --filter frontend build
 
-# Or specific viewport
-pnpm --filter frontend test:visual:desktop
-pnpm --filter frontend test:visual:mobile
+# Start preview server (background)
+pnpm --filter frontend preview --port 5173 &
+sleep 3
 ```
 
-### Runtime Error Capture
+### Step 2: Run Visual Regression
 
 ```bash
-# Run with console capture
-pnpm --filter frontend test:e2e -- --grep "route" --reporter=list 2>&1 | tee runtime-errors.log
+# Run visual tests (VISUAL_BASE_URL skips webServer startup)
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual
+```
 
-# Check for blocking patterns
-grep -iE "unexpected application error|clerkprovider|unhandled|typeerror" runtime-errors.log && echo "BLOCKING ERRORS FOUND" || echo "No blocking errors"
+### Step 3: Check Stylelint
+
+```bash
+pnpm --filter frontend lint:css
+```
+
+### Step 4: If Tests Fail
+
+```bash
+# Check if change is intentional
+# If so, update baselines:
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
+
+# Commit new baselines
+git add frontend/e2e/visual/__snapshots__/
 ```
 
 ### Artifact Paths
@@ -266,34 +280,25 @@ grep -iE "unexpected application error|clerkprovider|unhandled|typeerror" runtim
 | Artifact | Path |
 |----------|------|
 | Visual snapshots | `frontend/e2e/visual/__snapshots__/` |
-| Playwright report | `frontend/playwright-report/` |
+| Playwright report | `frontend/playwright-report/` (on failure) |
 | Lighthouse results | `frontend/.lighthouseci/` |
-| Runtime logs | `runtime-errors.log` |
 
-### Frontend Gate Command Contract
+### CI Integration
 
-```bash
-# Full frontend gate
-make verify-frontend || {
-  echo "Frontend gate failed. Check artifacts:"
-  echo "  - frontend/e2e/visual/__snapshots__/*.diff.png"
-  echo "  - frontend/playwright-report/"
-  exit 1
-}
-```
+CI auto-runs these workflows on frontend changes:
+- `visual-quality.yml` → Stylelint + Visual Regression
+- `lighthouse.yml` → Performance budgets
 
-### Integration with Evidence Contract
-
-After running frontend gate, include in PR body:
+### Evidence for PR Body
 
 ```markdown
 ## Frontend Evidence
-- Visual tests: PASS
-- Runtime errors: 0
-- Artifacts: [link to CI run]
+- Visual tests: [X] passed
+- Stylelint: PASS
+- Commit SHA: [hash]
 ```
 
-**Template:** `~/agent-skills/templates/frontend-evidence-contract.md`
+**Full Template:** `~/agent-skills/templates/frontend-evidence-contract.md`
 
  ## Best Practices
 

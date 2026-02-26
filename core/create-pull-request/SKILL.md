@@ -374,11 +374,11 @@ Test in dev: dev.yourapp.com/pr-{PR_NUMBER}
 
 ### 2.7. Frontend Evidence Contract (If Frontend Files Changed)
 
-**When frontend files are modified, enforce evidence contract before PR-ready state:**
+**When frontend files are modified in prime-radiant-ai, enforce evidence contract:**
 
 ```bash
 # Check if frontend files changed
-FRONTEND_CHANGES=$(git diff origin/master --name-only | grep -E "(frontend/|src/.*\.tsx|src/.*\.css)" | head -1)
+FRONTEND_CHANGES=$(git diff origin/master --name-only | grep -E "^frontend/" | head -1)
 
 if [ -n "$FRONTEND_CHANGES" ]; then
   echo ""
@@ -386,29 +386,24 @@ if [ -n "$FRONTEND_CHANGES" ]; then
   echo "🎨 FRONTEND EVIDENCE CONTRACT"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
-  echo "Frontend changes detected. PR requires evidence contract completion."
+  echo "Frontend changes detected. Before PR-ready:"
   echo ""
-  echo "Required evidence:"
-  echo "  1. Route matrix results (see template)"
-  echo "  2. Runtime error summary"
-  echo "  3. Valid PR URL (not /pull/new)"
-  echo "  4. Commit SHA"
+  echo "1. Run visual regression:"
+  echo "   pnpm --filter frontend build"
+  echo "   pnpm --filter frontend preview --port 5173 &"
+  echo "   VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual"
+  echo ""
+  echo "2. If baselines change, update and justify:"
+  echo "   VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update"
+  echo ""
+  echo "3. Add '## Frontend Evidence' section to PR body"
   echo ""
   echo "Template: ~/agent-skills/templates/frontend-evidence-contract.md"
   echo ""
-  
-  # Check if evidence exists in PR body (if PR already created)
-  if [ -f ".pr-number" ]; then
-    PR_BODY=$(gh pr view $(cat .pr-number) --json body -q '.body')
-    if ! echo "$PR_BODY" | grep -q "Frontend Evidence"; then
-      echo "⚠️  Missing frontend evidence section in PR body"
-      echo "   Add the evidence before marking PR as ready"
-    fi
-  fi
 fi
 ```
 
-**Evidence contract fields (add to PR body):**
+**Required PR body section for frontend changes:**
 
 ```markdown
 ## Frontend Evidence
@@ -421,20 +416,22 @@ fi
 
 ### Runtime Health
 - Console errors: 0
-- Page errors: 0
 - Unexpected Application Error: No
 
-### Evidence Integrity
-- PR URL: [valid URL]
+### Evidence
 - Commit SHA: [hash]
-- Tooling: Playwright MCP + Chrome DevTools MCP
+- Visual tests: [X] passed
+- CI workflows: [links]
 ```
+
+**CI will auto-run:**
+- `visual-quality.yml` (Stylelint + Visual Regression)
+- `lighthouse.yml` (Performance budgets)
 
 **Why this matters:**
 - Prevents false-positive "looks good" approvals
-- Catches runtime crashes before merge
-- Ensures evidence matches claims
-- Required for all UI/UX work
+- Catches visual regressions before merge
+- CI validates automatically - trust the pipeline
 
  ## Best Practices
 

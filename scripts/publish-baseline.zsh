@@ -209,42 +209,61 @@ Notes:
 
 ## 7) Frontend Evidence Contract (Required for UI/UX Claims)
 
-When changing frontend files, agents MUST provide evidence before PR-ready state:
+When changing frontend files in \`~/prime-radiant-ai\`, agents MUST follow this workflow:
+
+### Pre-PR Workflow
+\`\`\`bash
+# 1. Build and verify
+pnpm --filter frontend build
+pnpm --filter frontend type-check
+pnpm --filter frontend lint:css
+
+# 2. Run visual regression (start preview first)
+pnpm --filter frontend preview --port 5173 &
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual
+
+# 3. If baselines need update, justify and commit
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
+\`\`\`
 
 ### Route Matrix Verification
-Test routes in two modes:
-- **no-cookie mode**: \`/\`, \`/sign-in\`, \`/sign-up\`, \`/demo\`
-- **bypass-cookie mode**: \`/v2\`, \`/brokerage\`
+- **no-cookie mode**: \`/\`, \`/sign-in\`, \`/sign-up\`
+- **bypass-cookie mode**: \`/v2\`, \`/brokerage\` (if auth bypass available)
 
 ### Runtime Health Requirements
 - No "Unexpected Application Error" on page
 - No console errors containing: \`clerk\`, \`ClerkProvider\`, \`Unhandled\`, \`TypeError\`
 - Clean page render for all tested routes
 
-### Evidence Integrity
-- PR URL must be valid (not \`/pull/new\`)
-- Commit SHA must match current HEAD
-- Changed file/line mapping must match diff
-- Claims cannot contradict screenshots/logs
+### CI Workflows (Auto-triggered)
+- \`.github/workflows/visual-quality.yml\` - Stylelint + Visual Regression
+- \`.github/workflows/lighthouse.yml\` - Performance budgets
 
-### Tooling Requirement
-Use BOTH for verification:
-1. **Playwright MCP** - Screenshots, navigation, a11y checks
-2. **Chrome DevTools MCP** - Console capture, perf traces
-
-### Required PR Body Fields (Frontend Changes)
+### Required PR Body Section
 \`\`\`markdown
 ## Frontend Evidence
+
+### Route Matrix
 | Route | Desktop | Mobile | Status |
 |-------|---------|--------|--------|
 | / | ✅ | ✅ | Pass |
 
+### Runtime Health
 - Console errors: 0
-- PR URL: [valid URL]
+- Unexpected Application Error: No
+
+### Evidence
 - Commit SHA: [hash]
+- Visual tests: [X] passed
 \`\`\`
 
-**Template:** \`~/agent-skills/templates/frontend-evidence-contract.md\`
+**Full Template:** \`~/agent-skills/templates/frontend-evidence-contract.md\`
+
+### Pass/Fail Criteria
+- ✅ Visual tests pass (or baselines updated with justification)
+- ✅ CI checks green (Stylelint, Visual Regression, Lighthouse)
+- ❌ Missing evidence section blocks PR
+- ❌ Evidence contradicts claims blocks PR
 EOF
 
 # Header for AGENTS.md
