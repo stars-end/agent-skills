@@ -74,7 +74,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **Railway CLI token**: \`op://dev/Railway-Delivery/token\` for CI/automation.
 - **Quick reference**: use the \`op-secrets-quickref\` skill.
 
-## 6) Parallel Agent Orchestration (V8.3)
+## 6) Parallel Agent Orchestration (V8.4)
 
 ### Pattern: Plan-First, Batch-Second, Commit-Only
 
@@ -207,8 +207,66 @@ References:
 - \`~/agent-skills/extended/cc-glm/SKILL.md\`
 
 Notes:
-- PR metadata enforcement exists to keep squash merges ergonomic.
-- If unsure what to use for Agent, use platform id (see \`DX_AGENT_ID.md\`).
+ - PR metadata enforcement exists to keep squash merges ergonomic.
+ - If unsure what to use for Agent, use platform id (see \`DX_AGENT_ID.md\`).
+
+## 7) Frontend Evidence Contract (Required for UI/UX Claims)
+
+When changing frontend files in \`~/prime-radiant-ai\`, agents MUST follow this workflow:
+
+### Pre-PR Workflow
+\`\`\`bash
+# 1. Build and verify
+pnpm --filter frontend build
+pnpm --filter frontend type-check
+pnpm --filter frontend lint:css
+
+# 2. Run visual regression (start preview first)
+pnpm --filter frontend preview --port 5173 &
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual
+
+# 3. If baselines need update, justify and commit
+VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
+\`\`\`
+
+### Route Matrix Verification
+- **no-cookie mode**: \`/\`, \`/sign-in\`, \`/sign-up\`
+- **bypass-cookie mode**: \`/v2\`, \`/brokerage\` (if auth bypass available)
+
+### Runtime Health Requirements
+- No "Unexpected Application Error" on page
+- No console errors containing: \`clerk\`, \`ClerkProvider\`, \`Unhandled\`, \`TypeError\`
+- Clean page render for all tested routes
+
+### CI Workflows (Auto-triggered)
+- \`.github/workflows/visual-quality.yml\` - Stylelint + Visual Regression
+- \`.github/workflows/lighthouse.yml\` - Performance budgets
+
+### Required PR Body Section
+\`\`\`markdown
+## Frontend Evidence
+
+### Route Matrix
+| Route | Desktop | Mobile | Status |
+|-------|---------|--------|--------|
+| / | ✅ | ✅ | Pass |
+
+### Runtime Health
+- Console errors: 0
+- Unexpected Application Error: No
+
+### Evidence
+- Commit SHA: [hash]
+- Visual tests: [X] passed
+\`\`\`
+
+**Full Template:** \`~/agent-skills/templates/frontend-evidence-contract.md\`
+
+### Pass/Fail Criteria
+- ✅ Visual tests pass (or baselines updated with justification)
+- ✅ CI checks green (Stylelint, Visual Regression, Lighthouse)
+- ❌ Missing evidence section blocks PR
+- ❌ Evidence contradicts claims blocks PR
 EOF
 
 # Header for AGENTS.md
@@ -238,19 +296,6 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
 
-### Founder Cognitive Load Policy (Binary)
-Applies to all changes except ones explicitly impacting Railway production environment.
-
-Required decision:
-- \`ALL_IN_NOW\`
-- \`DEFER_TO_P2_PLUS\`
-- \`CLOSE_AS_NOT_WORTH_IT\`
-
-Rules:
-- No burn-in, phased cutover, or transition periods.
-- No required founder monitoring post-merge.
-- If it needs ongoing manual oversight, it is not P0/P1: defer to P2+ or close.
-
 EOF
 
 # Append constraints to baseline
@@ -269,19 +314,6 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not expand scope unless asked
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
-
-### Founder Cognitive Load Policy (Binary)
-Applies to all changes except ones explicitly impacting Railway production environment.
-
-Required decision:
-- \`ALL_IN_NOW\`
-- \`DEFER_TO_P2_PLUS\`
-- \`CLOSE_AS_NOT_WORTH_IT\`
-
-Rules:
-- No burn-in, phased cutover, or transition periods.
-- No required founder monitoring post-merge.
-- If it needs ongoing manual oversight, it is not P0/P1: defer to P2+ or close.
 
 EOF
 
