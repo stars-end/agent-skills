@@ -175,7 +175,7 @@ if $RUN_REMOTE; then
     
     # epyc6
     echo "Testing epyc6..."
-    EPYC_OUT=$(ssh feng@epyc6 'source ~/.zshenv && cd ~/agent-skills && git pull -q && python3 scripts/test-event-bus-e2e.py 2>&1' | grep "RESULTS" || echo "FAILED")
+    EPYC_OUT=$(ssh fengning@epyc6 'source ~/.zshenv && cd ~/agent-skills && git pull -q && python3 scripts/test-event-bus-e2e.py 2>&1' | grep "RESULTS" || echo "FAILED")
     if echo "$EPYC_OUT" | grep -q "6 passed"; then
         test_result 0 "epyc6: E2E test passed"
     else
