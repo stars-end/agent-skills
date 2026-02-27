@@ -13,10 +13,10 @@ This document provides a deterministic verification matrix for all canonical VMs
 |------|-----|---------------|------|-------|
 | homedesktop-wsl | Linux (WSL2) | `fengning@homedesktop-wsl` | fengning | Primary dev environment |
 | macmini | macOS | `fengning@macmini` | fengning | Captain VM - heartbeat origin |
-| epyc6 | Linux | `feng@epyc6` | **feng** | GPU/ML work (different user!) |
+| epyc6 | Linux | `fengning@epyc6` | fengning | GPU/ML work |
 | epyc12 | Linux | `fengning@epyc12` | fengning | Secondary Linux host |
 
-**Key Difference:** epyc6 uses `feng` while all others use `fengning`.
+**Key Difference:** none for principal family; canonical VMs use `fengning@...` principals.
 
 ---
 
@@ -29,7 +29,7 @@ This document provides a deterministic verification matrix for all canonical VMs
 | SSH reachable (direct) | N/A (local) | ✅ | ❌ (jump) | ✅ |
 | SSH reachable (via jump) | - | - | ✅ via WSL | - |
 | Tailscale SSH | ✅ | ✅ | ✅ | ✅ |
-| Auth principal verified | `fengning` | `fengning` | `feng` | `fengning` |
+| Auth principal verified | `fengning` | `fengning` | `fengning` | `fengning` |
 | Last check | 2026-02-18 | 2026-02-18 | 2026-02-18 | 2026-02-18 |
 
 ### 2.2 Tool Presence
@@ -94,10 +94,16 @@ When direct SSH fails, use `homedesktop-wsl` as jump host:
 
 ```bash
 # From VPS/cloud or macmini to epyc6
-ssh -J fengning@homedesktop-wsl feng@epyc6
+ssh -J fengning@homedesktop-wsl fengning@epyc6
 
 # Or chain through intermediate
-ssh fengning@homedesktop-wsl 'ssh feng@epyc6 "command"'
+ssh fengning@homedesktop-wsl 'ssh fengning@epyc6 "command"'
+```
+
+If host keys changed after VM reformat:
+```bash
+ssh-keygen -R epyc6
+ssh-keygen -R homedesktop-wsl
 ```
 
 ### 3.3 Tailscale SSH (V8.3 Standard)
@@ -188,8 +194,8 @@ ssh fengning@macmini "source ~/.zshrc && which cc-glm-headless.sh"
 |-------|---------------|------------------|-------|
 | macmini.ssh | `fengning@macmini` | `fengning@Fengs-Mac-mini-3.local` | ⚠️ Different format |
 | macmini.user | fengning | fengning | ✅ |
-| epyc6.ssh | `feng@epyc6` | `feng@epyc6` | ✅ |
-| epyc6.user | feng | feng | ✅ |
+| epyc6.ssh | `fengning@epyc6` | `fengning@epyc6` | ✅ |
+| epyc6.user | fengning | fengning | ✅ |
 | epyc12.ssh | `fengning@epyc12` | `fengning@epyc12` | ✅ |
 | epyc12.user | fengning | fengning | ✅ |
 | homedesktop-wsl.ssh | `fengning@homedesktop-wsl` | `fengning@homedesktop-wsl` | ✅ |
@@ -212,7 +218,7 @@ Before deploying cc-glm-headless dependent workloads:
 
 ```bash
 # 1. Verify target VM access
-for vm in "fengning@homedesktop-wsl" "fengning@macmini" "feng@epyc6" "fengning@epyc12"; do
+for vm in "fengning@homedesktop-wsl" "fengning@macmini" "fengning@epyc6" "fengning@epyc12"; do
   timeout 5 ssh "$vm" "echo OK" && echo "✅ $vm" || echo "❌ $vm"
 done
 
