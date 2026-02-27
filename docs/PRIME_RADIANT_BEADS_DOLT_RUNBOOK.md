@@ -7,6 +7,7 @@ This is the operating contract for agents working in `~/prime-radiant-ai` with c
 - Canonical Beads repo: `~/bd` (`git@github.com:stars-end/bd.git`)
 - Canonical backend: Dolt server mode
 - Canonical hosts: `macmini`, `epyc12`, `epyc6`, `homedesktop-wsl`
+- Fleet sync V2 plan: `docs/BEADS_FLEET_SYNC_UPGRADE_PLAN_V2.md` (Railway MinIO + Dolt native)
 
 ## 1) Preflight (Required Before Dispatch)
 
