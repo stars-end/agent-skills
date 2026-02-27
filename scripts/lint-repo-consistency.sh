@@ -39,11 +39,10 @@ if "${RG_BASE[@]}" "\\bhive-dispatch\\b|\\bhive/orchestrator\\b|\\bhive/node\\b"
   fail "hive orchestrator must not appear in repo"
 fi
 
-# 2) Canonical SSH identity (epyc6 user is feng, not fengning).
-if "${RG_BASE[@]}" "fengning@epyc6" . >/dev/null 2>&1; then
-  "${RG_BASE[@]}" "fengning@epyc6" . || true
-  fail "docs/scripts must not reference fengning@epyc6 (use feng@epyc6 or ssh_canonical_vm)"
-fi
+# 2) Canonical SSH identity for epyc6 is mutable after rebuilds.
+# Do not enforce a hardcoded username here; use canonical registries instead:
+# - configs/fleet_hosts.yaml
+# - scripts/canonical-targets.sh
 
 # 3) Avoid resurrecting dead paths.
 if "${RG_BASE[@]}" "~/.agent/skills/dx-doctor/check\\.sh|scripts/cli/dx_doctor\\.sh" . >/dev/null 2>&1; then
@@ -65,4 +64,3 @@ if find "$ROOT" -type f \( -name 'skill.md' -o -name 'Skill.md' \) | rg -n . >/d
 fi
 
 echo "OK: repo consistency checks passed"
-
