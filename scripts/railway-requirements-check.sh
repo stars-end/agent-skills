@@ -2,7 +2,7 @@
 # railway-requirements-check.sh - Railway Requirements Verification
 #
 # Checks Railway access requirements based on ENV_SOURCES_MODE
-# Hard-fails when RAILWAY_TOKEN required but missing, warns otherwise
+# Hard-fails when RAILWAY_API_TOKEN required but missing, warns otherwise
 #
 # Usage:
 #   ./railway-requirements-check.sh [--mode MODE]
@@ -60,7 +60,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Environment:"
             echo "  ENV_SOURCES_MODE  Set default mode"
-            echo "  RAILWAY_TOKEN     Railway API token (required for automated/ci)"
+            echo "  RAILWAY_API_TOKEN  Railway API token (required for automated/ci)"
             echo ""
             echo "Self-Test:"
             echo "  --self-test  Test all modes and verify behavior"
@@ -80,8 +80,8 @@ if [[ "$SELF_TEST" == "true" ]]; then
     echo ""
 
     # Save current token state
-    CURRENT_TOKEN="${RAILWAY_TOKEN:-}"
-    export RAILWAY_TOKEN=""
+    CURRENT_TOKEN="${RAILWAY_API_TOKEN:-}"
+    export RAILWAY_API_TOKEN=""
 
     echo "Test 1: local-dev mode (no token) - should PASS (optional)"
     ENV_SOURCES_MODE=local-dev "$0" --mode local-dev && echo "✅ PASS" || echo "❌ FAIL"
@@ -96,15 +96,15 @@ if [[ "$SELF_TEST" == "true" ]]; then
     echo ""
 
     echo "Test 4: automated mode (with token) - should PASS"
-    export RAILWAY_TOKEN="test_token_12345"
+    export RAILWAY_API_TOKEN="test_token_12345"
     ENV_SOURCES_MODE=automated "$0" --mode automated && echo "✅ PASS" || echo "❌ FAIL"
     echo ""
 
     # Restore token
     if [[ -n "$CURRENT_TOKEN" ]]; then
-        export RAILWAY_TOKEN="$CURRENT_TOKEN"
+        export RAILWAY_API_TOKEN="$CURRENT_TOKEN"
     else
-        unset RAILWAY_TOKEN
+        unset RAILWAY_API_TOKEN
     fi
 
     echo "=== Self-Test Complete ==="
@@ -157,15 +157,15 @@ else
 fi
 echo ""
 
-# Check RAILWAY_TOKEN
-RAILWAY_TOKEN_SET=false
-if [[ -n "${RAILWAY_TOKEN:-}" ]]; then
-    RAILWAY_TOKEN_SET=true
-    echo "✅ RAILWAY_TOKEN: Set"
+# Check RAILWAY_API_TOKEN
+RAILWAY_API_TOKEN_SET=false
+if [[ -n "${RAILWAY_API_TOKEN:-}" ]]; then
+    RAILWAY_API_TOKEN_SET=true
+    echo "✅ RAILWAY_API_TOKEN: Set"
 else
-    echo "⚠️  RAILWAY_TOKEN: Not set"
+    echo "⚠️  RAILWAY_API_TOKEN: Not set"
     echo "   Load from 1Password:"
-    echo "   export RAILWAY_TOKEN=\$(op item get --vault dev Railway-Delivery --fields label=token)"
+    echo "   export RAILWAY_API_TOKEN=\$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')"
 fi
 echo ""
 
@@ -190,21 +190,21 @@ echo ""
 
 # Final check
 if [[ "$RAILWAY_REQUIRED" == "true" ]]; then
-    if [[ "$RAILWAY_TOKEN_SET" == "true" ]]; then
+    if [[ "$RAILWAY_API_TOKEN_SET" == "true" ]]; then
         echo "✅ PASS: Railway token is set (required for '$MODE' mode)"
         exit 0
     else
-        echo "❌ FAIL: RAILWAY_TOKEN must be set for '$MODE' mode" >&2
+        echo "❌ FAIL: RAILWAY_API_TOKEN must be set for '$MODE' mode" >&2
         echo "" >&2
         echo "Required actions:" >&2
         echo "  1. Load token from 1Password:" >&2
-        echo "     export RAILWAY_TOKEN=\$(op item get --vault dev Railway-Delivery --fields label=token)" >&2
+        echo "     export RAILWAY_API_TOKEN=\$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')" >&2
         echo "  2. Or use interactive mode: railway login" >&2
         echo "  3. Or use local-dev mode (if Railway not needed)" >&2
         exit 1
     fi
 else
-    if [[ "$RAILWAY_AUTH_STATUS" == "authenticated" ]] || [[ "$RAILWAY_TOKEN_SET" == "true" ]]; then
+    if [[ "$RAILWAY_AUTH_STATUS" == "authenticated" ]] || [[ "$RAILWAY_API_TOKEN_SET" == "true" ]]; then
         echo "✅ PASS: Railway access available (optional for '$MODE' mode)"
     else
         echo "✅ PASS: Railway access not required for '$MODE' mode"

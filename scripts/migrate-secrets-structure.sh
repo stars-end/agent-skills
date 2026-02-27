@@ -1,10 +1,24 @@
 #!/usr/bin/env bash
+# ============================================================
+# DEPRECATED - 2026-02-27
+# ============================================================
+# Per-service item migration was NOT adopted.
+#
+# Decision: Agent-Secrets-Production remains the canonical source.
+# Rationale: Solo founder + agents = single-item approach is simpler
+# and provides adequate security.
+#
+# This script is kept for historical reference only.
+# ============================================================
+
+#!/usr/bin/env bash
 # migrate-secrets-structure.sh (V4.2.1 - SAFE VERSION)
 # Migrate from monolithic "Agent Secrets" to per-service items
 #
-# SAFE APPROACH: This script provides instructions only.
-# It does NOT pass secret values in CLI args or read them into shell variables.
-# Use the 1Password UI to create items and copy values.
+# CURRENT STATE (2026-02-27):
+# - Agent-Secrets-Production contains all secrets
+# - Per-service items are NOT NEEDED (decision made)
+# - This script remains as historical reference only
 #
 # Usage: ./scripts/migrate-secrets-structure.sh
 
@@ -12,50 +26,67 @@ set -euo pipefail
 
 cat <<'EOF'
 ================================================================================
-1PASSWORD MIGRATION GUIDE (V4.2.1 - Per-Service Items)
+HISTORICAL REFERENCE - Per-Service Items (NOT ADOPTED)
 ================================================================================
 
-GOAL: Migrate from monolithic "Agent Secrets" to per-service items
+DECISION: 2026-02-27
+Agent-Secrets-Production remains the canonical source for all DX/dev secrets.
+
+RATIONALE:
+- Solo founder + agents = no multi-team security boundary needed
+- Single item = simpler maintenance and onboarding
+- Per-service items add overhead without meaningful security benefit
+
+CURRENT ARCHITECTURE:
+
+All secrets are in Agent-Secrets-Production (dev vault):
+  - ZAI_API_KEY (also used as ANTHROPIC_AUTH_TOKEN via Z.ai)
+  - RAILWAY_API_TOKEN
+  - GITHUB_TOKEN
+  - SLACK_BOT_TOKEN
+  - SLACK_APP_TOKEN
+
+Access pattern:
+  op read "op://dev/Agent-Secrets-Production/<FIELD>"
+
+================================================================================
+BELOW IS HISTORICAL CONTENT - NOT APPLICABLE
+================================================================================
+
+================================================================================
+1PASSWORD MIGRATION GUIDE (FUTURE - Per-Service Items)
+================================================================================
+
+CURRENT STATE: All secrets are in Agent-Secrets-Production item.
+GOAL: Migrate to per-service items for least-privilege access.
 SAFE APPROACH: Use 1Password UI (no CLI args with secret values)
 
 ================================================================================
-STEP 1: Create Per-Service Items in 1Password UI
+STEP 1: Create Per-Service Items in 1Password UI (WHEN READY)
 ================================================================================
 
 Open 1Password (desktop app or browser) and create the following items:
 
---- Item 1: Anthropic-Config ---
-Type: API Credential (or Password with custom fields)
+--- Item 1: Railway-Delivery ---
+Type: Password
 Fields:
-  • ANTHROPIC_AUTH_TOKEN (password) - paste your token
-  • ANTHROPIC_BASE_URL (text) - https://api.z.ai/api/anthropic
+  • token (password) - copy from Agent-Secrets-Production/RAILWAY_API_TOKEN
+  • project_id (text) - your default project ID
 
 --- Item 2: Slack-Coordinator-Secrets ---
 Type: API Credential
 Fields:
-  • SLACK_BOT_TOKEN (password) - xoxb- token
-  • SLACK_APP_TOKEN (password) - xapp- token
-  • SLACK_SIGNING_SECRET (password) - optional
+  • SLACK_BOT_TOKEN (password) - copy from Agent-Secrets-Production
+  • SLACK_APP_TOKEN (password) - copy from Agent-Secrets-Production
 
 --- Item 3: Slack-MCP-Secrets ---
 Type: API Credential
 Fields:
-  • SLACK_APP_TOKEN (password) - xapp- token
-  • SLACK_BOT_TOKEN (password) - optional
+  • SLACK_APP_TOKEN (password) - copy from Agent-Secrets-Production
+  • SLACK_BOT_TOKEN (password) - copy from Agent-Secrets-Production
 
---- Item 4: Railway-Delivery ---
-Type: Password
-Fields:
-  • token (password) - your Railway token
-  • project_id (text) - your default project ID
-
---- Item 5: OpenCode-Config ---
-Type: Secure Note
-Fields:
-  • model (text) - zai-coding-plan
-  • port (text) - 4105
-  • slack_mcp_enabled (text) - true
-  • slack_mcp_add_message_tool (text) - true
+NOTE: Anthropic-Config is NOT needed. ZAI_API_KEY is used as ANTHROPIC_AUTH_TOKEN
+(via Z.ai's Anthropic-compatible API).
 
 ================================================================================
 STEP 2: Verify Items Created
@@ -63,21 +94,19 @@ STEP 2: Verify Items Created
 
 Run this command to list all items in the dev vault:
 
-  op item list --vault dev --format json | jq -r '.[].title'
+  op item list --vault dev
 
 You should see:
-  - Anthropic-Config
-  - Slack-Coordinator-Secrets
-  - Slack-MCP-Secrets
-  - Railway-Delivery
-  - OpenCode-Config
-  - Agent-Secrets-Production (contains GITHUB_TOKEN)
+  - Agent-Secrets-Production (current source of truth)
+  - Railway-Delivery (future)
+  - Slack-Coordinator-Secrets (future)
+  - Slack-MCP-Secrets (future)
 
 ================================================================================
-STEP 3: Generate Per-Service Env Files
+STEP 3: Update Env Templates (AFTER ITEMS CREATED)
 ================================================================================
 
-Run these commands to generate scoped env files:
+Update scripts/env/*.env.template files to use new item paths.
 
   ./scripts/setup-env-opencode.sh
   ./scripts/setup-env-slack-coordinator.sh

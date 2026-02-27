@@ -11,7 +11,7 @@ OUTPUT_DIR="$HOME/.config/slack-coordinator"
 OUTPUT_FILE="$OUTPUT_DIR/.env"
 
 echo "=== Generating Slack Coordinator Environment from 1Password ==="
-echo "Source: Per-service items (no mega-item)"
+echo "Source: Agent-Secrets-Production"
 echo ""
 
 # Check 1Password CLI version
@@ -36,20 +36,19 @@ fi
 
 echo "✅ Vault ID: $VAULT_ID"
 
-# Verify required items exist (fail fast if missing)
-REQUIRED_ITEMS=("Anthropic-Config" "Slack-Coordinator-Secrets")
-for item in "${REQUIRED_ITEMS[@]}"; do
-    ITEM_ID=$(op item list --vault "$VAULT_ID" --format json 2>/dev/null | jq -r --arg title "$item" '.[] | select(.title==$title) | .id' || echo "")
-    if [[ -z "$ITEM_ID" ]]; then
-        echo "❌ Required 1Password item not found: $item"
-        echo ""
-        echo "Please create the following items in 1Password:"
-        echo "  1. Anthropic-Config (ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL)"
-        echo "  2. Slack-Coordinator-Secrets (SLACK_BOT_TOKEN, SLACK_APP_TOKEN)"
-        exit 1
-    fi
-    echo "✅ Found item: $item"
-done
+# Verify required item exists (fail fast if missing)
+REQUIRED_ITEM="Agent-Secrets-Production"
+ITEM_ID=$(op item list --vault "$VAULT_ID" --format json 2>/dev/null | jq -r --arg title "$REQUIRED_ITEM" '.[] | select(.title==$title) | .id' || echo "")
+if [[ -z "$ITEM_ID" ]]; then
+    echo "❌ Required 1Password item not found: $REQUIRED_ITEM"
+    echo ""
+    echo "Please verify the item exists in the 'dev' vault with fields:"
+    echo "  - ZAI_API_KEY"
+    echo "  - SLACK_BOT_TOKEN"
+    echo "  - SLACK_APP_TOKEN"
+    exit 1
+fi
+echo "✅ Found item: $REQUIRED_ITEM"
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"

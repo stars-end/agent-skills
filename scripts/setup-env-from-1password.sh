@@ -10,18 +10,16 @@
 # ============================================================
 #
 # This script is DEPRECATED in V4.2.1 because it uses the
-# monolithic "Agent-Secrets-Production" mega-item approach.
+# monolithic "Agent-Secrets-Production" approach.
 #
-# NEW APPROACH (V4.2.1):
-# - Use per-service scoped env files: ~/.config/<service>/.env
-# - Use per-service 1Password items (Anthropic-Config, Slack-Coordinator-Secrets, etc.)
+# CURRENT STATE (2026-02-27):
+# - Agent-Secrets-Production is still the source of truth
+# - All secrets live in this single item
+# - Per-service items (Railway-Delivery, Slack-*) are planned but not yet created
+#
+# To generate env files for current state:
 # - See: scripts/setup-env-opencode.sh, scripts/setup-env-slack-coordinator.sh
-# - See: docs/1PASSWORD_MULTI_ITEM_ARCHITECTURE.md
-#
-# To migrate from this script:
-# 1. Run: ./scripts/setup-env-opencode.sh
-# 2. Run: ./scripts/setup-env-slack-coordinator.sh
-# 3. Update systemd services to use scoped env files
+# - See: docs/SECRETS_INDEX.md
 # ============================================================
 
 set -euo pipefail
@@ -84,7 +82,7 @@ SLACK_BOT_TOKEN="op://$VAULT_ID/$ITEM_TITLE/SLACK_BOT_TOKEN"
 SLACK_APP_TOKEN="op://$VAULT_ID/$ITEM_TITLE/SLACK_APP_TOKEN"
 ZAI_API_KEY="op://$VAULT_ID/$ITEM_TITLE/ZAI_API_KEY"
 SUPERMEMORY_API_KEY="op://$VAULT_ID/$ITEM_TITLE/SUPERMEMORY_API_KEY"
-RAILWAY_TOKEN="op://$VAULT_ID/$ITEM_TITLE/RAILWAY_TOKEN"
+RAILWAY_API_TOKEN="op://$VAULT_ID/$ITEM_TITLE/RAILWAY_API_TOKEN"
 GITHUB_TOKEN="op://$VAULT_ID/$ITEM_TITLE/GITHUB_TOKEN"
 OPENROUTER_API_KEY="op://$VAULT_ID/$ITEM_TITLE/OPENROUTER_API_KEY"
 

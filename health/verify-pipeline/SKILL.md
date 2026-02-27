@@ -49,10 +49,10 @@ Check if Railway environment is configured:
 
 ```bash
 # Check for Railway environment
-if [ -n "$RAILWAY_ENVIRONMENT" ] || [ -n "$RAILWAY_TOKEN" ]; then
+if [ -n "$RAILWAY_ENVIRONMENT" ] || [ -n "$RAILWAY_API_TOKEN" ]; then
   echo "✅ Railway context detected"
 else
-  echo "⚠️ No Railway context - run 'railway shell' or set RAILWAY_TOKEN"
+  echo "⚠️ No Railway context - run 'railway shell' or set RAILWAY_API_TOKEN"
 fi
 ```
 
@@ -62,7 +62,7 @@ fi
 railway shell
 
 # Option 2: Set token from 1Password (for CI/automation)
-export RAILWAY_TOKEN=$(op read "op://dev/Railway-Delivery/token")
+export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
 ```
 
 ### 2. Dev Server Check
