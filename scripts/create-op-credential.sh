@@ -93,34 +93,39 @@ echo "Creating protected credential..."
 # Create directory
 mkdir -p ~/.config/systemd/user/
 
-# ENCRYPTION LOGIC (V4.2)
+# ENCRYPTION LOGIC (V4.5)
+ENCRYPTED=false
 if command -v systemd-creds >/dev/null 2>&1; then
-    echo "🔒 Encrypting with systemd-creds (TPM/Host Key protection)..."
+    echo "🔒 Attempting systemd-creds encryption (TPM/Host Key protection)..."
 
-    # Encrypt to .cred file
-    echo -n "$OP_SERVICE_ACCOUNT_TOKEN" | systemd-creds encrypt --name="${TOKEN_NAME}" - "${CRED_ENCRYPTED}"
+    # Try encrypt to .cred file (may need sudo for credential.secret access)
+    # Use sudo but write to user's home directory
+    if echo -n "$OP_SERVICE_ACCOUNT_TOKEN" | sudo systemd-creds encrypt --name="${TOKEN_NAME}" - "${CRED_ENCRYPTED}" 2>/dev/null; then
+        # Fix ownership to user
+        sudo chown $USER:$USER "${CRED_ENCRYPTED}"
+        sudo chmod 600 "${CRED_ENCRYPTED}"
+        
+        # Remove plaintext if it exists (cleanup)
+        rm -f "$CRED_PLAINTEXT"
 
-    # Remove plaintext if it exists (cleanup)
-    rm -f "$CRED_PLAINTEXT"
+        echo "✅ Credential encrypted to ${CRED_ENCRYPTED}"
+        echo "   (Only decryptable by systemd on this host)"
+        ENCRYPTED=true
+    else
+        echo "⚠️  systemd-creds encryption failed (TPM unavailable or no sudo)"
+        echo "   Falling back to filesystem permissions..."
+    fi
+fi
 
-    echo "✅ Credential encrypted to ${CRED_ENCRYPTED}"
-    echo "   (Only decryptable by systemd on this host)"
-
-    # Fix ownership
-    chown $USER:$USER "${CRED_ENCRYPTED}" 2>/dev/null || true
-else
-    echo "⚠️  systemd-creds not found. Falling back to filesystem permissions."
-
-    # Write token to file
+if [[ "$ENCRYPTED" != "true" ]]; then
+    # Write token to file (plaintext with strict permissions)
     echo -n "$OP_SERVICE_ACCOUNT_TOKEN" > "$CRED_PLAINTEXT"
 
     # Set permissions
     chmod 600 "$CRED_PLAINTEXT"
 
     echo "✅ Credential installed to $CRED_PLAINTEXT (mode 600)"
-
-    # Fix ownership
-    chown $USER:$USER "$CRED_PLAINTEXT" 2>/dev/null || true
+    echo "   ⚠️  WARNING: Using plaintext fallback - consider using sudo for encryption"
 fi
 
 # Clear variable
