@@ -108,6 +108,33 @@ fi
 
 # 3.8 Install V8 cron schedule (idempotent)
 echo -e "${GREEN} -> Installing V8 cron schedule...${RESET}"
+remove_wrapper_job_entries() {
+    local job_name="$1"
+    local script_name="$2"
+    local current_cron updated_cron
+    current_cron="$(crontab -l 2>/dev/null || true)"
+
+    updated_cron="$(
+        printf '%s\n' "$current_cron" | awk -v job="$job_name" -v script="$script_name" '
+            /^[[:space:]]*#/ { print; next }
+            /^[[:space:]]*$/ { print; next }
+            {
+                if (index($0, "dx-job-wrapper.sh") > 0 &&
+                    index($0, " " job " -- ") > 0 &&
+                    index($0, script) > 0) {
+                    next
+                }
+                print
+            }
+        '
+    )"
+
+    if [[ "$updated_cron" != "$current_cron" ]]; then
+        printf '%s\n' "$updated_cron" | crontab -
+        echo "   Pruned duplicate cron entries for: $job_name ($script_name)"
+    fi
+}
+
 install_cron_entry() {
     local marker="$1"
     local entry="$2"
@@ -160,6 +187,12 @@ fi
 
 # Ensure log directory exists
 mkdir -p "$HOME/logs/dx"
+
+# Remove non-canonical duplicate lines before (re)installing V8 marker entries.
+remove_wrapper_job_entries "canonical-sync" "canonical-sync-v8.sh"
+remove_wrapper_job_entries "worktree-push" "worktree-push.sh"
+remove_wrapper_job_entries "worktree-gc" "worktree-gc-v8.sh"
+remove_wrapper_job_entries "queue-enforcer" "queue-hygiene-enforcer.sh"
 
 install_cron_entry "V8: canonical-sync" \
     "5 3 * * * $BASH_PATH $WRAPPER canonical-sync -- $AGENTS_ROOT/scripts/canonical-sync-v8.sh >> $HOME/logs/dx/canonical-sync.log 2>&1"
