@@ -31,6 +31,7 @@ SLACK_CHANNEL = "C09MQGMFKDE"  # #social
 SLACK_TOKEN = os.environ.get("SLACK_MCP_XOXP_TOKEN") or os.environ.get("SLACK_BOT_TOKEN")
 
 results = {"passed": [], "failed": [], "skipped": []}
+EPYC6_SSH = os.environ.get("EPYC6_SSH", "fengning@epyc6")
 
 
 def log(msg: str, level: str = "INFO"):
@@ -180,7 +181,7 @@ def test_slack_audit_dispatch():
 def test_slack_coordinator_running_epyc6():
     """Check Slack coordinator is running on epyc6."""
     result = subprocess.run(
-        ["ssh", "feng@epyc6", "pgrep -f slack-coordinator.py || echo 'not running'"],
+        ["ssh", EPYC6_SSH, "pgrep -f slack-coordinator.py || echo 'not running'"],
         capture_output=True, text=True, timeout=10
     )
     
@@ -266,14 +267,14 @@ def test_session_resume_epyc6():
 def test_beads_accessible_epyc6():
     """Check Beads is accessible on epyc6."""
     result = subprocess.run(
-        ["ssh", "feng@epyc6", "source ~/.zshrc 2>/dev/null; cd ~/agent-skills && bd list --limit 3 2>&1 || echo 'bd not found'"],
+        ["ssh", EPYC6_SSH, "source ~/.zshrc 2>/dev/null; cd ~/agent-skills && bd list --limit 3 2>&1 || echo 'bd not found'"],
         capture_output=True, text=True, timeout=15
     )
     
     if result.returncode == 0 and "bd not found" not in result.stdout:
         return True, "Beads accessible"
     # Also accept if bd is not installed but directory exists
-    check = subprocess.run(["ssh", "feng@epyc6", "ls ~/agent-skills/.beads"], capture_output=True, text=True, timeout=5)
+    check = subprocess.run(["ssh", EPYC6_SSH, "ls ~/agent-skills/.beads"], capture_output=True, text=True, timeout=5)
     if check.returncode == 0:
         return True, "Beads dir exists (bd not in PATH)"
     return False, "Beads not accessible"
@@ -298,7 +299,7 @@ def test_beads_accessible_macmini():
 def test_worktree_dirs_epyc6():
     """Check worktree directories exist on epyc6."""
     result = subprocess.run(
-        ["ssh", "feng@epyc6", "ls -d ~/affordabot-worktrees ~/prime-radiant-worktrees 2>/dev/null || echo 'missing'"],
+        ["ssh", EPYC6_SSH, "ls -d ~/affordabot-worktrees ~/prime-radiant-worktrees 2>/dev/null || echo 'missing'"],
         capture_output=True, text=True, timeout=10
     )
     

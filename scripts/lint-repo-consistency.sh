@@ -43,6 +43,14 @@ fi
 # Do not enforce a hardcoded username here; use canonical registries instead:
 # - configs/fleet_hosts.yaml
 # - scripts/canonical-targets.sh
+if "${RG_BASE[@]}" "feng@epyc6" scripts docs/CANONICAL_TARGETS.md docs/CROSS_VM_VERIFICATION_MATRIX.md configs/fleet_hosts.yaml \
+  --glob '!scripts/test_*' \
+  --glob '!scripts/*integration*.py' >/dev/null 2>&1; then
+  "${RG_BASE[@]}" "feng@epyc6" scripts docs/CANONICAL_TARGETS.md docs/CROSS_VM_VERIFICATION_MATRIX.md configs/fleet_hosts.yaml \
+    --glob '!scripts/test_*' \
+    --glob '!scripts/*integration*.py' || true
+  fail "deprecated epyc6 principal found; use canonical registries (fengning@epyc6)"
+fi
 
 # 3) Avoid resurrecting dead paths.
 if "${RG_BASE[@]}" "~/.agent/skills/dx-doctor/check\\.sh|scripts/cli/dx_doctor\\.sh" . >/dev/null 2>&1; then

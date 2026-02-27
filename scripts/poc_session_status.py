@@ -42,7 +42,7 @@ def ssh_curl(vm_ssh: str, endpoint: str, method: str = "GET", data: dict = None)
 
 
 def main():
-    vm = "feng@epyc6"  # Test on epyc6
+    vm = os.environ.get("EPYC6_SSH", "fengning@epyc6")
     
     log("=== POC: Test OpenCode Session Status API ===")
     log("")

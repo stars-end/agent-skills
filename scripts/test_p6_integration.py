@@ -18,6 +18,7 @@ from datetime import datetime
 
 # Test results
 results = {"passed": [], "failed": [], "skipped": []}
+EPYC6_SSH = os.environ.get("EPYC6_SSH", "fengning@epyc6")
 
 
 def log(msg: str, level: str = "INFO"):
@@ -108,7 +109,7 @@ def test_health_macmini():
 def test_health_epyc6():
     """Health check for epyc6 via SSH."""
     result = subprocess.run(
-        ["ssh", "feng@epyc6", "curl -s http://localhost:4105/global/health"],
+        ["ssh", EPYC6_SSH, "curl -s http://localhost:4105/global/health"],
         capture_output=True, text=True, timeout=15
     )
     if result.returncode == 0:
@@ -137,7 +138,7 @@ def test_config_on_macmini():
 def test_config_on_epyc6():
     """Check config exists on epyc6."""
     result = subprocess.run(
-        ["ssh", "feng@epyc6", "cat ~/.agent-skills/vm-endpoints.json"],
+        ["ssh", EPYC6_SSH, "cat ~/.agent-skills/vm-endpoints.json"],
         capture_output=True, text=True, timeout=10
     )
     if result.returncode == 0:
