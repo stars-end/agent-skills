@@ -111,11 +111,39 @@ echo -e "${GREEN} -> Installing V8 cron schedule...${RESET}"
 install_cron_entry() {
     local marker="$1"
     local entry="$2"
-    if ! crontab -l 2>/dev/null | grep -qF "$marker"; then
-        (crontab -l 2>/dev/null; echo ""; echo "# $marker"; echo "$entry") | crontab -
-        echo "   Added cron: $marker"
+    local current_cron
+    current_cron="$(crontab -l 2>/dev/null || true)"
+
+    if printf '%s\n' "$current_cron" | grep -qF "# $marker"; then
+        if printf '%s\n' "$current_cron" | grep -qF "$entry"; then
+            echo "   Cron already installed: $marker"
+            return
+        fi
+
+        local updated_cron
+        updated_cron="$(
+            printf '%s\n' "$current_cron" | awk -v marker="$marker" '
+                BEGIN { skip_next=0 }
+                skip_next { skip_next=0; next }
+                $0 == "# " marker { skip_next=1; next }
+                { print }
+            '
+        )"
+        {
+            printf '%s\n' "$updated_cron"
+            echo ""
+            echo "# $marker"
+            echo "$entry"
+        } | crontab -
+        echo "   Updated cron: $marker"
     else
-        echo "   Cron already installed: $marker"
+        {
+            printf '%s\n' "$current_cron"
+            echo ""
+            echo "# $marker"
+            echo "$entry"
+        } | crontab -
+        echo "   Added cron: $marker"
     fi
 }
 
@@ -140,7 +168,7 @@ install_cron_entry "V8: worktree-push" \
     "15 3 * * * $BASH_PATH $WRAPPER worktree-push -- $AGENTS_ROOT/scripts/worktree-push.sh >> $HOME/logs/dx/worktree-push.log 2>&1"
 
 install_cron_entry "V8: worktree-gc" \
-    "30 3 * * * $BASH_PATH $WRAPPER worktree-gc -- $AGENTS_ROOT/scripts/worktree-gc-v8.sh >> $HOME/logs/dx/worktree-gc.log 2>&1"
+    "0 * * * * $BASH_PATH $WRAPPER worktree-gc -- $AGENTS_ROOT/scripts/worktree-gc-v8.sh >> $HOME/logs/dx/worktree-gc.log 2>&1"
 
 install_cron_entry "V8: queue-hygiene-enforcer" \
     "0 */4 * * * DX_CONTROLLER=\${DX_CONTROLLER:-0} $BASH_PATH $WRAPPER queue-enforcer -- $AGENTS_ROOT/scripts/queue-hygiene-enforcer.sh >> $HOME/logs/dx/queue-enforcer.log 2>&1"

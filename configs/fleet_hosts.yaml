@@ -32,7 +32,7 @@ hosts:
     notes: "Primary dev environment with DCG, CASS"
 
   epyc6:
-    ssh: "feng@epyc6"
+    ssh: "fengning@epyc6"
     shell: "zsh"
     os: "linux"
     user: "feng"
