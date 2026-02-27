@@ -36,10 +36,66 @@ LOG_DIR="$HOME/logs/dx"
 mkdir -p "$STATE_DIR" "$LOG_DIR"
 
 LOG_FILE="$LOG_DIR/$JOB_NAME.log"
+LOCK_DIR="$STATE_DIR/locks/${JOB_NAME}.lock"
+LOCK_TTL_SECONDS="${DX_JOB_LOCK_TTL_SECONDS:-21600}"
+LOCK_ACQUIRED=0
 
 log() {
     echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] $1" >> "$LOG_FILE"
 }
+
+file_mtime_epoch() {
+    local path="$1"
+    if stat -f '%m' "$path" >/dev/null 2>&1; then
+        stat -f '%m' "$path"
+    elif stat -c '%Y' "$path" >/dev/null 2>&1; then
+        stat -c '%Y' "$path"
+    else
+        echo "0"
+    fi
+}
+
+release_lock() {
+    if [[ "$LOCK_ACQUIRED" -eq 1 ]]; then
+        rm -rf "$LOCK_DIR" >/dev/null 2>&1 || true
+    fi
+}
+
+acquire_lock() {
+    mkdir -p "$(dirname "$LOCK_DIR")"
+
+    if mkdir "$LOCK_DIR" >/dev/null 2>&1; then
+        LOCK_ACQUIRED=1
+        printf '%s\n' "$$" > "$LOCK_DIR/pid"
+        printf '%s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$LOCK_DIR/started_at"
+        return 0
+    fi
+
+    local now_ts lock_mtime age
+    now_ts=$(date +%s)
+    lock_mtime=$(file_mtime_epoch "$LOCK_DIR")
+    age=$((now_ts - lock_mtime))
+
+    if [[ "$LOCK_TTL_SECONDS" =~ ^[0-9]+$ ]] && [[ "$age" -gt "$LOCK_TTL_SECONDS" ]]; then
+        log "⚠️  Removing stale lock for $JOB_NAME (age=${age}s, ttl=${LOCK_TTL_SECONDS}s)"
+        rm -rf "$LOCK_DIR" >/dev/null 2>&1 || true
+        if mkdir "$LOCK_DIR" >/dev/null 2>&1; then
+            LOCK_ACQUIRED=1
+            printf '%s\n' "$$" > "$LOCK_DIR/pid"
+            printf '%s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$LOCK_DIR/started_at"
+            return 0
+        fi
+    fi
+
+    log "⏭️  Skipping job: $JOB_NAME lock is already held"
+    return 1
+}
+
+trap release_lock EXIT INT TERM
+
+if ! acquire_lock; then
+    exit 0
+fi
 
 # Determine previous state before running
 PREV_STATE="ok"
