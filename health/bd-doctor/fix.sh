@@ -33,17 +33,18 @@ fi
 echo "Running bd doctor --fix (best effort)..."
 bd doctor --fix >/dev/null 2>&1 || true
 
-echo "Running fleet sync (MinIO)..."
-if [[ -f "$BEADS_REPO/.beads/beads_sync.sh" ]]; then
-  source "$BEADS_REPO/.beads/minio_env.sh" 2>/dev/null || true
-  if timeout 120 "$BEADS_REPO/.beads/beads_sync.sh" pull 2>/tmp/bd-doctor-fix-sync.err; then
-    echo "✅ MinIO fleet sync completed"
+echo "Running fleet sync (SSH/rsync)..."
+SYNC_SCRIPT="$HOME/agent-skills/scripts/bd-fleet-sync.sh"
+if [[ -x "$SYNC_SCRIPT" ]]; then
+  if timeout 120 "$SYNC_SCRIPT" pull 2>/tmp/bd-doctor-fix-sync.err; then
+    echo "✅ Fleet sync completed"
   else
-    echo "⚠️  MinIO fleet sync failed/timed out"
+    echo "⚠️  Fleet sync failed/timed out"
     sed -n '1,80p' /tmp/bd-doctor-fix-sync.err || true
   fi
 else
-  echo "⚠️  Fleet sync script not found, skipping remote sync"
+  echo "⚠️  Fleet sync script not found at $SYNC_SCRIPT"
+  echo "   Skipping remote sync - run manually if needed"
 fi
 
 if bd doctor --json 2>/dev/null | grep -q '"status":"error"'; then
