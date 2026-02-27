@@ -45,6 +45,7 @@ def run_test(name: str, test_func):
 # Test 1: Config File Exists
 # =============================================================================
 
+
 def test_config_exists():
     """Test vm-endpoints.json exists."""
     config_path = Path.home() / ".agent-skills" / "vm-endpoints.json"
@@ -60,14 +61,14 @@ def test_config_exists():
 # Test 2: dx-dispatch --list
 # =============================================================================
 
+
 def test_dx_dispatch_list():
     """Test dx-dispatch --list works."""
     script = Path.home() / "agent-skills" / "scripts" / "dx-dispatch.py"
     result = subprocess.run(
-        ["python3", str(script), "--list"],
-        capture_output=True, text=True, timeout=60
+        ["python3", str(script), "--list"], capture_output=True, text=True, timeout=60
     )
-    
+
     if result.returncode == 0 and "Available VMs" in result.stdout:
         # Count online VMs
         online_count = result.stdout.count("✅ Online")
@@ -79,11 +80,14 @@ def test_dx_dispatch_list():
 # Test 3: Health Check Each VM
 # =============================================================================
 
+
 def test_health_homedesktop():
     """Health check for homedesktop."""
     result = subprocess.run(
         ["curl", "-s", "http://localhost:4105/global/health"],
-        capture_output=True, text=True, timeout=5
+        capture_output=True,
+        text=True,
+        timeout=5,
     )
     if result.returncode == 0:
         data = json.loads(result.stdout)
@@ -96,7 +100,9 @@ def test_health_macmini():
     """Health check for macmini via SSH."""
     result = subprocess.run(
         ["ssh", "fengning@macmini", "curl -s http://localhost:4105/global/health"],
-        capture_output=True, text=True, timeout=15
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     if result.returncode == 0:
         data = json.loads(result.stdout)
@@ -108,8 +114,10 @@ def test_health_macmini():
 def test_health_epyc6():
     """Health check for epyc6 via SSH."""
     result = subprocess.run(
-        ["ssh", "feng@epyc6", "curl -s http://localhost:4105/global/health"],
-        capture_output=True, text=True, timeout=15
+        ["ssh", "fengning@epyc6", "curl -s http://localhost:4105/global/health"],
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     if result.returncode == 0:
         data = json.loads(result.stdout)
@@ -122,11 +130,14 @@ def test_health_epyc6():
 # Test 4: Config Deployed to All VMs
 # =============================================================================
 
+
 def test_config_on_macmini():
     """Check config exists on macmini."""
     result = subprocess.run(
         ["ssh", "fengning@macmini", "cat ~/.agent-skills/vm-endpoints.json"],
-        capture_output=True, text=True, timeout=10
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if result.returncode == 0:
         data = json.loads(result.stdout)
@@ -137,8 +148,10 @@ def test_config_on_macmini():
 def test_config_on_epyc6():
     """Check config exists on epyc6."""
     result = subprocess.run(
-        ["ssh", "feng@epyc6", "cat ~/.agent-skills/vm-endpoints.json"],
-        capture_output=True, text=True, timeout=10
+        ["ssh", "fengning@epyc6", "cat ~/.agent-skills/vm-endpoints.json"],
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if result.returncode == 0:
         data = json.loads(result.stdout)
@@ -149,6 +162,7 @@ def test_config_on_epyc6():
 # =============================================================================
 # Test 5: Slack Audit Token Available
 # =============================================================================
+
 
 def test_slack_token():
     """Check Slack token is available for audit."""
@@ -162,27 +176,28 @@ def test_slack_token():
 # Run All Tests
 # =============================================================================
 
+
 def main():
     log("=" * 70)
     log("P6 Multi-VM Orchestration Integration Tests")
     log("=" * 70)
-    
+
     # Core tests
     run_test("1. Config file exists", test_config_exists)
     run_test("2. dx-dispatch --list", test_dx_dispatch_list)
-    
+
     # Health checks
     run_test("3a. Health: homedesktop", test_health_homedesktop)
     run_test("3b. Health: macmini", test_health_macmini)
     run_test("3c. Health: epyc6", test_health_epyc6)
-    
+
     # Config deployment
     run_test("4a. Config on macmini", test_config_on_macmini)
     run_test("4b. Config on epyc6", test_config_on_epyc6)
-    
+
     # Slack
     run_test("5. Slack token available", test_slack_token)
-    
+
     # Summary
     log("")
     log("=" * 70)
@@ -190,19 +205,19 @@ def main():
     log("=" * 70)
     log(f"Passed: {len(results['passed'])}")
     log(f"Failed: {len(results['failed'])}")
-    
+
     if results["failed"]:
         log("")
         log("Failed tests:")
         for name, msg in results["failed"]:
             log(f"  - {name}: {msg}", "FAIL")
-    
+
     if results["passed"]:
         log("")
         log("Passed tests:")
         for name, msg in results["passed"]:
             log(f"  - {name}: {msg}", "PASS")
-    
+
     return 0 if not results["failed"] else 1
 
 

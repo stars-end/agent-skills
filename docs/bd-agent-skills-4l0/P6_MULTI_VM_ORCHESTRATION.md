@@ -116,7 +116,7 @@ Orchestrator:
     },
     "epyc6": {
       "opencode": "http://epyc6.tail76761.ts.net:4105",
-      "ssh": "feng@epyc6",
+      "ssh": "fengning@epyc6",
       "tailscale": "epyc6.tail76761.ts.net"
     }
   },

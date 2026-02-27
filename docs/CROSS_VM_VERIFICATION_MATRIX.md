@@ -1,6 +1,6 @@
-# Cross-VM Verification Matrix (V8.3)
+# Cross-VM Verification Matrix (V8.4)
 
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-02-27
 **Authoritative Source:** `configs/fleet_hosts.yaml`
 
 This document provides a deterministic verification matrix for all canonical VMs, including authentication principals, tool presence, token paths, and cc-glm-headless resolution states.
@@ -13,10 +13,10 @@ This document provides a deterministic verification matrix for all canonical VMs
 |------|-----|---------------|------|-------|
 | homedesktop-wsl | Linux (WSL2) | `fengning@homedesktop-wsl` | fengning | Primary dev environment |
 | macmini | macOS | `fengning@macmini` | fengning | Captain VM - heartbeat origin |
-| epyc6 | Linux | `feng@epyc6` | **feng** | GPU/ML work (different user!) |
+| epyc6 | Linux | `fengning@epyc6` | fengning | GPU/ML work |
 | epyc12 | Linux | `fengning@epyc12` | fengning | Secondary Linux host |
 
-**Key Difference:** epyc6 uses `feng` while all others use `fengning`.
+**All canonical VMs now use `fengning@` username consistently.**
 
 ---
 
@@ -26,11 +26,11 @@ This document provides a deterministic verification matrix for all canonical VMs
 
 | Check | homedesktop-wsl | macmini | epyc6 | epyc12 |
 |-------|-----------------|---------|-------|--------|
-| SSH reachable (direct) | N/A (local) | ✅ | ❌ (jump) | ✅ |
-| SSH reachable (via jump) | - | - | ✅ via WSL | - |
+| SSH reachable (direct) | N/A (local) | ✅ | ✅ | ✅ |
+| SSH reachable (via jump) | - | - | - | - |
 | Tailscale SSH | ✅ | ✅ | ✅ | ✅ |
-| Auth principal verified | `fengning` | `fengning` | `feng` | `fengning` |
-| Last check | 2026-02-18 | 2026-02-18 | 2026-02-18 | 2026-02-18 |
+| Auth principal verified | `fengning` | `fengning` | `fengning` | `fengning` |
+| Last check | 2026-02-27 | 2026-02-27 | 2026-02-27 | 2026-02-27 |
 
 ### 2.2 Tool Presence
 
@@ -83,21 +83,21 @@ This document provides a deterministic verification matrix for all canonical VMs
 | From → To | homedesktop-wsl | macmini | epyc6 | epyc12 |
 |-----------|-----------------|---------|-------|--------|
 | **homedesktop-wsl** | - | ✅ | ✅ | ✅ |
-| **macmini** | ✅ | - | ❌ (jump) | ✅ |
+| **macmini** | ✅ | - | ✅ | ✅ |
 | **epyc6** | ✅ | ✅ | - | ✅ |
 | **epyc12** | ✅ | ✅ | ✅ | - |
-| **VPS/cloud** | ✅ | ✅ | ❌ (jump) | ✅ |
+| **VPS/cloud** | ✅ | ✅ | ✅ | ✅ |
 
 ### 3.2 Jump Host Pattern
 
-When direct SSH fails, use `homedesktop-wsl` as jump host:
+All canonical VMs are now directly reachable via Tailscale SSH:
 
 ```bash
-# From VPS/cloud or macmini to epyc6
-ssh -J fengning@homedesktop-wsl feng@epyc6
-
-# Or chain through intermediate
-ssh fengning@homedesktop-wsl 'ssh feng@epyc6 "command"'
+# Direct access to all VMs
+ssh fengning@epyc6 "command"
+ssh fengning@epyc12 "command"
+ssh fengning@homedesktop-wsl "command"
+ssh fengning@macmini "command"
 ```
 
 ### 3.3 Tailscale SSH (V8.3 Standard)
@@ -188,8 +188,8 @@ ssh fengning@macmini "source ~/.zshrc && which cc-glm-headless.sh"
 |-------|---------------|------------------|-------|
 | macmini.ssh | `fengning@macmini` | `fengning@Fengs-Mac-mini-3.local` | ⚠️ Different format |
 | macmini.user | fengning | fengning | ✅ |
-| epyc6.ssh | `feng@epyc6` | `feng@epyc6` | ✅ |
-| epyc6.user | feng | feng | ✅ |
+| epyc6.ssh | `fengning@epyc6` | `fengning@epyc6` | ✅ |
+| epyc6.user | fengning | fengning | ✅ |
 | epyc12.ssh | `fengning@epyc12` | `fengning@epyc12` | ✅ |
 | epyc12.user | fengning | fengning | ✅ |
 | homedesktop-wsl.ssh | `fengning@homedesktop-wsl` | `fengning@homedesktop-wsl` | ✅ |
@@ -212,7 +212,7 @@ Before deploying cc-glm-headless dependent workloads:
 
 ```bash
 # 1. Verify target VM access
-for vm in "fengning@homedesktop-wsl" "fengning@macmini" "feng@epyc6" "fengning@epyc12"; do
+for vm in "fengning@homedesktop-wsl" "fengning@macmini" "fengning@epyc6" "fengning@epyc12"; do
   timeout 5 ssh "$vm" "echo OK" && echo "✅ $vm" || echo "❌ $vm"
 done
 
@@ -248,6 +248,8 @@ done
 
 | Date | Change | Author |
 |------|--------|--------|
+| 2026-02-27 | V8.4: Host-identity convergence - epyc6 now uses `fengning@` | bd-zgzw |
+| 2026-02-27 | Updated Tailscale IPs, direct SSH for all VMs | bd-zgzw |
 | 2026-02-18 | Initial creation with full verification matrix | bd-xga8.10.6 |
 | 2026-02-18 | Added macmini access closeout section | bd-xga8.10.6 |
 | 2026-02-18 | Added epyc12 to matrix | bd-xga8.10.6 |

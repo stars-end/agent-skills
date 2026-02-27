@@ -100,7 +100,7 @@ opencode auth login
 The following VMs are defined in `scripts/canonical-targets.sh`:
 
 ### epyc6 (Production)
-- Location: `feng@epyc6` (primary Linux dev host)
+- Location: `fengning@epyc6` (primary Linux dev host)
 - Expected: All 4 canonical IDEs installed and configured
 - Verification: Run `dx-status` to check
 
