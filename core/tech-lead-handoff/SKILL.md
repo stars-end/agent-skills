@@ -183,7 +183,7 @@ Agent: <agent-id>"
 git push origin <branch>
 ```
 
-### 6. Create PR with V8.3 Metadata
+### 6. Create PR with V8.3 Metadata (REQUIRED BEFORE HANDOFF PROMPT)
 
 PR MUST include:
 - Title: `bd-xxxx: Description`
@@ -200,16 +200,29 @@ gh pr create --title "bd-xxxx: Description of changes" --body "$(cat <<'EOF'
 Agent: <your-agent-id>
 EOF
 )"
+
+# REQUIRED artifacts for cross-VM handoff
+PR_URL=$(gh pr view --json url -q .url)
+PR_HEAD_SHA=$(git rev-parse HEAD)
+
+test -n "$PR_URL" || { echo "BLOCKED: PR_NOT_CREATED"; exit 1; }
+test -n "$PR_HEAD_SHA" || { echo "BLOCKED: MISSING_HEAD_SHA"; exit 1; }
 ```
 
-### 7. Generate Self-Contained Prompt
+### 7. Generate Self-Contained Prompt (PR_URL + PR_HEAD_SHA REQUIRED)
+
+Only generate the handoff prompt after:
+1. Docs are committed and pushed.
+2. Beads evidence/status is updated.
+3. PR exists and `PR_URL` / `PR_HEAD_SHA` are captured.
 
 Output the handoff prompt:
 
 ```
 ## Tech Lead Review: [Topic]
 
-**GitHub:** https://github.com/org/repo/pull/xxx (if PR exists)
+**PR_URL:** https://github.com/org/repo/pull/xxx
+**PR_HEAD_SHA:** <40-char sha>
 **Beads Epic:** bd-xxxx
 **Investigation:** docs/investigations/YYYY-MM-DD-<topic>-analysis.md
 
@@ -233,7 +246,18 @@ Output the handoff prompt:
 ### How to View
 - **Beads:** `cd ~/bd && bd show bd-xxxx`
 - **Docs:** Check docs/investigations/ in repo
-- **PR:** <link if applicable>
+- **PR:** <required link>
+- **Commit:** <required head sha>
+```
+
+If PR is not created yet, output this exact blocker format and STOP:
+
+```text
+BLOCKED: PR_NOT_CREATED
+Next action:
+1) git push origin <branch>
+2) gh pr create --title "bd-xxxx: <title>" --body "Agent: <agent-id>"
+3) Re-run handoff output with PR_URL and PR_HEAD_SHA
 ```
 
 ## Happy Path (Copy-Paste)
@@ -268,6 +292,13 @@ gh pr create --title "bd-xxxx: [title]" --body "$(cat <<'EOF'
 Agent: <agent-id>
 EOF
 )"
+
+# 8. Capture required review artifacts
+PR_URL=$(gh pr view --json url -q .url)
+PR_HEAD_SHA=$(git rev-parse HEAD)
+test -n "$PR_URL" || { echo "BLOCKED: PR_NOT_CREATED"; exit 1; }
+echo "PR_URL=$PR_URL"
+echo "PR_HEAD_SHA=$PR_HEAD_SHA"
 ```
 
 ## Integration Points
@@ -280,7 +311,7 @@ EOF
 ### With Git
 - Commits investigation docs
 - Pushes to remote for visibility
-- Creates PR if applicable
+- Creates PR before handoff prompt generation (required)
 
 ### With GitHub
 - Provides permalink to docs
@@ -292,6 +323,7 @@ EOF
 
 ✅ Always verify `bd dolt test --json` before handoff
 ✅ Include GitHub permalinks to docs
+✅ Include `PR_URL` and `PR_HEAD_SHA` in the handoff prompt
 ✅ Keep summary under 10 lines
 ✅ List specific decisions needed
 ✅ Provide "how to view" instructions
@@ -302,6 +334,7 @@ EOF
 ❌ Assume tech lead has your Beads database
 ❌ Skip committing investigation docs
 ❌ Forget to push to remote
+❌ Output handoff prompt without `PR_URL` and `PR_HEAD_SHA`
 
 ## What This Skill Does
 
@@ -312,14 +345,14 @@ EOF
 ✅ Creates handoff summary document
 ✅ Commits and pushes all docs
 ✅ Creates PR with V8.3 metadata (bd-xxxx: title, Agent: in body)
-✅ Generates self-contained handoff prompt
+✅ Generates self-contained handoff prompt with required `PR_URL` + `PR_HEAD_SHA`
 
 ## What This Skill DOESN'T Do
 
 ❌ Create the Beads epic (use beads-workflow first)
 ❌ Do the investigation (that's your work)
 ❌ Make decisions (tech lead's job)
-❌ Create PR automatically (optional, do manually if needed)
+❌ Complete handoff output without an existing PR URL
 
 ## Example
 

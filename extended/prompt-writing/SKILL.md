@@ -24,6 +24,21 @@ Ensure every assigned task stays on the happy path even under agent tunnel-visio
 When asked to write a prompt for another agent, output:
 1) A **single copy/paste prompt**
 2) A short **PR description checklist** (optional) if the task requires “proof bundles”
+3) A **Mandatory Review Artifacts** section with:
+   - `PR_URL` (required once PR exists)
+   - `PR_HEAD_SHA` (required once first real commit exists)
+   - `FEATURE_KEY` / work item ID
+
+## PR Artifact Contract (Mandatory)
+
+All generated delegation prompts MUST enforce this behavior:
+1. Delegate opens a draft PR after the first real commit.
+2. Delegate final response MUST include:
+   - `PR_URL: https://github.com/<org>/<repo>/pull/<n>`
+   - `PR_HEAD_SHA: <40-char sha>`
+3. If PR does not exist yet, delegate MUST return:
+   - `BLOCKED: PR_NOT_CREATED`
+   - exact next commands to push branch and create PR
 
 ## Invariant First Line (Always)
 
@@ -44,6 +59,7 @@ Paste this prefix at the top of every prompt you generate:
 3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
 4) If you are about to edit anything under `~/...`, STOP and move to a worktree.
 5) **Draft PR early**: open a draft PR after your FIRST real commit — do NOT wait until done
+6) **Return review artifacts**: `PR_URL` + `PR_HEAD_SHA` are mandatory in final response
 ```
 
 Recommended ordering:
@@ -61,7 +77,7 @@ If the task touches **2+ repos** or has **3+ phases**, include this section imme
 ## Plan-First Gate (Mandatory)
 Before implementing, reply with:
 1) Worktrees you will create (repo → beads-id)
-2) Draft PRs that will exist at end (repo → title)
+2) Draft PRs that will exist at end (repo → title + expected PR URL placeholder)
 3) Exact commands you will run for proof (3–8 commands)
 
 Do not start implementation until this plan is written.
@@ -76,6 +92,7 @@ Every prompt should end with:
 Do not claim complete until:
 - All work is committed, pushed, and draft PR(s) exist (opened EARLY, not just at end)
 - `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
+- Final response includes: `PR_URL`, `PR_HEAD_SHA`, and validation summary
 ```
 
 > **Note on "draft PR early":** `worktree-push.sh` (3:15 AM) pushes committed branches nightly.
@@ -119,9 +136,19 @@ you're a full-stack dev agent at a tiny fintech startup:
 ## Plan-First Gate (Mandatory)
 Before implementing, reply with:
 1) Worktrees you will create (repo → beads-id)
-2) Draft PRs that will exist at end (repo → title)
+2) Draft PRs that will exist at end (repo → title + expected PR URL placeholder)
 3) Exact commands you will run for proof (3–8 commands)
 Do not start implementation until this plan is written.
+
+## Mandatory Review Artifacts
+In your final response, always include:
+- PR_URL: <required once PR is created>
+- PR_HEAD_SHA: <required once first real commit exists>
+- FEATURE_KEY: <beads/work item id>
+
+If blocked:
+- BLOCKED: PR_NOT_CREATED
+- Next actions: exact commands to push and create PR
 
 ## Task
 [Concrete deliverable(s) + acceptance criteria.]
@@ -130,6 +157,7 @@ Do not start implementation until this plan is written.
 Do not claim complete until:
 - All work is committed, pushed, and draft PR(s) exist (opened EARLY, not just at end)
 - `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
+- Final response includes `PR_URL` + `PR_HEAD_SHA`
 If blocked, explain which gate failed and the smallest next action to unblock.
 ```
 
