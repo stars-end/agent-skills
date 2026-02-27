@@ -7,6 +7,9 @@
 #
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/canonical-targets.sh"
+
 OUTPUT_DIR="$HOME/.dx-state/compliance"
 mkdir -p "$OUTPUT_DIR"
 JSON_OUT="$OUTPUT_DIR/latest.json"
@@ -16,12 +19,19 @@ GENERATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Host matrix with specific SSH targets
 declare -A HOST_TARGETS=(
-    ["macmini"]="local"
-    ["homedesktop-wsl"]="fengning@homedesktop-wsl"
-    ["epyc6"]="feng@epyc6"
+    ["macmini"]="${CANONICAL_VM_MACOS:-fengning@macmini}"
+    ["homedesktop-wsl"]="${CANONICAL_VM_WSL:-fengning@homedesktop-wsl}"
+    ["epyc6"]="${CANONICAL_VM_PRIMARY:-fengning@epyc6}"
 )
 
 LOCAL_HOSTNAME=$(hostname -s)
+if [[ "${CANONICAL_HOST_KEY:-}" == "macmini" ]]; then
+    HOST_TARGETS["macmini"]="local"
+elif [[ "${CANONICAL_HOST_KEY:-}" == "homedesktop-wsl" ]]; then
+    HOST_TARGETS["homedesktop-wsl"]="local"
+elif [[ "${CANONICAL_HOST_KEY:-}" == "epyc6" ]]; then
+    HOST_TARGETS["epyc6"]="local"
+fi
 
 # Collector script - logic that runs on each host
 # Outputs a raw JSON object for that host

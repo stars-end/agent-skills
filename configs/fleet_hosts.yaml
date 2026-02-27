@@ -35,7 +35,7 @@ hosts:
     ssh: "fengning@epyc6"
     shell: "zsh"
     os: "linux"
-    user: "feng"
+    user: "fengning"
     hostname: "v2202509262171386004"
     canonical_repos:
       - "$HOME/agent-skills"
@@ -44,7 +44,7 @@ hosts:
       - "$HOME/llm-common"
     beads_db: "$HOME/bd/.beads"
     dispatch_enabled: false
-    notes: "DISABLED for dispatch - runtime/session issues. See extended/cc-glm/docs/EPYC6_ENABLEMENT_GATE.md for enablement criteria. GPU work, ML training (user differs: feng vs fengning)"
+    notes: "DISABLED for dispatch - runtime/session issues. See extended/cc-glm/docs/EPYC6_ENABLEMENT_GATE.md for enablement criteria. GPU/ML host with canonical user fengning"
 
   epyc12:
     ssh: "fengning@epyc12"

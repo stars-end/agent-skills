@@ -10,6 +10,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/canonical-targets.sh"
+EPYC6_TARGET="${CANONICAL_VM_PRIMARY:-fengning@epyc6}"
+WSL_TARGET="${CANONICAL_VM_WSL:-fengning@homedesktop-wsl}"
 
 # Colors
 RED='\033[0;31m'
@@ -175,7 +178,7 @@ if $RUN_REMOTE; then
     
     # epyc6
     echo "Testing epyc6..."
-    EPYC_OUT=$(ssh feng@epyc6 'source ~/.zshenv && cd ~/agent-skills && git pull -q && python3 scripts/test-event-bus-e2e.py 2>&1' | grep "RESULTS" || echo "FAILED")
+    EPYC_OUT=$(ssh "$EPYC6_TARGET" 'source ~/.zshenv && cd ~/agent-skills && git pull -q && python3 scripts/test-event-bus-e2e.py 2>&1' | grep "RESULTS" || echo "FAILED")
     if echo "$EPYC_OUT" | grep -q "6 passed"; then
         test_result 0 "epyc6: E2E test passed"
     else
@@ -184,7 +187,7 @@ if $RUN_REMOTE; then
     
     # homedesktop-wsl
     echo "Testing homedesktop-wsl..."
-    WSL_OUT=$(ssh -p 2222 fengning@100.109.231.123 'source ~/.zshenv && cd ~/agent-skills && git pull -q && python3 scripts/test-event-bus-e2e.py 2>&1' | grep "RESULTS" || echo "FAILED")
+    WSL_OUT=$(ssh "$WSL_TARGET" 'source ~/.zshenv && cd ~/agent-skills && git pull -q && python3 scripts/test-event-bus-e2e.py 2>&1' | grep "RESULTS" || echo "FAILED")
     if echo "$WSL_OUT" | grep -q "6 passed"; then
         test_result 0 "homedesktop-wsl: E2E test passed"
     else
