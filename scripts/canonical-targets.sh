@@ -24,15 +24,15 @@
 export CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
 
 export CANONICAL_VMS=(
-  "feng@epyc6:linux:Primary Linux dev host (this machine)"
-  "feng@epyc12:linux:Secondary Linux dev host"
+  "fengning@epyc6:linux:Primary Linux dev host (this machine)"
+  "fengning@epyc12:linux:Secondary Linux dev host"
   "fengning@homedesktop-wsl:linux:WSL2 on Windows - Linux dev environment"
   "fengning@macmini:macos:macOS Dev machine"
 )
 
 # Shorthand access to primary targets
-export CANONICAL_VM_PRIMARY="feng@epyc6"
-export CANONICAL_VM_LINUX2="feng@epyc12"
+export CANONICAL_VM_PRIMARY="fengning@epyc6"
+export CANONICAL_VM_LINUX2="fengning@epyc12"
 export CANONICAL_VM_WSL="fengning@homedesktop-wsl"
 export CANONICAL_VM_MACOS="fengning@macmini"
 
@@ -159,7 +159,7 @@ export CANONICAL_MISSING_TOOLS_EPYC6=( "jq" )
 # ------------------------------------------------------------
 # Not all VMs can reach each other directly. Use jump hosts when needed.
 # From VPS/cloud: Use homedesktop-wsl as jump to reach epyc6
-#   ssh -J fengning@homedesktop-wsl feng@epyc6
+#   ssh -J fengning@homedesktop-wsl fengning@epyc6
 
 export CANONICAL_JUMP_HOST="fengning@homedesktop-wsl"
 
@@ -252,9 +252,9 @@ deploy_to_all_vms() {
   done
 
   # epyc6 via jump host (use homedesktop-wsl as the transfer point)
-  echo "  → feng@epyc6 (via jump)"
+  echo "  → fengning@epyc6 (via jump)"
   if scp "$src" "fengning@homedesktop-wsl:$tmp" 2>/dev/null; then
-    ssh fengning@homedesktop-wsl "scp '$tmp' 'feng@epyc6:$dest' && rm -f '$tmp'" 2>/dev/null \
+    ssh fengning@homedesktop-wsl "scp '$tmp' 'fengning@epyc6:$dest' && rm -f '$tmp'" 2>/dev/null \
       && echo "    ✅" || echo "    ❌ Failed"
   else
     echo "    ❌ Failed (could not copy to jump host)"
