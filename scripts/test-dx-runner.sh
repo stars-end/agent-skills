@@ -1480,7 +1480,7 @@ EOF
     chmod +x "$fake_railway"
 
     set +e
-    out="$(PATH="$tmp_bin:$PATH" DX_RUNNER_REQUIRE_RAILWAY_AUTH=1 DX_RUNNER_RAILWAY_REQUIRED_PROVIDERS=mock RAILWAY_SERVICE_FRONTEND_URL= RAILWAY_SERVICE_BACKEND_URL= RAILWAY_TOKEN= "$DX_RUNNER" preflight --provider mock 2>&1)"
+    out="$(PATH="$tmp_bin:$PATH" DX_RUNNER_REQUIRE_RAILWAY_AUTH=1 DX_RUNNER_RAILWAY_REQUIRED_PROVIDERS=mock RAILWAY_SERVICE_FRONTEND_URL= RAILWAY_SERVICE_BACKEND_URL= RAILWAY_API_TOKEN= RAILWAY_TOKEN= "$DX_RUNNER" preflight --provider mock 2>&1)"
     rc=$?
     set -e
     if [[ "$rc" -ne 0 ]] && echo "$out" | grep -q "railway_"; then

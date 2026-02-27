@@ -201,7 +201,12 @@ railway_auth_gate() {
     fi
 
     local has_token=false has_service_ctx=false whoami_ok=false
-    [[ -n "${RAILWAY_TOKEN:-}" ]] && has_token=true
+    if [[ -n "${RAILWAY_API_TOKEN:-}" ]]; then
+        has_token=true
+    elif [[ -n "${RAILWAY_TOKEN:-}" ]]; then
+        # Backward-compatible alias; canonical variable is RAILWAY_API_TOKEN.
+        has_token=true
+    fi
     [[ -n "${RAILWAY_SERVICE_FRONTEND_URL:-}" || -n "${RAILWAY_SERVICE_BACKEND_URL:-}" ]] && has_service_ctx=true
     if railway whoami >/dev/null 2>&1; then
         whoami_ok=true
@@ -217,7 +222,7 @@ railway_auth_gate() {
         echo "  ERROR_CODE=railway_service_context_missing severity=error action=run_in_railway_shell_or_export_service_urls"
     fi
     if [[ "$has_token" != "true" && "$whoami_ok" != "true" ]]; then
-        echo "  ERROR_CODE=railway_auth_missing severity=error action=railway_login_or_export_RAILWAY_TOKEN"
+        echo "  ERROR_CODE=railway_auth_missing severity=error action=railway_login_or_export_RAILWAY_API_TOKEN"
     fi
     return 1
 }
