@@ -19,15 +19,19 @@
 
 set -euo pipefail
 
+# Canonical host registry (single source of truth for VM principals)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/canonical-targets.sh"
+
 # Ensure we always prompt for tokens
 unset OP_SERVICE_ACCOUNT_TOKEN
 
 # Target VMs with their token names
 declare -A TARGETS
-TARGETS["feng@epyc6"]="op-epyc6-token"
-TARGETS["fengning@epyc12"]="op-epyc12-token"
-TARGETS["fengning@homedesktop-wsl"]="op-homedesktop-wsl-token"
-TARGETS["fengning@macmini"]="op-macmini-token"
+TARGETS["${CANONICAL_VM_PRIMARY:-fengning@epyc6}"]="op-epyc6-token"
+TARGETS["${CANONICAL_VM_LINUX2:-fengning@epyc12}"]="op-epyc12-token"
+TARGETS["${CANONICAL_VM_WSL:-fengning@homedesktop-wsl}"]="op-homedesktop-wsl-token"
+TARGETS["${CANONICAL_VM_MACOS:-fengning@macmini}"]="op-macmini-token"
 
 echo "=== Distributing Unique 1Password Tokens to All VMs ==="
 echo ""

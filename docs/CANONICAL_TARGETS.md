@@ -8,15 +8,15 @@ This document defines the single source of truth for canonical VMs, IDEs, and co
 |------|-----|-------------|------------|
 | homedesktop-wsl | Linux (WSL2) | Primary Linux dev environment | `fengning@homedesktop-wsl` |
 | macmini | macOS | macOS Dev machine | `fengning@macmini` |
-| epyc6 | Linux | Primary Linux dev host | `feng@epyc6` |
+| epyc6 | Linux | Primary Linux dev host | `fengning@epyc6` |
 | epyc12 | Linux | Secondary Linux dev host | `fengning@epyc12` |
 
 **For detailed verification matrix (auth principals, tool presence, token paths, cc-glm-headless state), see [CROSS_VM_VERIFICATION_MATRIX.md](./CROSS_VM_VERIFICATION_MATRIX.md).**
 
-**IMPORTANT: SSH Username Variations**
-- SSH targets use **username@host** format because usernames vary across machines
-- epyc6 uses `feng@` while WSL/macOS use `fengning@`
-- **Always use full `username@host` syntax** when SSH'ing between VMs
+**IMPORTANT: Canonical SSH Principals**
+- SSH targets use **username@host** format and are sourced from canonical registries.
+- epyc6 principal is now `fengning@epyc6` (same user family as other canonical VMs).
+- **Always use full `username@host` syntax** when SSH'ing between VMs.
 - Bare hostnames (e.g., `ssh homedesktop-wsl`) rely on SSH config which may not be configured on all machines
 - Example: `ssh fengning@homedesktop-wsl "ru --version"` (CORRECT)
 - Example: `ssh homedesktop-wsl "ru --version"` (MAY FAIL if SSH config missing)
@@ -27,7 +27,7 @@ Not all VMs can directly reach each other. Use this matrix for cross-VM operatio
 
 | From → To | homedesktop-wsl | macmini | epyc6 | epyc12 |
 |-----------|-----------------|---------|-------|--------|
-| **homedesktop-wsl** | - | ✅ Direct | ✅ Direct (`feng@epyc6`) | ✅ Direct |
+| **homedesktop-wsl** | - | ✅ Direct | ✅ Direct (`fengning@epyc6`) | ✅ Direct |
 | **macmini** | ✅ Direct | - | ❌ Use jump | ✅ Direct |
 | **epyc6** | ✅ Direct | ✅ Direct | - | ✅ Direct |
 | **epyc12** | ✅ Direct | ✅ Direct | ✅ Direct | - |
@@ -36,10 +36,16 @@ Not all VMs can directly reach each other. Use this matrix for cross-VM operatio
 **Jump Host Pattern** (when direct SSH fails):
 ```bash
 # From VPS/cloud to epyc6, jump through homedesktop-wsl:
-ssh fengning@homedesktop-wsl 'ssh feng@epyc6 "command here"'
+ssh fengning@homedesktop-wsl 'ssh fengning@epyc6 "command here"'
 
 # Or use ProxyJump:
-ssh -J fengning@homedesktop-wsl feng@epyc6
+ssh -J fengning@homedesktop-wsl fengning@epyc6
+```
+
+If a VM was reformatted and SSH warns `REMOTE HOST IDENTIFICATION HAS CHANGED`, refresh the stale key first:
+```bash
+ssh-keygen -R epyc6
+ssh-keygen -R homedesktop-wsl
 ```
 
 ### Tailscale SSH (Standard for Canonical VMs)
@@ -63,7 +69,7 @@ sudo tailscale up --ssh
 |------|-------------------|----------|
 | homedesktop-wsl | `100.109.231.123` | `fengning@` |
 | macmini | `100.117.177.18` | `fengning@` |
-| epyc6 | `100.101.113.91` | `feng@` |
+| epyc6 | `100.101.113.91` | `fengning@` |
 | epyc12 | (check `tailscale status`) | `fengning@` |
 
 ### Per-VM Tool Availability
@@ -92,7 +98,7 @@ All VMs use the same tiered secret cache structure:
 |----|----------|------------------|
 | homedesktop-wsl | `/home/fengning` | `/home/fengning/.config/secret-cache/secrets.env` |
 | macmini | `/Users/fengning` | `/Users/fengning/.config/secret-cache/secrets.env` |
-| epyc6 | `/home/feng` | `/home/feng/.config/secret-cache/secrets.env` |
+| epyc6 | `/home/fengning` | `/home/fengning/.config/secret-cache/secrets.env` |
 | epyc12 | `/home/fengning` | `/home/fengning/.config/secret-cache/secrets.env` |
 
 **Permissions:** `chmod 700 ~/.config/secret-cache && chmod 600 ~/.config/secret-cache/secrets.env`
@@ -116,7 +122,7 @@ for target in "fengning@homedesktop-wsl" "fengning@macmini"; do
 done
 
 # epyc6 may need jump host:
-ssh fengning@homedesktop-wsl 'scp ~/.local/bin/my-script.sh feng@epyc6:~/.local/bin/'
+ssh fengning@homedesktop-wsl 'scp ~/.local/bin/my-script.sh fengning@epyc6:~/.local/bin/'
 ```
 
 ## Canonical Git Trunk

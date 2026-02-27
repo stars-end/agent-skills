@@ -147,10 +147,9 @@ esac
 # ------------------------------------------------------------
 # Tool Availability Notes (per-host quirks)
 # ------------------------------------------------------------
-# epyc6: No jq (no sudo access). Scripts should use grep-based JSON parsing.
-# epyc6: User is 'feng' not 'fengning'.
-# epyc6: May not be directly reachable - use homedesktop-wsl as jump host.
-# epyc12: User is 'fengning'. Direct SSH access available. dcg v0.2.15 installed.
+# epyc6: Canonical principal is 'fengning@epyc6'.
+# epyc6: Direct SSH usually works; keep jump-host fallback for reliability.
+# epyc12: Canonical principal is 'fengning@epyc12'.
 
 export CANONICAL_MISSING_TOOLS_EPYC6=( "jq" )
 
