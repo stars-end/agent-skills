@@ -145,9 +145,69 @@ systemctl --user start beads-dolt.service
 cd ~/bd && bd dolt test --json && bd status --json
 ```
 
-## 7) Operator Rules
+## 7) Fleet Sync (MinIO S3)
+
+Fleet sync uses file:// Dolt remotes + S3-compatible MinIO for cross-host synchronization.
+
+> **Note**: Dolt's `aws://` remote requires DynamoDB for locking. MinIO is S3-compatible only, so we use file:// remotes synced via `mc mirror`.
+
+### Sync Workflow
+
+```bash
+# On source host after mutations:
+cd ~/bd/.beads/dolt/beads_bd
+dolt push fleet-cloud main
+source ~/bd/.beads/minio_env.sh && ~/bd/.beads/beads_sync.sh push
+
+# On target host to sync:
+source ~/bd/.beads/minio_env.sh && ~/bd/.beads/beads_sync.sh pull
+cd ~/bd/.beads/dolt/beads_bd
+dolt pull fleet-cloud main --ff-only
+```
+
+### Preflight Sync Check
+
+Before dispatch, verify fleet sync state:
+
+```bash
+~/bd/.beads/beads_sync.sh status
+~/bd/.beads/beads_sync.sh pull
+```
+
+### Rollback Procedure
+
+```bash
+# 1) Stop service
+systemctl --user stop beads-dolt.service  # Linux
+launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt  # macOS
+
+# 2) Restore from backup
+cd ~/bd/.beads
+mv dolt "dolt.corrupted.$(date +%Y%m%d%H%M%S)"
+tar -xzf ~/bd-backup-*.tgz
+
+# 3) Restart and validate
+systemctl --user start beads-dolt.service  # Linux
+launchctl kickstart gui/$(id -u)/com.starsend.beads-dolt  # macOS
+cd ~/bd && bd dolt test --json && bd status --json
+```
+
+### Files
+
+- `~/bd/.beads/beads_sync.sh` - MinIO sync script
+- `~/bd/.beads/minio_env.sh` - Credential sourcing from 1Password
+- `~/bd-backup-*.tgz` - Host-local backups
+
+### Known Limitations
+
+- Sync is manual (not automatic on mutation)
+- Requires `mc` (MinIO client) installed
+- Remote path must match host OS (Linux: `/home/...`, macOS: `/Users/...`)
+
+## 8) Operator Rules
 
 - Do not run mutating `bd` commands from non-`~/bd` repos.
 - Do not launch unmanaged long-running Dolt servers during active waves.
 - Keep one managed service per host and validate before dispatch.
 - Treat `bd status --json` + `bd dolt test --json` as the source of truth.
+- Sync to MinIO after significant mutations before switching hosts.
