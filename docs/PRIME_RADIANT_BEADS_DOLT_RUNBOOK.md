@@ -82,7 +82,6 @@ Fleet checks from macmini:
 ```bash
 ssh epyc12 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
 ssh homedesktop-wsl 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
-ssh feng@epyc6 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
 ```
 
 ## 5) Incident Triage
@@ -145,39 +144,32 @@ systemctl --user start beads-dolt.service
 cd ~/bd && bd dolt test --json && bd status --json
 ```
 
-## 7) Fleet Sync (SSH/rsync)
+## 7) Fleet Sync (GitHub Dolt Remote)
 
-Fleet sync uses file:// Dolt remotes with direct SSH/rsync for cross-host synchronization.
+Fleet sync uses GitHub-hosted Dolt remotes for cross-host synchronization via SSH.
 
-> **Deprecated**: MinIO mc mirror sync (`beads_sync.sh`, `minio_env.sh`) is no longer used for live sync. MinIO remains for app data only.
+> **Architecture**: GitHub private repo `git@github.com:stars-end/bd-dolt.git` stores Dolt data under `refs/dolt/data`. Auth via SSH keys.
 
-### Canonical Host
-
-`epyc12` is the canonical source of truth for Beads data.
-
-### Sync Workflow
+### Daily Sync Workflow
 
 ```bash
-# On source host (epyc12) after mutations:
+# On any host after mutations:
 cd ~/bd/.beads/dolt/beads_bd
-dolt push fleet-cloud main
+dolt push origin main
 
-# Sync fleet-remote to all hosts
-~/agent-skills/scripts/bd-fleet-sync.sh push
-
-# On target host to sync:
-~/agent-skills/scripts/bd-fleet-sync.sh pull
+# On target host before starting work:
 cd ~/bd/.beads/dolt/beads_bd
-dolt pull fleet-cloud main --ff-only
+dolt pull origin main --ff-only
 ```
 
 ### Preflight Sync Check
 
-Before dispatch, verify fleet sync state:
+Before dispatch, ensure you have latest state:
 
 ```bash
-~/agent-skills/scripts/bd-fleet-sync.sh status
-~/agent-skills/scripts/bd-fleet-sync.sh pull
+cd ~/bd/.beads/dolt/beads_bd
+dolt pull origin main --ff-only
+bd dolt test --json
 ```
 
 ### Rollback Procedure
@@ -198,19 +190,20 @@ launchctl kickstart gui/$(id -u)/com.starsend.beads-dolt  # macOS
 cd ~/bd && bd dolt test --json && bd status --json
 ```
 
-### Files
+### Remote Details
 
-- `~/agent-skills/scripts/bd-fleet-sync.sh` - SSH/rsync sync script
-- `~/bd/.beads/fleet-remote/` - Local file:// remote directory
-- `~/bd-backup-*.tgz` - Host-local backups
+- **Remote name**: `origin`
+- **URL**: `git@github.com:stars-end/bd-dolt.git`
+- **Auth**: SSH keys (non-interactive after initial setup)
 
 ### Deprecated (Do Not Use)
 
-| Path | Status | Replacement |
-|------|--------|-------------|
-| `~/.beads/beads_sync.sh` | DEPRECATED | `~/agent-skills/scripts/bd-fleet-sync.sh` |
-| `~/.beads/minio_env.sh` | DEPRECATED | Not needed |
-| `mc mirror` | DEPRECATED | `rsync` via `bd-fleet-sync.sh` |
+| Path/Method | Status | Notes |
+|-------------|--------|-------|
+| `~/bd/.beads/beads_sync.sh` | DEPRECATED | Was MinIO mc mirror |
+| `~/bd/.beads/minio_env.sh` | DEPRECATED | Was MinIO credentials |
+| `~/bd/.beads/fleet-remote/` | DEPRECATED | Was file:// transport |
+| SSH/rsync fleet sync | DEPRECATED | Was direct host sync |
 
 ## 8) Operator Rules
 
@@ -218,4 +211,4 @@ cd ~/bd && bd dolt test --json && bd status --json
 - Do not launch unmanaged long-running Dolt servers during active waves.
 - Keep one managed service per host and validate before dispatch.
 - Treat `bd status --json` + `bd dolt test --json` as the source of truth.
-- Sync to fleet after significant mutations before switching hosts.
+- Push to `origin` after significant mutations before switching hosts.
