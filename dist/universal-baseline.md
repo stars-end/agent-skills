@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 5bbf654d46207c6f953a1f8a7dbb17be62a31559 -->
-<!-- Last updated: 2026-02-26 07:47:20 UTC -->
+<!-- Source SHA: 6fc4aa61e462e36eb44e1481177a71d21b263ff6 -->
+<!-- Last updated: 2026-02-27 06:41:19 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -70,9 +70,42 @@ cd /tmp/agents/bd-xxxx/repo-name
   - interactive: `railway shell`
   - worktree/automation-safe: `railway run -p <project-id> -e <env> -s <service> -- <cmd>`
 - **Do not require canonical repo cwd for Railway context**; worktrees are first-class.
-- **API keys**: `op://dev/Agent-Secrets-Production/<FIELD>` (transitional, see SECRETS_INDEX.md).
-- **Railway CLI token**: `op://dev/Railway-Delivery/token` for CI/automation.
+- **API keys**: `op://dev/Agent-Secrets-Production/<FIELD>` (see SECRETS_INDEX.md).
+- **Railway CLI token**: `op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN` for CI/automation.
 - **Quick reference**: use the `op-secrets-quickref` skill.
+
+### 5.1) Agent Onboarding SOP (Required First Steps)
+
+New agents MUST complete these steps before any other work:
+
+**Step 1: Load 1Password Service Account**
+```bash
+# macOS
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-$(hostname)-token)"
+
+# Linux (systemd-creds encrypted)
+export OP_SERVICE_ACCOUNT_TOKEN="$(systemd-creds decrypt ~/.config/systemd/user/op-$(hostname)-token.cred)"
+
+# Verify
+op whoami  # Must show: User Type: SERVICE_ACCOUNT
+```
+
+**Step 2: Authenticate Railway CLI**
+```bash
+export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
+railway whoami  # Must show: Logged in as <email>
+```
+
+**Step 3: Verify Full Stack**
+```bash
+op item list --vault dev  # Should list items
+railway status            # Should show project context
+```
+
+**Common Issues:**
+- `op whoami` shows "account is not signed in" → Load OP_SERVICE_ACCOUNT_TOKEN
+- `railway whoami` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
+- Token file not found → Run `~/agent-skills/scripts/create-op-credential.sh`
 
 ## 6) Parallel Agent Orchestration (V8.4)
 
@@ -327,7 +360,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **skills-doctor** | Validate that the current VM has the right `agent-skills` installed for the repo you’re working in. | — |  |
 | **ssh-key-doctor** | Fast, deterministic SSH health check for canonical VMs (no hangs, no secrets). Warn-only by default; strict mode is opt-in. **DEPRECATED for canonical VM access**: Use Tailscale SSH instead. This skill remains useful for non-Tailscale SSH (external servers, GitHub, etc.). | — | dx, ssh, verification, deprecated |
 | **toolchain-health** | Validate Python toolchain alignment between mise, Poetry, and pyproject. Use when changing Python versions, editing pyproject.toml, or seeing Poetry/mise version solver errors. Invokes /toolchain-health to check: - .mise.toml python tool version - pyproject.toml python constraint - Poetry env python interpreter Keywords: python version, mise, poetry, toolchain, env use, lock, install | — | dx, tooling, python |
-| **verify-pipeline** | Run project verification checks using standard Makefile targets. Use when user says "verify pipeline", "check my work", "run tests", or "validate changes". Wraps `make verify-pipeline` (E2E), `make verify-analysis` (Logic), or `make verify-all`. Ensures environment constraints (Railway context) are met. | — | workflow, testing, verification, makefile, railway |
+| **verify-pipeline** | Run project verification checks using standard Makefile targets. Use when user says "verify pipeline", "check my work", "run tests", or "validate changes". Wraps `make verify-pipeline` (E2E), `make verify-analysis` (Logic), or `make verify-all`. Ensures environment constraints (e.g. Railway Shell) are met. | — | workflow, testing, verification, makefile, railway |
 
 
 ## Infrastructure

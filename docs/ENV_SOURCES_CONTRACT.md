@@ -21,9 +21,9 @@ This contract defines the sources of environment configuration and explicitly ma
 **Scope**: Local development, systemd services, any environment where 1Password CLI is available
 **Access Pattern**:
 ```bash
-# Direct op:// reference in config files (per-service items)
-SLACK_BOT_TOKEN=op://dev/Slack-Coordinator-Secrets/SLACK_BOT_TOKEN
-ANTHROPIC_AUTH_TOKEN=op://dev/Anthropic-Config/ANTHROPIC_AUTH_TOKEN
+# Direct op:// reference in config files
+SLACK_BOT_TOKEN=op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN
+ANTHROPIC_AUTH_TOKEN=op://dev/Agent-Secrets-Production/ZAI_API_KEY
 
 # OR op run wrapper
 op run --env-file=.env -- command-that-needs-secrets
@@ -52,18 +52,18 @@ railway status
 - ⚠️ Hard-fail DISABLED: Optional check only (may not be logged in during local dev)
 - ✅ Usage: Deployments, manual diagnostics, release workflows
 
-### 3. Railway Shell Context (Explicit RAILWAY_TOKEN)
-**Definition**: Railway access via exported `RAILWAY_TOKEN` environment variable
+### 3. Railway Shell Context (Explicit RAILWAY_API_TOKEN)
+**Definition**: Railway access via exported `RAILWAY_API_TOKEN` environment variable
 **Scope**: CI/CD pipelines, automated deployment workflows, scripts requiring non-interactive access
 **Access Pattern**:
 ```bash
 # Export token for script session
-export RAILWAY_TOKEN=$(op item get --vault dev "Railway-Delivery" --fields label="token")
+export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
 railway up  # Uses exported token, not interactive session
 ```
 
 **Guardrails**:
-- ⚠️ Hard-fail ENABLED: Script must fail if RAILWAY_TOKEN not set when required
+- ⚠️ Hard-fail ENABLED: Script must fail if RAILWAY_API_TOKEN not set when required
 - ✅ Usage: CI/CD, automated workflows, any non-interactive Railway operation
 
 ## Project-Specific Environment Sources
@@ -72,9 +72,9 @@ Different projects use different runtime platforms. This contract defines the ge
 
 | Project | Primary Platform | Secrets Source | Runtime Context Source |
 |---------|-----------------|----------------|----------------------|
-| `agent-skills` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_TOKEN` |
-| `prime-radiant-ai` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_TOKEN` |
-| `affordabot` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_TOKEN` |
+| `agent-skills` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_API_TOKEN` |
+| `prime-radiant-ai` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_API_TOKEN` |
+| `affordabot` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_API_TOKEN` |
 | `llm-common` | (library, no deploy) | 1Password (`op://`) | N/A |
 
 **Important:** When running `verify-*` tasks for Railway-deployed projects, you need BOTH:
@@ -99,9 +99,9 @@ See project-specific docs for detailed configuration.
 | **Manual Deployments** | | |
 | `railway up` (interactive) | Railway CLI login | ❌ No |
 | **Automated Workflows** | | |
-| CI/CD deployment | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_TOKEN) |
-| `scripts/deploy.sh` | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_TOKEN) |
-| Automated status checks | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_TOKEN) |
+| CI/CD deployment | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_API_TOKEN) |
+| `scripts/deploy.sh` | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_API_TOKEN) |
+| Automated status checks | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_API_TOKEN) |
 | **Systemd Services** | | |
 | opencode.service | op-only (LoadCredentialEncrypted) | N/A |
 | slack-coordinator.service | op-only (LoadCredentialEncrypted) | N/A |
@@ -122,9 +122,9 @@ Scripts MUST declare their environment source requirements:
 set -euo pipefail
 
 # Fail hard if Railway token required but not set
-if [[ -z "${RAILWAY_TOKEN:-}" ]]; then
-    echo "ERROR: RAILWAY_TOKEN must be set for this script" >&2
-    echo "Load from 1Password: export RAILWAY_TOKEN=\$(op item get ...)" >&2
+if [[ -z "${RAILWAY_API_TOKEN:-}" ]]; then
+    echo "ERROR: RAILWAY_API_TOKEN must be set for this script" >&2
+    echo "Load from 1Password: export RAILWAY_API_TOKEN=\$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')" >&2
     exit 1
 fi
 ```
@@ -141,7 +141,7 @@ case "$SCRIPT_MODE" in
         railway_check_mode="optional"
         ;;
     "ci-cd"|"automated")
-        # Railway check is mandatory (must have RAILWAY_TOKEN)
+        # Railway check is mandatory (must have RAILWAY_API_TOKEN)
         railway_check_mode="required"
         ;;
 esac
@@ -151,7 +151,7 @@ esac
 Scripts MUST use 1Password for secrets, NEVER hardcode:
 ```bash
 # CORRECT: Load from 1Password
-ANTHROPIC_AUTH_TOKEN=$(op item get --vault dev "Anthropic-Config" --fields label="ANTHROPIC_AUTH_TOKEN")
+ANTHROPIC_AUTH_TOKEN=$(op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY")
 
 # CORRECT: Use op run for multiple secrets
 op run --env-file=.env -- python3 script.py
@@ -174,7 +174,7 @@ ANTHROPIC_AUTH_TOKEN="your-hardcoded-token-here"  # NEVER DO THIS
 ~/agent-skills/scripts/guardrails/secret-scan.sh --fail
 
 # Check Railway token handling in scripts
-grep -r "RAILWAY_TOKEN" scripts/ | grep -v "op://"
+grep -r "RAILWAY_API_TOKEN" scripts/ | grep -v "op://"
 ```
 
 ## Migration Notes

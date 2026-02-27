@@ -157,10 +157,10 @@ Fleet sync uses file:// Dolt remotes + S3-compatible MinIO for cross-host synchr
 # On source host after mutations:
 cd ~/bd/.beads/dolt/beads_bd
 dolt push fleet-cloud main
-source ~/bd/.beads/minio_env.sh && ~/bd/.beads/beads_sync.sh push
+source ~/.beads/minio_env.sh && ~/.beads/beads_sync.sh push
 
 # On target host to sync:
-source ~/bd/.beads/minio_env.sh && ~/bd/.beads/beads_sync.sh pull
+source ~/.beads/minio_env.sh && ~/.beads/beads_sync.sh pull
 cd ~/bd/.beads/dolt/beads_bd
 dolt pull fleet-cloud main --ff-only
 ```
@@ -170,8 +170,8 @@ dolt pull fleet-cloud main --ff-only
 Before dispatch, verify fleet sync state:
 
 ```bash
-~/bd/.beads/beads_sync.sh status
-~/bd/.beads/beads_sync.sh pull
+~/.beads/beads_sync.sh status
+~/.beads/beads_sync.sh pull
 ```
 
 ### Rollback Procedure
@@ -187,8 +187,7 @@ mv dolt "dolt.corrupted.$(date +%Y%m%d%H%M%S)"
 tar -xzf ~/bd-backup-*.tgz
 
 # 3) Restart and validate
-systemctl --user start beads-dolt.service  # Linux
-launchctl kickstart gui/$(id -u)/com.starsend.beads-dolt  # macOS
+systemctl --user start beads-dolt.service
 cd ~/bd && bd dolt test --json && bd status --json
 ```
 
@@ -202,7 +201,7 @@ cd ~/bd && bd dolt test --json && bd status --json
 
 - Sync is manual (not automatic on mutation)
 - Requires `mc` (MinIO client) installed
-- Remote path must match host OS (Linux: `/home/...`, macOS: `/Users/...`)
+- `bd status --json` counts may differ between bd CLI versions
 
 ## 8) Operator Rules
 

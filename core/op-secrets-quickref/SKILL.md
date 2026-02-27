@@ -19,17 +19,15 @@ Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and 
 
 - **DX/dev workflow secrets** (agent keys, GitHub tokens, Slack tokens): 1Password (`op://...`), resolved at runtime.
 - **Deploy/runtime config**: Railway **environment variables** in the Railway project.
-- **Railway CLI automation token**: `RAILWAY_TOKEN` exported from 1Password (`Railway-Delivery`).
+- **Railway CLI automation token**: `RAILWAY_API_TOKEN` exported from 1Password (`Agent-Secrets-Production`).
 
 ## 1Password Item Reference
 
 | Item | Fields | Purpose |
 |------|--------|---------|
-| `Agent-Secrets-Production` | `ZAI_API_KEY`, `GITHUB_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `ANTHROPIC_AUTH_TOKEN` | DX/dev workflow secrets (default source) |
-| `Railway-Delivery` | `token`, `project_id` | Railway CLI automation |
-| `Anthropic-Config` | `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` | Anthropic API (scoped access) |
-| `Slack-Coordinator-Secrets` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | Slack coordinator service |
-| `Slack-MCP-Secrets` | `SLACK_APP_TOKEN`, `SLACK_BOT_TOKEN` | IDE Slack integration |
+| `Agent-Secrets-Production` | `ZAI_API_KEY`, `RAILWAY_API_TOKEN`, `GITHUB_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | DX/dev workflow secrets (default source) |
+
+**Note:** ZAI_API_KEY is used as ANTHROPIC_AUTH_TOKEN (Z.ai routes to Anthropic-compatible API).
 
 ## Service-Account-First Auth (Default)
 
@@ -96,14 +94,14 @@ op item get --vault dev Agent-Secrets-Production --fields label
 ### Read a Single Secret
 
 ```bash
-# Agent API key
+# Agent API key (also used as Anthropic token via Z.ai)
 op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
 
 # GitHub token (for gh CLI in cron/CI)
 op read "op://dev/Agent-Secrets-Production/GITHUB_TOKEN"
 
 # Railway CLI token
-op read "op://dev/Railway-Delivery/token"
+op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN"
 ```
 
 ### Export for CLI Usage (cron/CI)
@@ -114,14 +112,14 @@ export GH_TOKEN=$(op read "op://dev/Agent-Secrets-Production/GITHUB_TOKEN")
 gh auth status  # Should show: ✓ Logged in to github.com (GH_TOKEN)
 
 # Railway CLI auth
-export RAILWAY_TOKEN=$(op read "op://dev/Railway-Delivery/token")
+export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
 railway status
 ```
 
 ### Read Multiple Fields at Once
 
 ```bash
-op item get --vault dev Railway-Delivery --fields token,project_id
+op item get --vault dev Agent-Secrets-Production --fields ZAI_API_KEY,RAILWAY_API_TOKEN,GITHUB_TOKEN
 ```
 
 ## Railway Variables
@@ -129,7 +127,8 @@ op item get --vault dev Railway-Delivery --fields token,project_id
 ### Railway CLI Token (Non-Interactive)
 
 ```bash
-export RAILWAY_TOKEN=$(op read "op://dev/Railway-Delivery/token")
+export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
+railway whoami
 ```
 
 ### Railway Service URL Variables

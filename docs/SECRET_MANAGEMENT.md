@@ -4,21 +4,25 @@
 
 This guide covers safe 1Password CLI usage patterns. **Never pass secret values via CLI arguments** - they can be logged in shell history and process lists.
 
-## Architecture: Per-Service Items (No Mega-Items)
+## Architecture: Agent-Secrets-Production (Canonical Source)
 
-**V4.2.1 Design Principle:** One item per service/IDE with least-privilege access.
+**Canonical Item:** `Agent-Secrets-Production` in the `dev` vault contains all DX/dev workflow secrets.
 
-**Per-Service Items:**
-- `Anthropic-Config` - Anthropic API tokens
-- `Slack-Coordinator-Secrets` - Slack bot tokens for coordination service
-- `Slack-MCP-Secrets` - Slack tokens for MCP server (IDEs)
-- `Railway-Delivery` - Railway deployment tokens
-- `OpenCode-Config` - OpenCode IDE configuration
+**Key Fields:**
+- `ZAI_API_KEY` - Primary API key (also used as ANTHROPIC_AUTH_TOKEN via Z.ai)
+- `RAILWAY_API_TOKEN` - Railway CLI authentication
+- `GITHUB_TOKEN` - GitHub CLI / API authentication
+- `SLACK_BOT_TOKEN` - Slack bot token (xoxb-)
+- `SLACK_APP_TOKEN` - Slack app token (xapp-)
+
+**Access pattern:**
+```bash
+op read "op://dev/Agent-Secrets-Production/<FIELD>"
+```
 
 **Benefits:**
-- **Least-Privilege:** Services only access the secrets they need
-- **Labeled Fields:** Each secret has a clear label (e.g., `ANTHROPIC_AUTH_TOKEN`)
-- **Scoped Env Files:** One `.env` per service (no global `~/.agent-env`)
+- **Simplicity:** One item to manage, one path pattern to remember
+- **Labeled Fields:** Each secret has a clear label
 - **Safe CLI:** No secret values passed via CLI arguments
 
 ## Safe CLI Usage Patterns
@@ -27,8 +31,8 @@ This guide covers safe 1Password CLI usage patterns. **Never pass secret values 
 
 ```bash
 # In env files or config files - use op:// references
-ANTHROPIC_AUTH_TOKEN=op://dev/Anthropic-Config/ANTHROPIC_AUTH_TOKEN
-SLACK_BOT_TOKEN=op://dev/Slack-Coordinator-Secrets/SLACK_BOT_TOKEN
+ANTHROPIC_AUTH_TOKEN=op://dev/Agent-Secrets-Production/ZAI_API_KEY
+SLACK_BOT_TOKEN=op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN
 ```
 
 ### ✅ SAFE: Use op run -- for Runtime Resolution
@@ -43,21 +47,21 @@ op run -- -- your-command-here
 
 ```bash
 # Read a single secret value (outputs to stdout only)
-op item get --vault dev "Anthropic-Config" --fields label="ANTHROPIC_AUTH_TOKEN"
+op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
 
-# Or via op:// reference
-op read "op://dev/Anthropic-Config/ANTHROPIC_AUTH_TOKEN"
+# Or get all fields
+op item get --vault dev "Agent-Secrets-Production"
 ```
 
 ### ❌ UNSAFE: Passing Secrets via CLI Args
 
 ```bash
 # NEVER DO THIS - secret values logged in shell history
-op item edit "Anthropic-Config" --vault dev \
-  "ANTHROPIC_AUTH_TOKEN[password]=sk-your-secret-key-here"
+op item edit "Agent-Secrets-Production" --vault dev \
+  "ZAI_API_KEY[password]=sk-your-secret-key-here"
 
 # NEVER DO THIS - secret values exposed in process list
-export ANTHROPIC_AUTH_TOKEN="sk-your-secret-key-here" && ./script.sh
+export ZAI_API_KEY="sk-your-secret-key-here" && ./script.sh
 ```
 
 ## Managing Secrets (Safe Methods)
@@ -66,7 +70,7 @@ export ANTHROPIC_AUTH_TOKEN="sk-your-secret-key-here" && ./script.sh
 
 **Option 1: Use 1Password UI (Safest)**
 1. Open 1Password desktop app or browser
-2. Navigate to the item (e.g., "Anthropic-Config")
+2. Navigate to `Agent-Secrets-Production` in the `dev` vault
 3. Click "Add Field" or edit existing field
 4. Paste secret value directly (never touches CLI)
 
@@ -129,61 +133,51 @@ unset API_KEY
 **Option 2: Use CLI (field deletion only)**
 ```bash
 # This is safe - only field label is passed, not value
-op item edit "Anthropic-Config" --vault dev \
+op item edit "Agent-Secrets-Production" --vault dev \
   "OLD_FIELD[delete]"
 ```
 
-## Migration from Mega-Items
+## Migration to Per-Service Items (Future)
 
-### Old (Unsafe) Structure
+### Current Structure
 ```
 Agent-Secrets-Production (mega-item)
-├── ANTHROPIC_AUTH_TOKEN
+├── ZAI_API_KEY (used as ANTHROPIC_AUTH_TOKEN)
+├── RAILWAY_API_TOKEN
+├── GITHUB_TOKEN
 ├── SLACK_BOT_TOKEN
 ├── SLACK_APP_TOKEN
-├── RAILWAY_TOKEN
-├── GITHUB_TOKEN
 └── ... (all secrets in one place)
 ```
 
-### New (Safe) Structure
+### Future Target Structure
 ```
-Anthropic-Config
-├── ANTHROPIC_AUTH_TOKEN
-└── ANTHROPIC_BASE_URL
+Railway-Delivery
+├── token
+└── project_id
 
 Slack-Coordinator-Secrets
 ├── SLACK_BOT_TOKEN
 ├── SLACK_APP_TOKEN
 └── SLACK_SIGNING_SECRET
-
-Railway-Delivery
-├── token
-└── project_id
 ```
 
-### Migration Steps
+### Migration Steps (When Ready)
 
 1. **Create per-service items** (use 1Password UI)
-2. **Generate scoped env files**:
-   ```bash
-   ./scripts/setup-env-opencode.sh
-   ./scripts/setup-env-slack-coordinator.sh
-   ```
-3. **Update systemd services** to use scoped env files
+2. **Copy relevant fields** from Agent-Secrets-Production
+3. **Update env templates** to use new paths
 4. **Verify services work** with new items
-5. **Retire old mega-item** (archive or delete)
+5. **Grant service account read access** to new items
 
 See `./scripts/migrate-secrets-structure.sh` for detailed migration guide.
 
 ## Service Account Permissions
 
-**Principle:** Least-privilege access
+**Service account:** `agent-skills-production`
+**Access:** Read-only to the `dev` vault
 
-| Service Account | Access | Purpose |
-|-----------------|--------|---------|
-| `agent-skills-production` | Read-only: `Anthropic-Config`, `Slack-Coordinator-Secrets`, `OpenCode-Config` | Systemd services |
-| `cicd-deployment` | Read-only: `Railway-Delivery`, `Agent-Secrets-Production` | CI/CD pipelines |
+This provides access to `Agent-Secrets-Production` for all agent and service workflows.
 
 **To configure:**
 1. Log in to 1Password.com
@@ -234,13 +228,12 @@ echo "SECRET CLEANUP" > ~/.bash_history  # or ~/.zsh_history
 **Cause:** op:// references can't be resolved (missing item or field)
 **Fix:**
 1. Check journalctl: `journalctl --user -u opencode -n 50`
-2. Verify item exists: `op item list --vault dev --format json | jq -r '.[].title'`
-3. Verify field exists: `op item get "Item-Name" --vault dev`
+2. Verify item exists: `op item list --vault dev`
+3. Verify field exists: `op item get "Agent-Secrets-Production" --vault dev`
 
 ## References
 
 - **1Password CLI:** https://developer.1password.com/docs/cli/
 - **op run:** https://developer.1password.com/docs/cli/reference/management-commands/run
 - **Service Accounts:** https://developer.1password.com/docs/service-accounts/
-- **Migration Guide:** `./scripts/migrate-secrets-structure.sh`
-- **Env Sources Contract:** `/home/feng/agent-skills/docs/ENV_SOURCES_CONTRACT.md`
+- **Env Sources Contract:** `~/agent-skills/docs/ENV_SOURCES_CONTRACT.md`

@@ -31,7 +31,7 @@ if [ -z "${SLACK_MCP_XOXP_TOKEN:-}" ]; then
     echo "⚠️  SLACK_MCP_XOXP_TOKEN not set (optional for config setup)"
     echo "   Set in your shell profile: export SLACK_MCP_XOXP_TOKEN='xoxp-...'"
     echo "   Or load from 1Password:"
-    echo "   export SLACK_MCP_XOXP_TOKEN=\$(op item get --vault dev Slack-MCP-Secrets --fields label=xoxp_token)"
+    echo "   export SLACK_MCP_XOXP_TOKEN=\$(op read 'op://dev/Agent-Secrets-Production/SLACK_MCP_XOXP_TOKEN')"
 else
     echo "✅ SLACK_MCP_XOXP_TOKEN is set"
 fi

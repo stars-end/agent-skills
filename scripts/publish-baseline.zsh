@@ -70,9 +70,42 @@ cd /tmp/agents/bd-xxxx/repo-name
   - interactive: \`railway shell\`
   - worktree/automation-safe: \`railway run -p <project-id> -e <env> -s <service> -- <cmd>\`
 - **Do not require canonical repo cwd for Railway context**; worktrees are first-class.
-- **API keys**: \`op://dev/Agent-Secrets-Production/<FIELD>\` (transitional, see SECRETS_INDEX.md).
-- **Railway CLI token**: \`op://dev/Railway-Delivery/token\` for CI/automation.
+- **API keys**: \`op://dev/Agent-Secrets-Production/<FIELD>\` (see SECRETS_INDEX.md).
+- **Railway CLI token**: \`op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN\` for CI/automation.
 - **Quick reference**: use the \`op-secrets-quickref\` skill.
+
+### 5.1) Agent Onboarding SOP (Required First Steps)
+
+New agents MUST complete these steps before any other work:
+
+**Step 1: Load 1Password Service Account**
+\`\`\`bash
+# macOS
+export OP_SERVICE_ACCOUNT_TOKEN="\$(cat ~/.config/systemd/user/op-\$(hostname)-token)"
+
+# Linux (systemd-creds encrypted)
+export OP_SERVICE_ACCOUNT_TOKEN="\$(systemd-creds decrypt ~/.config/systemd/user/op-\$(hostname)-token.cred)"
+
+# Verify
+op whoami  # Must show: User Type: SERVICE_ACCOUNT
+\`\`\`
+
+**Step 2: Authenticate Railway CLI**
+\`\`\`bash
+export RAILWAY_API_TOKEN=\$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
+railway whoami  # Must show: Logged in as <email>
+\`\`\`
+
+**Step 3: Verify Full Stack**
+\`\`\`bash
+op item list --vault dev  # Should list items
+railway status            # Should show project context
+\`\`\`
+
+**Common Issues:**
+- \`op whoami\` shows "account is not signed in" → Load OP_SERVICE_ACCOUNT_TOKEN
+- \`railway whoami\` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
+- Token file not found → Run \`~/agent-skills/scripts/create-op-credential.sh\`
 
 ## 6) Parallel Agent Orchestration (V8.4)
 

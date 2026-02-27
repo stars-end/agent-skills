@@ -22,9 +22,9 @@ Verify Railway CLI is authenticated and has an active context:
 
 ```bash
 # Check for Railway environment or token
-if [[ -z "${RAILWAY_ENVIRONMENT:-}" && -z "${RAILWAY_TOKEN:-}" ]]; then
+if [[ -z "${RAILWAY_ENVIRONMENT:-}" && -z "${RAILWAY_API_TOKEN:-}" ]]; then
   echo "ERROR: No Railway context found."
-  echo "  Set RAILWAY_ENVIRONMENT or RAILWAY_TOKEN, or run: railway login"
+  echo "  Set RAILWAY_ENVIRONMENT or RAILWAY_API_TOKEN, or run: railway login"
   exit 1
 fi
 
@@ -36,7 +36,7 @@ railway status 2>/dev/null || {
 
 **What it checks:**
 - `RAILWAY_ENVIRONMENT` - Environment variable set by Railway
-- `RAILWAY_TOKEN` - API token for Railway CLI authentication
+- `RAILWAY_API_TOKEN` - API token for Railway CLI authentication
 
 **Quick Fix:**
 ```bash
@@ -47,8 +47,8 @@ railway shell
 # Worktree/automation-safe context (no local link required):
 railway run -p <project-id> -e dev -s backend -- env | grep RAILWAY_SERVICE
 
-# Or for CI/automation, set RAILWAY_TOKEN from 1Password:
-export RAILWAY_TOKEN=$(op read "op://dev/Railway-Delivery/token")
+# Or for CI/automation, set RAILWAY_API_TOKEN from 1Password:
+export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
 ```
 
 ### 2. URL Variables Check
@@ -144,8 +144,8 @@ Run all checks at once:
 ERRORS=0
 
 # 1. Railway Context
-if [[ -z "${RAILWAY_ENVIRONMENT:-}" && -z "${RAILWAY_TOKEN:-}" ]]; then
-  echo "[FAIL] No Railway context (RAILWAY_ENVIRONMENT or RAILWAY_TOKEN)"
+if [[ -z "${RAILWAY_ENVIRONMENT:-}" && -z "${RAILWAY_API_TOKEN:-}" ]]; then
+  echo "[FAIL] No Railway context (RAILWAY_ENVIRONMENT or RAILWAY_API_TOKEN)"
   ERRORS=$((ERRORS + 1))
 else
   echo "[OK] Railway context found"

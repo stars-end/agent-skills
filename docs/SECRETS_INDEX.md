@@ -12,36 +12,26 @@
 | Frontend URL | Railway | `$RAILWAY_SERVICE_FRONTEND_URL` |
 | Backend URL | Railway | `$RAILWAY_SERVICE_BACKEND_URL` |
 | API keys | 1Password | `op://dev/Agent-Secrets-Production/<FIELD>` |
-| Railway CLI token | 1Password | `op://dev/Railway-Delivery/token` |
+| Railway CLI token | 1Password | `op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN` |
 | GitHub token | 1Password | `op://dev/Agent-Secrets-Production/GITHUB_TOKEN` |
-| Anthropic token | 1Password | `op://dev/Anthropic-Config/ANTHROPIC_AUTH_TOKEN` |
-| Slack bot tokens | 1Password | `op://dev/Slack-Coordinator-Secrets/SLACK_BOT_TOKEN` |
+| Anthropic token | 1Password | `op://dev/Agent-Secrets-Production/ZAI_API_KEY` |
+| Slack bot tokens | 1Password | `op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN` |
 
 ---
 
-## 2. Agent-Secrets-Production Section
+## 2. Agent-Secrets-Production (Canonical Source)
 
-### Status: CURRENT DEFAULT - Transitional
+### Status: CANONICAL
 
-This is the **current default** source for API keys during the transition period. It is NOT "canonical" or "permanent" - migration to per-service items is planned.
+This is the **canonical source** for all DX/dev workflow secrets. All agents and services reference this item directly.
 
-### Migration Target
-
-The goal is to move to scoped per-service 1Password items:
-- `Anthropic-Config` - Anthropic API tokens
-- `Slack-Coordinator-Secrets` - Slack bot tokens for coordination service
-- `Slack-MCP-Secrets` - Slack tokens for MCP server (IDEs)
-- `Railway-Delivery` - Railway deployment tokens
-- `OpenCode-Config` - OpenCode IDE configuration
-
-### Field Listing (Agent-Secrets-Production)
+### Field Listing
 
 | Field Label | Purpose |
 |-------------|---------|
-| `ZAI_API_KEY` | Primary API key for agent workflows |
-| `ANTHROPIC_AUTH_TOKEN` | Anthropic API authentication |
-| `TEST_USER_EMAIL` | Test user email for CI/E2E tests |
-| `TEST_USER_PASSWORD` | Test user password for CI/E2E tests |
+| `ZAI_API_KEY` | Primary API key (also used as ANTHROPIC_AUTH_TOKEN via Z.ai) |
+| `RAILWAY_API_TOKEN` | Railway CLI authentication |
+| `GITHUB_TOKEN` | GitHub CLI / API authentication |
 | `SLACK_BOT_TOKEN` | Slack bot token (xoxb-) |
 | `SLACK_APP_TOKEN` | Slack app token (xapp-) |
 
@@ -54,8 +44,8 @@ op item get --vault dev Agent-Secrets-Production | grep -E "^[A-Z_]+:" | cut -d:
 # Read a single secret
 op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
 
-# Read Anthropic token
-op read "op://dev/Agent-Secrets-Production/ANTHROPIC_AUTH_TOKEN"
+# Read Railway token
+op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN"
 ```
 
 ---
@@ -92,7 +82,7 @@ For CI/CD or automated scripts, export the Railway token:
 
 ```bash
 # Load token from 1Password
-export RAILWAY_TOKEN="$(op read 'op://dev/Railway-Delivery/token')"
+export RAILWAY_API_TOKEN="$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')"
 
 # Now railway commands use the token
 railway status
@@ -142,22 +132,15 @@ op item list --vault dev
 
 ---
 
-## 5. Project to Secrets Mapping Table
+## 5. Service Mapping
 
-| Project | Railway Service | API Keys Source | Notes |
-|---------|-----------------|-----------------|-------|
-| prime-radiant-ai | frontend, backend | Agent-Secrets-Production | Primary app deployment |
-| affordabot | affordabot | Agent-Secrets-Production | Bot service |
-| agent-skills | N/A | Agent-Secrets-Production | DX tooling (no deployment) |
-| llm-common | N/A | N/A | Shared library (no secrets needed) |
+All services use `Agent-Secrets-Production` as their secrets source:
 
-### Per-Service Secret Mapping (Migration Target)
-
-| Service | 1Password Item | Fields Used |
-|---------|----------------|-------------|
-| opencode.service | Anthropic-Config, Slack-MCP-Secrets, OpenCode-Config | ANTHROPIC_AUTH_TOKEN, SLACK_APP_TOKEN |
-| slack-coordinator.service | Anthropic-Config, Slack-Coordinator-Secrets | ANTHROPIC_AUTH_TOKEN, SLACK_BOT_TOKEN, SLACK_APP_TOKEN |
-| CI/CD pipelines | Railway-Delivery, Agent-Secrets-Production | token, GITHUB_TOKEN |
+| Service | Fields Used |
+|---------|-------------|
+| opencode.service | ZAI_API_KEY, SLACK_APP_TOKEN |
+| slack-coordinator.service | ZAI_API_KEY, SLACK_BOT_TOKEN, SLACK_APP_TOKEN |
+| CI/CD pipelines | RAILWAY_API_TOKEN, GITHUB_TOKEN |
 
 ---
 
@@ -204,8 +187,8 @@ op item get --vault dev Agent-Secrets-Production
 
 ```bash
 # Verify token is loaded
-echo "${RAILWAY_TOKEN:0:10}..."  # Shows first 10 chars only
+echo "${RAILWAY_API_TOKEN:0:10}..."  # Shows first 10 chars only
 
 # Re-load from 1Password
-export RAILWAY_TOKEN="$(op read 'op://dev/Railway-Delivery/token')"
+export RAILWAY_API_TOKEN="$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')"
 ```
