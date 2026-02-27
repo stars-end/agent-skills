@@ -135,6 +135,28 @@ remove_wrapper_job_entries() {
     fi
 }
 
+remove_v8_marker_variants() {
+    local marker="$1"
+    local current_cron updated_cron
+    current_cron="$(crontab -l 2>/dev/null || true)"
+
+    updated_cron="$(
+        printf '%s\n' "$current_cron" | awk -v marker="$marker" '
+            {
+                if ($0 ~ "^# " marker "([[:space:]].*)?$") {
+                    next
+                }
+                print
+            }
+        '
+    )"
+
+    if [[ "$updated_cron" != "$current_cron" ]]; then
+        printf '%s\n' "$updated_cron" | crontab -
+        echo "   Removed stale marker variants for: $marker"
+    fi
+}
+
 install_cron_entry() {
     local marker="$1"
     local entry="$2"
@@ -193,6 +215,10 @@ remove_wrapper_job_entries "canonical-sync" "canonical-sync-v8.sh"
 remove_wrapper_job_entries "worktree-push" "worktree-push.sh"
 remove_wrapper_job_entries "worktree-gc" "worktree-gc-v8.sh"
 remove_wrapper_job_entries "queue-enforcer" "queue-hygiene-enforcer.sh"
+remove_v8_marker_variants "V8: canonical-sync"
+remove_v8_marker_variants "V8: worktree-push"
+remove_v8_marker_variants "V8: worktree-gc"
+remove_v8_marker_variants "V8: queue-hygiene-enforcer"
 
 install_cron_entry "V8: canonical-sync" \
     "5 3 * * * $BASH_PATH $WRAPPER canonical-sync -- $AGENTS_ROOT/scripts/canonical-sync-v8.sh >> $HOME/logs/dx/canonical-sync.log 2>&1"
