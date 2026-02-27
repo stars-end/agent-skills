@@ -217,15 +217,17 @@ if command -v railway >/dev/null 2>&1; then
     echo "✅ railway: authenticated (interactive session)"
   fi
 
-  # Check Railway Shell Context (RAILWAY_TOKEN - per ENV_SOURCES_CONTRACT.md)
+  # Check Railway Shell Context (RAILWAY_API_TOKEN - per ENV_SOURCES_CONTRACT.md)
   # This is the explicit token export for CI/CD and automated workflows
-  if [[ -n "${RAILWAY_TOKEN:-}" ]]; then
-    echo "✅ railway: RAILWAY_TOKEN set (shell context for automated workflows)"
+  if [[ -n "${RAILWAY_API_TOKEN:-}" ]]; then
+    echo "✅ railway: RAILWAY_API_TOKEN set (shell context for automated workflows)"
+  elif [[ -n "${RAILWAY_TOKEN:-}" ]]; then
+    echo "⚠️  railway: legacy RAILWAY_TOKEN set (prefer RAILWAY_API_TOKEN)"
   elif [[ -n "${RAILWAY_PROJECT_ID:-}" ]] || [[ -n "${RAILWAY_ENVIRONMENT:-}" ]]; then
     echo "✅ railway: inside Railway shell context (PROJECT_ID/ENVIRONMENT set)"
   else
     echo "⚠️  railway: NOT IN SHELL (optional for local dev, see ENV_SOURCES_CONTRACT.md)"
-    echo "   For CI/CD: export RAILWAY_TOKEN=\$(op item get --vault dev Railway-Delivery --fields label=token)"
+    echo "   For CI/CD: export RAILWAY_API_TOKEN=\$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')"
     missing_optional=$((missing_optional+1))
   fi
 else

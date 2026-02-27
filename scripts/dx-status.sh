@@ -108,6 +108,30 @@ check_canonical_repo() {
         return 0
     fi
 
+    # Refresh remote-tracking ref so drift detection is based on current origin state.
+    git -C "$repo_path" fetch --quiet --prune origin "$CANONICAL_TRUNK_BRANCH" >/dev/null 2>&1 || true
+    local upstream_ref="origin/$CANONICAL_TRUNK_BRANCH"
+    if git -C "$repo_path" rev-parse --verify "$upstream_ref" >/dev/null 2>&1; then
+        local lr ahead behind
+        lr="$(git -C "$repo_path" rev-list --left-right --count "HEAD...$upstream_ref" 2>/dev/null || echo "0 0")"
+        ahead="$(echo "$lr" | awk '{print $1}')"
+        behind="$(echo "$lr" | awk '{print $2}')"
+
+        if [ "${ahead:-0}" != "0" ]; then
+            if [ "$required" -eq 1 ]; then
+                echo -e "${RED}❌ $repo_path diverged: ahead of $upstream_ref by $ahead commit(s)${RESET}"
+                echo "   Fix: move local commits to a branch/worktree, then reset canonical to $upstream_ref"
+                ERRORS=$((ERRORS+1))
+                return 0
+            fi
+            warn_only "$repo_path ahead of $upstream_ref by $ahead commit(s)"
+        fi
+
+        if [ "${behind:-0}" != "0" ]; then
+            warn_only "$repo_path behind $upstream_ref by $behind commit(s) (dx-worktree still branches from fresh origin)"
+        fi
+    fi
+
     if [ -n "$(git -C "$repo_path" status --porcelain=v1 2>/dev/null || true)" ]; then
         if [ "$required" -eq 1 ]; then
             echo -e "${RED}❌ $repo_path has uncommitted changes (canonical clones must stay clean)${RESET}"
