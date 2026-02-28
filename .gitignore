@@ -9,13 +9,11 @@ dispatch_*.json
 # Debug scripts
 debug_backends.py
 
-# Beads metadata
-.beads/last-touched
-.beads/sync-state.json
+# Beads metadata (repo-local state is deprecated; use BEADS_DIR)
+.beads/
 
 # Reference checkouts
 mcp_agent_mail_reference/
-.beads/interactions.jsonl
 node_modules/
 
 

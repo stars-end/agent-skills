@@ -47,4 +47,34 @@ EOF
   exit 1
 fi
 
+# Block re-introducing repo-local .beads files.
+if git diff --cached --name-only --diff-filter=ACMRTUXB | grep -q '^\.beads/'; then
+  cat >&2 <<'EOF'
+
+❌ COMMIT BLOCKED: repo-local .beads content is deprecated
+
+Use external Beads state via:
+  BEADS_DIR=$HOME/bd/.beads
+
+Remove staged .beads paths from git tracking and commit again.
+
+EOF
+  exit 1
+fi
+
+# Sanity check: no tracked .beads files should remain in the index.
+if [ -n "$(git ls-files '.beads/**')" ]; then
+  cat >&2 <<'EOF'
+
+❌ COMMIT BLOCKED: tracked .beads files detected in repository index
+
+Run:
+  git rm --cached -r .beads
+
+Then commit the deletion so .beads stays external-only.
+
+EOF
+  exit 1
+fi
+
 exit 0

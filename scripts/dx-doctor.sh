@@ -147,6 +147,15 @@ diagnose_local() {
         ((ISSUES_FOUND++))
     fi
 
+    local tracked_beads
+    tracked_beads="$(git ls-files '.beads/**' 2>/dev/null || true)"
+    if [[ -n "$tracked_beads" ]]; then
+        echo -e "${RED}❌ Repo tracks local .beads files (deprecated)${RESET}"
+        echo "$tracked_beads" | sed 's/^/   - /'
+        echo -e "${YELLOW}   Repair: git rm --cached -r .beads${RESET}"
+        ((ISSUES_FOUND++))
+    fi
+
     if command -v bd >/dev/null 2>&1; then
         echo -e "${GREEN}✅ Beads CLI available${RESET}"
     else
