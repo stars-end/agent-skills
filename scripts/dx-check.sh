@@ -51,6 +51,16 @@ if [[ -d ".beads" ]]; then
     rm -rf .beads
 fi
 
+TRACKED_BEADS_FILES="$(git ls-files '.beads/**' 2>/dev/null || true)"
+if [[ -n "$TRACKED_BEADS_FILES" ]]; then
+    echo -e "${RED}❌ FATAL: repository is tracking local .beads files (deprecated).${RESET}"
+    echo "   Remove from index:"
+    echo "     git rm --cached -r .beads"
+    echo "   Tracked paths:"
+    echo "$TRACKED_BEADS_FILES" | sed 's/^/     - /'
+    exit 1
+fi
+
 needs_fix=0
 
 # macOS hygiene: disable legacy ru LaunchAgent if present (bd-f5rw)
