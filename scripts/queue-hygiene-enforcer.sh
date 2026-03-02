@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# scripts/queue-hygiene-enforcer.sh (V8.0)
+# scripts/queue-hygiene-enforcer.sh (V8.6)
 #
-# Purpose: Deterministic closed-loop PR queue management.
+# Purpose: Deterministic policy enforcement for PR queue hygiene.
 # Cron schedule: every 4 hours (*/4)
 # Bead: bd-gdlr
 #
@@ -100,15 +100,6 @@ update_heartbeat() {
     ' "$heartbeat" > "$tmpfile" && mv "$tmpfile" "$heartbeat"
 }
 
-get_hours_behind() {
-    local updated_at="$1"
-    local now_epoch
-    now_epoch=$(date -u +%s)
-    local pr_epoch
-    pr_epoch=$(date -jf "%Y-%m-%dT%H:%M:%SZ" "$updated_at" +%s 2>/dev/null || date -d "$updated_at" +%s 2>/dev/null)
-    echo $(( (now_epoch - pr_epoch) / 3600 ))
-}
-
 process_repo() {
     local repo="$1"
     local actions_taken=0
@@ -132,46 +123,25 @@ process_repo() {
         
         local number
         number=$(echo "$pr" | jq -r ".number")
-        local status
-        status=$(echo "$pr" | jq -r ".mergeStateStatus")
-        local updated_at
-        updated_at=$(echo "$pr" | jq -r ".updatedAt")
         local head_ref
         head_ref=$(echo "$pr" | jq -r ".headRefName")
         
         queued=$((queued + 1))
-        
-        local hours_behind
-        hours_behind=$(get_hours_behind "$updated_at")
-        
-        # Rule 1: DIRTY → disable auto-merge immediately
-        if [[ "$status" == "DIRTY" ]]; then
-            echo "🚨 Rule 1: #$number is DIRTY. Disabling auto-merge." >&2
-            blocked=$((blocked + 1))
-            if [[ "$DRY_RUN" == false ]]; then
-                gh pr merge --disable-auto --repo "$repo" "$number" >&2
-                actions_taken=$((actions_taken + 1))
-            fi
-            continue # Move to next PR
+
+        # Rule 1: Auto-merge is prohibited by policy. Disable always.
+        echo "🚫 Rule 1: #$number has auto-merge enabled. Disabling (policy)." >&2
+        blocked=$((blocked + 1))
+        if [[ "$DRY_RUN" == false ]]; then
+            gh pr merge --disable-auto --repo "$repo" "$number" >&2
+            actions_taken=$((actions_taken + 1))
         fi
         
-        # Rule 2: BEHIND > 6 hours → update branch
-        if [[ "$status" == "BEHIND" ]]; then
-            if [[ "$hours_behind" -gt 6 ]]; then
-                echo "🔄 Rule 2: #$number is BEHIND (${hours_behind}h). Updating branch." >&2
-                if [[ "$DRY_RUN" == false ]]; then
-                    gh api "repos/$repo/pulls/$number/update-branch" -X PUT >&2 2>/dev/null || true
-                    actions_taken=$((actions_taken + 1))
-                fi
-            fi
-        fi
-        
-        # Rule 3: Rescue branches with 0 commits ahead → delete
+        # Rule 2: Empty rescue PRs can be closed and branch deleted.
         if [[ "$head_ref" == rescue-* || "$head_ref" == stash-rescue-* ]]; then
             local ahead
             ahead=$(gh api "repos/$repo/compare/master...$head_ref" --jq ".ahead_by" 2>/dev/null || echo "0")
             if [[ "$ahead" -eq 0 ]]; then
-                echo "🗑️  Rule 3: #$number is an empty rescue PR. Closing and deleting branch." >&2
+                echo "🗑️  Rule 2: #$number is an empty rescue PR. Closing and deleting branch." >&2
                 if [[ "$DRY_RUN" == false ]]; then
                     gh pr close --repo "$repo" "$number" --delete-branch >&2
                     actions_taken=$((actions_taken + 1))
@@ -179,20 +149,7 @@ process_repo() {
                 continue
             fi
         fi
-        
-        # Rule 4: DIRTY or BEHIND > 72 hours → disable auto-merge
-        if [[ "$status" == "DIRTY" || "$status" == "BEHIND" ]]; then
-            if [[ "$hours_behind" -gt 72 ]]; then
-                echo "🛑 Rule 4: #$number is stuck (${hours_behind}h). Disabling auto-merge." >&2
-                blocked=$((blocked + 1))
-                if [[ "$DRY_RUN" == false ]]; then
-                    gh pr merge --disable-auto --repo "$repo" "$number" >&2
-                    actions_taken=$((actions_taken + 1))
-                fi
-                continue
-            fi
-        fi
-        
+
     done <<< "$prs"
     
     echo "$actions_taken $blocked $queued"

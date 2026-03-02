@@ -53,14 +53,14 @@ Last run: never
 #### Summary
 | Metric | Count | Status |
 |--------|-------|--------|
-| Rescue branches (canonical violations) | 0 | ✅ OK |
+| Rescue branch events (last 7d) | 0 | ✅ OK |
 | Commits missing Feature-Key | 0 | ✅ OK |
 | PRs with auto-merge enabled | 0 | ✅ OK |
 | Stale PRs (>7d) | 0 | ✅ OK |
 
 #### Analysis Prompt for OpenClawd
 When reading this section, consider:
-1. Rescue branches indicate agents editing canonical repos directly (V8 violation)
+1. Rescue branch events indicate canonical workflow violations (often direct canonical edits)
 2. Missing Feature-Key means commits aren't linked to beads issues
 3. Auto-merge should NEVER be enabled (humans merge)
 4. Stale PRs may indicate blocked work or forgotten branches

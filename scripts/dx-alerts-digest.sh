@@ -28,6 +28,34 @@ format_alert() {
     echo "[DX-ALERT][$severity][$scope] $message"
 }
 
+recent_recovery_entries() {
+    if [[ ! -f "$RECOVERY_LOG" ]]; then
+        return 0
+    fi
+
+    python3 - "$RECOVERY_LOG" <<'PY'
+import datetime as dt
+import sys
+
+path = sys.argv[1]
+now = dt.datetime.now(dt.timezone.utc)
+cutoff = now - dt.timedelta(hours=24)
+
+with open(path, "r", encoding="utf-8", errors="ignore") as f:
+    for raw in f:
+        line = raw.rstrip("\n")
+        if not line:
+            continue
+        ts = line.split(" | ", 1)[0].strip()
+        try:
+            when = dt.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            continue
+        if when >= cutoff:
+            print(line)
+PY
+}
+
 # Get evacuations from the last 24 hours
 get_evacuation_summary() {
     if [[ ! -f "$RECOVERY_LOG" ]]; then
@@ -35,12 +63,8 @@ get_evacuation_summary() {
         return
     fi
 
-    # Get entries from last 24h
-    local yesterday
-    yesterday=$(date -u -v-1d +"%Y-%m-%d" 2>/dev/null || date -u -d "1 day ago" +"%Y-%m-%d" 2>/dev/null)
-
     local recent
-    recent=$(awk -v cutoff="$yesterday" '$1 >= cutoff' "$RECOVERY_LOG" 2>/dev/null | tail -20)
+    recent=$(recent_recovery_entries | tail -20)
 
     if [[ -z "$recent" ]]; then
         echo "No evacuations in last 24h"
@@ -59,11 +83,8 @@ get_evacuation_counts() {
         return
     fi
 
-    local yesterday
-    yesterday=$(date -u -v-1d +"%Y-%m-%d" 2>/dev/null || date -u -d "1 day ago" +"%Y-%m-%d" 2>/dev/null)
-
     local counts
-    counts=$(awk -v cutoff="$yesterday" '$1 >= cutoff {print $3}' "$RECOVERY_LOG" 2>/dev/null | sort | uniq -c | sort -rn)
+    counts=$(recent_recovery_entries | awk -F ' \\| ' '{gsub(/^ +| +$/, "", $2); if ($2 != "") print $2}' | sort | uniq -c | sort -rn)
 
     if [[ -n "$counts" ]]; then
         echo "Evacuations by repo:"
