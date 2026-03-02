@@ -210,3 +210,20 @@ cd ~/bd && bd dolt test --json && bd status --json
 - Keep one managed service per host and validate before dispatch.
 - Treat `bd status --json` + `bd dolt test --json` as the source of truth.
 - Sync to MinIO after significant mutations before switching hosts.
+
+## 9) ID Reconciliation (Canonical Contract)
+
+Legacy handoff text and PR notes may reference non-canonical IDs that do not exist in the current
+Beads database. Use the canonical IDs below for all coordination, dispatch, and closure checks.
+
+| Legacy alias (non-canonical) | Canonical Beads ID | Meaning |
+|---|---|---|
+| `bd-eigu` | `bd-dnhf` | Fleet Sync V2 epic |
+| `bd-3m51` | `bd-6m88` | Rollback drill task |
+| `bd-rvyc` | `bd-ke5a` | Legacy path deprecation task |
+| `bd-rr7f`, `bd-t4pz`, `bd-8hxm` | `bd-dnhf` (epic context) | Treat as external aliases only |
+
+Provenance:
+- PR: <https://github.com/stars-end/agent-skills/pull/269>
+- Beads reconciliation task: `bd-wh4m`
+- See: `docs/BEADS_ID_RECONCILIATION_2026-03-02.md`
