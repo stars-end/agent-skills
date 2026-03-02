@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# canonical-evacuate-active.sh - Active-hours canonical enforcer (V8.3.x)
+# canonical-evacuate-active.sh - Active-hours canonical enforcer (V8.6)
 #
 # Purpose
 # - Keep canonical working trees from staying dirty/stale during active hours.
@@ -229,22 +229,15 @@ get_dirty_paths_json() {
   local repo_path="$1"
   local n="${2:-10}"
   cd "$repo_path"
+  git status --porcelain 2>/dev/null \
+    | awk '{line=substr($0,4); sub(/.* -> /,"",line); print line}' \
+    | head -n "$n" \
+    | python3 - <<'PY'
+import json
+import sys
 
-  # Extract path portion (char 3 onwards); preserve leading spaces via IFS=.
-  local paths=()
-  local line path
-  local i=0
-  while IFS= read -r line; do
-    path="${line:3}"
-    [[ "$path" == *" -> "* ]] && path="${path##* -> }"
-    paths+=("$path")
-    i=$((i + 1))
-    [[ $i -ge $n ]] && break
-  done < <(git status --porcelain 2>/dev/null)
-
-  python3 - "${paths[@]}" <<'PY'
-import json, sys
-print(json.dumps(sys.argv[1:]))
+paths = [line.rstrip("\n") for line in sys.stdin if line.strip()]
+print(json.dumps(paths))
 PY
 }
 
@@ -272,6 +265,52 @@ log_recovery() {
   local reason="$3"
   local agent="${4:-}"
   echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") | $repo | $rescue_branch | $reason | agent=$agent" >>"$RECOVERY_LOG"
+}
+
+extract_locked_worktree_path() {
+  local checkout_err="$1"
+  echo "$checkout_err" | sed -nE "s/.*worktree at '([^']+)'.*/\1/p" | head -1
+}
+
+is_tmux_attached_to_path() {
+  local target_path="$1"
+  command -v tmux >/dev/null 2>&1 || return 1
+
+  while IFS=$'\t' read -r attached pane_path; do
+    [[ "$attached" == "1" ]] || continue
+    [[ "$pane_path" == "$target_path"* ]] && return 0
+  done < <(tmux list-panes -a -F '#{session_attached}	#{pane_current_path}' 2>/dev/null || true)
+
+  return 1
+}
+
+normalize_off_trunk_clean_repo() {
+  local repo="$1"
+  local repo_path="$2"
+  local current_branch="$3"
+  local checkout_err lock_path active=false
+
+  cd "$repo_path"
+  if checkout_err="$(git checkout master -q 2>&1)"; then
+    git reset --hard origin/master -q
+    git clean -fdq
+    log "OK: $repo reset from off-trunk clean state (branch=$current_branch) to origin/master"
+    echo "normalized||false"
+    return 0
+  fi
+
+  lock_path="$(extract_locked_worktree_path "$checkout_err")"
+  if [[ -n "$lock_path" ]]; then
+    if is_tmux_attached_to_path "$lock_path"; then
+      active=true
+    fi
+    log "INFO: $repo master checkout blocked by worktree lock (branch=$current_branch lock=$lock_path tmux_attached=$active)"
+    echo "branch_locked_by_worktree|$lock_path|$active"
+    return 0
+  fi
+
+  log "ERROR: $repo failed to checkout master from off-trunk clean state: $checkout_err"
+  return 1
 }
 
 send_event_alert() {
@@ -363,6 +402,7 @@ evacuate_diverged() {
   current_branch="$(git branch --show-current 2>/dev/null || echo "unknown")"
   local agent
   agent="$(get_agent_trailer "$repo_path")"
+  [[ -z "$agent" ]] && agent="canonical-evacuate-active"
 
   log "Evacuating diverged $repo (branch=$current_branch ahead commits present; agent=$agent)"
 
@@ -431,7 +471,7 @@ Feature-Key: RESCUE-$host-$repo
 Agent: canonical-evacuate-active" --quiet >/dev/null 2>&1 || true
 
   if git push -u origin "$rescue_branch" --quiet >/dev/null 2>&1; then
-    log_recovery "$repo" "$rescue_branch" "dirty" ""
+    log_recovery "$repo" "$rescue_branch" "dirty" "canonical-evacuate-active"
     state_upsert "$repo" "rescue_branch=$rescue_branch" "evacuated_at_epoch=$(now_epoch)" "evac_reason=dirty-timeout"
 
     cd "$repo_path"
@@ -523,6 +563,33 @@ PY
   local now
   now="$(now_epoch)"
 
+  local lock_worktree_path=""
+  local lock_worktree_active=false
+
+  if [[ "$is_diverged" == false && "$is_dirty" == false && "$is_off_trunk" == true ]]; then
+    local off_trunk_resolution
+    if ! off_trunk_resolution="$(normalize_off_trunk_clean_repo "$repo" "$repo_path" "$current_branch")"; then
+      return 1
+    fi
+
+    local resolved_status resolved_path resolved_active
+    resolved_status="${off_trunk_resolution%%|*}"
+    resolved_path="$(echo "$off_trunk_resolution" | cut -d'|' -f2)"
+    resolved_active="$(echo "$off_trunk_resolution" | cut -d'|' -f3)"
+
+    if [[ "$resolved_status" == "normalized" ]]; then
+      if [[ "$prev_status" != "clean" ]]; then
+        send_event_alert "$repo" "recovered" ""
+      fi
+      state_delete_repo "$repo"
+      return 0
+    fi
+
+    status="$resolved_status"
+    lock_worktree_path="$resolved_path"
+    lock_worktree_active="$resolved_active"
+  fi
+
   # Recovery: became clean
   if [[ "$status" == "clean" ]]; then
     if [[ "$prev_status" != "clean" ]]; then
@@ -561,20 +628,28 @@ PY
     "untracked_count=$untracked_count" \
     "diffstat=$diffstat" \
     "has_precommit_hook=$hook" \
-    "last_commit_agent=$agent"
+    "last_commit_agent=$agent" \
+    "lock_worktree_path=$lock_worktree_path" \
+    "lock_worktree_active=$lock_worktree_active"
 
   # Immediate diverged evacuation
   if [[ "$is_diverged" == true ]]; then
     send_event_alert "$repo" "first-seen" "diverged (ahead=$ahead)"
     if evacuate_diverged "$repo"; then
       send_event_alert "$repo" "evacuated" "diverged"
+    else
+      return 1
     fi
     return 0
   fi
 
   # First-seen transition
+  local first_seen_detail="$status"
+  if [[ "$status" == "branch_locked_by_worktree" ]]; then
+    first_seen_detail="branch_locked_by_worktree lock=$lock_worktree_path tmux_attached=$lock_worktree_active"
+  fi
   if [[ "$prev_status" == "clean" ]]; then
-    send_event_alert "$repo" "first-seen" "$status"
+    send_event_alert "$repo" "first-seen" "$first_seen_detail"
   fi
 
   # Warn threshold
@@ -583,19 +658,28 @@ PY
     send_event_alert "$repo" "warn" ""
   fi
 
-  # Evict threshold
-  if [[ "$age_minutes" -ge "$DIRTY_EVICT_MINUTES" ]]; then
+  # Evict threshold (dirty only)
+  if [[ "$status" == "dirty" && "$age_minutes" -ge "$DIRTY_EVICT_MINUTES" ]]; then
     if evacuate_dirty "$repo"; then
       send_event_alert "$repo" "evacuated" "dirty"
+    else
+      return 1
     fi
   fi
 }
 
 main() {
   log "=== Canonical Enforcer (Active Hours) ==="
+  local fail_count=0
   for repo in "${CANONICAL_REPOS[@]}"; do
-    process_repo "$repo" || true
+    if ! process_repo "$repo"; then
+      fail_count=$((fail_count + 1))
+    fi
   done
+  if [[ "$fail_count" -gt 0 ]]; then
+    log "=== Complete (errors=$fail_count) ==="
+    return 1
+  fi
   log "=== Complete ==="
 }
 

@@ -52,9 +52,11 @@
 | canonical-sync-v8.sh | Evacuate dirty canonicals, reset to master | 3:05 AM | bd-obyk |
 | worktree-push.sh | Push unpushed worktree branches | 3:15 AM | bd-s7a3 |
 | worktree-gc-v8.sh | Prune merged worktrees | 3:30 AM | bd-7jpo |
-| queue-hygiene-enforcer.sh | PR queue hygiene (DX_CONTROLLER only) | */4h | bd-gdlr |
+| queue-hygiene-enforcer.sh | Auto-merge policy enforcement + rescue PR cleanup (DX_CONTROLLER only) | */4h | bd-gdlr |
 | dx-job-wrapper.sh | Wrap all above with state + Slack alerts | N/A | bd-suaw |
-| dx-audit.sh | V8 invariant audit (rescue branches, trailers) | Weekly | bd-rrb9 |
+| dx-audit.sh | V8 invariant audit (lookback rescue events, trailers) | Weekly | bd-rrb9 |
+
+Runbook: `docs/DX_V8_6_RESCUE_LOOP_RUNBOOK.md`
 
 ## Controller Pattern
 
@@ -175,7 +177,7 @@ The following V5-V7 components are removed in V8:
 
 | Bead | Script | PR | Notes |
 |------|--------|----|-------|
-| bd-gdlr | queue-hygiene-enforcer.sh | #123 | DX_CONTROLLER=1 guard. 4 rules: DIRTY→disable auto-merge, BEHIND>6h→update branch, empty rescue→delete, stuck>72h→disable. Bug found: stdout corruption (same pattern as gc) — fixed in review. |
+| bd-gdlr | queue-hygiene-enforcer.sh | #123 | DX_CONTROLLER=1 guard. Auto-merge is disabled unconditionally on any PR; empty rescue PRs are closed/deleted. Bug found: stdout corruption (same pattern as gc) — fixed in review. |
 
 ### Phase 3: Alerting (implemented by Gemini 2.5 Flash, reviewed by Claude Code)
 

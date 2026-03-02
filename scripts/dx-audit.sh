@@ -39,6 +39,20 @@ done
 # Timestamp
 TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 CUTOFF_DATE=$(date -u -v-${LOOKBACK_DAYS}d +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "${LOOKBACK_DAYS} days ago" +"%Y-%m-%dT%H:%M:%SZ")
+CUTOFF_EPOCH=$(date -u -v-${LOOKBACK_DAYS}d +%s 2>/dev/null || date -u -d "${LOOKBACK_DAYS} days ago" +%s)
+
+iso_to_epoch() {
+  local iso="$1"
+  date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$iso" +%s 2>/dev/null || date -u -d "$iso" +%s 2>/dev/null || echo ""
+}
+
+rescue_branch_to_iso() {
+  local branch="$1"
+  local ts
+  ts=$(echo "$branch" | sed -nE 's/.*-([0-9]{8}T[0-9]{6}Z)$/\1/p')
+  [[ -z "$ts" ]] && return 1
+  echo "${ts:0:4}-${ts:4:2}-${ts:6:2}T${ts:9:2}:${ts:11:2}:${ts:13:2}Z"
+}
 
 # Initialize counters
 declare -A rescue_counts
@@ -67,24 +81,27 @@ for repo in "${REPOS[@]}"; do
   repo_name=$(basename "$repo")
   echo "Auditing $repo..." >&2
 
-  # 1. Rescue branches (canonical violation evidence)
+  # 1. Rescue branch events within lookback window (canonical violation evidence)
   rescue_branches=$(gh api "repos/$repo/branches" --paginate --jq '.[].name | select(startswith("rescue-"))' 2>/dev/null || echo "")
-  if [[ -n "$rescue_branches" ]]; then
-    rescue_count=$(echo "$rescue_branches" | wc -l | tr -d ' ')
-  else
-    rescue_count=0
-  fi
-  rescue_counts[$repo_name]=$rescue_count
-  total_rescue=$((total_rescue + rescue_count))
+  rescue_count=0
 
   if [[ -n "$rescue_branches" ]]; then
     while IFS= read -r branch; do
       [[ -z "$branch" ]] && continue
-      # Get last commit date on rescue branch
-      commit_date=$(gh api "repos/$repo/branches/$branch" --jq '.commit.commit.committer.date' 2>/dev/null || echo "unknown")
-      rescue_events="${rescue_events}| ${commit_date} | ${branch} | ${repo_name} |\n"
+      branch_ts="$(rescue_branch_to_iso "$branch" || true)"
+      if [[ -z "$branch_ts" ]]; then
+        continue
+      fi
+      branch_epoch="$(iso_to_epoch "$branch_ts")"
+      if [[ -z "$branch_epoch" || "$branch_epoch" -lt "$CUTOFF_EPOCH" ]]; then
+        continue
+      fi
+      rescue_count=$((rescue_count + 1))
+      rescue_events="${rescue_events}| ${branch_ts} | ${branch} | ${repo_name} |\n"
     done <<< "$rescue_branches"
   fi
+  rescue_counts[$repo_name]=$rescue_count
+  total_rescue=$((total_rescue + rescue_count))
 
   # 2. Feature-Key trailer compliance (recent commits on master)
   # Check last 20 commits for Feature-Key trailer
@@ -148,7 +165,7 @@ Lookback: ${LOOKBACK_DAYS} days
 ### Summary
 | Metric | Count | Status |
 |--------|-------|--------|
-| Rescue branches (canonical violations) | $total_rescue | $([ $total_rescue -eq 0 ] && echo '✅ OK' || echo '⚠️ VIOLATION') |
+| Rescue branch events (${LOOKBACK_DAYS}d) | $total_rescue | $([ $total_rescue -eq 0 ] && echo '✅ OK' || echo '⚠️ VIOLATION') |
 | Commits missing Feature-Key | $total_missing_fk | $([ $total_missing_fk -lt 5 ] && echo '✅ OK' || echo '⚠️ CHECK') |
 | Commits missing Agent: trailer | $total_missing_agent | $([ $total_missing_agent -lt 5 ] && echo '✅ OK' || echo '⚠️ CHECK') |
 | PRs with auto-merge enabled | $total_auto_merge | $([ $total_auto_merge -eq 0 ] && echo '✅ OK' || echo '❌ VIOLATION') |
@@ -170,7 +187,7 @@ Lookback: ${LOOKBACK_DAYS} days
   if [[ -n "$rescue_events" ]]; then
     output="${output}
 
-### Rescue Branch Events (Canonical Violations)
+### Rescue Branch Events (Canonical Violations, ${LOOKBACK_DAYS}d)
 | Timestamp | Branch | Repo |
 |-----------|--------|------|
 $(echo -e "$rescue_events")"
@@ -179,7 +196,7 @@ $(echo -e "$rescue_events")"
   output="${output}
 
 ### Invariant Definitions
-1. **Rescue branches**: Created when canonical-sync-v8 evacuates dirty repos. High count = agents editing canonicals.
+1. **Rescue branch events (${LOOKBACK_DAYS}d)**: New rescue branches created during lookback. High count = canonical workflow violations.
 2. **Feature-Key**: Every commit should have \`Feature-Key: bd-XXXX\` trailer for traceability.
 3. **Agent trailer**: Every agent commit should have \`Agent: <name>\` trailer for attribution.
 4. **Auto-merge**: Should NEVER be enabled. Humans merge, not bots.
@@ -192,6 +209,7 @@ elif [[ "$OUTPUT_FORMAT" == "json" ]]; then
   "generated_at": "$TS",
   "lookback_days": $LOOKBACK_DAYS,
   "summary": {
+    "rescue_branches_lookback": $total_rescue,
     "rescue_branches": $total_rescue,
     "missing_feature_key": $total_missing_fk,
     "missing_agent_trailer": $total_missing_agent,
@@ -203,6 +221,7 @@ elif [[ "$OUTPUT_FORMAT" == "json" ]]; then
 $(for repo in "${REPOS[@]}"; do
   name=$(basename "$repo")
   echo "    \"$name\": {"
+  echo "      \"rescue_branches_lookback\": ${rescue_counts[$name]:-0},"
   echo "      \"rescue_branches\": ${rescue_counts[$name]:-0},"
   echo "      \"missing_feature_key\": ${missing_feature_key[$name]:-0},"
   echo "      \"missing_agent_trailer\": ${missing_agent_trailer[$name]:-0},"
@@ -235,7 +254,7 @@ elif [[ "$OUTPUT_FORMAT" == "slack" ]]; then
 
   # Build main message (≤300 chars)
   output="${status_emoji} *V8 Weekly Audit* (${LOOKBACK_DAYS}d):
-• Rescue branches: ${total_rescue} $([ $total_rescue -eq 0 ] && echo '✅' || echo '❌')
+• Rescue events (${LOOKBACK_DAYS}d): ${total_rescue} $([ $total_rescue -eq 0 ] && echo '✅' || echo '❌')
 • Auto-merge PRs: ${total_auto_merge} $([ $total_auto_merge -eq 0 ] && echo '✅' || echo '❌')
 • Skill Drift: ${total_skill_drift} $([ $total_skill_drift -eq 0 ] && echo '✅' || echo '⚠️')
 • Stale PRs: ${total_stale} | Drafts: ${total_draft}"
