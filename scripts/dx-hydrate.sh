@@ -211,14 +211,24 @@ fi
 mkdir -p "$HOME/logs/dx"
 
 # Remove non-canonical duplicate lines before (re)installing V8 marker entries.
+remove_wrapper_job_entries "canonical-evacuate" "canonical-evacuate-active.sh"
 remove_wrapper_job_entries "canonical-sync" "canonical-sync-v8.sh"
 remove_wrapper_job_entries "worktree-push" "worktree-push.sh"
 remove_wrapper_job_entries "worktree-gc" "worktree-gc-v8.sh"
 remove_wrapper_job_entries "queue-enforcer" "queue-hygiene-enforcer.sh"
+remove_v8_marker_variants "V8.3.x: Canonical Enforcer - Active Hours (5am-5pm PT)"
+remove_v8_marker_variants "V8: canonical-evacuate-active-15m"
+remove_v8_marker_variants "V8: canonical-evacuate-active-1700"
 remove_v8_marker_variants "V8: canonical-sync"
 remove_v8_marker_variants "V8: worktree-push"
 remove_v8_marker_variants "V8: worktree-gc"
 remove_v8_marker_variants "V8: queue-hygiene-enforcer"
+
+install_cron_entry "V8: canonical-evacuate-active-15m" \
+    "*/15 5-16 * * * TZ=America/Los_Angeles $BASH_PATH $WRAPPER canonical-evacuate -- $AGENTS_ROOT/scripts/canonical-evacuate-active.sh >> $HOME/logs/dx/canonical-evacuate.log 2>&1"
+
+install_cron_entry "V8: canonical-evacuate-active-1700" \
+    "0 17 * * * TZ=America/Los_Angeles $BASH_PATH $WRAPPER canonical-evacuate -- $AGENTS_ROOT/scripts/canonical-evacuate-active.sh >> $HOME/logs/dx/canonical-evacuate.log 2>&1"
 
 install_cron_entry "V8: canonical-sync" \
     "5 3 * * * $BASH_PATH $WRAPPER canonical-sync -- $AGENTS_ROOT/scripts/canonical-sync-v8.sh >> $HOME/logs/dx/canonical-sync.log 2>&1"
@@ -231,6 +241,24 @@ install_cron_entry "V8: worktree-gc" \
 
 install_cron_entry "V8: queue-hygiene-enforcer" \
     "0 */4 * * * DX_CONTROLLER=\${DX_CONTROLLER:-0} $BASH_PATH $WRAPPER queue-enforcer -- $AGENTS_ROOT/scripts/queue-hygiene-enforcer.sh >> $HOME/logs/dx/queue-enforcer.log 2>&1"
+
+# 3.9 macOS legacy launchd policy guard (V8.6)
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    echo -e "${GREEN} -> Enforcing macOS launchd policy (disable legacy io.agentskills.ru)...${RESET}"
+    LEGACY_LABEL="io.agentskills.ru"
+    LEGACY_PLIST="$HOME/Library/LaunchAgents/${LEGACY_LABEL}.plist"
+    USER_DOMAIN="gui/$(id -u)"
+
+    launchctl bootout "${USER_DOMAIN}/${LEGACY_LABEL}" >/dev/null 2>&1 || true
+    launchctl disable "${USER_DOMAIN}/${LEGACY_LABEL}" >/dev/null 2>&1 || true
+
+    if [[ -f "$LEGACY_PLIST" ]]; then
+        mkdir -p "$HOME/.v7-quarantine"
+        TS="$(date -u +%Y%m%dT%H%M%SZ)"
+        mv "$LEGACY_PLIST" "$HOME/.v7-quarantine/${LEGACY_LABEL}.${TS}.plist" 2>/dev/null || true
+        echo "   Quarantined legacy LaunchAgent plist: $LEGACY_LABEL"
+    fi
+fi
 
 # 3.6 Configure Beads Merge Driver
 echo -e "${GREEN} -> Configuring Beads merge driver...${RESET}"
