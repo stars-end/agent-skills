@@ -11,9 +11,10 @@
 ┌─────────────────────────────────────────────┐
 │                 CRON (macOS)                 │
 │                                             │
-│  3:05  canonical-sync-v8  (evacuate+reset)  │
+│  5:00-17:00 PT  canonical-evacuate-active   │
+│  3:05  canonical-sync-v8  (nightly reset)   │
 │  3:15  worktree-push      (durability)      │
-│  3:30  worktree-gc-v8     (cleanup)         │
+│  hourly worktree-gc-v8    (cleanup)         │
 │  */4h  queue-enforcer     (PR hygiene)      │
 │                                             │
 │  All wrapped by dx-job-wrapper              │
@@ -49,9 +50,10 @@
 
 | Script | Purpose | Schedule | Beads |
 |--------|---------|----------|-------|
+| canonical-evacuate-active.sh | Active-hours canonical guard (warn/evacuate state machine) | every 15m (5:00-16:59 PT) + 17:00 PT | bd-eaza |
 | canonical-sync-v8.sh | Evacuate dirty canonicals, reset to master | 3:05 AM | bd-obyk |
 | worktree-push.sh | Push unpushed worktree branches | 3:15 AM | bd-s7a3 |
-| worktree-gc-v8.sh | Prune merged worktrees | 3:30 AM | bd-7jpo |
+| worktree-gc-v8.sh | Prune merged worktrees | hourly | bd-7jpo |
 | queue-hygiene-enforcer.sh | Auto-merge policy enforcement + rescue PR cleanup (DX_CONTROLLER only) | */4h | bd-gdlr |
 | dx-job-wrapper.sh | Wrap all above with state + Slack alerts | N/A | bd-suaw |
 | dx-audit.sh | V8 invariant audit (lookback rescue events, trailers) | Weekly | bd-rrb9 |
@@ -75,19 +77,27 @@ not set to 1. This prevents duplicate actions across VMs.
 
 | VM | Cron jobs | DX_CONTROLLER | Status |
 |----|-----------|---------------|--------|
-| macmini | All 4 + wrapper | 1 | Primary |
-| epyc6 | sync + push + gc | 0 | Replica |
-| epyc12 | sync + push + gc | 0 | Replica |
-| homedesktop-wsl | sync + push + gc | 0 | Replica |
+| macmini | active-evacuate + sync + push + gc + enforcer (+ wrapper) | 1 | Primary |
+| epyc6 | active-evacuate + sync + push + gc + enforcer(no-op) | 0 | Replica |
+| epyc12 | active-evacuate + sync + push + gc + enforcer(no-op) | 0 | Replica |
+| homedesktop-wsl | active-evacuate + sync + push + gc + enforcer(no-op) | 0 | Replica |
 
-Replicas run sync/push/gc for their local canonicals but do NOT run the
-enforcer (no DX_CONTROLLER).
+All hosts run the same V8.6 schedule entries. Only the controller host executes
+enforcer actions (`DX_CONTROLLER=1`); replicas run the same job in no-op mode.
 
 ## Crontab (macmini — canonical)
 
 ```cron
 # V8 DX Automation (macmini)
 DX_CONTROLLER=1
+
+# V8: canonical-evacuate-active-15m
+*/15 5-16 * * * TZ=America/Los_Angeles /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh canonical-evacuate -- \
+  ~/agent-skills/scripts/canonical-evacuate-active.sh >> ~/logs/dx/canonical-evacuate.log 2>&1
+
+# V8: canonical-evacuate-active-1700
+0 17 * * * TZ=America/Los_Angeles /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh canonical-evacuate -- \
+  ~/agent-skills/scripts/canonical-evacuate-active.sh >> ~/logs/dx/canonical-evacuate.log 2>&1
 
 # V8: canonical-sync
 5 3 * * * /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh canonical-sync -- \
@@ -98,11 +108,11 @@ DX_CONTROLLER=1
   ~/agent-skills/scripts/worktree-push.sh >> ~/logs/dx/worktree-push.log 2>&1
 
 # V8: worktree-gc
-30 3 * * * /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh worktree-gc -- \
+0 * * * * /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh worktree-gc -- \
   ~/agent-skills/scripts/worktree-gc-v8.sh >> ~/logs/dx/worktree-gc.log 2>&1
 
 # V8: queue-hygiene-enforcer (controller only)
-0 */4 * * * /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh queue-enforcer -- \
+0 */4 * * * DX_CONTROLLER=${DX_CONTROLLER:-0} /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh queue-enforcer -- \
   ~/agent-skills/scripts/queue-hygiene-enforcer.sh >> ~/logs/dx/queue-enforcer.log 2>&1
 
 # System Cron Workaround (OpenClaw native cron broken)

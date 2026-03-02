@@ -31,6 +31,17 @@ Stop repeated `rescue-*` branch storms without hiding real canonical violations.
    - `tail -80 ~/logs/dx/canonical-evacuate.log`
    - Confirm no repeated 15-minute dirty evacuations for `off_trunk + clean` state.
 
+## V8.6 Schedule Contract (All Canonical VMs)
+- `canonical-evacuate-active`:
+  - `*/15 5-16 * * * TZ=America/Los_Angeles ...`
+  - `0 17 * * * TZ=America/Los_Angeles ...`
+- `canonical-sync`: `5 3 * * * ...`
+- `worktree-push`: `15 3 * * * ...`
+- `worktree-gc`: `0 * * * * ...`
+- `queue-hygiene-enforcer`: `0 */4 * * * DX_CONTROLLER=${DX_CONTROLLER:-0} ...`
+
+Only the controller host (`DX_CONTROLLER=1`) performs enforcer actions.
+
 ## If Rescue Storm Persists
 1. Identify state:
    - `jq '.["agent-skills"]' ~/.dx-state/dirty-incidents.json`
