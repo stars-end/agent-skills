@@ -33,19 +33,28 @@ fi
 echo "Running bd doctor --fix (best effort)..."
 bd doctor --fix >/dev/null 2>&1 || true
 
-echo "Running fleet sync (MinIO)..."
-if [[ -f "$BEADS_REPO/.beads/beads_sync.sh" ]]; then
-  source "$BEADS_REPO/.beads/minio_env.sh" 2>/dev/null || true
-  if timeout 120 "$BEADS_REPO/.beads/beads_sync.sh" pull 2>/tmp/bd-doctor-fix-sync.err; then
-    echo "✅ MinIO fleet sync completed"
-  else
-    echo "⚠️  MinIO fleet sync failed/timed out"
-    sed -n '1,80p' /tmp/bd-doctor-fix-sync.err || true
+echo "Running fleet sync (Dolt native)..."
+cd "$BEADS_REPO/.beads/dolt/beads_bd" 2>/dev/null || {
+  echo "⚠️  Dolt database not found, skipping fleet sync"
+  cd "$BEADS_REPO"
+  if bd doctor --json 2>/dev/null | grep -q '"status":"error"'; then
+    echo "❌ Remaining doctor errors detected"
+    exit 1
   fi
+  echo "✅ Beads remediation complete (no sync)"
+  exit 0
+}
+
+if timeout 120 dolt pull origin main --ff-only 2>/tmp/bd-doctor-fix-sync.err; then
+  echo "✅ Fleet sync completed"
 else
-  echo "⚠️  Fleet sync script not found, skipping remote sync"
+  EXIT_CODE=$?
+  echo "❌ Fleet sync failed (exit code: $EXIT_CODE)"
+  cat /tmp/bd-doctor-fix-sync.err
+  exit 1
 fi
 
+cd "$BEADS_REPO"
 if bd doctor --json 2>/dev/null | grep -q '"status":"error"'; then
   echo "❌ Remaining doctor errors detected"
   exit 1

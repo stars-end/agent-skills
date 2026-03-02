@@ -82,7 +82,6 @@ Fleet checks from macmini:
 ```bash
 ssh epyc12 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
 ssh homedesktop-wsl 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
-ssh feng@epyc6 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
 ```
 
 ## 5) Incident Triage
@@ -145,33 +144,32 @@ systemctl --user start beads-dolt.service
 cd ~/bd && bd dolt test --json && bd status --json
 ```
 
-## 7) Fleet Sync (MinIO S3)
+## 7) Fleet Sync (GitHub Dolt Remote)
 
-Fleet sync uses file:// Dolt remotes + S3-compatible MinIO for cross-host synchronization.
+Fleet sync uses GitHub-hosted Dolt remotes for cross-host synchronization via SSH.
 
-> **Note**: Dolt's `aws://` remote requires DynamoDB for locking. MinIO is S3-compatible only, so we use file:// remotes synced via `mc mirror`.
+> **Architecture**: GitHub private repo `git@github.com:stars-end/bd-dolt.git` stores Dolt data under `refs/dolt/data`. Auth via SSH keys.
 
-### Sync Workflow
+### Daily Sync Workflow
 
 ```bash
-# On source host after mutations:
+# On any host after mutations:
 cd ~/bd/.beads/dolt/beads_bd
-dolt push fleet-cloud main
-source ~/.beads/minio_env.sh && ~/.beads/beads_sync.sh push
+dolt push origin main
 
-# On target host to sync:
-source ~/.beads/minio_env.sh && ~/.beads/beads_sync.sh pull
+# On target host before starting work:
 cd ~/bd/.beads/dolt/beads_bd
-dolt pull fleet-cloud main --ff-only
+dolt pull origin main --ff-only
 ```
 
 ### Preflight Sync Check
 
-Before dispatch, verify fleet sync state:
+Before dispatch, ensure you have latest state:
 
 ```bash
-~/.beads/beads_sync.sh status
-~/.beads/beads_sync.sh pull
+cd ~/bd/.beads/dolt/beads_bd
+dolt pull origin main --ff-only
+bd dolt test --json
 ```
 
 ### Rollback Procedure
@@ -187,21 +185,25 @@ mv dolt "dolt.corrupted.$(date +%Y%m%d%H%M%S)"
 tar -xzf ~/bd-backup-*.tgz
 
 # 3) Restart and validate
-systemctl --user start beads-dolt.service
+systemctl --user start beads-dolt.service  # Linux
+launchctl kickstart gui/$(id -u)/com.starsend.beads-dolt  # macOS
 cd ~/bd && bd dolt test --json && bd status --json
 ```
 
-### Files
+### Remote Details
 
-- `~/bd/.beads/beads_sync.sh` - MinIO sync script
-- `~/bd/.beads/minio_env.sh` - Credential sourcing from 1Password
-- `~/bd-backup-*.tgz` - Host-local backups
+- **Remote name**: `origin`
+- **URL**: `git@github.com:stars-end/bd-dolt.git`
+- **Auth**: SSH keys (non-interactive after initial setup)
 
-### Known Limitations
+### Deprecated (Do Not Use)
 
-- Sync is manual (not automatic on mutation)
-- Requires `mc` (MinIO client) installed
-- `bd status --json` counts may differ between bd CLI versions
+| Path/Method | Status | Notes |
+|-------------|--------|-------|
+| `~/bd/.beads/beads_sync.sh` | DEPRECATED | Was MinIO mc mirror |
+| `~/bd/.beads/minio_env.sh` | DEPRECATED | Was MinIO credentials |
+| `~/bd/.beads/fleet-remote/` | DEPRECATED | Was file:// transport |
+| SSH/rsync fleet sync | DEPRECATED | Was direct host sync |
 
 ## 8) Operator Rules
 
@@ -209,4 +211,4 @@ cd ~/bd && bd dolt test --json && bd status --json
 - Do not launch unmanaged long-running Dolt servers during active waves.
 - Keep one managed service per host and validate before dispatch.
 - Treat `bd status --json` + `bd dolt test --json` as the source of truth.
-- Sync to MinIO after significant mutations before switching hosts.
+- Push to `origin` after significant mutations before switching hosts.
