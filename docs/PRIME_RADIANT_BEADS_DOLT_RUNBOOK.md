@@ -7,7 +7,10 @@ This is the operating contract for agents working in `~/prime-radiant-ai` with c
 - Canonical Beads repo: `~/bd` (`git@github.com:stars-end/bd.git`)
 - Canonical backend: Dolt server mode
 - Canonical hosts: `macmini`, `epyc12`, `epyc6`, `homedesktop-wsl`
-- Fleet sync V2 plan: `docs/BEADS_FLEET_SYNC_UPGRADE_PLAN_V2.md` (Railway MinIO + Dolt native)
+- **Fleet sync: MinIO S3 (V2 - ACTIVE)** - See Section 7 for sync workflow
+- Legacy JSONL-over-Git sync: **DEPRECATED** - Do not use `bd sync`
+
+> **Note**: The V2 Railway MinIO cutover is complete. All fleet hosts use Dolt-native sync via MinIO S3-compatible storage.
 
 ## 1) Preflight (Required Before Dispatch)
 
@@ -146,9 +149,45 @@ systemctl --user start beads-dolt.service
 cd ~/bd && bd dolt test --json && bd status --json
 ```
 
-## 7) Operator Rules
+## 7) Fleet Sync (MinIO S3)
+
+Fleet sync uses file:// Dolt remotes + S3-compatible MinIO for cross-host synchronization.
+
+### Sync Workflow
+
+```bash
+# On source host after mutations:
+cd ~/bd/.beads/dolt/beads_bd
+dolt push fleet-cloud main
+source ~/.beads/minio_env.sh && ~/.beads/beads_sync.sh push
+
+# On target host to sync:
+source ~/.beads/minio_env.sh && ~/.beads/beads_sync.sh pull
+cd ~/bd/.beads/dolt/beads_bd
+dolt pull fleet-cloud main --ff-only
+```
+
+### Preflight Sync Check
+
+Before dispatch, verify fleet sync state:
+
+```bash
+# Check remote status
+~/.beads/beads_sync.sh status
+
+# Sync latest state
+~/.beads/beads_sync.sh pull
+```
+
+### Architecture Note
+
+Dolt's `aws://` remote requires DynamoDB for locking. MinIO is S3-compatible only.
+The file:// + S3 sync pattern provides equivalent functionality without DynamoDB dependency.
+
+## 8) Operator Rules
 
 - Do not run mutating `bd` commands from non-`~/bd` repos.
 - Do not launch unmanaged long-running Dolt servers during active waves.
 - Keep one managed service per host and validate before dispatch.
 - Treat `bd status --json` + `bd dolt test --json` as the source of truth.
+- Sync to MinIO after significant mutations before switching hosts.
