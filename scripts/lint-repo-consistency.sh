@@ -71,4 +71,19 @@ if find "$ROOT" -type f \( -name 'skill.md' -o -name 'Skill.md' \) | rg -n . >/d
   fail "non-standard skill file name found (must be SKILL.md)"
 fi
 
+# 6) OpenClaw is retained only for reasoning/triage messages; Slack transport sends
+# must use deterministic agent_coordination_send_message.
+if rg -n -S \
+  --hidden \
+  --glob '!**/.git/**' \
+  --glob '!scripts/lint-repo-consistency.sh' \
+  "openclaw\\s+message\\s+send" scripts >/dev/null 2>&1; then
+  rg -n -S \
+    --hidden \
+    --glob '!**/.git/**' \
+    --glob '!scripts/lint-repo-consistency.sh' \
+    "openclaw\\s+message\\s+send" scripts || true
+  fail "deterministic Slack transport must not use 'openclaw message send'; use agent_coordination_send_message"
+fi
+
 echo "OK: repo consistency checks passed"
