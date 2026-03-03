@@ -1,6 +1,11 @@
 # External Beads Database Distribution Plan
 
-**Status:** Draft | **Date:** 2026-01-31 | **POC:** agent-skills-pe5 (validated)
+> [!WARNING]
+> **Historical only.** This plan is archived and superseded by the epyc12 hub-spoke architecture in
+> [`docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md`](docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md).
+> Do not use for active fleet operations.
+
+**Status:** Archived Historical | **Date:** 2026-01-31 | **POC:** agent-skills-pe5 (validated)
 
 ---
 

@@ -5,8 +5,8 @@
 This is the operating contract for agents working in `~/prime-radiant-ai` with centralized Beads on `~/bd`.
 
 - Canonical Beads repo: `~/bd` (`git@github.com:stars-end/bd.git`)
-- Canonical backend: Dolt server mode
-- Canonical hosts: `macmini`, `epyc12`, `epyc6`, `homedesktop-wsl`
+- Canonical backend: Dolt SQL server mode
+- Canonical fleet: `epyc12` hub, `macmini`, `homedesktop-wsl`, `epyc6` spokes
 
 ## 1) Preflight (Required Before Dispatch)
 
@@ -30,11 +30,44 @@ macOS host must pass:
 launchctl print gui/$(id -u)/com.starsend.beads-dolt
 ```
 
+Set/verify fleet connection settings for all hosts:
+
+```bash
+export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
+if [[ -z "${BEADS_DOLT_SERVER_HOST:-}" ]]; then
+  if [[ "$(hostname)" == "epyc12" ]]; then
+    export BEADS_DOLT_SERVER_HOST="127.0.0.1"
+  elif [[ -n "${BEADS_EPYC12_TAILSCALE_IP:-}" ]]; then
+    export BEADS_DOLT_SERVER_HOST="$BEADS_EPYC12_TAILSCALE_IP"
+  else
+    export BEADS_DOLT_SERVER_HOST="$(tailscale ip -4 2>/dev/null | awk 'NF{print $1; exit}')"
+  fi
+fi
+if [[ -z "${BEADS_DOLT_SERVER_HOST:-}" ]]; then
+  echo "❌ BEADS_DOLT_SERVER_HOST is not set and could not be auto-detected"
+  exit 1
+fi
+
+echo "fleet target: ${BEADS_DOLT_SERVER_HOST}:${BEADS_DOLT_SERVER_PORT}"
+```
+
+Spoke hosts must resolve `BEADS_DOLT_SERVER_HOST` to the epyc12 Tailscale IP.
+If host auto-detection is not stable on that host, set `BEADS_EPYC12_TAILSCALE_IP` in profile once.
+
+Connectivity check:
+
+```bash
+if command -v nc >/dev/null 2>&1; then
+  nc -z "$BEADS_DOLT_SERVER_HOST" "$BEADS_DOLT_SERVER_PORT"
+else
+  : < /dev/tcp/"$BEADS_DOLT_SERVER_HOST"/"$BEADS_DOLT_SERVER_PORT"
+fi
+```
+
 Expected result:
 - `bd dolt test --json` shows `"connection_ok": true`
 - `bd status --json` returns non-zero `summary.total_issues`
-- service state is active/running
-- exactly one listener on `127.0.0.1:3307`, owned by managed `dolt sql-server --data-dir ~/bd/.beads/dolt`
+- service is active/running on `epyc12`
 
 ## 2) Prime Radiant Worktree Flow
 
@@ -81,9 +114,15 @@ bd ready --limit 5 --json
 Fleet checks from macmini:
 
 ```bash
-ssh epyc12 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
-ssh homedesktop-wsl 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
-ssh feng@epyc6 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
+export EPYC12_BEADS_HOST="${EPYC12_BEADS_HOST:-${BEADS_DOLT_SERVER_HOST}}"
+if [[ -z "$EPYC12_BEADS_HOST" ]]; then
+  echo "❌ EPYC12_BEADS_HOST or BEADS_DOLT_SERVER_HOST must be set"
+  exit 1
+fi
+
+ssh epyc12 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=127.0.0.1; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
+ssh homedesktop-wsl "cd ~/bd; export BEADS_DOLT_SERVER_HOST=${EPYC12_BEADS_HOST}; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
+ssh feng@epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=${EPYC12_BEADS_HOST}; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
 ```
 
 ## 5) Incident Triage
@@ -91,16 +130,11 @@ ssh feng@epyc6 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary
 ### A) `connection_ok: false`
 
 1. Verify service state (systemd/launchd)
-2. Check logs:
+2. Check network from spoke:
 
-Linux:
 ```bash
-journalctl --user -u beads-dolt.service -n 80 --no-pager
-```
-
-macOS:
-```bash
-tail -n 80 ~/bd/.beads/dolt-launchd.err.log
+grep -q "BEADS_DOLT_SERVER_HOST" ~/.zshrc ~/.bashrc
+nc -z "$BEADS_DOLT_SERVER_HOST" "$BEADS_DOLT_SERVER_PORT"
 ```
 
 3. Restart service:
@@ -115,32 +149,27 @@ macOS:
 launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt
 ```
 
-### B) Lock contention (`database ... is locked by another dolt process`)
+### B) `database ... is locked`
 
-- Ensure exactly one Dolt server per host for `~/bd/.beads/dolt`
-- Stop ad hoc/manual Dolt processes, then restart managed service
-
-Port-owner checks:
+- Ensure no extra `dolt sql-server` instances are running for `~/bd/.beads/dolt`
+- Stop unmanaged process on the host, then restart managed service
 
 ```bash
-# exactly one listener expected
-lsof -nP -iTCP@127.0.0.1:3307 -sTCP:LISTEN
-ps -p "$(lsof -t -iTCP@127.0.0.1:3307 -sTCP:LISTEN)" -o command=
+lsof -nP -iTCP@"${BEADS_DOLT_SERVER_HOST}:$BEADS_DOLT_SERVER_PORT" -sTCP:LISTEN
 ```
 
-### C) Divergent host counts
+### C) Divergent host summaries
 
-- Select source host (normally `epyc12`)
-- Stop source + target services
-- Copy source `.beads/dolt` snapshot to target
-- Restart services
-- Re-run `bd dolt test --json` and compare `bd status --json` summaries
+- Verify all hosts use same server target
+  - Hub: `epyc12`
+  - Spokes: `BEADS_DOLT_SERVER_HOST` resolves to epyc12 Tailscale IP
+- Compare `bd status --json | jq -c '.summary'` output
 
 ## 6) Recovery: Corrupt/Unusable Dolt Data
 
 1. Stop service
 2. Move bad data aside
-3. Restore from latest `dolt.pre-sync-*` backup or known-good host snapshot
+3. Restore from latest `dolt.pre-sync-*` backup or known-good snapshot
 4. Start service and validate
 
 Linux example:
@@ -154,77 +183,48 @@ systemctl --user start beads-dolt.service
 cd ~/bd && bd dolt test --json && bd status --json
 ```
 
-## 7) Fleet Sync (Canonical: Dolt Remote Origin)
+## 7) Fleet Sync (Canonical: Hub-Spoke Dolt SQL)
 
-Canonical fleet sync path is native Dolt `push`/`pull` against `origin` from
-`~/bd/.beads/dolt/beads_bd` on each host.
+There is no per-host local Git/Dolt pull-push sync in active operation.
 
-### Canonical Sync Workflow
-
-```bash
-# Source host after local mutations
-cd ~/bd/.beads/dolt/beads_bd
-dolt push origin main
-
-# Target host before continuing work
-cd ~/bd/.beads/dolt/beads_bd
-dolt pull origin main --ff-only
+```text
+Hub:    epyc12
+Spokes: macmini, homedesktop-wsl, epyc6
+Data:   epyc12:/home/$USER/bd/.beads/dolt
 ```
 
-### Daily Operator Checklist
+### Deployment Contract
+
+- Hub runs `dolt sql-server --data-dir ~/bd/.beads/dolt`
+- Spokes connect via `BEADS_DOLT_SERVER_HOST=<epyc12_tailscale_ip>`
+- `BEADS_DOLT_SERVER_PORT` is shared across hosts (currently `3307`)
+- `bd` commands run against the SQL endpoint from all hosts
+
+### Recovery (Host Divergence)
 
 ```bash
-cd ~/bd
-bd dolt test --json
-bd status --json
-
-cd ~/bd/.beads/dolt/beads_bd
-dolt remote -v
-dolt pull origin main --ff-only
+# 1) validate hub is the source of truth
+ssh epyc12 'cd ~/bd && bd dolt test --json && bd status --json'
+# 2) validate spoke target points to hub
+ssh homedesktop-wsl 'grep -q "BEADS_DOLT_SERVER_HOST" ~/.zshrc ~/.bashrc'
+# 3) re-run dispatch preflight on each host
 ```
 
 ### Hard-Fail Conditions
 
-- `dolt pull origin main --ff-only` fails (divergence or connectivity)
-- more than one listener exists on `127.0.0.1:3307`
-- listener command does not match managed data dir `~/bd/.beads/dolt`
-
-### Recovery (Deterministic Peer Restore)
-
-If local Dolt data is corrupt or service loops:
-
-```bash
-# 1) stop service
-systemctl --user stop beads-dolt.service  # Linux
-launchctl bootout gui/$(id -u)/com.starsend.beads-dolt  # macOS
-
-# 2) move bad data aside
-cd ~/bd/.beads
-mv dolt "dolt.corrupted.$(date +%Y%m%d%H%M%S)"
-
-# 3) restore from healthy peer snapshot
-# example (macmini <- epyc12):
-ssh epyc12 'tar -C /home/fengning/bd/.beads/dolt -cf - .' | tar -C ~/bd/.beads/dolt -xf -
-
-# 4) restart and validate
-systemctl --user start beads-dolt.service  # Linux
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.starsend.beads-dolt.plist 2>/dev/null || true
-launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt  # macOS
-cd ~/bd && bd dolt test --json && bd status --json
-```
-
-### Deprecated (Historical)
-
-The MinIO `file://` mirror workflow and `~/.beads/beads_sync.sh` path are historical only.
-Do not use them for active fleet sync.
+- Hub service down on epyc12
+- spoke target host is not set or not reachable
+- network path to epyc12 fails
+- more than one local listener on hub DB port
+- listener command does not match `dolt sql-server --data-dir ~/bd/.beads/dolt`
 
 ## 8) Operator Rules
 
 - Do not run mutating `bd` commands from non-`~/bd` repos.
-- Do not launch unmanaged long-running Dolt servers during active waves.
+- Do not launch unmanaged Dolt servers during active waves.
 - Keep one managed service per host and validate before dispatch.
-- Treat `bd status --json` + `bd dolt test --json` as the source of truth.
-- Sync via `dolt push/pull origin main` before switching hosts.
+- Treat `bd status --json` + `bd dolt test --json` as source of truth.
+- Do not use local-file or Git-based Beads sync as primary fleet transport.
 
 ## 9) ID Reconciliation (Canonical Contract)
 

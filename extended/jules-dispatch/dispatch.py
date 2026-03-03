@@ -19,14 +19,15 @@ import json
 import subprocess
 import sys
 import argparse
-import os
 import re
+import shutil
 import time
 from pathlib import Path
 from typing import List, Dict, Optional
 
 # Constants
 BEADS_FILE = ".beads/issues.jsonl"
+CANONICAL_BEADS_REPO = Path.home() / "bd"
 DOCS_DIR = "docs"
 LABEL_TRIGGER = "jules-ready"
 
@@ -82,15 +83,59 @@ def get_repo_name() -> Optional[str]:
 
 
 def load_issues(repo_root: Path) -> List[Dict]:
-    """Load all issues from the JSONL file."""
-    issues = []
+    """Load all issues from canonical Beads (`~/bd`) when possible.
+
+    Falls back to local `.beads/issues.jsonl` for legacy repos.
+    """
+    issues = load_issues_from_bd_cli()
+    if issues:
+        return issues
+
     beads_path = repo_root / BEADS_FILE
-    
     if not beads_path.exists():
-        print(f"❌ Error: Beads file not found at {beads_path}")
+        print(f"⚠️  Beads CLI unavailable and no local issues file at {beads_path}")
         return []
-    
-    with open(beads_path, "r") as f:
+    print(f"⚠️  Falling back to legacy JSONL source: {beads_path}")
+    return load_issues_from_jsonl(beads_path)
+
+
+def load_issues_from_bd_cli() -> List[Dict]:
+    """Load open issues using the canonical Beads CLI (hub-spoke path)."""
+    if not shutil.which("bd"):
+        return []
+
+    try:
+        result = subprocess.run(
+            ["bd", "list", "--json", "--status", "open", "--limit", "0"],
+            cwd=str(CANONICAL_BEADS_REPO),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+
+    raw = result.stdout.strip()
+    if not raw:
+        return []
+
+    try:
+        payload = json.loads(raw)
+        if isinstance(payload, list):
+            return payload
+    except json.JSONDecodeError:
+        return []
+
+    return []
+
+
+def load_issues_from_jsonl(path: Path) -> List[Dict]:
+    """Load all issues from legacy `.beads/issues.jsonl`."""
+    issues = []
+    if not path.exists():
+        return []
+
+    with open(path, "r", encoding="utf-8") as f:
         for line in f:
             try:
                 if line.strip():
@@ -98,6 +143,14 @@ def load_issues(repo_root: Path) -> List[Dict]:
             except json.JSONDecodeError:
                 continue
     return issues
+
+
+def issue_has_label(issue: Dict, label: str) -> bool:
+    """Handle label payload differences between legacy JSONL and Beads CLI output."""
+    labels = issue.get("labels", []) or issue.get("label", [])
+    if isinstance(labels, str):
+        labels = [labels]
+    return label in labels
 
 
 def get_tech_plan(repo_root: Path, issue_id: str) -> Optional[str]:
@@ -283,12 +336,11 @@ def main():
             continue
         
         status = issue.get("status", "todo")
-        labels = issue.get("labels", [])
+        is_ready = issue_has_label(issue, LABEL_TRIGGER)
 
         if status not in ["todo", "open", "in_progress"]:
             continue
-            
-        is_ready = LABEL_TRIGGER in labels
+
         if not is_ready and not args.force:
             continue
 

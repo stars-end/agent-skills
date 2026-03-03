@@ -2,14 +2,14 @@
 name: beads-guard
 description: |
   Safe Beads workflow helper (warning-only). Use before bd sync/close/create to
-  avoid JSONL conflicts. Ensures you are on a feature branch, up to date with
-  origin/master, and stages Beads files cleanly with Feature-Key commits.
+  avoid Beads conflict. Ensures you are on a feature branch, up to date with
+  origin/master, and executes Beads operations against the canonical `~/bd` Dolt backend.
 tags: [beads, dx, guardrail]
 ---
 
 # Beads Guard
 
-Avoid recurring .beads/issues.jsonl conflicts and master commits.
+Avoid Beads drift and master commits with canonical Dolt backend checks.
 
 ## How to run (manual steps)
 
@@ -21,21 +21,23 @@ git status -sb
 git fetch origin master
 git rebase origin/master
 
-# 2) Clear stale locks
-rm -f .beads/bd.sock* || true
+# 2) Verify Beads connectivity (server mode)
+cd ~/bd && bd dolt test --json
+# If this fails, run `bd-doctor` before proceeding
+cd -
 
-# 3) Pull Beads DB to JSONL
-bd pull
-
-# 4) Do your Beads op
+# 3) Do your Beads op in canonical repo context
+cd ~/bd
+export BEADS_DIR="$HOME/bd/.beads"
+export BEADS_IGNORE_REPO_MISMATCH=1
 #   bd close <id> --reason "..."
 #   bd create "..." --type ... --priority ...
 #   bd sync
 
-# 5) Stage Beads files
-git add .beads/issues.jsonl .beads/deletions.jsonl 2>/dev/null || true
+# 4) Return and commit code changes only
+cd -
 
-# 6) Commit with Feature-Key trailer (on feature branch)
+# 5) Commit with Feature-Key trailer (on feature branch)
 git commit -m "beads: <summary>\n\nFeature-Key: <id>\nAgent: claude-code\nRole: backend-engineer"
 
 # 7) Push/PR as normal

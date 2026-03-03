@@ -225,23 +225,42 @@ echo ""
 echo "--- External Beads Database (BEADS_DIR) ---"
 check_beads_dir() {
     local expected_path="$HOME/bd/.beads"
+    local beads_dir_real
+    local expected_beads_db
+    local expected_real
     if [ -z "${BEADS_DIR:-}" ]; then
         echo -e "${RED}❌ BEADS_DIR not set${RESET}"
         ERRORS=$((ERRORS+1))
         return
     fi
-    local beads_dir_real=$(resolve_path "$BEADS_DIR")
-    local expected_real=$(resolve_path "$expected_path")
+    beads_dir_real=$(resolve_path "$BEADS_DIR")
+    expected_beads_db="${beads_dir_real}/dolt"
+    expected_real=$(resolve_path "$expected_path")
     if [ "$beads_dir_real" != "$expected_real" ]; then
         warn_only "BEADS_DIR points to non-standard location: $BEADS_DIR"
     else
         echo -e "${GREEN}✅ BEADS_DIR = $BEADS_DIR${RESET}"
     fi
-    if [ ! -f "$BEADS_DIR/beads.db" ]; then
-        echo -e "${RED}❌ Beads database not found at $BEADS_DIR${RESET}"
+
+    # Server mode compatibility: ~/bd may not expose a raw beads.db file anymore.
+    if [ ! -d "$BEADS_DIR" ]; then
+        echo -e "${RED}❌ BEADS_DIR directory missing: $BEADS_DIR${RESET}"
         ERRORS=$((ERRORS+1))
+        return
+    fi
+
+    if [ -f "$BEADS_DIR/beads.db" ]; then
+        echo -e "${GREEN}✅ Database file present: $BEADS_DIR/beads.db${RESET}"
+    elif [ -d "$expected_beads_db" ]; then
+        if (cd "$HOME/bd" && bd dolt test --json >/dev/null 2>&1); then
+            echo -e "${GREEN}✅ Beads service reachable in Dolt server mode (expected: no beads.db)${RESET}"
+        else
+            echo -e "${RED}❌ Beads service unreachable (${HOME}/bd -- dolt server mode)${RESET}"
+            ERRORS=$((ERRORS+1))
+        fi
     else
-        echo -e "${GREEN}✅ Database exists at $BEADS_DIR${RESET}"
+        echo -e "${RED}❌ Beads state not found at $BEADS_DIR (neither beads.db nor dolt dir)${RESET}"
+        ERRORS=$((ERRORS+1))
     fi
 
     # Check for repository mismatch bypass
@@ -276,8 +295,21 @@ fi
 # 3.1 Auth sanity
 echo ""
 echo "--- Auth Sanity (warn-only) ---"
-command -v gh >/dev/null 2>&1 && { gh auth status >/dev/null 2>&1 && echo -e "${GREEN}✅ gh auth: OK${RESET}" || warn_only "gh auth: not logged in"; }
-command -v railway >/dev/null 2>&1 && { railway status >/dev/null 2>&1 && echo -e "${GREEN}✅ railway auth: OK${RESET}" || warn_only "railway auth: not logged in"; }
+if command -v gh >/dev/null 2>&1; then
+  if gh auth status >/dev/null 2>&1; then
+    echo -e "${GREEN}✅ gh auth: OK${RESET}"
+  else
+    warn_only "gh auth: not logged in"
+  fi
+fi
+
+if command -v railway >/dev/null 2>&1; then
+  if railway status >/dev/null 2>&1; then
+    echo -e "${GREEN}✅ railway auth: OK${RESET}"
+  else
+    warn_only "railway auth: not logged in"
+  fi
+fi
 
 # 4. MCP & Tooling Status
 echo "--- MCP & Tooling Status ---"

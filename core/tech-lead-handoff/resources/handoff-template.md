@@ -180,7 +180,7 @@ another-command
 
 ## How to View
 
-- **Beads:** `bd import ~/bd/.beads/issues.jsonl` then `bd show bd-xxxx`
+- **Beads:** `cd ~/bd && bd show bd-xxxx` (canonical Beads backend)
 - **Full Doc:** `docs/investigations/YYYY-MM-DD-<topic>-analysis.md`
 - **GitHub:** https://github.com/org/repo/blob/.../docs/investigations/...
 ```
@@ -214,7 +214,7 @@ another-command
 2. <Decision 2>
 
 ### How to View
-- **Beads:** Import from `~/bd/.beads/issues.jsonl`
+- **Beads:** `cd ~/bd && bd show bd-xxxx` (canonical Beads backend)
 - **Docs:** See `docs/investigations/` in repo
 - **PR:** <link if applicable>
 ```

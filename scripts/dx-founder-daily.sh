@@ -7,7 +7,8 @@
 # Bead: bd-lsxp.3
 #
 # Dependencies:
-#   - BEADS database at ~/bd/.beads/beads.db
+#   - Beads source at ~/bd/.beads (native `bd` CLI with hub-spoke Dolt SQL).
+#     SQLite/JSONL are transitional fallbacks only.
 #   - GitHub CLI (gh) authenticated
 #   - bv CLI for robot alerts/drift check
 #   - jq for JSON manipulation
@@ -17,12 +18,15 @@
 set -euo pipefail
 
 # Configuration
-BEADS_DIR="${BEADS_DIR:-/Users/fengning/bd/.beads}"
+BEADS_DIR="${BEADS_DIR:-${HOME}/bd/.beads}"
 BEADS_DB="${BEADS_DIR}/beads.db"
+BEADS_ISSUES_JSONL="${BEADS_DIR}/issues.jsonl"
 GH_REPO="stars-end/prime-radiant-ai"
 TEMP_DIR=$(mktemp -d)
 OUTPUT_FILE="${TEMP_DIR}/founder-daily-data.json"
 LOG_FILE="${TEMP_DIR}/founder-daily.log"
+BEADS_SOURCE="auto"
+BEADS_CLI_OPEN_CACHE=""
 
 # Colors for logging
 RED='\033[0;31m'
@@ -66,117 +70,263 @@ check_dependencies() {
   if ! command -v jq >/dev/null 2>&1; then
     missing+=("jq")
   fi
+  if ! command -v bd >/dev/null 2>&1; then
+    warn "bd CLI not found; will only use transitional sqlite/jsonl path"
+  fi
 
   if [ ${#missing[@]} -gt 0 ]; then
     error "Missing dependencies: ${missing[*]}"
     return 1
   fi
 
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    warn "sqlite3 not found; skipping legacy sqlite fallback"
+  fi
+
   return 0
+}
+
+query_cli_open_issues() {
+  if [ -n "$BEADS_CLI_OPEN_CACHE" ]; then
+    echo "$BEADS_CLI_OPEN_CACHE"
+    return 0
+  fi
+
+  if ! command -v bd >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local raw
+  raw="$(cd "${HOME}/bd" && BEADS_DIR="${BEADS_DIR}" bd list --json --status open --limit 0 2>>"$LOG_FILE" || true)"
+  if [ -z "$raw" ] || ! jq -e 'type == "array"' <<<"$raw" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  BEADS_CLI_OPEN_CACHE="$raw"
+  echo "$raw"
+  return 0
+}
+
+query_source() {
+  if [ "$BEADS_SOURCE" = "auto" ]; then
+    if query_cli_open_issues >/dev/null 2>&1; then
+      BEADS_SOURCE="cli"
+      return
+    fi
+
+    if [ -f "$BEADS_DB" ] && sqlite3 "$BEADS_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='issues';" >/dev/null 2>&1; then
+      BEADS_SOURCE="sqlite"
+      return
+    fi
+
+    if [ -f "$BEADS_ISSUES_JSONL" ]; then
+      BEADS_SOURCE="jsonl"
+      return
+    fi
+
+    if [ -f "$BEADS_DB" ]; then
+      BEADS_SOURCE="bad-sqlite"
+      return
+    fi
+
+    BEADS_SOURCE="missing"
+    if [ -f "$BEADS_ISSUES_JSONL" ]; then
+      BEADS_SOURCE="jsonl"
+      return
+    fi
+  fi
 }
 
 # Query BEADS for P0 issues
 query_p0_issues() {
   log "Querying BEADS for P0 issues..."
 
-  sqlite3 "$BEADS_DB" "
-    SELECT json_group_array(
-      json_object(
-        'id', id,
-        'title', title,
-        'priority', cast(priority as text),
-        'status', status,
-        'issue_type', issue_type,
-        'updated_at', updated_at
+  query_source
+
+  if [ "$BEADS_SOURCE" = "sqlite" ]; then
+    sqlite3 "$BEADS_DB" "
+      SELECT json_group_array(
+        json_object(
+          'id', id,
+          'title', title,
+          'priority', cast(priority as text),
+          'status', status,
+          'issue_type', issue_type,
+          'updated_at', updated_at
+        )
       )
-    )
-    FROM issues
-    WHERE priority = 0 AND status = 'open' AND issue_type != 'epic'
-    ORDER BY updated_at DESC
-    LIMIT 10;
-  " 2>>"$LOG_FILE" || echo "[]"
+      FROM issues
+      WHERE priority = 0 AND status = 'open' AND issue_type != 'epic'
+      ORDER BY updated_at DESC
+      LIMIT 10;
+    " 2>>"$LOG_FILE" || echo "[]"
+    return
+  fi
+
+  if [ "$BEADS_SOURCE" = "cli" ]; then
+    query_cli_open_issues | jq -c '[
+      .[]
+      | select((.status // "open") == "open")
+      | select(((.issue_type // .type // "") != "epic"))
+      | select((.priority // "P99" | tostring | ascii_downcase) | test("^p?0$") )
+      | {id: .id, title: .title, priority: (.priority // ""), status: .status, issue_type: (.issue_type // .type // ""), updated_at: .updated_at}
+    ] | sort_by(.updated_at // "") | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
+    return
+  fi
+
+  echo "[]"
 }
 
 # Query BEADS for P1 issues
 query_p1_issues() {
   log "Querying BEADS for P1 issues..."
 
-  sqlite3 "$BEADS_DB" "
-    SELECT json_group_array(
-      json_object(
-        'id', id,
-        'title', title,
-        'priority', cast(priority as text),
-        'status', status,
-        'issue_type', issue_type,
-        'updated_at', updated_at
+  query_source
+
+  if [ "$BEADS_SOURCE" = "sqlite" ]; then
+    sqlite3 "$BEADS_DB" "
+      SELECT json_group_array(
+        json_object(
+          'id', id,
+          'title', title,
+          'priority', cast(priority as text),
+          'status', status,
+          'issue_type', issue_type,
+          'updated_at', updated_at
+        )
       )
-    )
-    FROM issues
-    WHERE priority = 1 AND status = 'open' AND issue_type != 'epic'
-    ORDER BY updated_at DESC
-    LIMIT 10;
-  " 2>>"$LOG_FILE" || echo "[]"
+      FROM issues
+      WHERE priority = 1 AND status = 'open' AND issue_type != 'epic'
+      ORDER BY updated_at DESC
+      LIMIT 10;
+    " 2>>"$LOG_FILE" || echo "[]"
+    return
+  fi
+
+  if [ "$BEADS_SOURCE" = "cli" ]; then
+    query_cli_open_issues | jq -c '[
+      .[]
+      | select((.status // "open") == "open")
+      | select(((.issue_type // .type // "") != "epic"))
+      | select((.priority // "P99" | tostring | ascii_downcase) | test("^p?1$") )
+      | {id: .id, title: .title, priority: (.priority // ""), status: .status, issue_type: (.issue_type // .type // ""), updated_at: .updated_at}
+    ] | sort_by(.updated_at // "") | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
+    return
+  fi
+
+  echo "[]"
 }
 
 # Query BEADS for blocking issues
 query_blocking_issues() {
   log "Querying BEADS for blocking issues..."
 
-  sqlite3 "$BEADS_DB" "
-    SELECT json_group_array(
-      json_object(
-        'id', id,
-        'title', title,
-        'priority', cast(priority as text),
-        'status', status,
-        'blocked_count', blocked_count
+  query_source
+
+  if [ "$BEADS_SOURCE" = "sqlite" ]; then
+    sqlite3 "$BEADS_DB" "
+      SELECT json_group_array(
+        json_object(
+          'id', id,
+          'title', title,
+          'priority', cast(priority as text),
+          'status', status,
+          'blocked_count', blocked_count
+        )
       )
-    )
-    FROM (
-      SELECT
-        i.id,
-        i.title,
-        i.priority,
-        i.status,
-        (SELECT COUNT(*) FROM dependencies d
-         WHERE d.depends_on_id = i.id AND d.type = 'blocks') as blocked_count
-      FROM issues i
-      WHERE i.status = 'open' AND i.issue_type != 'epic'
-        AND (SELECT COUNT(*) FROM dependencies d
-             WHERE d.depends_on_id = i.id AND d.type = 'blocks') > 0
-      ORDER BY i.priority DESC, blocked_count DESC
-      LIMIT 10
-    );
-  " 2>>"$LOG_FILE" || echo "[]"
+      FROM (
+        SELECT
+          i.id,
+          i.title,
+          i.priority,
+          i.status,
+          (SELECT COUNT(*) FROM dependencies d
+           WHERE d.depends_on_id = i.id AND d.type = 'blocks') as blocked_count
+        FROM issues i
+        WHERE i.status = 'open' AND i.issue_type != 'epic'
+          AND (SELECT COUNT(*) FROM dependencies d
+               WHERE d.depends_on_id = i.id AND d.type = 'blocks') > 0
+        ORDER BY i.priority DESC, blocked_count DESC
+        LIMIT 10
+      );
+    " 2>>"$LOG_FILE" || echo "[]"
+    return
+  fi
+
+  if [ "$BEADS_SOURCE" = "cli" ]; then
+    query_cli_open_issues | jq -c '[
+      .[]
+      | select((.status // "open") == "open")
+      | select(((.issue_type // .type // "") != "epic"))
+      | select((.dependency_count // 0) | tonumber? > 0)
+      | . as $issue
+      | {
+          id: $issue.id,
+          title: $issue.title,
+          priority: ($issue.priority // ""),
+          status: $issue.status,
+          blocked_count: ($issue.dependency_count // 0)
+        }
+    ] | sort_by(.blocked_count | tonumber?) | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
+    return
+  fi
+
+  echo "[]"
 }
 
 # Query BEADS for stale issues (>14 days)
 query_stale_issues() {
   log "Querying BEADS for stale issues..."
 
-  sqlite3 "$BEADS_DB" "
-    SELECT json_group_array(
-      json_object(
-        'id', id,
-        'title', title,
-        'updated_at', updated_at,
-        'days_stale', days_stale
+  query_source
+
+  if [ "$BEADS_SOURCE" = "sqlite" ]; then
+    sqlite3 "$BEADS_DB" "
+      SELECT json_group_array(
+        json_object(
+          'id', id,
+          'title', title,
+          'updated_at', updated_at,
+          'days_stale', days_stale
+        )
       )
-    )
-    FROM (
-      SELECT 
-        id,
-        title,
-        updated_at,
-        cast(julianday('now') - julianday(updated_at) as integer) as days_stale
-      FROM issues
-      WHERE status = 'open' AND issue_type != 'epic'
-        AND cast(julianday('now') - julianday(updated_at) as integer) > 14
-      ORDER BY days_stale DESC
-      LIMIT 10
-    );
-  " 2>>"$LOG_FILE" || echo "[]"
+      FROM (
+        SELECT 
+          id,
+          title,
+          updated_at,
+          cast(julianday('now') - julianday(updated_at) as integer) as days_stale
+        FROM issues
+        WHERE status = 'open' AND issue_type != 'epic'
+          AND cast(julianday('now') - julianday(updated_at) as integer) > 14
+        ORDER BY days_stale DESC
+        LIMIT 10
+      );
+    " 2>>"$LOG_FILE" || echo "[]"
+    return
+  fi
+
+  if [ "$BEADS_SOURCE" = "cli" ]; then
+    local now
+    now=$(date -u +%s)
+    query_cli_open_issues | jq --argjson now "$now" -c '[
+      .[]
+      | select((.status // "open") == "open")
+      | select(((.issue_type // .type // "") != "epic"))
+      | . as $issue
+      | (($now - (($issue.updated_at // "1970-01-01T00:00:00Z") | fromdate? // 0)) as $age
+         | select($age > 1209600)
+         | {
+             id: $issue.id,
+             title: $issue.title,
+             updated_at: $issue.updated_at,
+             days_stale: ($age / 86400 | floor)
+           })
+    ] | sort_by(.days_stale) | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
+    return
+  fi
+
+  echo "[]"
 }
 
 # Get robot alerts from bv
@@ -213,7 +363,19 @@ query_stale_prs() {
 # Query Backlog Size (Open Beads)
 query_backlog_count() {
   log "Querying Backlog Size..."
-  sqlite3 "$BEADS_DB" "SELECT count(*) FROM issues WHERE status = 'open';" 2>>"$LOG_FILE" || echo "0"
+  query_source
+
+  if [ "$BEADS_SOURCE" = "sqlite" ]; then
+    sqlite3 "$BEADS_DB" "SELECT count(*) FROM issues WHERE status = 'open';" 2>>"$LOG_FILE" || echo "0"
+    return
+  fi
+
+  if [ "$BEADS_SOURCE" = "cli" ]; then
+    query_cli_open_issues | jq -c 'map(select((.status // "open") == "open" and ((.issue_type // .type // "") != "epic"))) | length' 2>>"$LOG_FILE" | tr -d '\n' | tr -dc '0-9'
+    return
+  fi
+
+  echo "0"
 }
 
 # Query Rescue PRs
@@ -422,7 +584,7 @@ format_slack_message() {
   today=$(date +%Y-%m-%d)
   
   local main_msg="${status_emoji} *DX Daily* (${today}): ${status_text}
-• P0: ${p0_count} | GH fails: ${failed_count} | Rescue: ${rescue_count}
+• P0: ${p0_count} | P1: ${p1_count} | GH fails: ${failed_count} | Rescue: ${rescue_count}
 • Stale PRs: ${stale_prs_count} | Backlog: ${backlog_count} | Drift: ${drift_status}"
   
   echo "$main_msg"

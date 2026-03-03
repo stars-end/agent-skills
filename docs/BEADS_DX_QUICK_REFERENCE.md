@@ -2,7 +2,7 @@
 
 ## Overview
 
-The DX scripts provide automated handling for the **Centralized Beads Database Pattern**, including chunked imports for large JSONL files, safety bypass persistence, and health diagnostics.
+The DX scripts provide automated handling for the **Centralized Beads Database Pattern**, including safety bypass persistence, fleet checks, and health diagnostics.
 
 ## DX Scripts
 
@@ -17,12 +17,12 @@ The DX scripts provide automated handling for the **Centralized Beads Database P
 | `dx-ensure-bins.sh` | Symlinks tools to `~/bin/` | Setup |
 | `ensure-shell-path.sh` | Ensures background jobs have same configuration | Cron job setup |
 
-### Symlinked Tools
+### Beads Runtime Focus
 
 | Tool | Location | Purpose |
 |------|----------|---------|
-| `bd-sync-safe` | `~/bin/bd-sync-safe` → `~/bd/bd-sync-safe.sh` | Deterministic syncs |
-| `bd-import-safe` | `~/bin/bd-import-safe` → `~/bd/bd-import-safe.sh` | Manual chunked imports |
+| `bd` | `~/bd/.` | Native canonical DB operations |
+| `bd-doctor.sh` | `~/agent-skills/health/bd-doctor` | Health diagnostics |
 
 ## Environment Configuration
 
@@ -33,16 +33,16 @@ The DX scripts provide automated handling for the **Centralized Beads Database P
 export BEADS_IGNORE_REPO_MISMATCH=1
 ```
 
-### Centralized Database Pattern
+### Centralized Database Pattern (Hub-Spoke)
 
 ```bash
-# Location
-~/bd/.beads/          # Centralized beads database
-~/bd/.beads/beads.db  # SQLite database (1,136 issues)
-~/bd/.beads/issues.jsonl
+# Hub
+export BEADS_EPYC12_TAILSCALE_IP=<epyc12_tailscale_ip>
+export BEADS_DOLT_SERVER_HOST="$BEADS_EPYC12_TAILSCALE_IP"
+export BEADS_DOLT_SERVER_PORT=3307
 
-# Git remote
-stars-end/bd          # Remote repository
+# Spokes and hub connect through this endpoint using Dolt SQL
+cd ~/bd && bd dolt test --json
 ```
 
 ## Usage Examples
@@ -56,23 +56,26 @@ dx-status.sh
 # Verify health
 dx-doctor.sh
 
-# Sync safely (atomic with git operations)
-bd-sync-safe
+# Validate Beads endpoint from the current host
+cd ~/bd && bd dolt test --json && bd status --json
 ```
 
 ### Manual Large Import
 
 ```bash
-# Use the wrapper for manual chunked imports
-bd-import-safe ~/bd/.beads/issues.jsonl
-
-# Custom batch size
-bd-import-safe issues.jsonl --batch-size 100
+# Use structured `bd` APIs for targeted imports/migrations
+bd export -o /tmp/epic-snapshot.jsonl
+bd import -i /tmp/epic-snapshot.jsonl
 ```
 
 ### Environment Bootstrap
 
 ```bash
+# Required for fleet mode
+export BEADS_EPYC12_TAILSCALE_IP=<epyc12_tailscale_ip>
+export BEADS_DOLT_SERVER_HOST="$BEADS_EPYC12_TAILSCALE_IP"
+export BEADS_DOLT_SERVER_PORT=3307
+
 # Ensure all safety settings are exported
 dx-check.sh
 
@@ -86,7 +89,9 @@ The `ensure-shell-path.sh` script ensures that background cron jobs have the sam
 
 ```bash
 # Crontab example - safety bypass is automatically available
-0 0 * * * bd-sync-safe
+# No dedicated Beads sync cron in canonical mode.
+# Use periodic fleet checks from your host operations tooling.
+*/10 * * * * bash -lc 'cd ~/agent-skills && dx-status.sh >/tmp/dx-status.log 2>&1 || true'
 ```
 
 ## Resolution History
@@ -105,7 +110,7 @@ The `ensure-shell-path.sh` script ensures that background cron jobs have the sam
 
 **Solutions**:
 1. Use `dx-hydrate.sh` for automated hydration
-2. Use `bd-import-safe` for manual chunked imports
+2. Use `bd` import/export for controlled migrations
 3. See `~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md`
 
 ### Repository Mismatch Error
@@ -124,15 +129,18 @@ export BEADS_IGNORE_REPO_MISMATCH=1
 
 ### Symlinks Missing
 
-**Symptom**: `bd-sync-safe: command not found`
+### Legacy Tooling (Optional)
 
 **Solution**:
 ```bash
-# Run the bins setup script
-dx-ensure-bins.sh
+# Legacy wrappers are deprecated and should be retired for canonical Beads operations.
+# Keep them only if a non-canonical repo still requires one-off JSONL migrations.
 
-# Verify symlinks
-ls -la ~/bin/bd-*
+# For canonical mode, verify Beads SQL health instead:
+cd ~/bd && bd dolt test --json && bd status --json
+
+# Verify modern setup
+dx-check.sh
 ```
 
 ## See Also

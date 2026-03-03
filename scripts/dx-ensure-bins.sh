@@ -56,6 +56,8 @@ link "$AGENTS_ROOT/scripts/dx-delegate.sh" "$BIN_DIR/dx-delegate"
 # Beads helpers (used across repos)
 link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
 link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
+# Legacy sync wrapper is deprecated in canonical Dolt hub-spoke mode.
+# Keep available for rollback-only/manual workflows.
 link "$AGENTS_ROOT/scripts/bd-sync-safe.sh" "$BIN_DIR/bd-sync-safe"
 
 # Skills plane helpers

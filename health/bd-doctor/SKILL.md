@@ -34,6 +34,9 @@ This skill assumes:
 Run from `~/bd`:
 
 ```bash
+export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-127.0.0.1}"
+export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
+
 bd dolt test --json
 bd status --json
 bd ready --limit 5 --json
@@ -41,7 +44,7 @@ bd ready --limit 5 --json
 
 Service checks:
 
-Linux:
+Linux (hub host):
 ```bash
 systemctl --user is-active beads-dolt.service
 ```
@@ -57,7 +60,7 @@ launchctl print gui/$(id -u)/com.starsend.beads-dolt
 
 1. Restart managed service
 
-Linux:
+Linux (hub host):
 ```bash
 systemctl --user restart beads-dolt.service
 ```
@@ -96,8 +99,19 @@ tail -n 100 ~/bd/.beads/dolt-launchd.err.log
 3. Copy source `~/bd/.beads/dolt` to target
 4. Restart services
 5. Compare summaries on all hosts
+6. Use this only when service-level failover or backup restore is unavoidable.
 
-### 4) Bad/corrupt data dir
+### 4) Spoke connectivity from non-hub host
+
+```bash
+export BEADS_DOLT_SERVER_HOST="<epyc12 tailscale ip>"
+export BEADS_DOLT_SERVER_PORT=3307
+
+nc -z "$BEADS_DOLT_SERVER_HOST" "$BEADS_DOLT_SERVER_PORT"
+bd dolt test --json
+```
+
+### 5) Bad/corrupt data dir
 
 ```bash
 # Linux example
@@ -112,9 +126,12 @@ cd ~/bd && bd dolt test --json && bd status --json
 ## Fleet Verification (from macmini)
 
 ```bash
-ssh epyc12 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
-ssh homedesktop-wsl 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
-ssh feng@epyc6 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
+export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
+export EPYC12_BEADS_HOST="${EPYC12_BEADS_HOST:-${BEADS_DOLT_SERVER_HOST:-127.0.0.1}}"
+
+ssh epyc12 'cd ~/bd; export BEADS_DOLT_SERVER_HOST=127.0.0.1; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c ".summary"'
+ssh homedesktop-wsl "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json; bd status --json | jq -c '.summary'"
+ssh feng@epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json; bd status --json | jq -c '.summary'"
 ```
 
 ## Guardrails

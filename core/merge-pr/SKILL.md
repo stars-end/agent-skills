@@ -454,7 +454,7 @@ User: "merge the PR"
 
 AI:
 1. Checks PR status: ✅ Ready
-2. Checks working tree: ❌ Dirty (.beads/beads.left.meta.json modified)
+2. Checks working tree: ❌ Dirty (Beads metadata or unrelated working-tree changes present)
 3. Asks: "Working tree has uncommitted changes. Options:
    a) Commit changes now
    b) Stash changes

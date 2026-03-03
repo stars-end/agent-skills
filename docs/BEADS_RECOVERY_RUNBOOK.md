@@ -9,7 +9,7 @@ Use this when `bd sync --import-only` hangs, reports `sqlite ... interrupted/loc
 
 ## Fast Recovery
 1. `cd ~/bd`
-2. `~/.agent/skills/bd-doctor/check.sh || ~/.agent/skills/bd-doctor/fix.sh`
+2. `~/.agent/skills/health/bd-doctor/check.sh || ~/.agent/skills/health/bd-doctor/fix.sh`
 3. `bd doctor --json`
 4. `dx-runner preflight --provider opencode`
 5. `dx-batch doctor --wave-id <wave-id> --json` (if a wave is active)
@@ -22,9 +22,8 @@ Use this when `bd sync --import-only` hangs, reports `sqlite ... interrupted/loc
 - `bd_version_out_of_policy`: host has old `bd`.
   - Action: upgrade/pin host to policy version floor.
 - `sqlite ... locked/interrupted` on import:
-  - Action: run `~/.agent/skills/bd-doctor/fix.sh`, then rerun doctor/preflight.
+  - Action: run `~/.agent/skills/health/bd-doctor/fix.sh`, then rerun doctor/preflight.
 
 ## Operator Gate (must pass before dispatch)
 - `dx-runner preflight --provider <provider>`
 - `dx-batch doctor --wave-id <wave-id>` returns no `critical` issues
-
