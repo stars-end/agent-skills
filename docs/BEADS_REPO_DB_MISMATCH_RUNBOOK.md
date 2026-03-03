@@ -1,5 +1,10 @@
 # Beads Repo/DB Mismatch Remediation Runbook
 
+> [!WARNING]
+> **Deprecated for active fleet ops.** This runbook targets local `.beads` workflows and is retained for archival context only.
+>
+> Current canonical reference: `docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md` (single `epyc12` Beads SQL hub).
+
 ## Symptom
 
 `bd show`, `bd status`, or `bd comments add` returns:

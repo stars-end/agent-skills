@@ -1,5 +1,10 @@
 # Self-Contained External Beads Migration Prompt
 
+> [!WARNING]
+> **Archived.** This prompt is for the historical migration sequence and is not used by the active `epyc12` hub-spoke architecture.
+>
+> Active reference: `docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md`
+
 **Copy-paste this entire block into each VM. One command. No external dependencies.**
 
 ---

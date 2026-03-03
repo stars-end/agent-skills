@@ -34,7 +34,7 @@ This skill assumes:
 Run from `~/bd`:
 
 ```bash
-export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-127.0.0.1}"
+export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
 
 bd dolt test --json
@@ -51,7 +51,9 @@ systemctl --user is-active beads-dolt.service
 
 macOS:
 ```bash
-launchctl print gui/$(id -u)/com.starsend.beads-dolt
+if launchctl print gui/$(id -u)/com.starsend.beads-dolt >/dev/null 2>&1; then
+  echo "⚠️ macOS launchd Beads service is present; this should remain disabled on control-pane hosts."
+fi
 ```
 
 ## Recovery Playbooks
@@ -67,7 +69,10 @@ systemctl --user restart beads-dolt.service
 
 macOS:
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt
+if launchctl print gui/$(id -u)/com.starsend.beads-dolt >/dev/null 2>&1; then
+  launchctl bootout gui/$(id -u)/com.starsend.beads-dolt
+  launchctl disable gui/$(id -u)/com.starsend.beads-dolt
+fi
 ```
 
 2. Re-validate:
@@ -89,7 +94,9 @@ journalctl --user -u beads-dolt.service -n 100 --no-pager
 
 macOS logs:
 ```bash
-tail -n 100 ~/bd/.beads/dolt-launchd.err.log
+if [[ -f ~/bd/.beads/dolt-launchd.err.log ]]; then
+  tail -n 100 ~/bd/.beads/dolt-launchd.err.log
+fi
 ```
 
 ### 3) Host divergence (different totals across VMs)
@@ -127,11 +134,11 @@ cd ~/bd && bd dolt test --json && bd status --json
 
 ```bash
 export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
-export EPYC12_BEADS_HOST="${EPYC12_BEADS_HOST:-${BEADS_DOLT_SERVER_HOST:-127.0.0.1}}"
+export EPYC12_BEADS_HOST="${EPYC12_BEADS_HOST:-${BEADS_DOLT_SERVER_HOST:-100.107.173.83}}"
 
-ssh epyc12 'cd ~/bd; export BEADS_DOLT_SERVER_HOST=127.0.0.1; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c ".summary"'
+ssh epyc12 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
 ssh homedesktop-wsl "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json; bd status --json | jq -c '.summary'"
-ssh feng@epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json; bd status --json | jq -c '.summary'"
+ssh epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json; bd status --json | jq -c '.summary'"
 ```
 
 ## Guardrails
