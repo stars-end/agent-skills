@@ -7,6 +7,30 @@ This is the operating contract for agents working in `~/prime-radiant-ai` with c
 - Canonical Beads repo: `~/bd` (`git@github.com:stars-end/bd.git`)
 - Canonical backend: Dolt server mode
 - Canonical hosts: `macmini`, `epyc12`, `epyc6`, `homedesktop-wsl`
+- **Architecture:** Hub-Spoke (epyc12 = hub, others = spokes)
+
+## 0) Hub-Spoke Architecture (bd-va5h)
+
+### Model
+
+| Host | Role | Dolt Server | Connection Target |
+|------|------|-------------|-------------------|
+| epyc12 | HUB | Active (writer) | localhost |
+| macmini | SPOKE | Stopped | epyc12:3307 |
+| homedesktop-wsl | SPOKE | Stopped | epyc12:3307 |
+| epyc6 | SPOKE + STANDBY | Stopped | epyc12:3307 |
+
+### Environment Variables
+
+All hosts must have:
+```bash
+export BEADS_DOLT_SERVER_HOST=100.107.173.83  # epyc12 Tailscale IP
+export BEADS_DOLT_SERVER_PORT=3307
+```
+
+### Reference
+
+See `docs/BEADS_FLEET_HUB_SPOKE_IMPLEMENTATION.md` for full architecture details.
 
 ## 1) Preflight (Required Before Dispatch)
 
@@ -18,23 +42,21 @@ bd dolt test --json
 bd status --json
 ```
 
-Linux hosts must pass:
-
+**Hub (epyc12) must also pass:**
 ```bash
 systemctl --user is-active beads-dolt.service
+# Listener should be on 100.107.173.83:3307
+ss -tlnp | grep 3307
 ```
 
-macOS host must pass:
-
-```bash
-launchctl print gui/$(id -u)/com.starsend.beads-dolt
-```
+**Spokes (macmini, homedesktop-wsl, epyc6):**
+- Do NOT run local Dolt servers
+- Must connect to hub via BEADS_DOLT_SERVER_HOST
 
 Expected result:
 - `bd dolt test --json` shows `"connection_ok": true`
 - `bd status --json` returns non-zero `summary.total_issues`
-- service state is active/running
-- exactly one listener on `127.0.0.1:3307`, owned by managed `dolt sql-server --data-dir ~/bd/.beads/dolt`
+- Hub has active listener on `100.107.173.83:3307`
 
 ## 2) Prime Radiant Worktree Flow
 
@@ -78,153 +100,102 @@ bd dolt test --json
 bd ready --limit 5 --json
 ```
 
-Fleet checks from macmini:
-
+Hub health from epyc12:
 ```bash
-ssh epyc12 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
-ssh homedesktop-wsl 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
-ssh feng@epyc6 'cd ~/bd; bd dolt test --json; bd status --json | jq -c ".summary"'
+systemctl --user status beads-dolt.service
+bd status --json | jq -c ".summary"
+```
+
+Spoke connectivity check from macmini:
+```bash
+# All spokes should connect to hub
+ssh homedesktop-wsl 'bd dolt test --json'
+ssh fengning@epyc6 'bd dolt test --json'
 ```
 
 ## 5) Incident Triage
 
 ### A) `connection_ok: false`
 
-1. Verify service state (systemd/launchd)
-2. Check logs:
+**On Hub (epyc12):**
+1. Verify service: `systemctl --user status beads-dolt.service`
+2. Check logs: `journalctl --user -u beads-dolt.service -n 80 --no-pager`
+3. Verify Tailscale: `tailscale status`
+4. Restart: `systemctl --user restart beads-dolt.service`
 
-Linux:
-```bash
-journalctl --user -u beads-dolt.service -n 80 --no-pager
-```
-
-macOS:
-```bash
-tail -n 80 ~/bd/.beads/dolt-launchd.err.log
-```
-
-3. Restart service:
-
-Linux:
-```bash
-systemctl --user restart beads-dolt.service
-```
-
-macOS:
-```bash
-launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt
-```
+**On Spokes:**
+1. Verify hub is reachable: `tailscale ping epyc12`
+2. Check env vars: `echo $BEADS_DOLT_SERVER_HOST`
+3. Verify hub service is running on epyc12
 
 ### B) Lock contention (`database ... is locked by another dolt process`)
 
-- Ensure exactly one Dolt server per host for `~/bd/.beads/dolt`
-- Stop ad hoc/manual Dolt processes, then restart managed service
+- Only the hub should run Dolt server
+- Spokes should NOT have local Dolt servers running
+- Check: `ss -tlnp | grep 3307` (should only show on epyc12)
 
-Port-owner checks:
+### C) Divergent behavior across hosts
 
-```bash
-# exactly one listener expected
-lsof -nP -iTCP@127.0.0.1:3307 -sTCP:LISTEN
-ps -p "$(lsof -t -iTCP@127.0.0.1:3307 -sTCP:LISTEN)" -o command=
-```
-
-### C) Divergent host counts
-
-- Select source host (normally `epyc12`)
-- Stop source + target services
-- Copy source `.beads/dolt` snapshot to target
-- Restart services
-- Re-run `bd dolt test --json` and compare `bd status --json` summaries
+In hub-spoke mode, all hosts see the SAME data (single source of truth).
+If hosts see different data:
+1. Check which host is acting as hub
+2. Verify all spokes connect to the correct hub
+3. Failover to epyc6 if hub is corrupted
 
 ## 6) Recovery: Corrupt/Unusable Dolt Data
 
-1. Stop service
-2. Move bad data aside
-3. Restore from latest `dolt.pre-sync-*` backup or known-good host snapshot
-4. Start service and validate
+### Hub Recovery (epyc12)
 
-Linux example:
+1. Stop hub service
+2. Restore from MinIO backup (hourly snapshots)
+3. Or copy from epyc6 standby
 
 ```bash
+# On epyc12
 systemctl --user stop beads-dolt.service
 cd ~/bd/.beads
-mv dolt dolt.bad.$(date +%Y%m%d%H%M%S)
-# restore copied snapshot into ./dolt
+mv dolt "dolt.corrupted.$(date +%Y%m%d%H%M%S)"
+
+# Restore from MinIO (requires mc client configured)
+# mc cp beads-minio/beads-backups/latest/dolt_data.tar.gz .
+# tar -xzf dolt_data.tar.gz -C ~/bd/.beads/dolt
+
 systemctl --user start beads-dolt.service
 cd ~/bd && bd dolt test --json && bd status --json
 ```
 
-## 7) Fleet Sync (Canonical: Dolt Remote Origin)
+### Failover to epyc6 (Standby)
 
-Canonical fleet sync path is native Dolt `push`/`pull` against `origin` from
-`~/bd/.beads/dolt/beads_bd` on each host.
+See `docs/BEADS_FLEET_HUB_SPOKE_IMPLEMENTATION.md` for detailed failover procedure.
 
-### Canonical Sync Workflow
+## 7) Backup Strategy
 
-```bash
-# Source host after local mutations
-cd ~/bd/.beads/dolt/beads_bd
-dolt push origin main
+### Hourly Snapshots (epyc12 → MinIO)
 
-# Target host before continuing work
-cd ~/bd/.beads/dolt/beads_bd
-dolt pull origin main --ff-only
-```
+- Script: `scripts/beads-backup-hourly.sh`
+- Schedule: Hourly via cron on epyc12
+- Retention: 7 days
 
-### Daily Operator Checklist
+### Daily Verification (epyc6)
 
-```bash
-cd ~/bd
-bd dolt test --json
-bd status --json
+- Script: `scripts/beads-restore-verify.sh`
+- Schedule: Daily via cron on epyc6
+- Validates: Backup integrity and restore procedure
 
-cd ~/bd/.beads/dolt/beads_bd
-dolt remote -v
-dolt pull origin main --ff-only
-```
+### RPO/RTO
 
-### Hard-Fail Conditions
-
-- `dolt pull origin main --ff-only` fails (divergence or connectivity)
-- more than one listener exists on `127.0.0.1:3307`
-- listener command does not match managed data dir `~/bd/.beads/dolt`
-
-### Recovery (Deterministic Peer Restore)
-
-If local Dolt data is corrupt or service loops:
-
-```bash
-# 1) stop service
-systemctl --user stop beads-dolt.service  # Linux
-launchctl bootout gui/$(id -u)/com.starsend.beads-dolt  # macOS
-
-# 2) move bad data aside
-cd ~/bd/.beads
-mv dolt "dolt.corrupted.$(date +%Y%m%d%H%M%S)"
-
-# 3) restore from healthy peer snapshot
-# example (macmini <- epyc12):
-ssh epyc12 'tar -C /home/fengning/bd/.beads/dolt -cf - .' | tar -C ~/bd/.beads/dolt -xf -
-
-# 4) restart and validate
-systemctl --user start beads-dolt.service  # Linux
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.starsend.beads-dolt.plist 2>/dev/null || true
-launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt  # macOS
-cd ~/bd && bd dolt test --json && bd status --json
-```
-
-### Deprecated (Historical)
-
-The MinIO `file://` mirror workflow and `~/.beads/beads_sync.sh` path are historical only.
-Do not use them for active fleet sync.
+| Metric | Target |
+|--------|--------|
+| RPO | < 1 hour |
+| RTO | < 15 minutes |
 
 ## 8) Operator Rules
 
 - Do not run mutating `bd` commands from non-`~/bd` repos.
-- Do not launch unmanaged long-running Dolt servers during active waves.
-- Keep one managed service per host and validate before dispatch.
+- Do not launch Dolt servers on spoke hosts.
+- Keep hub service (epyc12) healthy and monitored.
 - Treat `bd status --json` + `bd dolt test --json` as the source of truth.
-- Sync via `dolt push/pull origin main` before switching hosts.
+- **No dolt push/pull between hosts** - use hub-spoke model.
 
 ## 9) ID Reconciliation (Canonical Contract)
 
@@ -242,3 +213,14 @@ Provenance:
 - PR: <https://github.com/stars-end/agent-skills/pull/269>
 - Beads reconciliation task: `bd-wh4m`
 - See: `docs/BEADS_ID_RECONCILIATION_2026-03-02.md`
+
+## 10) Deprecated Paths (DO NOT USE)
+
+The following patterns are **deprecated** in hub-spoke mode:
+
+- ❌ `dolt push origin main` from spokes
+- ❌ `dolt pull origin main --ff-only` on spokes
+- ❌ Local Dolt server running on spokes
+- ❌ JSONL file-based sync (`~/.beads/beads_sync.sh`)
+- ❌ MinIO `file://` mirror as primary sync
+- ❌ Any "active-active" distributed sync pattern
