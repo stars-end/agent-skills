@@ -244,10 +244,9 @@ install_cron_entry "V8: worktree-gc" \
 install_cron_entry "V8: queue-hygiene-enforcer" \
     "0 */4 * * * DX_CONTROLLER=\${DX_CONTROLLER:-0} $BASH_PATH $WRAPPER queue-enforcer -- $AGENTS_ROOT/scripts/queue-hygiene-enforcer.sh >> $HOME/logs/dx/queue-enforcer.log 2>&1"
 
-# 3.6 Beads health alert (Hub-only: epyc12) with stateful DX job alerts.
 if [[ "$(hostname -s)" == "epyc12" ]]; then
     install_cron_entry "V8: beads-health" \
-        "*/10 * * * * DX_ALERTS_CHANNEL_ID=\${DX_ALERTS_CHANNEL_ID:-C0AEC54RZ6V} $BASH_PATH $WRAPPER beads-health -- $AGENTS_ROOT/scripts/dx-beads-health-alert.sh >> $HOME/logs/dx/beads-health-alert.log 2>&1"
+        "*/10 * * * * TZ=America/Los_Angeles $BASH_PATH $WRAPPER beads-health -- $AGENTS_ROOT/scripts/dx-beads-health-alert.sh >> $HOME/logs/dx/beads-health-alert.log 2>&1"
 fi
 
 # 3.9 macOS legacy launchd policy guard (V8.6)
