@@ -2,7 +2,7 @@
 # dx-alerts-digest.sh - Daily digest for DX alerts
 # Usage: dx-alerts-digest.sh [--dry-run]
 #
-# Posts to #dx-alerts using OpenClaw (same as dx-job-wrapper)
+# Posts to #dx-alerts using Slack Web API
 # Summarizes evacuation events from recovery-commands.log
 #
 # Note: Dirty incident tracking is now handled by canonical-evacuate-active.sh
@@ -19,6 +19,55 @@ RECOVERY_LOG="$STATE_DIR/recovery-commands.log"
 DRY_RUN="${DRY_RUN:-false}"
 
 mkdir -p "$LOG_DIR" "$STATE_DIR"
+
+post_slack_message() {
+    local message="$1"
+    local token="${SLACK_MCP_XOXB_TOKEN:-${SLACK_MCP_XOXP_TOKEN:-${SLACK_BOT_TOKEN:-${SLACK_APP_TOKEN:-}}}}"
+    local channel="${DX_ALERTS_CHANNEL:-dx-alerts}"
+
+    if [[ -z "$token" ]]; then
+        echo "Slack token missing; cannot post digest"
+        return 1
+    fi
+
+    local channel_id
+    if [[ "$channel" == C* || "$channel" == U* || "$channel" == G* ]]; then
+        channel_id="$channel"
+    else
+        local trimmed_channel="${channel#\#}"
+        local response
+        response=$(curl -sS -m 8 -X GET \
+            -H "Authorization: Bearer $token" \
+            -H 'Content-type: application/json; charset=utf-8' \
+            'https://slack.com/api/conversations.list?types=public_channel,private_channel&exclude_archived=true')
+
+        if ! jq -e '.ok == true' >/dev/null <<<"$response"; then
+            echo "Slack conversation lookup failed"
+            return 1
+        fi
+
+        channel_id=$(jq -r --arg name "$trimmed_channel" '.channels[] | select(.name == $name) | .id' <<<"$response" | head -n 1)
+        if [[ -z "$channel_id" || "$channel_id" == "null" ]]; then
+            echo "Could not resolve Slack channel '$channel'"
+            return 1
+        fi
+    fi
+
+    local payload
+    payload=$(jq -n --arg channel_id "$channel_id" --arg text "$message" '{channel: $channel_id, text: $text}')
+    local response
+    response=$(curl -sS -m 8 -X POST "https://slack.com/api/chat.postMessage" \
+        -H "Authorization: Bearer $token" \
+        -H 'Content-type: application/json; charset=utf-8' \
+        --data-raw "$payload")
+
+    if ! jq -e '.ok == true' >/dev/null <<<"$response"; then
+        echo "Slack API postMessage failed"
+        return 1
+    fi
+
+    return 0
+}
 
 # Severity prefix helper
 format_alert() {
@@ -109,27 +158,15 @@ post_digest() {
         return 0
     fi
 
-    # Post to Slack using OpenClaw (same as dx-job-wrapper)
-    local OPENCLAW="$HOME/.local/bin/mise x node@22.21.1 -- openclaw"
-    local ALERTS_CHANNEL="C0ADSSZV9M2"
-    local SENT=0
-
-    # Try OpenClaw first (integrated with dx-job-wrapper)
-    if command -v "$HOME/.local/bin/mise" &> /dev/null; then
-        if $OPENCLAW message send --channel slack --target "$ALERTS_CHANNEL" --message "$message" >/dev/null 2>&1; then
-            SENT=1
+    if ! post_slack_message "$message" >/dev/null 2>&1; then
+        # Fallback to webhook if conversation lookup or API posting fails
+        if command -v curl >/dev/null 2>&1 && [[ -n "${DX_SLACK_WEBHOOK:-}" ]]; then
+            curl -s -m 5 -X POST "$DX_SLACK_WEBHOOK" \
+                -H 'Content-type: application/json' \
+                -d "{\"text\":\"$message\"}" >/dev/null 2>&1 || true
+        else
+            echo "Slack post skipped, see $DIGEST_LOG"
         fi
-    fi
-
-    # Fallback to webhook if OpenClaw failed
-    if [[ "$SENT" -eq 0 && -n "${DX_SLACK_WEBHOOK:-}" ]]; then
-        curl -s -m 5 -X POST "$DX_SLACK_WEBHOOK" \
-            -H 'Content-type: application/json' \
-            -d "{\"text\":\"$message\"}" >/dev/null 2>&1 || true
-    fi
-
-    if [[ "$SENT" -eq 0 && -z "${DX_SLACK_WEBHOOK:-}" ]]; then
-        echo "Slack post skipped (no OpenClaw or webhook), see $DIGEST_LOG"
     fi
 }
 

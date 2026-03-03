@@ -293,6 +293,18 @@ ssh homedesktop-wsl 'grep -q "BEADS_DOLT_SERVER_HOST" ~/.zshrc ~/.bashrc'
 - Treat `bd status --json` + `bd dolt test --json` as source of truth.
 - Do not use local-file or Git-based Beads sync as primary fleet transport.
 
+### DX Alerts & Health Observability
+
+- `#dx-alerts` is the single alert destination for Beads health and migration drift signals.
+- Use deterministic Slack transport (Bot/App token) in automation:
+  - Preferred: `SLACK_BOT_TOKEN` or `SLACK_APP_TOKEN`
+  - Optional aliases: `SLACK_MCP_XOXB_TOKEN`, `SLACK_MCP_XOXP_TOKEN`
+  - Optional fallback: `DX_SLACK_WEBHOOK` (if token is unavailable)
+- `dx-beads-health-alert` runs via `dx-job-wrapper` on epyc12 only, with:
+  - 10-minute cadence
+  - state transition alerting (`fail`/`recovered`) in `dx-job-wrapper`
+  - `DX_WRAPPER_SKIP_SLACK_ALERT=1` for this specific cron to suppress duplicate transitions if already handled elsewhere
+
 ## 9) ID Reconciliation (Canonical Contract)
 
 Legacy handoff text and PR notes may reference non-canonical IDs that do not exist in the current
