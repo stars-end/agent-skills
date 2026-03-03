@@ -44,6 +44,65 @@ log() {
     echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] $1" >> "$LOG_FILE"
 }
 
+resolve_slack_channel_id() {
+    local token="$1"
+    local target="$2"
+
+    if [[ "$target" == C* || "$target" == U* || "$target" == G* ]]; then
+        echo "$target"
+        return 0
+    fi
+
+    local trimmed_target="${target#\#}"
+    local response
+    response=$(curl -sS -m 8 -X GET \
+        -H "Authorization: Bearer $token" \
+        -H 'Content-type: application/json; charset=utf-8' \
+        'https://slack.com/api/conversations.list?types=public_channel,private_channel&exclude_archived=true')
+
+    if ! jq -e '.ok == true' >/dev/null <<<"$response"; then
+        return 1
+    fi
+
+    local channel_id
+    channel_id=$(jq -r --arg name "$trimmed_target" '.channels[] | select(.name == $name) | .id' <<<"$response" | head -n 1)
+    if [[ -z "$channel_id" || "$channel_id" == "null" ]]; then
+        return 1
+    fi
+
+    echo "$channel_id"
+}
+
+post_slack_message() {
+    local message="$1"
+    local token="${SLACK_MCP_XOXB_TOKEN:-${SLACK_MCP_XOXP_TOKEN:-${SLACK_BOT_TOKEN:-${SLACK_APP_TOKEN:-}}}}"
+    local channel="${DX_ALERTS_CHANNEL:-dx-alerts}"
+
+    if [[ -z "$token" ]]; then
+        return 1
+    fi
+
+    local channel_id
+    channel_id=$(resolve_slack_channel_id "$token" "$channel")
+    if [[ -z "$channel_id" ]]; then
+        return 1
+    fi
+
+    local payload
+    payload=$(jq -n --arg channel_id "$channel_id" --arg text "$message" '{channel: $channel_id, text: $text}')
+    local response
+    response=$(curl -sS -m 8 -X POST "https://slack.com/api/chat.postMessage" \
+        -H "Authorization: Bearer $token" \
+        -H 'Content-type: application/json; charset=utf-8' \
+        --data-raw "$payload")
+
+    if ! jq -e '.ok == true' >/dev/null <<<"$response"; then
+        return 1
+    fi
+
+    return 0
+}
+
 file_mtime_epoch() {
     local path="$1"
     if stat -f '%m' "$path" >/dev/null 2>&1; then
@@ -134,9 +193,7 @@ else
 fi
 
 # Slack alerting on state transitions
-SLACK_WEBHOOK_URL="${DX_SLACK_WEBHOOK:-}"
-OPENCLAW="$HOME/.local/bin/mise x node@22.21.1 -- openclaw"
-ALERTS_CHANNEL="C0ADSSZV9M2"
+SKIP_SLACK_ALERT="${DX_WRAPPER_SKIP_SLACK_ALERT:-0}"
 
 if [[ "$PREV_STATE" != "$CURR_STATE" ]]; then
     EMOJI="✅"
@@ -146,20 +203,18 @@ if [[ "$PREV_STATE" != "$CURR_STATE" ]]; then
         MSG="DX job '$JOB_NAME' failed on $(hostname -s) (exit $EXIT_CODE)"
     fi
 
-    # Try integrated OpenClaw messenger first
-    SENT_INTEGRATED=0
-    if command -v "$HOME/.local/bin/mise" &> /dev/null; then
-        if $OPENCLAW message send --channel slack --target "$ALERTS_CHANNEL" --message "${EMOJI} ${MSG}" >/dev/null 2>&1; then
-            SENT_INTEGRATED=1
+    if [[ "$SKIP_SLACK_ALERT" == "1" ]]; then
+        log "ℹ️  Slack alert skipped by DX_WRAPPER_SKIP_SLACK_ALERT"
+    else
+        if ! post_slack_message "${EMOJI} ${MSG}" >/dev/null 2>&1; then
+            # Fallback to legacy webhook if configured
+            if command -v curl >/dev/null 2>&1 && [[ -n "${DX_SLACK_WEBHOOK:-}" ]]; then
+                curl -s -m 5 -X POST "$DX_SLACK_WEBHOOK" \
+                    -H 'Content-type: application/json' \
+                    -d "{\"text\": \"${EMOJI} ${MSG}\"}" \
+                    >/dev/null 2>&1 || true
+            fi
         fi
-    fi
-
-    # Fallback to legacy webhook if necessary
-    if [[ "$SENT_INTEGRATED" -eq 0 && -n "$SLACK_WEBHOOK_URL" ]]; then
-        curl -s -m 5 -X POST "$SLACK_WEBHOOK_URL" \
-            -H 'Content-type: application/json' \
-            -d "{\"text\": \"${EMOJI} ${MSG}\"}" \
-            >/dev/null 2>&1 || true
     fi
 fi
 
