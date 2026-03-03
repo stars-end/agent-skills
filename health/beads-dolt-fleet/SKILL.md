@@ -39,10 +39,10 @@ export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
 export EPYC12_BEADS_HOST="${EPYC12_BEADS_HOST:-$BEADS_DOLT_SERVER_HOST}"
 
-cd ~/bd && bd dolt test --json && bd status --json | jq -c '.summary'
-ssh epyc12 "cd ~/bd && export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json && bd status --json | jq -c '.summary'"
-ssh homedesktop-wsl "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json && bd status --json | jq -c '.summary'"
-ssh epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json && bd status --json | jq -c '.summary'"
+beads-dolt dolt test --json && beads-dolt status --json | jq -c '.summary'
+ssh epyc12 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
+ssh homedesktop-wsl "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
+ssh epyc6 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
 ```
 
 Spokes should point to epyc12’s Tailscale SQL endpoint for all Beads operations.

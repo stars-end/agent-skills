@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Canonical Beads command entrypoint for Dolt SQL fleet mode.
+#
+# This wrapper standardizes:
+# - canonical repo context (~/$HOME/bd)
+# - hub endpoint defaults (epyc12)
+# - compatibility bypass env for multi-repo invocation
+#
+# Use this for all migration-critical Beads calls. Legacy JSONL-only workflows are
+# intentionally compatibility-only; keep them out of the active fleet contract.
+
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  beads-dolt <bd-args...>
+
+Examples:
+  beads-dolt dolt test --json
+  beads-dolt status --json
+  beads-dolt ready --limit 5 --json
+USAGE
+}
+
+if [[ $# -eq 0 ]]; then
+  usage >&2
+  exit 64
+fi
+
+if ! command -v bd >/dev/null 2>&1; then
+  echo "❌ bd CLI not found in PATH" >&2
+  exit 127
+fi
+
+CANONICAL_REPO="${BEADS_REPO_PATH:-$HOME/bd}"
+CANONICAL_HOST="${EPYC12_BEADS_HOST:-${BEADS_DOLT_SERVER_HOST:-100.107.173.83}}"
+
+export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-$CANONICAL_HOST}"
+export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
+export BEADS_DIR="${BEADS_DIR:-$CANONICAL_REPO/.beads}"
+export BEADS_IGNORE_REPO_MISMATCH="${BEADS_IGNORE_REPO_MISMATCH:-1}"
+
+if [[ ! -d "$CANONICAL_REPO/.git" ]]; then
+  echo "❌ canonical Beads repo missing: $CANONICAL_REPO" >&2
+  echo "   Fix: clone git@github.com:stars-end/bd.git to $CANONICAL_REPO" >&2
+  exit 2
+fi
+
+if (cd "$CANONICAL_REPO" && bd "$@" ) ; then
+  exit 0
+fi
+
+status=$?
+# Compatibility-friendly failure hint when command is not available in this `bd` build.
+if [[ "${1:-}" == "dolt" ]] && ! (bd --help 2>/dev/null | grep -q "[[:space:]]dolt[[:space:]]"); then
+  echo "❌ This bd binary appears to not expose the `dolt` subcommand (legacy/SQLite-mode CLI)." >&2
+  echo "   Active contract requires a dolt-aware bd binary." >&2
+  echo "   For one-off legacy JSONL-only workflows, use bd-sync-safe.sh explicitly." >&2
+  exit 1
+fi
+
+# Preserve original exit behavior while surfacing explicit migration guidance.
+exit $status

@@ -26,7 +26,7 @@ This skill assumes:
 
 - `bd` commands fail with connection/lock errors
 - dispatch preflight fails at Beads gate
-- host summaries diverge (`bd status --json` mismatch)
+- host summaries diverge (`beads-dolt status --json` mismatch)
 - agent reports stalled/blocked Beads operations
 
 ## Quick Check
@@ -37,9 +37,9 @@ Run from `~/bd`:
 export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
 
-bd dolt test --json
-bd status --json
-bd ready --limit 5 --json
+beads-dolt dolt test --json
+beads-dolt status --json
+beads-dolt ready --limit 5 --json
 ```
 
 Service checks:
@@ -78,8 +78,8 @@ fi
 2. Re-validate:
 
 ```bash
-bd dolt test --json
-bd status --json
+beads-dolt dolt test --json
+beads-dolt status --json
 ```
 
 ### 2) Lock contention (`database ... is locked by another dolt process`)
@@ -115,7 +115,7 @@ export BEADS_DOLT_SERVER_HOST="<epyc12 tailscale ip>"
 export BEADS_DOLT_SERVER_PORT=3307
 
 nc -z "$BEADS_DOLT_SERVER_HOST" "$BEADS_DOLT_SERVER_PORT"
-bd dolt test --json
+beads-dolt dolt test --json
 ```
 
 ### 5) Bad/corrupt data dir
@@ -127,7 +127,7 @@ cd ~/bd/.beads
 mv dolt dolt.bad.$(date +%Y%m%d%H%M%S)
 # restore known-good snapshot into ./dolt
 systemctl --user start beads-dolt.service
-cd ~/bd && bd dolt test --json && bd status --json
+beads-dolt dolt test --json && beads-dolt status --json
 ```
 
 ## Fleet Verification (from macmini)
@@ -136,9 +136,9 @@ cd ~/bd && bd dolt test --json && bd status --json
 export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
 export EPYC12_BEADS_HOST="${EPYC12_BEADS_HOST:-${BEADS_DOLT_SERVER_HOST:-100.107.173.83}}"
 
-ssh epyc12 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
-ssh homedesktop-wsl "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json; bd status --json | jq -c '.summary'"
-ssh epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json; bd status --json | jq -c '.summary'"
+ssh epyc12 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
+ssh homedesktop-wsl "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
+ssh epyc6 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
 ```
 
 ## Guardrails
@@ -146,4 +146,4 @@ ssh epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEA
 - Do not run mutating `bd` operations from non-`~/bd` repos.
 - Do not run ad hoc `dolt sql-server` during active waves.
 - Prefer managed services (`systemd --user` or `launchd`) for uptime.
-- Use `bd dolt test --json` + `bd status --json` as source of truth.
+- Use `beads-dolt dolt test --json` + `beads-dolt status --json` as source of truth.
