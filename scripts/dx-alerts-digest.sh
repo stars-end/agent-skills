@@ -2,7 +2,7 @@
 # dx-alerts-digest.sh - Daily digest for DX alerts
 # Usage: dx-alerts-digest.sh [--dry-run]
 #
-# Posts to #dx-alerts using OpenClaw (same as dx-job-wrapper)
+# Posts to #dx-alerts using Agent Coordination (Slack API) with webhook fallback
 # Summarizes evacuation events from recovery-commands.log
 #
 # Note: Dirty incident tracking is now handled by canonical-evacuate-active.sh
@@ -10,6 +10,9 @@
 # provides a daily summary of any evacuations that occurred.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/dx-slack-alerts.sh"
 
 STATE_DIR="$HOME/.dx-state"
 LOG_DIR="$HOME/logs/dx"
@@ -109,27 +112,9 @@ post_digest() {
         return 0
     fi
 
-    # Post to Slack using OpenClaw (same as dx-job-wrapper)
-    local OPENCLAW="$HOME/.local/bin/mise x node@22.21.1 -- openclaw"
-    local ALERTS_CHANNEL="C0ADSSZV9M2"
-    local SENT=0
-
-    # Try OpenClaw first (integrated with dx-job-wrapper)
-    if command -v "$HOME/.local/bin/mise" &> /dev/null; then
-        if $OPENCLAW message send --channel slack --target "$ALERTS_CHANNEL" --message "$message" >/dev/null 2>&1; then
-            SENT=1
-        fi
-    fi
-
-    # Fallback to webhook if OpenClaw failed
-    if [[ "$SENT" -eq 0 && -n "${DX_SLACK_WEBHOOK:-}" ]]; then
-        curl -s -m 5 -X POST "$DX_SLACK_WEBHOOK" \
-            -H 'Content-type: application/json' \
-            -d "{\"text\":\"$message\"}" >/dev/null 2>&1 || true
-    fi
-
-    if [[ "$SENT" -eq 0 && -z "${DX_SLACK_WEBHOOK:-}" ]]; then
-        echo "Slack post skipped (no OpenClaw or webhook), see $DIGEST_LOG"
+    # Post to Slack via deterministic Agent Coordination transport.
+    if ! agent_coordination_send_message "$message" "${DX_ALERTS_CHANNEL_ID:-}" >/dev/null 2>&1; then
+        echo "Slack post skipped (no Agent Coordination transport or webhook), see $DIGEST_LOG"
     fi
 }
 

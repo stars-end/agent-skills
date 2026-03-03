@@ -15,7 +15,7 @@
 #   5. PR-to-beads linkage
 #
 # Schedule: Weekly via system cron (OpenClaw native cron is broken)
-# Cron: 0 7 * * 0 /bin/bash -c 'source ~/.bashrc; MSG=$(~/agent-skills/scripts/dx-audit.sh --slack); openclaw message send --channel slack --target C09MQGMFKDE --message "$MSG"'
+# Cron: 0 7 * * 0 /bin/bash -c 'source ~/.bashrc; MSG=$(~/agent-skills/scripts/dx-audit.sh --slack); /bin/bash ~/agent-skills/scripts/dx-audit-cron.sh'
 #
 set -euo pipefail
 

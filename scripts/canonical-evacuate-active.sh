@@ -23,6 +23,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/dx-slack-alerts.sh"
 
 STATE_DIR="$HOME/.dx-state"
 STATE_FILE="$STATE_DIR/dirty-incidents.json"
@@ -38,7 +39,7 @@ DIRTY_WARN_MINUTES="${DIRTY_WARN_MINUTES:-15}"
 DIRTY_EVICT_MINUTES="${DIRTY_EVICT_MINUTES:-45}"
 DIVERGED_EVICT_MINUTES="${DIVERGED_EVICT_MINUTES:-0}"
 
-SLACK_CHANNEL_ID="${DX_ALERTS_CHANNEL_ID:-C0ADSSZV9M2}"
+SLACK_CHANNEL_ID="${DX_ALERTS_CHANNEL_ID:-}"
 
 mkdir -p "$STATE_DIR" "$LOG_DIR"
 touch "$RECOVERY_LOG"
@@ -77,17 +78,8 @@ is_locked() {
 slack_send() {
   local msg="$1"
 
-  # Prefer OpenClaw via mise (same pattern as dx-alerts-digest.sh / dx-job-wrapper.sh).
-  if [[ -x "$HOME/.local/bin/mise" ]]; then
-    if "$HOME/.local/bin/mise" x node@22.21.1 -- openclaw message send \
-      --channel slack --target "$SLACK_CHANNEL_ID" --message "$msg" >/dev/null 2>&1; then
-      return 0
-    fi
-  fi
-
-  # Fallback: if an openclaw shim is available in PATH.
-  if command -v openclaw >/dev/null 2>&1; then
-    openclaw message send --channel slack --target "$SLACK_CHANNEL_ID" --message "$msg" >/dev/null 2>&1 && return 0
+  if agent_coordination_send_message "$msg" "$SLACK_CHANNEL_ID" >/dev/null 2>&1; then
+    return 0
   fi
 
   # Last resort: local log only.

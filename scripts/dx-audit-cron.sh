@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/dx-slack-alerts.sh"
+
 # Setup environment
 export PATH="${HOME}/.local/bin:${HOME}/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
@@ -28,10 +31,10 @@ fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Message generated (${#MSG} chars)"
 
-# Send via OpenClaw CLI (system cron has full env access)
-"${HOME}/.local/bin/mise" x node@22.21.1 -- openclaw message send \
-    --channel slack \
-    --target C0ADSSZV9M2 \
-    --message "$MSG"
-
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Audit sent successfully"
+# Send via Agent Coordination Slack transport.
+if agent_coordination_send_message "$MSG" "${DX_ALERTS_CHANNEL_ID:-}"; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Audit sent successfully"
+else
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Slack transport unavailable"
+  exit 1
+fi
