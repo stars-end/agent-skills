@@ -8,10 +8,12 @@ Automated weekly meta-analysis to detect DX toil patterns and track improvements
 - ✅ **CI run analysis**: Collect failure rates and patterns
 - ✅ **Pattern detection**: Identify recurring toil (lockfile drift, fixture config, etc.)
 - ✅ **Automated reporting**: Generate markdown reports in docs/
-- ✅ **Beads integration**: Optional posting to dx-audit epic
+- ⚠️ **Beads integration**: Compatibility path only; writes to legacy JSONL tracks
 - ⚠️  **Claude API integration**: Placeholder (not yet implemented)
 
 ## Concept
+
+**Migration posture**: Active contract is Dolt-native for Beads state. This action’s Beads writeback remains a compatibility path and is disabled by default.
 
 Instead of manual one-time DX analysis (like bd-vi6j), run weekly automated audits:
 
@@ -54,6 +56,7 @@ jobs:
     lookback-runs: 30
     output-file: docs/DX_AUDIT_LOG.md
     beads-epic: bd-audit  # Post summary to this epic
+    legacy-beads-sync: false  # Explicitly disabled unless compatibility is needed
 ```
 
 ### Custom Lookback Period
@@ -74,6 +77,7 @@ jobs:
 | `lookback-runs` | Number of recent CI runs to analyze | No | `30` |
 | `output-file` | Output file path for audit report | No | `docs/DX_AUDIT_LOG.md` |
 | `beads-epic` | Beads epic to post summary to | No | `''` |
+| `legacy-beads-sync` | Enable legacy Beads JSONL sync path | No | `false` |
 
 ## Outputs
 

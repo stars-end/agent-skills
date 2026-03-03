@@ -20,9 +20,13 @@ inputs:
     required: false
     default: ''
   repo-writer-token:
-    description: 'Token with contents:write for pushing Beads JSONL (optional)'
+    description: 'Token with contents:write for pushing legacy Beads JSONL (optional)'
     required: false
     default: ''
+  legacy-beads-sync:
+    description: 'Enable legacy Beads JSONL sync (compatibility mode)'
+    required: false
+    default: 'false'
   assignee:
     description: 'GitHub username to assign the issue to (forces email notification)'
     required: false
@@ -304,9 +308,26 @@ runs:
         echo "issue-url=$ISSUE_URL" >> $GITHUB_OUTPUT
         echo "issue-created=true" >> $GITHUB_OUTPUT
 
+    - name: Resolve legacy Beads sync compatibility
+      id: beads-compat
+      shell: bash
+      run: |
+        LEGACY_BEADS_SYNC='${{ inputs.legacy-beads-sync }}'
+        if [ "${BEADS_LEGACY_AUDIT_SYNC:-false}" = "1" ] || [ "${BEADS_LEGACY_AUDIT_SYNC:-false}" = "true" ]; then
+          LEGACY_BEADS_SYNC=true
+        fi
+
+        if [ "$LEGACY_BEADS_SYNC" = "true" ]; then
+          echo "enabled=true" >> $GITHUB_OUTPUT
+          echo "Legacy Beads audit sync enabled."
+        else
+          echo "enabled=false" >> $GITHUB_OUTPUT
+          echo "Legacy Beads audit sync disabled."
+        fi
+
     - name: Sync to Beads (best-effort)
       id: beads-sync
-      if: inputs.beads-epic != '' && steps.create-issue.outputs.issue-created == 'true'
+      if: inputs.beads-epic != '' && steps.create-issue.outputs.issue-created == 'true' && steps.beads-compat.outputs.enabled == 'true'
       continue-on-error: true
       shell: bash
       run: |
@@ -346,7 +367,7 @@ runs:
 
     - name: Commit Beads JSONL
       id: commit-beads
-      if: steps.beads-sync.outputs.sync-status == 'created'
+      if: steps.beads-sync.outputs.sync-status == 'created' && steps.beads-compat.outputs.enabled == 'true'
       continue-on-error: true
       shell: bash
       run: |
@@ -421,6 +442,8 @@ runs:
           echo "- **Beads**: ⚠️ Created but push failed (check permissions)" >> $GITHUB_STEP_SUMMARY
         elif [ "$SYNC" = "created" ]; then
           echo "- **Beads**: ⚠️ Created but not committed" >> $GITHUB_STEP_SUMMARY
+        elif [ "$SYNC" = "" ]; then
+          echo "- **Beads**: ⏭️ Compatibility path disabled (legacy sync off)" >> $GITHUB_STEP_SUMMARY
         elif [ "$SYNC" = "no-cli" ] || [ "$SYNC" = "no-db" ]; then
           echo "- **Beads**: ⏭️ Skipped (bd CLI or .beads not available)" >> $GITHUB_STEP_SUMMARY
         elif [ "$SYNC" = "failed" ]; then

@@ -216,6 +216,7 @@ remove_wrapper_job_entries "canonical-sync" "canonical-sync-v8.sh"
 remove_wrapper_job_entries "worktree-push" "worktree-push.sh"
 remove_wrapper_job_entries "worktree-gc" "worktree-gc-v8.sh"
 remove_wrapper_job_entries "queue-enforcer" "queue-hygiene-enforcer.sh"
+remove_wrapper_job_entries "beads-health" "beads-health-alert.sh"
 remove_v8_marker_variants "V8.3.x: Canonical Enforcer - Active Hours (5am-5pm PT)"
 remove_v8_marker_variants "V8: canonical-evacuate-active-15m"
 remove_v8_marker_variants "V8: canonical-evacuate-active-1700"
@@ -223,6 +224,7 @@ remove_v8_marker_variants "V8: canonical-sync"
 remove_v8_marker_variants "V8: worktree-push"
 remove_v8_marker_variants "V8: worktree-gc"
 remove_v8_marker_variants "V8: queue-hygiene-enforcer"
+remove_v8_marker_variants "V8: beads-health"
 
 install_cron_entry "V8: canonical-evacuate-active-15m" \
     "*/15 5-16 * * * TZ=America/Los_Angeles $BASH_PATH $WRAPPER canonical-evacuate -- $AGENTS_ROOT/scripts/canonical-evacuate-active.sh >> $HOME/logs/dx/canonical-evacuate.log 2>&1"
@@ -241,6 +243,12 @@ install_cron_entry "V8: worktree-gc" \
 
 install_cron_entry "V8: queue-hygiene-enforcer" \
     "0 */4 * * * DX_CONTROLLER=\${DX_CONTROLLER:-0} $BASH_PATH $WRAPPER queue-enforcer -- $AGENTS_ROOT/scripts/queue-hygiene-enforcer.sh >> $HOME/logs/dx/queue-enforcer.log 2>&1"
+
+# 3.6 Beads health alert (Hub-only: epyc12) with stateful DX job alerts.
+if [[ "$(hostname -s)" == "epyc12" ]]; then
+    install_cron_entry "V8: beads-health" \
+        "*/10 * * * * DX_ALERTS_CHANNEL_ID=\${DX_ALERTS_CHANNEL_ID:-C0AEC54RZ6V} $BASH_PATH $WRAPPER beads-health -- $AGENTS_ROOT/scripts/dx-beads-health-alert.sh >> $HOME/logs/dx/beads-health-alert.log 2>&1"
+fi
 
 # 3.9 macOS legacy launchd policy guard (V8.6)
 if [[ "$(uname -s)" == "Darwin" ]]; then
