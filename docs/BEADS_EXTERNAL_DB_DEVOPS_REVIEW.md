@@ -1,5 +1,10 @@
 # DevOps Review: External Beads Database Migration
 
+> [!WARNING]
+> **Historical only.** This review is archived and no longer reflects active architecture.
+> Use hub-spoke migration guidance in
+> [`docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md`](docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md).
+
 **Reviewed by:** DevOps Engineer (fintech perspective)
 **Date:** 2026-01-31
 **Status:** ✅ Production-ready scripts created

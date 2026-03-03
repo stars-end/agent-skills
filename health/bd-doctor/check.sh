@@ -72,7 +72,7 @@ fi
 if command -v bd >/dev/null 2>&1; then
   if bd doctor --json 2>/dev/null | grep -q '"status":"error"'; then
     fail "bd doctor reports hard errors"
-    echo "   Remediation: run ~/.agent/skills/bd-doctor/fix.sh"
+    echo "   Remediation: run ~/.agent/skills/health/bd-doctor/fix.sh"
   else
     pass "bd doctor reports no hard errors"
   fi
@@ -84,5 +84,5 @@ if [[ $ISSUES -eq 0 ]]; then
 fi
 
 echo "❌ Found $ISSUES issue(s)"
-echo "Run: ~/.agent/skills/bd-doctor/fix.sh"
+echo "Run: ~/.agent/skills/health/bd-doctor/fix.sh"
 exit 1

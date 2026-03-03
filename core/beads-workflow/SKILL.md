@@ -513,7 +513,7 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 **Issue not found:**
 - List all: `bd list --status open`
 - Check ID format: `bd-abc123` (not just abc123)
-- Verify beads initialized: `ls .beads/`
+- Verify Beads backend is initialized and healthy: `cd ~/bd && bd dolt test --json`
 
 **Dolt lock contention (`database ... is locked`):**
 - Ensure only one Dolt server process is using `~/bd/.beads/dolt` on the host

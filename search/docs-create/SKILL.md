@@ -92,7 +92,7 @@ Read all cached docs together and generate summaries.
 **Example output:**
 ```
 Doc 1: Beads AGENTS.md
-Summary: Beads workflow for AI agents: Issue-First development pattern, epic→feature→task hierarchy, dependency types (blocks, parent-child, discovered-from). Core commands: bd create/update/close, bd ready, bd sync. Multi-developer git integration via .beads/issues.jsonl.
+Summary: Beads workflow for AI agents: Issue-First development pattern, epic→feature→task hierarchy, dependency types (blocks, parent-child, discovered-from). Core commands: bd create/update/close, bd ready, bd sync. Multi-developer coordination uses centralized Beads (`~/bd`) for durable issue tracking.
 Topics: beads, workflow, issue-first, dependencies
 
 Doc 2: Claude Code Skills

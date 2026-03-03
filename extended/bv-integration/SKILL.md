@@ -87,7 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/beads_viewer/main
 # Check installed
 which bv && bv --version
 
-# Robot protocol works (run in repo with .beads/)
+# Robot protocol works in a normal repo checkout (with canonical Beads available)
 cd ~/affordabot && bv --robot-plan | jq .
 
 # Optional: Interactive TUI (human only)
