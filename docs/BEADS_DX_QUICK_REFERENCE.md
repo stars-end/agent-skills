@@ -6,12 +6,11 @@
 
 ## Overview
 
-The DX scripts provide automated handling for the **Centralized Beads Database Pattern**, including safety bypass persistence, fleet checks, and health diagnostics.
+The DX scripts provide automated handling for the **Centralized Beads Database Pattern**, including chunked imports for large JSONL files, safety bypass persistence, and health diagnostics.
 
-### Active Contract
-
-- Beads runtime is **Dolt-native hub-spoke only** (`~/bd/.beads/dolt` + `BEADS_DOLT_SERVER_HOST`).
-- Legacy JSONL/SQLite checks are compatibility-only for non-canonical recovery workflows and must not be considered the default path.
+**Note on Data Formats**:
+- **Dolt (Canonical)**: The primary, high-concurrency database engine is Dolt server mode. Use `bd` commands for all interactive work.
+- **JSONL (Compatibility Only)**: `issues.jsonl` is maintained for legacy compatibility and bulk imports/exports. Do not use JSONL as the primary data store for active fleet operations.
 
 ## DX Scripts
 
