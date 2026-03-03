@@ -66,7 +66,11 @@ cd ~/bd && bd dolt test --json && bd status --json
 ### Manual Large Import
 
 ```bash
-# Use structured `bd` APIs for targeted imports/migrations
+# Active path is Dolt SQL (`bd dolt test` + `bd status`).
+# Use JSONL import/export only in legacy/compatibility recovery workflows.
+export ALLOW_BEADS_LEGACY_SOURCE=1
+export ALLOW_BEADS_LEGACY_IMPORT=1
+export BEADS_JSONL_COMPAT=1
 bd export -o /tmp/epic-snapshot.jsonl
 bd import -i /tmp/epic-snapshot.jsonl
 ```
