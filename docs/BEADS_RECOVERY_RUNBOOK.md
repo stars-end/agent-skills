@@ -1,5 +1,9 @@
 # Beads Recovery Runbook (Canonical `~/bd`)
 
+> [!WARNING]
+> This runbook is a fallback for local `.beads` SQLite recovery. Active fleet recovery for `epyc12` hub-spoke operations should follow
+> [`docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md`](docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md).
+
 Use this when `bd sync --import-only` hangs, reports `sqlite ... interrupted/locked`, or DX tools report stale Beads state.
 
 ## Scope

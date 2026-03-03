@@ -35,14 +35,14 @@ Use this skill for:
 Run from macmini:
 
 ```bash
-export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-127.0.0.1}"
+export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
 export EPYC12_BEADS_HOST="${EPYC12_BEADS_HOST:-$BEADS_DOLT_SERVER_HOST}"
 
 cd ~/bd && bd dolt test --json && bd status --json | jq -c '.summary'
-ssh epyc12 'cd ~/bd && export BEADS_DOLT_SERVER_HOST=127.0.0.1; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json && bd status --json | jq -c ".summary"'
+ssh epyc12 "cd ~/bd && export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json && bd status --json | jq -c '.summary'"
 ssh homedesktop-wsl "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json && bd status --json | jq -c '.summary'"
-ssh feng@epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json && bd status --json | jq -c '.summary'"
+ssh epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=$EPYC12_BEADS_HOST; export BEADS_DOLT_SERVER_PORT=$BEADS_DOLT_SERVER_PORT; bd dolt test --json && bd status --json | jq -c '.summary'"
 ```
 
 Spokes should point to epyc12’s Tailscale SQL endpoint for all Beads operations.
@@ -61,7 +61,7 @@ Use this transfer pattern:
 
 ```bash
 ssh epyc12 'cd ~/bd/.beads && tar -cf - dolt' | ssh homedesktop-wsl 'cd ~/bd/.beads && tar -xf -'
-ssh epyc12 'cd ~/bd/.beads && tar -cf - dolt' | ssh feng@epyc6 'cd ~/bd/.beads && tar -xf -'
+ssh epyc12 'cd ~/bd/.beads && tar -cf - dolt' | ssh epyc6 'cd ~/bd/.beads && tar -xf -'
 ```
 
 ## Service Controls

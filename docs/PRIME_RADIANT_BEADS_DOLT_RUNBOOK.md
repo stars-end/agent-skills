@@ -8,11 +8,19 @@ This is the operating contract for agents working in `~/prime-radiant-ai` with c
 - Canonical backend: Dolt SQL server mode
 - Canonical fleet: `epyc12` hub, `macmini`, `homedesktop-wsl`, `epyc6` spokes
 
+Operational contract:
+- `epyc12` is the single managed Beads SQL service host.
+- `macmini` is a control-pane host only (no local Beads SQL service).
+- `homedesktop-wsl` and `epyc6` are spokes only.
+
 ## 1) Preflight (Required Before Dispatch)
 
 Run on the host where dispatch will run:
 
 ```bash
+export BEADS_DOLT_SERVER_HOST=100.107.173.83
+export BEADS_DOLT_SERVER_PORT=3307
+
 cd ~/bd
 bd dolt test --json
 bd status --json
@@ -21,30 +29,24 @@ bd status --json
 Linux hosts must pass:
 
 ```bash
-systemctl --user is-active beads-dolt.service
+if [[ "$(hostname)" == "epyc12" ]]; then
+  systemctl --user is-active beads-dolt.service
+fi
 ```
 
-macOS host must pass:
+macOS host (macmini) does not run Beads SQL; confirm local service is disabled:
 
 ```bash
-launchctl print gui/$(id -u)/com.starsend.beads-dolt
+launchctl print gui/$(id -u)/com.starsend.beads-dolt >/dev/null 2>&1 || true
 ```
 
 Set/verify fleet connection settings for all hosts:
 
 ```bash
+export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
-if [[ -z "${BEADS_DOLT_SERVER_HOST:-}" ]]; then
-  if [[ "$(hostname)" == "epyc12" ]]; then
-    export BEADS_DOLT_SERVER_HOST="127.0.0.1"
-  elif [[ -n "${BEADS_EPYC12_TAILSCALE_IP:-}" ]]; then
-    export BEADS_DOLT_SERVER_HOST="$BEADS_EPYC12_TAILSCALE_IP"
-  else
-    export BEADS_DOLT_SERVER_HOST="$(tailscale ip -4 2>/dev/null | awk 'NF{print $1; exit}')"
-  fi
-fi
-if [[ -z "${BEADS_DOLT_SERVER_HOST:-}" ]]; then
-  echo "❌ BEADS_DOLT_SERVER_HOST is not set and could not be auto-detected"
+if [[ -z "${BEADS_DOLT_SERVER_HOST}" ]]; then
+  echo "❌ BEADS_DOLT_SERVER_HOST is required for remote Beads mode"
   exit 1
 fi
 
@@ -52,7 +54,7 @@ echo "fleet target: ${BEADS_DOLT_SERVER_HOST}:${BEADS_DOLT_SERVER_PORT}"
 ```
 
 Spoke hosts must resolve `BEADS_DOLT_SERVER_HOST` to the epyc12 Tailscale IP.
-If host auto-detection is not stable on that host, set `BEADS_EPYC12_TAILSCALE_IP` in profile once.
+All hosts should have `BEADS_DOLT_SERVER_HOST=100.107.173.83` in profile for consistency.
 
 Connectivity check:
 
@@ -106,6 +108,9 @@ dx-batch doctor --wave-id <wave-id> --json
 ## 4) Daily Health Checks
 
 ```bash
+export BEADS_DOLT_SERVER_HOST=100.107.173.83
+export BEADS_DOLT_SERVER_PORT=3307
+
 cd ~/bd
 bd dolt test --json
 bd ready --limit 5 --json
@@ -114,15 +119,15 @@ bd ready --limit 5 --json
 Fleet checks from macmini:
 
 ```bash
-export EPYC12_BEADS_HOST="${EPYC12_BEADS_HOST:-${BEADS_DOLT_SERVER_HOST}}"
+export EPYC12_BEADS_HOST="100.107.173.83"
 if [[ -z "$EPYC12_BEADS_HOST" ]]; then
   echo "❌ EPYC12_BEADS_HOST or BEADS_DOLT_SERVER_HOST must be set"
   exit 1
 fi
 
-ssh epyc12 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=127.0.0.1; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
+ssh epyc12 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=${EPYC12_BEADS_HOST}; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
 ssh homedesktop-wsl "cd ~/bd; export BEADS_DOLT_SERVER_HOST=${EPYC12_BEADS_HOST}; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
-ssh feng@epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=${EPYC12_BEADS_HOST}; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
+ssh epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=${EPYC12_BEADS_HOST}; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
 ```
 
 ## 5) Incident Triage
@@ -141,12 +146,17 @@ nc -z "$BEADS_DOLT_SERVER_HOST" "$BEADS_DOLT_SERVER_PORT"
 
 Linux:
 ```bash
-systemctl --user restart beads-dolt.service
+if [[ "$(hostname)" == "epyc12" ]]; then
+  systemctl --user restart beads-dolt.service
+fi
 ```
 
 macOS:
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt
+if launchctl print gui/$(id -u)/com.starsend.beads-dolt >/dev/null 2>&1; then
+  echo "Unexpected Beads launchd service found on macOS control pane; disable it and let host stay read-only for Beads control."
+  launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt
+fi
 ```
 
 ### B) `database ... is locked`
@@ -155,7 +165,12 @@ launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt
 - Stop unmanaged process on the host, then restart managed service
 
 ```bash
-lsof -nP -iTCP@"${BEADS_DOLT_SERVER_HOST}:$BEADS_DOLT_SERVER_PORT" -sTCP:LISTEN
+if [[ "$(hostname)" == "epyc12" ]]; then
+  lsof -nP -iTCP@100.107.173.83:3307 -sTCP:LISTEN
+else
+  # On spokes, clear any unmanaged local listener so there is only one canonical source
+  pkill -f "dolt sql-server -H 127.0.0.1 -P 3307" || true
+fi
 ```
 
 ### C) Divergent host summaries
@@ -164,6 +179,18 @@ lsof -nP -iTCP@"${BEADS_DOLT_SERVER_HOST}:$BEADS_DOLT_SERVER_PORT" -sTCP:LISTEN
   - Hub: `epyc12`
   - Spokes: `BEADS_DOLT_SERVER_HOST` resolves to epyc12 Tailscale IP
 - Compare `bd status --json | jq -c '.summary'` output
+
+```bash
+ssh epyc12 "ss -ltnp | grep ':3307' || true"
+ssh homedesktop-wsl "ss -ltnp | grep ':3307' || true"
+ssh epyc6 "ss -ltnp | grep ':3307' || true"
+```
+
+Expected:
+
+- `epyc12`: listener on `100.107.173.83:3307`
+- `homedesktop-wsl`: no listener on `127.0.0.1:3307`
+- `epyc6`: no listener on `127.0.0.1:3307`
 
 ## 6) Recovery: Corrupt/Unusable Dolt Data
 
@@ -195,10 +222,50 @@ Data:   epyc12:/home/$USER/bd/.beads/dolt
 
 ### Deployment Contract
 
-- Hub runs `dolt sql-server --data-dir ~/bd/.beads/dolt`
-- Spokes connect via `BEADS_DOLT_SERVER_HOST=<epyc12_tailscale_ip>`
-- `BEADS_DOLT_SERVER_PORT` is shared across hosts (currently `3307`)
+- Hub runs `dolt sql-server --data-dir ~/bd/.beads/dolt --host 100.107.173.83 --port 3307`
+- Spokes connect via `BEADS_DOLT_SERVER_HOST=100.107.173.83`
+- `BEADS_DOLT_SERVER_PORT` is fixed to `3307`
 - `bd` commands run against the SQL endpoint from all hosts
+
+### Rollout Wave (Canonical)
+
+Run this when promoting hub-spoke mode:
+
+1. Validate hub server target:
+
+```bash
+ssh epyc12 "ss -ltnp | grep ':3307' || true"
+```
+
+2. Enforce client env on all hosts:
+
+```bash
+for host in epyc12 homedesktop-wsl epyc6; do
+  ssh $host "grep -q '^export BEADS_DOLT_SERVER_HOST=100.107.173.83' ~/.zshrc ~/.bashrc || true"
+done
+grep -q '^export BEADS_DOLT_SERVER_HOST=100.107.173.83' ~/.zshrc ~/.bashrc || true
+```
+
+3. Ensure spokes are not running local listeners:
+
+```bash
+for host in homedesktop-wsl epyc6; do
+  ssh $host "ss -ltnp | grep ':3307' || true"
+done
+```
+
+4. Validate end-to-end status from each host:
+
+```bash
+cd ~/bd
+export BEADS_DOLT_SERVER_HOST=100.107.173.83
+export BEADS_DOLT_SERVER_PORT=3307
+bd dolt test --json
+bd status --json | jq -c .summary
+ssh epyc12 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=100.107.173.83; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c .summary"
+ssh homedesktop-wsl "cd ~/bd; export BEADS_DOLT_SERVER_HOST=100.107.173.83; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c .summary"
+ssh epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=100.107.173.83; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c .summary"
+```
 
 ### Recovery (Host Divergence)
 

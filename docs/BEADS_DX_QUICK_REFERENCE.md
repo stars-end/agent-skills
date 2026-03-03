@@ -1,5 +1,9 @@
 # Beads DX Tooling Quick Reference
 
+> [!NOTE]
+> This is the current quick reference for Beads tooling. Canonical topology and host rollout are defined in
+> [`docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md`](docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md).
+
 ## Overview
 
 The DX scripts provide automated handling for the **Centralized Beads Database Pattern**, including safety bypass persistence, fleet checks, and health diagnostics.
@@ -36,9 +40,8 @@ export BEADS_IGNORE_REPO_MISMATCH=1
 ### Centralized Database Pattern (Hub-Spoke)
 
 ```bash
-# Hub
-export BEADS_EPYC12_TAILSCALE_IP=<epyc12_tailscale_ip>
-export BEADS_DOLT_SERVER_HOST="$BEADS_EPYC12_TAILSCALE_IP"
+# Hub (single-host mode)
+export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 export BEADS_DOLT_SERVER_PORT=3307
 
 # Spokes and hub connect through this endpoint using Dolt SQL
@@ -72,8 +75,7 @@ bd import -i /tmp/epic-snapshot.jsonl
 
 ```bash
 # Required for fleet mode
-export BEADS_EPYC12_TAILSCALE_IP=<epyc12_tailscale_ip>
-export BEADS_DOLT_SERVER_HOST="$BEADS_EPYC12_TAILSCALE_IP"
+export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 export BEADS_DOLT_SERVER_PORT=3307
 
 # Ensure all safety settings are exported
