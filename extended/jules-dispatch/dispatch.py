@@ -93,9 +93,9 @@ def load_issues(repo_root: Path) -> List[Dict]:
     if issues:
         return issues
 
-    if os.getenv("ALLOW_LEGACY_BEADS_JSONL", "0") != "1":
+    if os.getenv("ALLOW_BEADS_LEGACY_JSONL_IMPORT", "0") != "1":
         print("⚠️  Beads CLI unavailable; legacy JSONL source is disabled for this run")
-        print("    Set ALLOW_LEGACY_BEADS_JSONL=1 to enable compatibility fallback.")
+        print("    Set ALLOW_BEADS_LEGACY_JSONL_IMPORT=1 to enable compatibility fallback.")
         return []
 
     beads_path = repo_root / BEADS_FILE
