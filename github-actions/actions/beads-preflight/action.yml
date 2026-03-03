@@ -11,6 +11,10 @@ inputs:
     description: 'Fail CI if Beads issues detected'
     required: false
     default: 'false'
+  legacy-jsonl-check:
+    description: 'Enable legacy Beads JSONL compatibility checks'
+    required: false
+    default: 'false'
 
 outputs:
   status:
@@ -43,8 +47,13 @@ runs:
         ISSUES=""
         STATUS="ok"
 
-        # Check 1: JSONL timestamp skew (compatibility mode only)
-        if [ "${BEADS_LEGACY_JSONL_CHECK:-0}" = "1" ]; then
+        # Check 1: JSONL timestamp skew
+        LEGACY_JSONL_CHECK='${{ inputs.legacy-jsonl-check }}'
+        if [ "${BEADS_LEGACY_JSONL_CHECK:-false}" = "1" ] || [ "${BEADS_LEGACY_JSONL_CHECK:-false}" = "true" ]; then
+          LEGACY_JSONL_CHECK=true
+        fi
+
+        if [ "$LEGACY_JSONL_CHECK" = "true" ]; then
           if git status --porcelain 2>/dev/null | grep -q ".beads/issues.jsonl"; then
             if [ "$(git status --porcelain 2>/dev/null | grep ".beads/issues.jsonl" | cut -c1-2)" != "M " ]; then
               ISSUES="${ISSUES}unstaged-jsonl,"
@@ -53,7 +62,7 @@ runs:
             fi
           fi
         else
-          echo "ℹ️  JSONL compatibility checks are disabled by default."
+          echo "ℹ️  Legacy JSONL check is disabled by default. Set inputs.legacy-jsonl-check=true or BEADS_LEGACY_JSONL_CHECK=1 to enable."
         fi
 
         # Check 2: Feature-Key in recent commits (if on feature branch)

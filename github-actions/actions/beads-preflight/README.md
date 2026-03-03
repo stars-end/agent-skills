@@ -2,9 +2,12 @@
 
 Validate Beads workflow health in CI before expensive operations run.
 
+> Important: This action is a **legacy JSONL compatibility fallback** check.
+> Active Beads policy is Dolt-native via `~/bd/.beads/dolt`.
+
 ## Features
 
-- ✅ **JSONL checks**: Detect unstaged .beads/issues.jsonl changes
+- ⚠️ **Legacy JSONL checks**: Detect unstaged `.beads/issues.jsonl` changes when explicitly enabled
 - ✅ **Feature-Key validation**: Ensure commits have proper trailers
 - ✅ **Branch/issue alignment**: Verify feature-bd-xyz branch matches open issue bd-xyz
 - ✅ **Optional enforcement**: Warning-only mode (default) or fail CI
@@ -36,12 +39,21 @@ This will:
 - ❌ Fail CI if issues detected
 - Use for protected workflows where Beads sync is critical
 
+### Legacy JSONL Preflight (Compatibility Mode)
+
+```yaml
+- uses: stars-end/agent-skills/.github/actions/beads-preflight@main
+  with:
+    legacy-jsonl-check: true
+```
+
 ## Inputs
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `check-only` | Only check, no auto-fix (CI read-only) | No | `true` |
 | `fail-on-issues` | Fail CI if issues detected | No | `false` |
+| `legacy-jsonl-check` | Enable legacy JSONL compatibility checks | No | `false` |
 
 ## Outputs
 
@@ -52,8 +64,8 @@ This will:
 
 ## What It Checks
 
-### 1. Unstaged JSONL Changes
-**Problem**: .beads/issues.jsonl modified but not committed
+### 1. Legacy Unstaged JSONL Changes
+**Problem**: `.beads/issues.jsonl` modified but not committed in compatibility mode
 **Detection**: `git status --porcelain | grep .beads/issues.jsonl`
 **Fix**: Run `bd-doctor/fix.sh` or `git add .beads/issues.jsonl`
 

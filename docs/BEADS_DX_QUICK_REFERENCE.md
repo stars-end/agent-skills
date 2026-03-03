@@ -8,6 +8,11 @@
 
 The DX scripts provide automated handling for the **Centralized Beads Database Pattern**, including safety bypass persistence, fleet checks, and health diagnostics.
 
+### Active Contract
+
+- Beads runtime is **Dolt-native hub-spoke only** (`~/bd/.beads/dolt` + `BEADS_DOLT_SERVER_HOST`).
+- Legacy JSONL/SQLite checks are compatibility-only for non-canonical recovery workflows and must not be considered the default path.
+
 ## DX Scripts
 
 ### Core Scripts
@@ -95,9 +100,11 @@ The `ensure-shell-path.sh` script ensures that background cron jobs have the sam
 
 ```bash
 # Crontab example - safety bypass is automatically available
-# No dedicated Beads sync cron in canonical mode.
-# Use periodic fleet checks from your host operations tooling.
-*/10 * * * * bash -lc 'cd ~/agent-skills && dx-status.sh >/tmp/dx-status.log 2>&1 || true'
+# Beads connectivity alert job is installed only on the hub.
+# State-change alerting is sent via dx-job-wrapper -> Agent Coordination transport -> Slack (#railway-dev-alerts by default).
+*/10 * * * * DX_ALERTS_CHANNEL_ID=${DX_ALERTS_CHANNEL_ID:-C0AEC54RZ6V} \
+  /Users/fengning/agent-skills/scripts/dx-job-wrapper.sh beads-health -- \
+  /Users/fengning/agent-skills/scripts/dx-beads-health-alert.sh >> ~/logs/dx/beads-health-alert.log 2>&1
 ```
 
 ## Resolution History
@@ -137,10 +144,10 @@ export BEADS_IGNORE_REPO_MISMATCH=1
 
 ### Legacy Tooling (Optional)
 
-**Solution**:
+**Solution (explicit compatibility):**
 ```bash
-# Legacy wrappers are deprecated and should be retired for canonical Beads operations.
-# Keep them only if a non-canonical repo still requires one-off JSONL migrations.
+# Legacy wrappers are deprecated and should not be used in active canonical Beads operations.
+# Keep them only for explicit one-off compatibility work in non-canonical contexts.
 
 # For canonical mode, verify Beads SQL health instead:
 cd ~/bd && bd dolt test --json && bd status --json
