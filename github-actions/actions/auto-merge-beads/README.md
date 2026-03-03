@@ -2,6 +2,14 @@
 
 Composite action for automatically resolving Beads JSONL merge conflicts using union merge strategy.
 
+## Important
+
+This action is a **legacy JSONL compatibility fallback** only.
+- Active migration contract is **Dolt-native** (`~/bd/.beads/dolt`).
+- Enable this action only for explicit legacy compatibility:
+  - action input: `legacy-jsonl-automerge: true`
+  - env var: `BEADS_LEGACY_JSONL_AUTOMERGE=1`
+
 ## Problem
 
 Multi-agent, multi-VM workflows cause frequent `.beads/issues.jsonl` merge conflicts when creating PRs:
@@ -62,6 +70,7 @@ git push
     base-ref: ${{ github.base_ref }}
     pr-branch: ${{ github.event.pull_request.head.ref }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
+    legacy-jsonl-automerge: false
 ```
 
 ## How It Works
@@ -115,6 +124,7 @@ graph TD
 | `base-ref` | Yes | Base branch to merge from (e.g., `master`, `main`) |
 | `pr-branch` | Yes | PR branch to merge into |
 | `github-token` | Yes | GitHub token for pushing changes |
+| `legacy-jsonl-automerge` | No | Enable legacy JSONL merge fallback (`true`/`false`, default `false`) |
 
 ## Outputs
 

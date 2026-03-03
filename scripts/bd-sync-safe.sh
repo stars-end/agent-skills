@@ -2,8 +2,9 @@
 #
 # bd-sync-safe.sh
 #
-# Deterministic wrapper for Beads sync to keep ~/bd git-clean.
-# Multi-writer safe with host-local locking and retry logic.
+# Compatibility-only wrapper for legacy JSONL-based Beads sync.
+# In Dolt hub-spoke mode, this wrapper is disabled by default and exits fast.
+# Enable explicit compatibility mode with BEADS_LEGACY_SYNC=1.
 #
 # Usage:
 #   bd-sync-safe.sh [--quiet]
@@ -17,6 +18,13 @@ BEADS_REPO="$HOME/bd"
 MAX_LOCK_WAIT_SECONDS=120
 MAX_RETRIES=3
 MIN_BD_VERSION="${DX_MIN_BD_VERSION:-0.49.4}"
+
+# Dolt hub-spoke contract is authoritative; legacy JSONL sync remains manual.
+if [[ "${BEADS_LEGACY_SYNC:-0}" != "1" ]]; then
+    log "⚠️ Legacy bd-sync-safe path disabled (Dolt-only contract)."
+    log "   Set BEADS_LEGACY_SYNC=1 to run this compatibility wrapper explicitly."
+    exit 0
+fi
 
 # Ensure environment
 export BEADS_DIR="${BEADS_DIR:-$HOME/bd/.beads}"

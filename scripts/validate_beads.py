@@ -1,6 +1,11 @@
-import json
-import sys
 import os
+import sys
+import json
+
+if os.getenv("BEADS_JSONL_COMPAT", "0") != "1":
+    print("✅ Beads JSONL integrity checks skipped (compatibility mode off).")
+    print("Set BEADS_JSONL_COMPAT=1 to run legacy JSONL validation.")
+    sys.exit(0)
 
 def validate_jsonl(file_path):
     """
@@ -47,4 +52,3 @@ if __name__ == "__main__":
         
     print("✅ Beads integrity verified.")
     sys.exit(0)
-

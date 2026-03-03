@@ -8,8 +8,8 @@ on:
 
 jobs:
   auto-merge-jsonl:
-    # Only run on non-draft PRs
-    if: github.event.pull_request.draft == false
+    # Default-off compatibility workflow: enable only when repository opts in.
+    if: github.event.pull_request.draft == false && vars.BEADS_LEGACY_JSONL_AUTOMERGE == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -30,6 +30,7 @@ jobs:
           base-ref: ${{ github.base_ref }}
           pr-branch: ${{ github.event.pull_request.head.ref }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          legacy-jsonl-automerge: true
 
       - name: Comment on PR if conflict resolved
         if: steps.auto-merge.outputs.conflict-resolved == 'true'

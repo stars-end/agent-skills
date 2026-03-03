@@ -11,6 +11,10 @@ inputs:
   github-token:
     description: 'GitHub token for pushing changes'
     required: true
+  legacy-jsonl-automerge:
+    description: 'Enable legacy Beads JSONL auto-merge fallback'
+    required: false
+    default: 'false'
 
 outputs:
   conflict-resolved:
@@ -23,15 +27,34 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Check legacy compatibility mode
+      id: compat
+      shell: bash
+      run: |
+        LEGACY_JSONL_AUTOMERGE='${{ inputs.legacy-jsonl-automerge }}'
+        if [ "${BEADS_LEGACY_JSONL_AUTOMERGE:-false}" = "1" ] || [ "${BEADS_LEGACY_JSONL_AUTOMERGE:-false}" = "true" ]; then
+          LEGACY_JSONL_AUTOMERGE=true
+        fi
+
+        if [ "$LEGACY_JSONL_AUTOMERGE" != "true" ]; then
+          echo "compatibility-mode=disabled" >> "$GITHUB_OUTPUT"
+          echo "ℹ️ Legacy Beads JSONL auto-merge is disabled. Set inputs.legacy-jsonl-automerge=true or BEADS_LEGACY_JSONL_AUTOMERGE=1 to enable."
+          exit 0
+        fi
+
+        echo "compatibility-mode=enabled" >> "$GITHUB_OUTPUT"
+
     - name: Configure git
       shell: bash
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
+      if: steps.compat.outputs.compatibility-mode == 'enabled'
 
     - name: Check if merge is needed
       id: check
       shell: bash
+      if: steps.compat.outputs.compatibility-mode == 'enabled'
       run: |
         # Fetch base branch
         git fetch origin ${{ inputs.base-ref }}

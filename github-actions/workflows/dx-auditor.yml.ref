@@ -27,6 +27,8 @@ jobs:
           lookback-commits: 60
           lookback-runs: 30
           output-file: docs/DX_AUDIT_LOG.md
+          # Legacy Beads sync disabled by default in Dolt-first environments
+          # legacy-beads-sync: false
           # beads-epic: bd-audit  # Uncomment to post summary
         env:
           GH_TOKEN: ${{ github.token }}

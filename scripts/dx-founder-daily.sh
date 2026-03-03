@@ -8,7 +8,7 @@
 #
 # Dependencies:
 #   - Beads source at ~/bd/.beads (native `bd` CLI with hub-spoke Dolt SQL).
-#     SQLite/JSONL are transitional fallbacks only.
+#     SQLite/JSONL are compatibility fallbacks only and must be explicitly enabled.
 #   - GitHub CLI (gh) authenticated
 #   - bv CLI for robot alerts/drift check
 #   - jq for JSON manipulation
@@ -22,6 +22,7 @@ BEADS_DIR="${BEADS_DIR:-${HOME}/bd/.beads}"
 BEADS_DB="${BEADS_DIR}/beads.db"
 BEADS_ISSUES_JSONL="${BEADS_DIR}/issues.jsonl"
 GH_REPO="stars-end/prime-radiant-ai"
+ALLOW_BEADS_LEGACY_SOURCE="${ALLOW_BEADS_LEGACY_SOURCE:-0}"
 TEMP_DIR=$(mktemp -d)
 OUTPUT_FILE="${TEMP_DIR}/founder-daily-data.json"
 LOG_FILE="${TEMP_DIR}/founder-daily.log"
@@ -71,7 +72,13 @@ check_dependencies() {
     missing+=("jq")
   fi
   if ! command -v bd >/dev/null 2>&1; then
-    warn "bd CLI not found; will only use transitional sqlite/jsonl path"
+    if [ "$ALLOW_BEADS_LEGACY_SOURCE" = "1" ]; then
+      warn "bd CLI not found; compatibility fallback mode enabled via ALLOW_BEADS_LEGACY_SOURCE=1"
+    else
+      error "bd CLI not found. Active Beads contract is Dolt SQL only."
+      error "Set ALLOW_BEADS_LEGACY_SOURCE=1 temporarily if explicit legacy compatibility mode is required."
+      return 1
+    fi
   fi
 
   if [ ${#missing[@]} -gt 0 ]; then
@@ -79,8 +86,8 @@ check_dependencies() {
     return 1
   fi
 
-  if ! command -v sqlite3 >/dev/null 2>&1; then
-    warn "sqlite3 not found; skipping legacy sqlite fallback"
+  if [ "$ALLOW_BEADS_LEGACY_SOURCE" = "1" ] && ! command -v sqlite3 >/dev/null 2>&1; then
+    warn "sqlite3 not found; legacy sqlite fallback unavailable"
   fi
 
   return 0
@@ -114,6 +121,13 @@ query_source() {
       return
     fi
 
+    if [ "$ALLOW_BEADS_LEGACY_SOURCE" != "1" ]; then
+      BEADS_SOURCE="missing"
+      return
+    fi
+
+    warn "Dolt CLI unavailable; using transitional compatibility source."
+
     if [ -f "$BEADS_DB" ] && sqlite3 "$BEADS_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='issues';" >/dev/null 2>&1; then
       BEADS_SOURCE="sqlite"
       return
@@ -134,6 +148,19 @@ query_source() {
       BEADS_SOURCE="jsonl"
       return
     fi
+  fi
+}
+
+require_active_dolt_source() {
+  if [ "$ALLOW_BEADS_LEGACY_SOURCE" = "1" ]; then
+    return 0
+  fi
+
+  if [ "$BEADS_SOURCE" != "cli" ]; then
+    error "Unable to resolve canonical Beads source (bd CLI required)."
+    error "Run from an environment where ~/bd + Beads SQL service are available."
+    error "Set ALLOW_BEADS_LEGACY_SOURCE=1 only for compatibility troubleshooting."
+    return 1
   fi
 }
 
@@ -446,6 +473,8 @@ main() {
   log "Starting founder daily data gathering..."
 
   check_dependencies || exit 1
+  query_source
+  require_active_dolt_source || exit 1
 
   # Gather all data
   local p0_issues

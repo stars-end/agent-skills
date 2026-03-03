@@ -47,6 +47,12 @@ if [ ! -f "${BEADS_DIR}/issues.jsonl" ]; then
     exit 0
 fi
 
+if [ "${ALLOW_BEADS_LEGACY_JSONL_IMPORT:-0}" != "1" ]; then
+    echo "ℹ️  Legacy JSONL flush path is compatibility-only."
+    echo "    Set ALLOW_BEADS_LEGACY_JSONL_IMPORT=1 to enable pre-commit import/flush."
+    exit 0
+fi
+
 # Flush pending changes to JSONL.
 # Default behavior is warn-only to avoid contradictory "commit succeeded + error" UX.
 # Set BEADS_FLUSH_STRICT=1 to make this blocking.
