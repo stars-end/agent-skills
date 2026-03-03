@@ -3,6 +3,20 @@ set -euo pipefail
 
 # Canonical deterministic Slack transport for Agent Coordination app.
 #
+# Transport policy (deterministic):
+# - Use this library for deterministic scripts (alerts, audit posts, incident fanout).
+# - Keep deterministic and LLM calls separate:
+#   - deterministic / rule-based alerts: agent_coordination_send_message
+#   - reasoning / summarization workflows: OpenClaw/LLM tools
+#
+# Token precedence:
+# - Uses SLACK_MCP_XOXB_TOKEN if set
+# - then SLACK_MCP_XOXP_TOKEN
+# - then SLACK_BOT_TOKEN (preferred default from Agent-Secrets-Production)
+# - then SLACK_APP_TOKEN (fallback if needed)
+#
+# OpenClaw tokens are still supported for non-deterministic contexts where required by
+# downstream tooling.
 # - Uses SLACK_BOT_TOKEN (preferred), then SLACK_APP_TOKEN if needed.
 # - Resolves channel by ENVIRONMENT:
 #   - production/prod -> C0AE2SPCY2Y (#railway-prod-alerts)

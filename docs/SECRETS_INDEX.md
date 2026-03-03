@@ -17,6 +17,9 @@
 | Anthropic token | 1Password | `op://dev/Agent-Secrets-Production/ZAI_API_KEY` |
 | Slack bot tokens | 1Password | `op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN` |
 
+Cross-reference:
+- [Slack Transport Strategy (V8)](/private/tmp/agents/bd-3o07/agent-skills/docs/SLACK_TRANSPORT_STRATEGY_V8.md)
+
 ---
 
 ## 2. Agent-Secrets-Production (Canonical Source)

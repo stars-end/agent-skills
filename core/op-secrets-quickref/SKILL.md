@@ -21,6 +21,20 @@ Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and 
 - **Deploy/runtime config**: Railway **environment variables** in the Railway project.
 - **Railway CLI automation token**: `RAILWAY_API_TOKEN` exported from 1Password (`Agent-Secrets-Production`).
 
+### Slack token policy for deterministic transport
+
+- Use `SLACK_BOT_TOKEN` as default for Agent Coordination transport.
+- Fallback to `SLACK_APP_TOKEN` if needed.
+- Both are resolved from `op://dev/Agent-Secrets-Production/...`.
+
+```bash
+export SLACK_BOT_TOKEN=$(op read "op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN")
+export SLACK_APP_TOKEN=$(op read "op://dev/Agent-Secrets-Production/SLACK_APP_TOKEN")
+```
+
+Implementation uses these tokens via:
+[`scripts/lib/dx-slack-alerts.sh`](/private/tmp/agents/bd-3o07/agent-skills/scripts/lib/dx-slack-alerts.sh)
+
 ## 1Password Item Reference
 
 | Item | Fields | Purpose |

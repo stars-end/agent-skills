@@ -6,6 +6,8 @@
 set -euo pipefail
 
 # Setup environment
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/dx-slack-alerts.sh"
 export PATH="${HOME}/.local/bin:${HOME}/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 LOG_FILE="${HOME}/logs/dx-heartbeat.log"
@@ -18,6 +20,11 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting heartbeat check..."
 # Use openclaw agent CLI to read and summarize HEARTBEAT.md
 # We use the full path to mise and openclaw
 OPENCLAW="${HOME}/.local/bin/mise x node@22.21.1 -- openclaw"
+HEARTBEAT_SLACK_CHANNEL="C0ADSSZV9M2"
+
+# Deterministic: only the final Slack post path is a transport call
+# and must use agent_coordination_send_message.
+# Reasoning path remains the OpenClaw agent summary step above.
 
 # Run agent turn to get summary
 # Redirect stderr to avoid capturing doctor warnings
@@ -38,13 +45,13 @@ fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Detect issues: $RESPONSE"
 
-# Send alert to Slack
-$OPENCLAW message send \
-    --channel slack \
-    --target C0ADSSZV9M2 \
-    --message "$RESPONSE"
-
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Alert sent successfully"
+# Send alert via deterministic Agent Coordination transport.
+if agent_coordination_send_message "$RESPONSE" "$HEARTBEAT_SLACK_CHANNEL"; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Alert sent successfully"
+else
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Slack transport unavailable"
+  exit 1
+fi
 
 # Push heartbeat to remote for GHA dead-man's switch
 "${HOME}/agent-skills/scripts/dx-heartbeat-push.sh"

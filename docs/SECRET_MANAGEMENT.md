@@ -4,6 +4,9 @@
 
 This guide covers safe 1Password CLI usage patterns. **Never pass secret values via CLI arguments** - they can be logged in shell history and process lists.
 
+For Agent Coordination Slack transport precedence and when OpenClaw is used for summarization vs transport, see:
+- [Slack Transport Strategy (V8)](/private/tmp/agents/bd-3o07/agent-skills/docs/SLACK_TRANSPORT_STRATEGY_V8.md)
+
 ## Architecture: Agent-Secrets-Production (Canonical Source)
 
 **Canonical Item:** `Agent-Secrets-Production` in the `dev` vault contains all DX/dev workflow secrets.

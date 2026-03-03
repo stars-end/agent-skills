@@ -67,6 +67,42 @@ Each repo's AGENTS.md follows this pattern:
 - Updates to Nakomi protocol
 
 **Process:**
+1. Update `~/agent-skills/AGENTS.md` first (this repo is the canonical global source).
+2. Immediately run:
+   ```bash
+   make publish-baseline
+   ```
+   This regenerates:
+   - `AGENTS.md` (agent-skills canonical)
+   - `dist/universal-baseline.md`
+   - `dist/dx-global-constraints.md`
+3. If your change must be propagated to other repos, run the baseline sync workflow/script used by your environment (for example `scripts/dx-baseline-sync.sh` or CI sync process).
+4. Verify propagation targets have `CANONICAL REPOSITORY RULES` present.
+
+### Does global inheritance happen automatically across repos?
+
+No. `~/agent-skills/AGENTS.md` does not automatically mutate all repo roots in place.
+It is the canonical input, and each target repo receives global content through explicit
+sync/compile steps (or manual copy/update), not runtime auto-inheritance.
+
+### Manual vs Compile Path
+
+If a repo uses `AGENTS.local.md`, global content can be assembled via:
+```bash
+scripts/compile_agent_context.sh <repo>
+```
+This requires the local file to exist and is still an explicit local action.
+
+### Legacy/Current propagation examples
+
+Current propagation patterns in this repo are:
+
+- `make publish-baseline` to rebuild agent-skills baseline and AGENTS in-place.
+- `scripts/dx-baseline-sync.sh` to package/push updates from canonical into other repos where used.
+- Manual PR-based updates in repos without sync automation.
+
+### Updating Universal Sections (manual legacy path)
+
 1. Update `~/agent-skills/AGENTS.md` (master copy)
 2. Propagate changes to other repos:
    ```bash
@@ -224,7 +260,10 @@ git diff HEAD
 
 ## No Automated Compilation
 
-**Current approach:** Manual maintenance
+**Current approach:** Baseline regeneration is explicit and script-driven in `agent-skills`:
+
+- `make publish-baseline` regenerates the canonical and distribution artifacts.
+- Cross-repo propagation is a separate sync step (not automatic without explicit tooling/PR).
 
 **Rationale:**
 1. **Flexibility:** Each repo can customize AGENTS.md
@@ -232,9 +271,21 @@ git diff HEAD
 3. **Clarity:** Direct editing, no template indirection
 4. **Low churn:** Universal sections change infrequently
 
-**Trade-off:** Manual propagation of universal section updates
+**Trade-off:** Universal section updates require explicit regeneration then explicit cross-repo sync/push.
 
-**Future option:** Could create compilation script if maintenance burden increases
+### Always regenerate baseline after AGENTS/skill routing edits
+
+If you add/change/remove:
+- `AGENTS.md` sections used for workflow/runtime rules
+- Skill frontmatter fields (`name`, `description`, `example`, `tags`) in `core/*`, `extended/*`, etc.
+
+then run:
+
+```bash
+make publish-baseline
+```
+
+Do not defer this step; keep regenerated baseline committed together with the source edits.
 
 ---
 
@@ -354,9 +405,9 @@ jobs:
 
 ## Summary
 
-**Current state:** Manual maintenance, working well  
-**Migration needed:** Add canonical rules to 3 repos  
-**Compilation:** No automation, intentional flexibility  
+**Current state:** Canonical source is `agent-skills/AGENTS.md` with explicit `make publish-baseline` regeneration.  
+**Cross-repo propagation:** Explicit only (sync script / manual update / local compile).  
+**Compilation:** Baseline generation is scripted; cross-repo propagation remains explicitly orchestrated.  
 **Skills relationship:** Separate layer, no compilation needed  
 
 **Total maintenance time:** ~5 minutes per universal section update
