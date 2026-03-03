@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# beads-dolt - Canonical entrypoint for Beads CLI in Dolt SQL mode.
+#
+# Usage:
+#   beads-dolt dolt test --json
+#   beads-dolt status --json
+#
+# This keeps Beads host/port, repo root, and compatibility flags consistent
+# across hosts and scripts.
+
+set -euo pipefail
+
+if [ "$#" -eq 0 ]; then
+  echo "Usage: $0 <bd-subcommand>..."
+  echo "Examples:"
+  echo "  $0 dolt test --json"
+  echo "  $0 status --json"
+  exit 1
+fi
+
+BEADS_DIR="${BEADS_DIR:-$HOME/bd}"
+BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
+BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
+BEADS_IGNORE_REPO_MISMATCH="${BEADS_IGNORE_REPO_MISMATCH:-1}"
+
+if [ ! -d "$BEADS_DIR/.git" ]; then
+  echo "❌ Beads canonical repo not found at $BEADS_DIR"
+  exit 1
+fi
+
+if ! command -v bd >/dev/null 2>&1; then
+  echo "❌ bd CLI not found in PATH"
+  exit 1
+fi
+
+export BEADS_DIR
+export BEADS_DOLT_SERVER_HOST
+export BEADS_DOLT_SERVER_PORT
+export BEADS_IGNORE_REPO_MISMATCH
+
+cd "$BEADS_DIR"
+exec bd "$@"

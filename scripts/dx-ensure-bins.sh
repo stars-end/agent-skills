@@ -53,6 +53,9 @@ link "$AGENTS_ROOT/scripts/dx-verify-clean.sh" "$BIN_DIR/dx-verify-clean"
 link "$AGENTS_ROOT/scripts/dx-worktree-gc.sh" "$BIN_DIR/dx-worktree-gc"
 link "$AGENTS_ROOT/scripts/dx-delegate.sh" "$BIN_DIR/dx-delegate"
 
+# Canonical Beads helper for Dolt SQL mode.
+link "$AGENTS_ROOT/scripts/beads-dolt" "$BIN_DIR/beads-dolt"
+
 # Beads helpers (used across repos)
 link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
 link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
