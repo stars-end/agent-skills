@@ -25,6 +25,12 @@ export BEADS_DIR="${BEADS_DIR:-$HOME/bd/.beads}"
 mkdir -p "$(dirname "$LOG_FILE")"
 mkdir -p "$(dirname "$LOCK_DIR")"
 
+if [[ "${BD_SYNC_SAFE_LEGACY:-0}" != "1" ]]; then
+  echo "⚠️  bd-sync-safe is deprecated for the active Dolt-native workflow."
+  echo "    Set BD_SYNC_SAFE_LEGACY=1 to run this compatibility wrapper explicitly."
+  exit 0
+fi
+
 log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $(hostname -s) $$: $1"
     if [[ "$QUIET" != "--quiet" ]]; then

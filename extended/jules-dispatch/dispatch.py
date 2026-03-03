@@ -20,6 +20,7 @@ import subprocess
 import sys
 import argparse
 import re
+import os
 import shutil
 import time
 from pathlib import Path
@@ -83,13 +84,19 @@ def get_repo_name() -> Optional[str]:
 
 
 def load_issues(repo_root: Path) -> List[Dict]:
-    """Load all issues from canonical Beads (`~/bd`) when possible.
+    """Load issues from canonical Beads (`~/bd`) by default.
 
-    Falls back to local `.beads/issues.jsonl` for legacy repos.
+    Falls back to local `.beads/issues.jsonl` only when explicitly
+    enabled for legacy compatibility.
     """
     issues = load_issues_from_bd_cli()
     if issues:
         return issues
+
+    if os.getenv("ALLOW_LEGACY_BEADS_JSONL", "0") != "1":
+        print("⚠️  Beads CLI unavailable; legacy JSONL source is disabled for this run")
+        print("    Set ALLOW_LEGACY_BEADS_JSONL=1 to enable compatibility fallback.")
+        return []
 
     beads_path = repo_root / BEADS_FILE
     if not beads_path.exists():
