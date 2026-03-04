@@ -45,7 +45,13 @@ source ~/.bashrc  # or source ~/.zshrc
 dx-check
 ```
 
-`dx-hydrate` installs control-plane commands into `~/bin` and enables **auto-checkpoint** (periodic WIP commits so work is not lost).
+`dx-hydrate` installs control-plane commands into `~/bin` and applies baseline host bootstrap settings.
+
+DX command contract:
+- `dx-check` is the default health + fix entrypoint.
+- `dx-status` is read-only diagnostics.
+- `dx-hydrate` is bootstrap/repair, usually called by `dx-check` when needed.
+- There is no separate `dx-health` command.
 
 ---
 
@@ -70,22 +76,10 @@ git push
 
 ---
 
-## Auto-Checkpoint (durability)
+## Durability
 
-Status:
-```bash
-auto-checkpoint-install --status
-```
-
-Run now:
-```bash
-auto-checkpoint-install --run
-```
-
-Disable scheduler (not recommended):
-```bash
-auto-checkpoint-install --uninstall
-```
+V8 uses worktree discipline, canonical sync, and scheduled DX hygiene jobs.
+Auto-checkpoint is not part of the active bootstrap contract.
 
 ---
 

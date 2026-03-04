@@ -14,6 +14,10 @@ TARGET_VM="${1:-local}"
 AGENTS_ROOT="${HOME}/agent-skills"
 ISSUES_FOUND=0
 
+echo -e "${BLUE}ℹ dx-doctor scope: advanced coordinator/MCP diagnostics.${RESET}"
+echo -e "${BLUE}ℹ For standard environment health, run: dx-check${RESET}"
+echo ""
+
 # =============================================================================
 # Helper: Check MCP Servers
 # =============================================================================
