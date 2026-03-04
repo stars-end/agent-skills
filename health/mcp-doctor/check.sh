@@ -38,6 +38,61 @@ have_in_files() {
   return 1
 }
 
+gemini_enforcement_state() {
+  local grace_days=7
+  local enforce_after=7
+  local marker="${HOME}/.dx-state/fleet/enforcement/gemini-enforcement.json"
+  local now_epoch
+  local first_epoch=""
+  local missing=0
+
+  if [[ -f "${HOME}/.gemini/GEMINI.md" && -f "${HOME}/.gemini/antigravity/mcp_config.json" && -x "${HOME}/.gemini/gemini" ]]; then
+    if [[ -f "$marker" ]]; then
+      rm -f "$marker"
+    fi
+    echo "pass"
+    return
+  fi
+
+  if [[ ! -f "${HOME}/.gemini/GEMINI.md" ]]; then
+    missing=$((missing + 1))
+    artifact="missing_gemini_constraints"
+  fi
+  if [[ ! -x "${HOME}/.gemini/gemini" ]]; then
+    missing=$((missing + 1))
+    artifact="missing_gemini_binary"
+  fi
+
+  if command -v gemini >/dev/null 2>&1; then
+    :
+  fi
+
+  if [[ "$missing" -eq 0 ]]; then
+    echo "warn"
+    return
+  fi
+
+  now_epoch="$(date -u +%s)"
+  mkdir -p "$(dirname "$marker")"
+  if [[ -f "$marker" ]]; then
+    first_epoch="$(sed -n '1p' "$marker" 2>/dev/null || printf '')"
+  fi
+  if [[ -z "$first_epoch" || ! "$first_epoch" =~ ^[0-9]+$ ]]; then
+    first_epoch="$now_epoch"
+    printf '%s\n' "$first_epoch" > "$marker"
+  fi
+  local days_missing=$(( (now_epoch - first_epoch) / 86400 ))
+  if [[ "$days_missing" -le "$grace_days" ]]; then
+    echo "warn"
+    return
+  fi
+  if [[ "$days_missing" -gt "$enforce_after" ]]; then
+    echo "fail"
+  else
+    echo "warn"
+  fi
+}
+
 missing_required=0
 missing_optional=0
 
@@ -239,6 +294,21 @@ if command -v gh >/dev/null 2>&1; then
   echo "✅ gh ($(gh --version 2>/dev/null | head -1 || echo installed))"
 else
   echo "⚠️  gh (not installed) — optional"
+  missing_optional=$((missing_optional+1))
+fi
+
+echo ""
+echo "Canonical Gemini CLI lane:"
+gemini_state="$(gemini_enforcement_state)"
+if [[ "$gemini_state" == "pass" ]]; then
+  echo "✅ gemini-cli lane present and compliant"
+elif [[ "$gemini_state" == "warn" ]]; then
+  echo "⚠️  gemini-cli lane missing artifacts; allowed in grace window"
+  echo "   Ensure: ~/.gemini/GEMINI.md, ~/.gemini/gemini, ~/.gemini/antigravity/mcp_config.json"
+  missing_optional=$((missing_optional+1))
+else
+  echo "❌ gemini-cli lane missing beyond grace window"
+  echo "   Ensure: ~/.gemini/GEMINI.md, ~/.gemini/gemini, ~/.gemini/antigravity/mcp_config.json"
   missing_optional=$((missing_optional+1))
 fi
 

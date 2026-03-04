@@ -1,101 +1,67 @@
-# Fleet Sync canonical manifest (V2.1)
-# Local-first execution, centralized governance.
-schema_version: "2.1"
-
-principles:
-  execution: local_first
-  state: centralize_state_not_execution
-  no_mandatory_gateway: true
-
-hard_constraints:
-  epyc12_max_always_on_services: 4
-  one_primary_tool_manifest: configs/mcp-tools.yaml
-  no_manual_ide_edits: true
-  failure_domain_isolation: vm_local
-
-fleet:
-  hosts:
-    - name: epyc12
-      role: hub
-      tailscale_ip: 100.107.173.83
-    - name: macmini
-      role: worker
-    - name: homedesktop-wsl
-      role: worker
-    - name: epyc6
-      role: worker
-
-runtime_services:
-  required:
-    epyc12:
-      - beads-dolt.service
-  optional:
-    epyc12:
-      - litellm.service
-
-distribution:
-  primary_tool_manifest: configs/mcp-tools.yaml
-  skills_install_script: scripts/dx-agents-skills-install.sh
-  baseline_publish_script: scripts/publish-baseline.zsh
-  baseline_sync_script: scripts/dx-baseline-sync.sh
-  config_renderer_script: scripts/dx-mcp-tools-sync.sh
-
-ide_configs:
-  merge_mode: patch
-  targets:
-    codex-cli: ~/.codex/config.toml
-    claude-code: ~/.claude.json
-    antigravity: ~/.gemini/antigravity/mcp_config.json
-    opencode: ~/.opencode/config.json
-
-render:
-  merge_mode: patch
-  preserve_user_overrides: true
-  write_paths:
-    codex-cli: ~/.codex/config.toml
-    claude-code: ~/.claude.json
-    antigravity: ~/.gemini/antigravity/mcp_config.json
-    opencode: ~/.opencode/config.json
-  templates:
-    codex-cli: config-templates/fleet-sync-codex-cli.template.toml
-    claude-code: config-templates/fleet-sync-claude-code.template.json
-    antigravity: config-templates/fleet-sync-antigravity.template.json
-    opencode: config-templates/fleet-sync-opencode.template.toml
-
-beads:
-  host: 100.107.173.83
-  port: 3307
-  test_cmd: "cd ~/bd && bd dolt test --json"
-
-secrets:
-  source_of_truth: 1password
-  deploy_sink: railway
-  direction: op_to_railway
-  mappings:
-    - name: railway_api_token
-      source: op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN
-      targets:
-        - type: local_env
-          env: RAILWAY_API_TOKEN
-
-dolt_phase2:
-  enabled: false
-  notes:
-    - "Governance DB remains primary for Beads."
-    - "Only small control tables allowed (no embeddings/raw logs)."
-  tables:
-    - name: mcp_tool_manifest
-      purpose: version_override_policy
-      max_rows: 100
-    - name: tool_health
-      purpose: fleet_telemetry
-      max_rows: 50
-    - name: memory_digest
-      purpose: sanitized_opt_in_cross_learning
-      max_rows: 1000
-      ttl_days: 30
-
-weekly_audit:
-  script: scripts/dx-audit.sh
-  cron_wrapper: scripts/dx-audit-cron.sh
-  channel: "#dx-alerts"
+version: "2.2.0"
+source: "agent-skills/fleet-sync"
+coordinator_host: "macmini"
+hosts:
+  - host: "macmini"
+    role: "canonical"
+    checks:
+      - beads_dolt
+      - required_service_health
+  - host: "homedesktop-wsl"
+    role: "workstation"
+    checks:
+      - beads_dolt
+      - required_service_health
+  - host: "epyc6"
+    role: "linux"
+    checks:
+      - beads_dolt
+      - required_service_health
+  - host: "epyc12"
+    role: "linux"
+    checks:
+      - beads_dolt
+      - required_service_health
+audit:
+  coordinator_host: "macmini"
+  schedule:
+    daily: "0 6 * * *"
+    weekly: "0 7 * * 0"
+  daily_checks:
+    - beads_dolt
+    - tool_mcp_health
+    - required_service_health
+    - op_auth_readiness
+    - alerts_transport_readiness
+  weekly_checks:
+    - canonical_repo_hygiene
+    - skills_symlink_integrity
+    - global_constraints_rails
+    - ide_config_presence_and_drift
+    - cron_health
+    - service_cap_and_forbidden_components
+    - trailer_compliance
+    - deployment_stack_readiness
+    - railway_auth_context
+    - gh_deploy_readiness
+  thresholds:
+    tool_stale_hours: 6
+    dolt_stale_minutes: 15
+    unknown_host_escalation_runs: 3
+  slack:
+    channel: "#dx-alerts"
+    post_on_green: true
+    thread_mode: false
+  gemini_enforcement:
+    grace_days: 7
+    enforce_after: 7
+legacy_state_roots:
+  - ~/.dx-state/fleet-sync
+  - ~/.dx-state/fleet_sync
+state_layout:
+  tool_health_json: "tool-health.json"
+  tool_health_lines: "tool-health.lines"
+  daily_audit_latest: "audit/daily/latest.json"
+  daily_audit_history: "audit/daily/history"
+  weekly_audit_latest: "audit/weekly/latest.json"
+  weekly_audit_history: "audit/weekly/history"

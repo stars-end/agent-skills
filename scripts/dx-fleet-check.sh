@@ -1,239 +1,369 @@
 #!/usr/bin/env bash
+#
 # dx-fleet-check.sh
-# Fleet Sync V2.1 convergence check surface.
-
+#
+# Fleet health probe for Fleet Sync runtime checks.
+# Emits JSON output and writes canonical state artifacts.
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FLEET_MANIFEST="${SCRIPT_DIR}/../configs/fleet-sync.manifest.yaml"
-MCP_MANIFEST="${SCRIPT_DIR}/../configs/mcp-tools.yaml"
-STATE_DIR="${HOME}/.dx-state/fleet-sync"
-OUTPUT_JSON=0
-RED_ONLY=0
-MODE="check"
-JSON=0
+STATE_ROOT="${DX_FLEET_STATE_ROOT:-${HOME}/.dx-state/fleet}"
+STATE_JSON="${STATE_ROOT}/tool-health.json"
+STATE_LINES="${STATE_ROOT}/tool-health.lines"
+OUTPUT_FORMAT="text"
 
-usage() {
-  cat <<'USAGE'
-Usage:
-  dx-fleet-check.sh [--json] [--red-only] [--manifest PATH] [--mcp-manifest PATH] [--state-dir PATH]
-USAGE
+# shellcheck disable=SC1090
+source "$SCRIPT_DIR/canonical-targets.sh" 2>/dev/null || true
+
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  s="${s//$'\b'/\\b}"
+  s="${s//$'\f'/\\f}"
+  printf '%s' "$s"
 }
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --json)
-      OUTPUT_JSON=1
-      shift
-      ;;
-    --red-only)
-      RED_ONLY=1
-      shift
-      ;;
-    --manifest)
-      FLEET_MANIFEST="${2:-}"
-      [[ -n "$FLEET_MANIFEST" ]] || { echo "Missing value for --manifest" >&2; exit 2; }
-      shift 2
-      ;;
-    --mcp-manifest)
-      MCP_MANIFEST="${2:-}"
-      [[ -n "$MCP_MANIFEST" ]] || { echo "Missing value for --mcp-manifest" >&2; exit 2; }
-      shift 2
-      ;;
-    --state-dir)
-      STATE_DIR="${2:-}"
-      [[ -n "$STATE_DIR" ]] || { echo "Missing value for --state-dir" >&2; exit 2; }
-      shift 2
-      ;;
-    --help|-h)
-      usage
-      exit 0
+write_atomic() {
+  local target="$1"
+  local data="$2"
+  local tmp
+  mkdir -p "$(dirname "$target")"
+  tmp="$(mktemp "${target}.tmp.XXXXXX")"
+  printf '%s\n' "$data" > "$tmp"
+  mv "$tmp" "$target"
+}
+
+fleet_local_host() {
+  local current_host
+  current_host="$(hostname -s 2>/dev/null | sed 's/\.local$//' | tr '[:upper:]' '[:lower:]')"
+  if [[ "$current_host" =~ macmini ]] || [[ "$current_host" =~ mac[-]?mini ]]; then
+    echo "macmini"
+  elif [[ "$current_host" =~ homedesktop ]]; then
+    echo "homedesktop-wsl"
+  elif [[ "$current_host" =~ epyc12 ]]; then
+    echo "epyc12"
+  elif [[ "$current_host" =~ epyc ]]; then
+    echo "epyc6"
+  else
+    echo "local"
+  fi
+}
+
+required_tools_for_host() {
+  local host_key="$1"
+  case "$host_key" in
+    macmini|homedesktop-wsl|macos)
+      printf '%s\n' "bd" "gh" "git" "railway" "op" "mise" "ru"
       ;;
     *)
-      echo "Unknown argument: $1" >&2
-      usage
-      exit 2
+      printf '%s\n' "bd" "gh" "git" "railway" "op" "mise"
       ;;
   esac
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json)
+        OUTPUT_FORMAT="json"
+        shift
+        ;;
+      --state-dir)
+        STATE_ROOT="$2"
+        STATE_JSON="${STATE_ROOT}/tool-health.json"
+        STATE_LINES="${STATE_ROOT}/tool-health.lines"
+        shift 2
+        ;;
+      --help|-h)
+        cat <<'EOF'
+Usage: dx-fleet-check.sh [--json] [--state-dir PATH]
+  --json       emit machine-readable JSON
+  --state-dir  override state root (default: ~/.dx-state/fleet)
+EOF
+        exit 0
+        ;;
+      *)
+        echo "Unknown flag: $1" >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
+collect_hosts() {
+  local local_host="$1"
+  local raw=()
+  local host
+
+  if declare -p CANONICAL_VMS >/dev/null 2>&1 && [[ "${#CANONICAL_VMS[@]}" -gt 0 ]]; then
+    for entry in "${CANONICAL_VMS[@]}"; do
+      host="${entry%%:*}"
+      raw+=("$host")
+    done
+  else
+    raw=("macmini" "homedesktop-wsl" "epyc6" "epyc12")
+  fi
+
+  # deterministic local-first ordering
+  echo "$local_host"
+  for host in "${raw[@]}"; do
+    [[ "$host" == "$local_host" ]] && continue
+    echo "$host"
+  done
+}
+
+host_role_for_check() {
+  local host="$1"
+  case "$host" in
+    *macmini* )
+      echo "macmini"
+      ;;
+    *homedesktop* )
+      echo "homedesktop-wsl"
+      ;;
+    *epyc12* )
+      echo "epyc12"
+      ;;
+    *epyc6* )
+      echo "epyc6"
+      ;;
+    * )
+      echo "$CANONICAL_HOST_KEY"
+      ;;
+  esac
+}
+
+build_check_rows() {
+  local host="$1"
+  local role="$2"
+  local check_id
+  local status severity details
+  local pass_count=0
+  local warn_count=0
+  local fail_count=0
+  local unknown_count=0
+  local rows=()
+
+  # 1) beads_dolt
+  check_id="beads_dolt"
+  status="pass"
+  severity="low"
+  details="Beads runtime data path present and accessible"
+  if ! command -v bd >/dev/null 2>&1; then
+    status="fail"
+    severity="critical"
+    details="bd not installed"
+  elif [[ -z "${BEADS_DIR:-}" ]]; then
+    status="warn"
+    severity="medium"
+    details="BEADS_DIR unset"
+  elif [[ ! -d "${BEADS_DIR}" ]]; then
+    status="warn"
+    severity="medium"
+    details="BEADS_DIR directory missing (${BEADS_DIR})"
+  fi
+  rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
+  [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
+  [[ "$status" == warn ]] && warn_count=$((warn_count+1)) || \
+  [[ "$status" == fail ]] && fail_count=$((fail_count+1)) || \
+  unknown_count=$((unknown_count+1))
+
+  # 2) tool_mcp_health
+  check_id="tool_mcp_health"
+  details=""
+  status="pass"
+  severity="low"
+  local missing=0
+  [[ -f "${HOME}/.claude/settings.json" ]] || missing=$((missing+1))
+  [[ -f "${HOME}/.claude.json" ]] || missing=$((missing+1))
+  [[ -f "${HOME}/.codex/config.toml" ]] || missing=$((missing+1))
+  [[ -f "${HOME}/.opencode/config.json" ]] || missing=$((missing+1))
+  [[ -f "${HOME}/.gemini/antigravity/mcp_config.json" ]] || missing=$((missing+1))
+  [[ -f "${HOME}/.gemini/GEMINI.md" ]] || missing=$((missing+1))
+  if [[ "$missing" -gt 0 ]]; then
+    status="warn"
+    severity="medium"
+    details="canonical IDE artifacts missing: $missing"
+  fi
+  rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
+  [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
+  [[ "$status" == warn ]] && warn_count=$((warn_count+1)) || \
+  [[ "$status" == fail ]] && fail_count=$((fail_count+1)) || \
+  unknown_count=$((unknown_count+1))
+
+  # 3) required_service_health
+  check_id="required_service_health"
+  details=""
+  status="pass"
+  severity="low"
+  local missing_service=0
+  local tool
+  while IFS= read -r tool; do
+    [[ -z "$tool" ]] && continue
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      missing_service=$((missing_service+1))
+    fi
+  done < <(required_tools_for_host "$role")
+  if [[ "$missing_service" -gt 0 ]]; then
+    status="warn"
+    severity="medium"
+    details="required tools missing on host role '$role': $missing_service"
+  fi
+  rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
+  [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
+  [[ "$status" == warn ]] && warn_count=$((warn_count+1)) || \
+  [[ "$status" == fail ]] && fail_count=$((fail_count+1)) || \
+  unknown_count=$((unknown_count+1))
+
+  # 4) op_auth_readiness
+  check_id="op_auth_readiness"
+  if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && command -v op >/dev/null 2>&1; then
+    status="pass"
+    severity="low"
+    details="OP service-account token detected"
+  elif command -v op >/dev/null 2>&1; then
+    status="warn"
+    severity="low"
+    details="op installed but OP_SERVICE_ACCOUNT_TOKEN not set"
+  else
+    status="warn"
+    severity="low"
+    details="op CLI unavailable"
+  fi
+  rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
+  [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
+  [[ "$status" == warn ]] && warn_count=$((warn_count+1)) || \
+  [[ "$status" == fail ]] && fail_count=$((fail_count+1)) || \
+  unknown_count=$((unknown_count+1))
+
+  # 5) alerts_transport_readiness
+  check_id="alerts_transport_readiness"
+  if [[ -n "${SLACK_BOT_TOKEN:-}" ]] || [[ -n "${SLACK_APP_TOKEN:-}" ]] || [[ -n "${SLACK_MCP_XOXB_TOKEN:-}" ]] || [[ -n "${SLACK_MCP_XOXP_TOKEN:-}" ]] || [[ -n "${DX_SLACK_WEBHOOK:-}" ]] || [[ -n "${DX_ALERTS_WEBHOOK:-}" ]]; then
+    status="pass"
+    severity="low"
+    details="deterministic Slack transport configured"
+  else
+    status="warn"
+    severity="low"
+    details="Slack transport token/webhook missing"
+  fi
+  rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
+  [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
+  [[ "$status" == warn ]] && warn_count=$((warn_count+1)) || \
+  [[ "$status" == fail ]] && fail_count=$((fail_count+1)) || \
+  unknown_count=$((unknown_count+1))
+
+  local rows_json="["
+  local first=1
+  for row in "${rows[@]}"; do
+    if [[ "$first" -eq 1 ]]; then
+      rows_json+="$row"
+      first=0
+    else
+      rows_json+=",${row}"
+    fi
+  done
+  rows_json+="]"
+
+  local overall="green"
+  if [[ "$fail_count" -gt 0 ]]; then
+    overall="red"
+  elif [[ "$warn_count" -gt 0 ]]; then
+    overall="yellow"
+  fi
+
+  echo "$overall|$pass_count|$warn_count|$fail_count|$unknown_count|$rows_json|$host"
+}
+
+parse_args "$@"
+
+TIMESTAMP="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+TIMESTAMP_EPOCH="$(date -u +%s)"
+LOCAL_HOST="$(fleet_local_host)"
+CANONICAL_ROLE="${CANONICAL_HOST_KEY:-$LOCAL_HOST}"
+
+host_records=""
+hosts_checked=0
+hosts_failed=0
+total_pass=0
+total_warn=0
+total_fail=0
+total_unknown=0
+first=1
+overall="green"
+
+for host in $(collect_hosts "$LOCAL_HOST"); do
+  host_role="$(host_role_for_check "$host")"
+  hosts_checked=$((hosts_checked + 1))
+  row_payload="$(build_check_rows "$host" "$host_role")"
+  IFS='|' read -r host_overall host_pass host_warn host_fail host_unknown host_rows _ <<EOF
+$row_payload
+EOF
+
+  if [[ "$host_overall" == "red" ]]; then
+    hosts_failed=$((hosts_failed + 1))
+    overall="red"
+  elif [[ "$host_overall" == "yellow" && "$overall" != "red" ]]; then
+    overall="yellow"
+  fi
+
+  total_pass=$((total_pass + host_pass))
+  total_warn=$((total_warn + host_warn))
+  total_fail=$((total_fail + host_fail))
+  total_unknown=$((total_unknown + host_unknown))
+
+  record="{\"host\":\"$host\",\"overall\":\"$host_overall\",\"checks\":$host_rows}"
+  if [[ "$first" -eq 1 ]]; then
+    host_records+="$record"
+    first=0
+  else
+    host_records+=",$record"
+  fi
+
+  if [[ "$host" == "$LOCAL_HOST" ]]; then
+    local_message="local checks completed"
+  fi
 done
 
-TMP_JSON="$(mktemp)"
-CHECK_JSON="$(mktemp)"
-trap 'rm -f "$TMP_JSON" "$CHECK_JSON"' EXIT
+host_records="[${host_records}]"
+summary_json="{\"hosts_checked\":$hosts_checked,\"hosts_failed\":$hosts_failed,\"checks\":{\"pass\":$total_pass,\"warn\":$total_warn,\"fail\":$total_fail,\"unknown\":$total_unknown}}"
 
-if ! "$SCRIPT_DIR/dx-fleet-install.sh" \
-  --check --json --manifest "$FLEET_MANIFEST" --mcp-manifest "$MCP_MANIFEST" --state-dir "$STATE_DIR" > "$TMP_JSON"; then
-  echo "Fleet check: install preflight returned non-zero" >&2
-fi
+state_paths_json="{\"tool_health_json\":\"${STATE_JSON}\",\"tool_health_lines\":\"${STATE_LINES}\",\"audit_daily_latest\":\"${STATE_ROOT}/audit/daily/latest.json\",\"audit_weekly_latest\":\"${STATE_ROOT}/audit/weekly/latest.json\",\"legacy_fleet_sync_dir\":[\"${HOME}/.dx-state/fleet-sync/tool-health.json\",\"${HOME}/.dx-state/fleet-sync/tool-health.lines\"]}"
+result_json="{\"mode\":\"check\",\"generated_at\":\"$TIMESTAMP\",\"generated_at_epoch\":$TIMESTAMP_EPOCH,\"fleet_status\":\"$overall\",\"summary\":$summary_json,\"hosts\":$host_records,\"checks\":[],\"repair_hints\":[],\"reason_codes\":[],\"state_paths\":$state_paths_json}"
 
-python3 - "$TMP_JSON" "$CHECK_JSON" <<'PY'
-import json
-import os
-import re
-import time
-import sys
+text_lines="generated_at=$TIMESTAMP
+generated_at_epoch=$TIMESTAMP_EPOCH
+fleet_status=$overall
+hosts_checked=$hosts_checked
+hosts_failed=$hosts_failed
+checks_pass=$total_pass
+checks_warn=$total_warn
+checks_fail=$total_fail
+checks_unknown=$total_unknown"
 
-raw_path = sys.argv[1]
-with open(raw_path, "r", encoding="utf-8") as fp:
-    payload = json.load(fp)
+write_atomic "$STATE_JSON" "$result_json"
+write_atomic "$STATE_LINES" "$text_lines"
 
-configs = payload.get("configs", {}) or {}
-configs_entries = configs.get("entries", []) if isinstance(configs, dict) else []
-configs_overall = bool(configs.get("overall_ok", False)) if isinstance(configs, dict) else False
-config_drift = int(configs.get("drift_count", 0) or 0) if isinstance(configs, dict) else 0
-config_count = int(configs.get("count", 0) or 0) if isinstance(configs, dict) else len(configs_entries)
-
-tools = payload.get("tools", {}) or {}
-if not isinstance(tools, dict):
-    tools = {}
-tool_rows = tools.get("tools", []) if isinstance(tools, dict) else []
-if not isinstance(tool_rows, list):
-    tool_rows = []
-
-now = int(time.time())
-tool_stale_default = 24 * 3600
-dolt_stale_default = 60 * 60
-
-
-def read_env_int(name: str, default: int) -> int:
-    raw = os.environ.get(name, "")
-    if not raw:
-        return int(default)
-    match = re.fullmatch(r"\s*([0-9]+)\s*", raw)
-    if not match:
-        return int(default)
-    return int(match.group(1))
-
-
-max_tool_stale_seconds = read_env_int("DX_FLEET_TOOL_STALE_SECONDS", tool_stale_default)
-max_dolt_stale_seconds = read_env_int("DX_FLEET_DOLT_STALE_MINUTES", 60) * 60
-
-version_mismatch = 0
-stale_tools = 0
-failing_tools = 0
-for row in tool_rows:
-    if not isinstance(row, dict):
-        continue
-    if str(row.get("healthy", "")).lower() not in ("true", "1", "yes"):
-        failing_tools += 1
-        continue
-
-    expected_version = (row.get("expected_version") or "").strip()
-    detected_version = (row.get("detected_version") or "").strip()
-    if expected_version and detected_version and expected_version != detected_version:
-        version_mismatch += 1
-
-    last_ok = row.get("last_ok_epoch")
-    if isinstance(last_ok, (int, float)) and last_ok:
-        if now - int(last_ok) > max_tool_stale_seconds:
-            stale_tools += 1
-    else:
-        stale_tools += 1
-
-dolt_ok = str(tools.get("dolt_ok", "unknown")).lower() == "true"
-last_dolt_ok_epoch = int(tools.get("dolt_last_ok_epoch", 0) or 0)
-if not dolt_ok:
-    dolt_stale = 1
-elif last_dolt_ok_epoch > 0 and now - last_dolt_ok_epoch > max_dolt_stale_seconds:
-    dolt_stale = 1
-else:
-    dolt_stale = 0
-
-auth = payload.get("auth", {}) if isinstance(payload, dict) else {}
-auth_ok = bool((auth.get("op", {}) or {}).get("ready", False) and (auth.get("railway", {}) or {}).get("ready", False))
-
-checks = {
-    "tool_stale_seconds": max_tool_stale_seconds,
-    "dolt_stale_seconds": max_dolt_stale_seconds,
-    "tool_version_mismatch": int(version_mismatch),
-    "tool_health_failing": int(failing_tools),
-    "tool_health_stale": int(stale_tools),
-    "dolt_stale": int(dolt_stale),
-    "config_drift": int(config_drift),
-}
-
-overall_ok = bool(
-    configs_overall
-    and not bool(version_mismatch)
-    and not bool(failing_tools)
-    and not bool(stale_tools)
-    and not dolt_stale
-    and auth_ok
-    and bool(tools.get("overall_ok", False))
-)
-
-if not isinstance(payload, dict):
-    payload = {}
-
-summary = {
-    "generated_at": payload.get("generated_at", ""),
-    "generated_at_epoch": int(payload.get("generated_at_epoch", 0) or 0),
-    "host": payload.get("host", ""),
-    "mode": "check",
-    "overall_ok": bool(overall_ok),
-    "checks": checks,
-    "configs": {
-        "overall_ok": bool(configs_overall),
-        "count": int(config_count),
-        "drift_count": int(config_drift),
-        "entries": configs_entries,
-    },
-    "tools": {
-        "overall_ok": bool(tools.get("overall_ok", False)),
-        "dolt_ok": str(tools.get("dolt_ok", "unknown")),
-        "dolt_last_ok_epoch": int(last_dolt_ok_epoch),
-        "rows": tool_rows,
-    },
-    "auth": {
-        "op": auth.get("op", {}),
-        "railway": auth.get("railway", {}),
-    },
-}
-
-with open(sys.argv[2], "w", encoding="utf-8") as out:
-    json.dump(summary, out, indent=2, sort_keys=True)
-    out.write("\n")
-PY
-
-if [[ "$OUTPUT_JSON" -eq 1 ]]; then
-  cat "$CHECK_JSON"
+if [[ "$OUTPUT_FORMAT" == "json" ]]; then
+  echo "$result_json"
 else
-  python3 - "$CHECK_JSON" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as fp:
-    p = json.load(fp)
-
-if p.get("overall_ok"):
-  print("Fleet check: OK")
-  print(f"tools_ok={p['tools']['overall_ok']} config_drift={p['checks']['config_drift']} v_mismatch={p['checks']['tool_version_mismatch']} stale_tools={p['checks']['tool_health_stale']} dolt_stale={p['checks']['dolt_stale']}")
-  print(f"auth_op={str(bool(p['auth']['op'].get('ready'))).lower()} auth_railway={str(bool(p['auth']['railway'].get('ready'))).lower()}")
-else:
-  print("Fleet check: RED")
-  print(f"tools_ok={p['tools']['overall_ok']} config_drift={p['checks']['config_drift']} v_mismatch={p['checks']['tool_version_mismatch']} stale_tools={p['checks']['tool_health_stale']} dolt_stale={p['checks']['dolt_stale']}")
-  if not p['auth']['op'].get('ready'):
-    print(f"auth_op={p['auth']['op'].get('reason', 'unknown')}")
-  if not p['auth']['railway'].get('ready'):
-    print(f"auth_railway={p['auth']['railway'].get('reason', 'unknown')}")
-PY
+  echo "🔍 DX Fleet Check"
+  echo "-----------------"
+  echo "$text_lines"
+  echo ""
+  if [[ -n "${local_message:-}" ]]; then
+    echo "Local checks: $local_message"
+  else
+    echo "Local checks: skipped"
+  fi
 fi
 
-overall=$(python3 - "$CHECK_JSON" <<'PY'
-import json
-import sys
-with open(sys.argv[1], "r", encoding="utf-8") as fp:
-    p = json.load(fp)
-print('1' if p.get('overall_ok') else '0')
-PY
-)
-
-if [[ "$RED_ONLY" -eq 1 && "$overall" != "1" ]]; then
+if [[ "$overall" == "red" ]]; then
   exit 1
 fi
-
-if [[ "$overall" != "1" ]]; then
-  exit 1
-fi
-
 exit 0

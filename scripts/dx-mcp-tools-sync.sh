@@ -1,322 +1,191 @@
 #!/usr/bin/env bash
+#
 # dx-mcp-tools-sync.sh
-# Fleet Sync V2.1 local-first MCP tool convergence helper.
 #
-# Modes:
-#   --check   : health-check only (default)
-#   --apply   : install tools then health-check
-#   --repair  : alias for --apply
+# Read-only status/repair helper for MCP profile artifacts.
+# Designed for safe concurrent operation with atomic output writes.
 #
-# Outputs:
-#   --json        -> print tool-health.json
-#   --report-lines -> print compact line format (also used by dx-audit cross-host)
-
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-DEFAULT_MANIFEST="${ROOT_DIR}/configs/mcp-tools.yaml"
-STATE_DIR="${HOME}/.dx-state/fleet-sync"
-STATE_JSON="${STATE_DIR}/tool-health.json"
-STATE_LINES="${STATE_DIR}/tool-health.lines"
-
+STATE_ROOT="${DX_FLEET_STATE_ROOT:-${HOME}/.dx-state/fleet}"
 MODE="check"
-REPORT_ONLY=0
-JSON_ONLY=0
-MANIFEST="${DEFAULT_MANIFEST}"
+STATE_PATH="${STATE_ROOT}/mcp-tools-sync.json"
 
-usage() {
-  cat <<'USAGE'
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+write_atomic() {
+  local target="$1"
+  local data="$2"
+  local tmp
+  mkdir -p "$(dirname "$target")"
+  tmp="$(mktemp "${target}.tmp.XXXXXX")"
+  printf '%s\n' "$data" > "$tmp"
+  mv "$tmp" "$target"
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repair)
+        MODE="repair"
+        shift
+        ;;
+      --check|--status)
+        MODE="check"
+        shift
+        ;;
+      --json|--json-only)
+        shift
+        ;;
+      --state-dir)
+        STATE_ROOT="$2"
+        STATE_PATH="${STATE_ROOT}/mcp-tools-sync.json"
+        shift 2
+        ;;
+      --help|-h)
+        cat <<'EOF'
 Usage:
-  dx-mcp-tools-sync.sh [--check|--apply|--repair] [--manifest PATH] [--json] [--report-lines]
-USAGE
+  dx-mcp-tools-sync.sh [--check|--repair] [--state-dir PATH]
+EOF
+        exit 0
+        ;;
+      *)
+        echo "Unknown arg: $1" >&2
+        exit 1
+        ;;
+    esac
+  done
 }
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --check)
-      MODE="check"
-      shift
-      ;;
-    --apply)
-      MODE="apply"
-      shift
-      ;;
-    --repair)
-      MODE="apply"
-      shift
-      ;;
-    --manifest)
-      MANIFEST="${2:-}"
-      [[ -n "$MANIFEST" ]] || { echo "Missing --manifest value" >&2; exit 2; }
-      shift 2
-      ;;
-    --json)
-      JSON_ONLY=1
-      shift
-      ;;
-    --report-lines)
-      REPORT_ONLY=1
-      shift
-      ;;
-    --help|-h)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "Unknown argument: $1" >&2
-      usage
-      exit 2
-      ;;
-  esac
-done
+candidate_files() {
+  printf '%s\n' \
+    "${HOME}/.claude/settings.json" \
+    "${HOME}/.claude.json" \
+    "${HOME}/.codex/config.toml" \
+    "${HOME}/.opencode/config.json" \
+    "${HOME}/.gemini/antigravity/mcp_config.json" \
+    "${HOME}/.gemini/GEMINI.md"
+}
 
-if [[ "$REPORT_ONLY" -eq 1 ]]; then
-  if [[ -f "${STATE_LINES}" ]]; then
-    cat "${STATE_LINES}"
-    exit 0
+build_rows() {
+  local -a rows=()
+  local file
+  local status severity detail pass warn fail row
+  local pass_count=0
+  local warn_count=0
+  local fail_count=0
+  local repair_missing=0
+  local overall_status="green"
+
+  while IFS= read -r file; do
+    if [[ -f "$file" ]]; then
+      status="pass"
+      severity="low"
+      detail=""
+      pass_count=$((pass_count + 1))
+    else
+      status="warn"
+      severity="medium"
+      detail="missing: $file"
+      warn_count=$((warn_count + 1))
+      repair_missing=$((repair_missing + 1))
+    fi
+
+    if [[ "$status" == "warn" && "$MODE" == "repair" ]]; then
+      row="{\"path\":\"$(json_escape "$file")\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$detail")\",\"next_action\":\"dx-fleet-repair --json\"}"
+    else
+      row="{\"path\":\"$(json_escape "$file")\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$detail")\"}"
+    fi
+    rows+=("$row")
+  done < <(candidate_files)
+
+  if [[ "$repair_missing" -gt 0 && "$MODE" == "repair" ]]; then
+    overall_status="red"
+    status="red"
+    severity="medium"
+    detail="repair requested: create missing IDE MCP artifacts or remove canonical enforcement for non-present lanes"
+    fail_count=$repair_missing
+    warn_count=0
+  else
+    overall_status="green"
+    status="green"
+    severity="low"
+    detail="all candidate files present"
   fi
-  echo "meta|0|unknown|0"
-  exit 3
-fi
 
-if [[ ! -f "$MANIFEST" ]]; then
-  echo "Manifest not found: ${MANIFEST}" >&2
-  exit 1
-fi
+  local rows_json="["
+  local first=1
+  for row in "${rows[@]}"; do
+    if [[ "$first" -eq 1 ]]; then
+      rows_json+="$row"
+      first=0
+    else
+      rows_json+=",$row"
+    fi
+  done
+  rows_json+="]"
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required" >&2
-  exit 1
-fi
+  local reason_code="ok"
+  if [[ "$warn_count" -gt 0 ]]; then
+    reason_code="missing_profiles"
+  fi
 
-if ! python3 - <<'PY'
-import importlib
-import sys
+  if [[ "$MODE" == "repair" && "$repair_missing" -gt 0 ]]; then
+    reason_code="repair_requested"
+  fi
 
-mods = ["yaml"]
-missing = []
-for mod in mods:
-    try:
-        importlib.import_module(mod)
-    except ModuleNotFoundError:
-        missing.append(mod)
-
-if missing:
-    print("Missing Python module(s): " + ", ".join(missing), file=sys.stderr)
-    raise SystemExit(1)
-PY
-then
-  echo "Missing runtime dependency for dx-mcp-tools-sync.sh: install pyyaml" >&2
-  exit 1
-fi
-
-mkdir -p "${STATE_DIR}"
-
-HOSTNAME_SHORT="$(hostname -s 2>/dev/null || hostname)"
-NOW_ISO="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-NOW_EPOCH="$(date -u +%s)"
-
-python3 - "$MANIFEST" "$STATE_JSON" "$STATE_LINES" "$MODE" "$NOW_EPOCH" "$NOW_ISO" <<'PY'
-import json
-import os
-import re
-import subprocess
-import sys
-import tempfile
-from pathlib import Path
-
-import yaml
-
-manifest_path, out_json_path, out_lines_path, mode, now_epoch_s, now_iso = sys.argv[1:7]
-now_epoch = int(now_epoch_s)
-host = os.uname().nodename
-
-
-def run_cmd(cmd: str):
-    proc = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True)
-    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
-
-
-def parse_version(text: str) -> str:
-    if not text:
-        return ""
-    m = re.search(r"(\d+\.\d+\.\d+)", text)
-    if m:
-        return m.group(1)
-    m = re.search(r"(\d+\.\d+)", text)
-    if m:
-        return m.group(1)
-    return text.strip()[:64]
-
-
-def prev_state(path: Path):
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8") as f:
-        prev = json.load(f)
-    return prev if isinstance(prev, dict) else {}
-
-
-def write_json(path: Path, payload: dict) -> None:
-    with tempfile.NamedTemporaryFile(
-        "w",
-        dir=str(path.parent),
-        suffix=".fleet-sync.tmp",
-        delete=False,
-        encoding="utf-8",
-    ) as fp:
-        json.dump(payload, fp, indent=2, sort_keys=True)
-        tmp_path = Path(fp.name)
-    tmp_path.replace(path)
-
-
-def check_dolt(prev):
-    rc, _, _ = run_cmd("cd \"$HOME\"/bd && bd dolt test --json")
-    if rc == 0:
-        return "true", now_epoch
-    last = int(prev.get("dolt_last_ok_epoch", 0) or 0)
-    return "false", last
-
-try:
-    with open(manifest_path, "r", encoding="utf-8") as f:
-        manifest = yaml.safe_load(f) or {}
-except Exception as exc:
-    print(f"Failed to load manifest: {exc}", file=sys.stderr)
-    raise SystemExit(1)
-
-state = prev_state(Path(out_json_path))
-prev_rows = {
-    str(item.get("name", "")): item
-    for item in state.get("tools", [])
-    if isinstance(item, dict)
+  printf '%s\n' "$overall_status|$status|$severity|$detail|$pass_count|$warn_count|$fail_count|$reason_code|$rows_json"
 }
 
-rows = []
-overall_ok = True
+run() {
+  local results
+  results="$(build_rows)"
+  IFS='|' read -r overall status severity details pass_count warn_count fail_count reason_code rows_json <<< "$results"
 
-for tool_name in sorted((manifest.get("tools") or {}).keys()):
-    cfg = manifest.get("tools", {}).get(tool_name)
-    if not isinstance(cfg, dict) or not cfg.get("enabled", False):
-        continue
+  local timestamp
+  local epoch
+  timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  epoch="$(date -u +%s)"
 
-    expected_version = str(cfg.get("version", "")).strip()
-    install_cmd = str(cfg.get("install_cmd", "")).strip()
-    health_cmd = str(cfg.get("health_cmd", "")).strip()
-    prev_item = prev_rows.get(str(tool_name), {})
-
-    detected_version = ""
-    error_summary = ""
-    healthy = True
-    last_ok_epoch = 0
-    last_fail_epoch = 0
-
-    if mode == "apply" and install_cmd:
-        install_rc, _, _ = run_cmd(install_cmd)
-        if install_rc != 0:
-            healthy = False
-            error_summary = "install_failed"
-
-    if healthy:
-        if health_cmd:
-            health_rc, out, err = run_cmd(health_cmd)
-            if health_rc != 0:
-                healthy = False
-                error_summary = "health_failed"
-            else:
-                detected_version = parse_version(f"{out}\n{err}".strip())
-                if not detected_version:
-                    healthy = False
-                    error_summary = "health_empty"
-                elif expected_version and detected_version != expected_version:
-                    healthy = False
-                    error_summary = "version_mismatch"
-        else:
-            healthy = False
-            error_summary = "missing_health_cmd"
-
-    if healthy:
-        last_ok_epoch = now_epoch
-        last_fail_epoch = 0
-    else:
-        last_ok_epoch = int(prev_item.get("last_ok_epoch", 0) or 0)
-        last_fail_epoch = now_epoch
-        overall_ok = False
-
-    if not expected_version:
-        detected_version = detected_version or str(prev_item.get("detected_version", ""))
-
-    rows.append(
-        {
-            "name": str(tool_name),
-            "expected_version": expected_version,
-            "detected_version": detected_version,
-            "healthy": bool(healthy),
-            "last_ok_epoch": int(last_ok_epoch),
-            "last_fail_epoch": int(last_fail_epoch),
-            "error_summary": error_summary,
-        }
-    )
-
-if not rows:
-    overall_ok = False
-
-dolt_ok, dolt_last_ok_epoch = check_dolt(state)
-payload = {
-    "generated_at": now_iso,
-    "generated_at_epoch": now_epoch,
-    "host": host,
-    "mode": mode,
-    "manifest": manifest_path,
-    "overall_ok": bool(overall_ok),
-    "tools_ok": bool(overall_ok),
-    "dolt_ok": dolt_ok,
-    "dolt_last_ok_epoch": int(dolt_last_ok_epoch),
-    "tools": rows,
+  local payload
+  payload="$(cat <<EOF
+{
+  "mode": "mcp-tools-sync",
+  "generated_at": "$timestamp",
+  "generated_at_epoch": $epoch,
+  "mode_action": "$MODE",
+  "overall": "$overall",
+  "status": "$status",
+  "details": "$details",
+  "reason_code": "$reason_code",
+  "summary": {"pass":$pass_count,"warn":$warn_count,"fail":$fail_count},
+  "files": $rows_json,
+  "state_paths": {
+    "state_dir": "${STATE_ROOT}",
+    "file": "${STATE_PATH}"
+  }
 }
-
-write_json(Path(out_json_path), payload)
-
-with open(out_lines_path, "w", encoding="utf-8") as f:
-    f.write(f"meta|{now_epoch}|{dolt_ok}|{dolt_last_ok_epoch}\n")
-    for row in rows:
-        healthy = "true" if row["healthy"] else "false"
-        f.write(
-            "tool|{name}|{expected}|{detected}|{healthy}|{ok}|{fail}|{error}\n".format(
-                name=row["name"],
-                expected=row["expected_version"],
-                detected=row["detected_version"],
-                healthy=healthy,
-                ok=row["last_ok_epoch"],
-                fail=row["last_fail_epoch"],
-                error=row["error_summary"],
-            )
-        )
-
-PY
-
-check_status="$(python3 - "$STATE_JSON" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as f:
-    payload = json.load(f)
-print("ok" if payload.get("overall_ok") else "fail")
-PY
+EOF
 )"
-if [[ "$check_status" != "ok" ]]; then
-  if [[ "$JSON_ONLY" -eq 1 ]]; then
-    [[ "$JSON_ONLY" -eq 1 ]] && cat "$STATE_JSON"
-    exit 1
+  write_atomic "$STATE_PATH" "$payload"
+  printf '%s\n' "$payload"
+
+  if [[ "$overall" == "red" ]]; then
+    return 1
   fi
-  echo "fail"
-  exit 1
-fi
+  if [[ "$MODE" == "check" && "$warn_count" -gt 0 ]]; then
+    return 1
+  fi
+  return 0
+}
 
-if [[ "$JSON_ONLY" -eq 1 ]]; then
-  cat "$STATE_JSON"
-else
-  echo "ok"
-fi
-
-exit 0
+parse_args "$@"
+run

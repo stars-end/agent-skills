@@ -1,38 +1,104 @@
-#!/bin/bash
-# V8 Weekly Audit - System Cron Wrapper
-# Bypasses OpenClaw native cron (broken isolated sessions)
-# Schedule: Sunday 7am PT (0 7 * * 0)
-
+#!/usr/bin/env bash
+#
+# dx-audit-cron.sh
+#
+# Cron wrapper for Fleet audit posting.
+# Produces deterministic one-message payloads for #dx-alerts.
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/dx-slack-alerts.sh"
 
-# Setup environment
-export PATH="${HOME}/.local/bin:${HOME}/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+MODE="weekly"
+DRY_RUN=0
+STATE_DIR="${DX_FLEET_STATE_ROOT:-${HOME}/.dx-state/fleet}"
 
-LOG_FILE="${HOME}/logs/dx-audit.log"
-mkdir -p "$(dirname "$LOG_FILE")"
+usage() {
+  cat <<'EOF'
+Usage:
+  dx-audit-cron.sh --daily [--state-dir PATH] [--dry-run]
+  dx-audit-cron.sh --weekly [--state-dir PATH] [--dry-run]
+EOF
+}
 
-exec >> "$LOG_FILE" 2>&1
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --daily)
+        MODE="daily"
+        shift
+        ;;
+      --weekly)
+        MODE="weekly"
+        shift
+        ;;
+      --dry-run)
+        DRY_RUN=1
+        shift
+        ;;
+      --state-dir)
+        STATE_DIR="$2"
+        shift 2
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown arg: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+}
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting weekly V8 audit (includes Fleet Sync V2.1 checks)..."
+render_payload() {
+  "$SCRIPT_DIR/dx-fleet.sh" audit "--$MODE" --json --state-dir "$STATE_DIR" 2>&1
+}
 
-# Generate the message
-AUDIT_SCRIPT="${HOME}/agent-skills/scripts/dx-audit.sh"
-MSG=$("$AUDIT_SCRIPT" --slack 2>/dev/null)
+main() {
+  local payload
+  local message
+  local log_file="${HOME}/logs/dx-audit.log"
+  local channel="#dx-alerts"
+  mkdir -p "$(dirname "$log_file")"
 
-if [ -z "$MSG" ]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Empty message generated"
+  payload="$(render_payload)"
+  if ! printf '%s\n' "$payload" | jq -e '.mode' >/dev/null 2>&1; then
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ERROR: invalid JSON from dx-audit.sh" >&2
+    echo "$payload" >> "$log_file"
     exit 1
-fi
+  fi
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Message generated (${#MSG} chars)"
+  message="$(printf '%s\n' "$payload" | jq -r '.slack_message // ""')"
+  if [[ -z "$message" ]]; then
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ERROR: no slack_message in payload" >&2
+    exit 1
+  fi
 
-# Send via Agent Coordination Slack transport.
-if agent_coordination_send_message "$MSG" "${DX_ALERTS_CHANNEL_ID:-}"; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Audit sent successfully"
-else
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Slack transport unavailable"
-  exit 1
-fi
+  {
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] mode=$MODE"
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] channel=$channel"
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] message=$message"
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] state_dir=$STATE_DIR"
+  } >> "$log_file"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf '%s\n' "$message"
+    printf '%s\n' "$payload"
+    return 0
+  fi
+
+  if agent_coordination_send_message "$message" "${DX_ALERTS_CHANNEL_ID:-$channel}"; then
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] audit message sent to $channel"
+    return 0
+  fi
+
+  echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ERROR: transport unavailable for channel=$channel" >&2
+  return 1
+}
+
+parse_args "$@"
+main

@@ -1,64 +1,85 @@
-# Fleet Sync V2.1 Runbook
+# Fleet Sync Runbook
 
 ## Scope
 
-- Fleet Sync installation and convergence for CASS, Context+, Serena, and llm-tldr
-- IDE MCP manifest rendering for:
-  - `codex-cli`
-  - `claude-code`
-  - `antigravity`
-  - `opencode`
-- Daily and weekly deterministic health surfacing
+This runbook defines deterministic fleet health operations for v2.2:
 
-## Post-Deploy Gate Checklist
+- Daily fleet runtime checks
+- Weekly governance/compliance audits
+- Deterministic Slack alerting to `#dx-alerts`
 
-Run this immediately after any Fleet Sync rollout step:
+## Commands
 
-- [ ] `scripts/dx-fleet-install.sh --apply --json --manifest configs/fleet-sync.manifest.yaml --mcp-manifest configs/mcp-tools.yaml`
-- [ ] `scripts/dx-fleet-check.sh --json --manifest configs/fleet-sync.manifest.yaml --mcp-manifest configs/mcp-tools.yaml`
-- [ ] `scripts/dx-mcp-tools-sync.sh --check --json --manifest configs/mcp-tools.yaml`
-- [ ] If any gate fails: `scripts/dx-fleet-repair.sh --json --manifest configs/fleet-sync.manifest.yaml --mcp-manifest configs/mcp-tools.yaml`, then re-run `dx-fleet-check.sh --json`.
-- [ ] `scripts/dx-audit.sh --json` contains a parseable `fleet_sync` object with current host counts.
-- [ ] Confirm `configs/fleet-sync.manifest.yaml` and `configs/mcp-tools.yaml` are unchanged from the approved release hash unless explicitly versioned.
-
-## Daily Runtime Fast-Feedback Path
-
-- Run `scripts/dx-fleet-daily-check.sh` once per day from cron on the host driving operations.
-- This check is red-only and non-destructive (`dx-fleet-check.sh --red-only` under the hood).
-- On failure, it posts a deterministic alert to `#dx-alerts` via `agent_coordination_send_message` only (no inference layer).
-
-## Weekly Governance Path
-
-- `scripts/dx-audit-cron.sh` remains the weekly governance wrapper and must continue to call `scripts/dx-audit.sh --slack`.
-- `dx-audit` JSON output should include:
-  - `fleet_sync.passed_checks`
-  - `fleet_sync.hosts_*` counters
-  - `fleet_sync.skill_stubs_missing`
-
-## Baseline Capture Scaffolding
-
-Use this file for gate baselines:
-
-- PR reject rate: `~/.dx-state/fleet-sync/metrics/pr_reject_rate.jsonl`
-  - Append one row per deploy/review cycle with `deploy_epoch`, `pr_number`, `reject_count`.
-- Multi-VM bug recurrence notes: `~/.dx-state/fleet-sync/metrics/bug_recurrence.jsonl`
-  - Append one row per recurring issue with `title`, `beads`, `vm_count`, `notes`.
-
-Suggested command examples:
+- Daily runtime check snapshot:
 
 ```bash
-mkdir -p ~/.dx-state/fleet-sync/metrics
-jq -cn --arg ts "$(date -u +%s)" '{deploy_epoch:($ts|tonumber), pr_number:0, reject_count:0}' \
-  >> ~/.dx-state/fleet-sync/metrics/pr_reject_rate.jsonl
+~/agent-skills/scripts/dx-fleet.sh check --json --state-dir ~/.dx-state/fleet
 ```
 
-## Rollback (Break-Glass)
+- Daily repair (lean):
 
-- Break-glass uninstall: `scripts/dx-fleet-install.sh --uninstall --json`
-- Break-glass uninstall is auth-independent and fail-open by design (best-effort config teardown).
-- Verify recovery with `scripts/dx-fleet-check.sh --json --manifest configs/fleet-sync.manifest.yaml --mcp-manifest configs/mcp-tools.yaml`.
-- If uninstall is confirmed green, proceed to manual IDE bootstrap as needed by the active on-call runbook.
+```bash
+~/agent-skills/scripts/dx-fleet.sh repair --json --state-dir ~/.dx-state/fleet
+```
 
-## Rollback Gate
+- Daily audit:
 
-- If post-deploy `gate_a` (quality trend) or `gate_b` (recurrence trend) regress for two consecutive reviews, pause rollout and open a follow-up issue for scope reduction or manual triage.
+```bash
+~/agent-skills/scripts/dx-fleet.sh audit --daily --json --state-dir ~/.dx-state/fleet
+```
+
+- Weekly audit:
+
+```bash
+~/agent-skills/scripts/dx-fleet.sh audit --weekly --json --state-dir ~/.dx-state/fleet
+```
+
+## Cron Wiring
+
+Use `scripts/dx-audit-cron.sh`:
+
+- Daily: `scripts/dx-audit-cron.sh --daily --state-dir ~/.dx-state/fleet`
+- Weekly: `scripts/dx-audit-cron.sh --weekly --state-dir ~/.dx-state/fleet`
+
+Each wrapper invocation emits one deterministic message and sends one `#dx-alerts` post.
+
+Dry-run:
+
+```bash
+~/agent-skills/scripts/dx-audit-cron.sh --daily --dry-run --state-dir ~/.dx-state/fleet
+```
+
+## Severity Mapping and Escalation
+
+- `green`: no action required
+- `yellow`: run `dx-fleet repair --json`
+- `red`: dispatch repair immediately
+- `unknown`: inspect stale-host history, then dispatch on policy
+
+On red/fail from audit:
+
+- Dispatch `dx-fleet repair --json`.
+
+## Backward Compatibility / Migration
+
+- New writes only to `~/.dx-state/fleet/`.
+- Reads continue from legacy roots for now:
+  - `~/.dx-state/fleet-sync/`
+  - `~/.dx-state/fleet_sync/`
+
+Rollback:
+
+- If a script regression is suspected, set `DX_FLEET_STATE_ROOT` back to `~/.dx-state/fleet-sync` in automation temporarily.
+- Temporarily disable weekly governance by running daily mode only (no code changes; do not delete state).
+
+## Failure Modes
+
+- Missing `jq`/`python3`: both weekly and daily audit commands use fallback parsing where possible.
+- Invalid JSON from `dx-audit.sh`: cron wrapper exits non-zero and logs failure without sending.
+
+## Evidence Artifact Paths
+
+- Daily latest: `~/.dx-state/fleet/audit/daily/latest.json`
+- Daily history: `~/.dx-state/fleet/audit/daily/history/YYYY-MM-DD.json`
+- Weekly latest: `~/.dx-state/fleet/audit/weekly/latest.json`
+- Weekly history: `~/.dx-state/fleet/audit/weekly/history/YYYY-WW.json`

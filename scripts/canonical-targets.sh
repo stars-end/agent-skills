@@ -46,6 +46,7 @@ export CANONICAL_IDES=(
   "claude-code"
   "codex-cli"
   "opencode"
+  "gemini-cli"
 )
 
 # ------------------------------------------------------------
@@ -188,6 +189,7 @@ get_ide_config() {
     claude-code) echo "$HOME/.claude/settings.json" ;;
     codex-cli) echo "$HOME/.codex/config.toml" ;;
     opencode) echo "$HOME/.opencode/config.json" ;;
+    gemini-cli) echo "$HOME/.gemini/GEMINI.md" ;;
     *)
       echo "Error: Unknown IDE '$ide'" >&2
       return 1
@@ -240,7 +242,7 @@ deploy_to_all_vms() {
   local dest="$2"
   local base
   base="$(basename "$src")"
-  local tmp="/tmp/agentskills-deploy-$base-$$"
+  local tmp="/tmp/agent-skills-deploy-$base-$$"
 
   echo "Deploying $src to all canonical VMs..."
 

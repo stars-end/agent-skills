@@ -2,9 +2,11 @@
 
 ## Canonical IDE Set
 
-**4 IDEs**: antigravity, claude-code, codex-cli, opencode
+**5 IDEs**: antigravity, claude-code, codex-cli, opencode, gemini-cli
 
-**Note**: gemini-cli is not part of the canonical IDE set, but may be used for deterministic cron/heartbeat jobs.
+gemini-cli is canonical from this release and is under staged enforcement:
+- Week 1: missing gemini lane is **YELLOW**.
+- Week 2+: missing gemini lane is **RED** in governance checks.
 
 ## DX Global Constraints Rail (All IDEs)
 
@@ -27,7 +29,7 @@ Installed targets:
 - codex-cli: `~/.codex/AGENTS.md`
 - claude-code: `~/.claude/CLAUDE.md`
 - opencode: `~/.config/opencode/AGENTS.md`
-- gemini-cli (optional): `~/.gemini/GEMINI.md`
+- gemini-cli: `~/.gemini/GEMINI.md`
 
 ## Supported IDEs
 
@@ -69,6 +71,15 @@ To expose `~/agent-skills/*/*/SKILL.md` to Codex (user scope), run:
 - **Slack MCP**: Supported via `~/agent-skills/scripts/setup-slack-mcp.sh opencode`
 - **Known Issues**: None (Slack MCP configuration now supported)
 
+### 5. gemini-cli
+- **agentskills.io**: ✅ Native support
+- **Docs**: https://github.com/google-gemini/gemini-cli
+- **Constraints Rail**: `~/.gemini/GEMINI.md`
+- **Binary**: `~/.gemini/gemini`
+- **Canonical profile path**: `~/.gemini/antigravity/mcp_config.json`
+- **Verification**: `gemini --version` and `test -f ~/.gemini/GEMINI.md`
+- **Slack MCP**: not yet auto-discovered by helper tooling; governed via Fleet checks
+
 ## Installation Instructions
 
 ### antigravity
@@ -101,17 +112,17 @@ The following VMs are defined in `scripts/canonical-targets.sh`:
 
 ### epyc6 (Production)
 - Location: `feng@epyc6` (primary Linux dev host)
-- Expected: All 4 canonical IDEs installed and configured
+- Expected: All 5 canonical IDEs installed and configured
 - Verification: Run `dx-status` to check
 
 ### macmini (Staging)
 - Location: `fengning@macmini`
-- Expected: All 4 canonical IDEs installed and configured
+- Expected: All 5 canonical IDEs installed and configured
 - Note: Uses native 1Password app (not systemd LoadCredentialEncrypted)
 
 ### homedesktop-wsl (Development)
 - Location: `fengning@homedesktop-wsl`
-- Expected: All 4 canonical IDEs installed and configured
+- Expected: All 5 canonical IDEs installed and configured
 - Verified: ✅ All services passing as of 2026-01-22
 
 ## agentskills.io Verification
@@ -127,10 +138,11 @@ ls ~/.agent/skills
 
 ## Migration from gemini-cli
 
-If you were using gemini-cli (deprecated in V4.2.1):
-1. Install antigravity: `brew install antigravity`
-2. Migrate config: `cp ~/.gemini/settings.json ~/.gemini/antigravity/mcp_config.json`
-3. Update MCP configs to use antigravity instead of gemini-cli
+If gemini-cli is not yet present:
+1. Install binary: `brew install gemini-cli`
+2. Add `~/.gemini/GEMINI.md`
+3. Ensure canonical profile artifact `~/.gemini/antigravity/mcp_config.json` is valid
+4. Governance uses staged enforcement (7-day warn window, then fail-on-missing)
 
 ## Slack MCP Configuration
 
@@ -149,6 +161,6 @@ See `~/agent-skills/scripts/setup-slack-mcp.sh` for verification commands per ID
 
 - **Update frequency**: Quarterly or when IDE releases major version
 - **Contact**: DX team
-- **Last updated**: 2026-01-22 (V4.2.1 - Slack MCP support added, IDE specs verified)
+- **Last updated**: 2026-03-04 (V8.4 hardening - gemini canonicalized)
 - **Canonical targets**: `~/agent-skills/scripts/canonical-targets.sh`
 - **See also**: `~/agent-skills/docs/CANONICAL_TARGETS.md`
