@@ -10,9 +10,15 @@ RU_URL_DEFAULT="https://raw.githubusercontent.com/Dicklesworthstone/repo_updater
 RU_URL="${RU_URL:-$RU_URL_DEFAULT}"
 
 ensure_path_bootstrap() {
+  local ensure_script="$HOME/agent-skills/scripts/ensure-shell-path.sh"
+  if [ -x "$ensure_script" ]; then
+    "$ensure_script" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  # Fallback for environments without full agent-skills script plane.
   local zshenv="$HOME/.zshenv"
   local marker="# agent-skills: shell bootstrap (no secrets)"
-
   if [ -f "$zshenv" ] && grep -Fq "$marker" "$zshenv"; then
     return 0
   fi
@@ -43,7 +49,7 @@ main() {
 
   echo -e "${GREEN}✓ ru installed${RESET} -> $HOME/.local/bin/ru"
   echo -e "${GREEN}✓ symlink${RESET} -> $HOME/bin/ru"
-  echo -e "${GREEN}✓ PATH bootstrap ensured${RESET} -> $HOME/.zshenv"
+  echo -e "${GREEN}✓ PATH bootstrap ensured${RESET} -> shell profile bootstrap"
 
   if command -v ru >/dev/null 2>&1; then
     ru --version || true
