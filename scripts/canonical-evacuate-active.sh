@@ -253,10 +253,26 @@ get_diffstat() {
 
 log_recovery() {
   local repo="$1"
-  local rescue_branch="$2"
+  local status="$2"
   local reason="$3"
-  local agent="${4:-}"
-  echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") | $repo | $rescue_branch | $reason | agent=$agent" >>"$RECOVERY_LOG"
+  local rescue_branch="${4:-}"
+  local details="${5:-}"
+  local agent="${6:-}"
+  local ts
+  ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  local host
+  host="$(short_host)"
+  echo -n "${ts} | script=canonical-evacuate-active | repo=${repo} | host=${host} | status=${status} | reason=${reason}" >>"$RECOVERY_LOG"
+  if [[ -n "$rescue_branch" ]]; then
+    echo -n " | branch=${rescue_branch}" >>"$RECOVERY_LOG"
+  fi
+  if [[ -n "$agent" ]]; then
+    echo -n " | agent=${agent}" >>"$RECOVERY_LOG"
+  fi
+  if [[ -n "$details" ]]; then
+    echo -n " | ${details}" >>"$RECOVERY_LOG"
+  fi
+  echo >>"$RECOVERY_LOG"
 }
 
 extract_locked_worktree_path() {
@@ -401,7 +417,7 @@ evacuate_diverged() {
   git branch -f "$rescue_branch" HEAD >/dev/null 2>&1 || true
 
   if git push -u origin "$rescue_branch" --quiet >/dev/null 2>&1; then
-    log_recovery "$repo" "$rescue_branch" "diverged" "$agent"
+    log_recovery "$repo" "evacuated" "diverged" "$rescue_branch" "branch=${current_branch}" "$agent"
     state_upsert "$repo" "rescue_branch=$rescue_branch" "evacuated_at_epoch=$(now_epoch)" "evac_reason=diverged"
 
     git checkout master -q >/dev/null 2>&1 || true
@@ -463,7 +479,7 @@ Feature-Key: RESCUE-$host-$repo
 Agent: canonical-evacuate-active" --quiet >/dev/null 2>&1 || true
 
   if git push -u origin "$rescue_branch" --quiet >/dev/null 2>&1; then
-    log_recovery "$repo" "$rescue_branch" "dirty" "canonical-evacuate-active"
+    log_recovery "$repo" "evacuated" "dirty_timeout" "$rescue_branch" "branch=${current_branch}" "canonical-evacuate-active"
     state_upsert "$repo" "rescue_branch=$rescue_branch" "evacuated_at_epoch=$(now_epoch)" "evac_reason=dirty-timeout"
 
     cd "$repo_path"
@@ -495,6 +511,7 @@ process_repo() {
 
   if is_locked "$repo_path"; then
     log "SKIP: $repo (locked)"
+    log_recovery "$repo" "skip" "branch_locked_by_script" "" "path=${repo_path}"
     return 0
   fi
 
@@ -572,6 +589,7 @@ PY
     if [[ "$resolved_status" == "normalized" ]]; then
       if [[ "$prev_status" != "clean" ]]; then
         send_event_alert "$repo" "recovered" ""
+        log_recovery "$repo" "skip" "off_trunk_clean" "n/a" "branch=${current_branch}" "canonical-evacuate-active"
       fi
       state_delete_repo "$repo"
       return 0
@@ -587,6 +605,7 @@ PY
     if [[ "$prev_status" != "clean" ]]; then
       send_event_alert "$repo" "recovered" ""
       state_delete_repo "$repo"
+      log_recovery "$repo" "skip" "clean" "n/a" "branch=${current_branch}" "canonical-evacuate-active"
       log "$repo recovered -> clean"
     fi
     return 0
@@ -629,6 +648,7 @@ PY
     send_event_alert "$repo" "first-seen" "diverged (ahead=$ahead)"
     if evacuate_diverged "$repo"; then
       send_event_alert "$repo" "evacuated" "diverged"
+      # evacuation success is logged in evacuate_diverged()
     else
       return 1
     fi
@@ -639,6 +659,9 @@ PY
   local first_seen_detail="$status"
   if [[ "$status" == "branch_locked_by_worktree" ]]; then
     first_seen_detail="branch_locked_by_worktree lock=$lock_worktree_path tmux_attached=$lock_worktree_active"
+    if [[ "$prev_status" != "branch_locked_by_worktree" ]]; then
+      log_recovery "$repo" "skip" "branch_locked_by_worktree" "n/a" "path=${lock_worktree_path} tmux_attached=${lock_worktree_active} branch=${current_branch}"
+    fi
   fi
   if [[ "$prev_status" == "clean" ]]; then
     send_event_alert "$repo" "first-seen" "$first_seen_detail"
@@ -654,6 +677,7 @@ PY
   if [[ "$status" == "dirty" && "$age_minutes" -ge "$DIRTY_EVICT_MINUTES" ]]; then
     if evacuate_dirty "$repo"; then
       send_event_alert "$repo" "evacuated" "dirty"
+      log_recovery "$repo" "evacuated" "dirty_timeout" "n/a" "branch=${current_branch}" "canonical-evacuate-active"
     else
       return 1
     fi
