@@ -17,6 +17,14 @@ tools:
       - claude-code
       - antigravity
       - opencode
+    mcp:
+      type: stdio
+      command: "npx"
+      args:
+        - "-y"
+        - "@forloopcodes/contextplus@0.4.2"
+        - "--transport"
+        - "stdio"
     runtime: node
 
   cass-memory:
@@ -28,6 +36,10 @@ tools:
       - codex-cli
       - claude-code
       - opencode
+    mcp:
+      type: stdio
+      command: "cass-memory"
+      args: []
     runtime: bun
     sharing:
       default: local_only
@@ -36,14 +48,18 @@ tools:
 
   serena:
     enabled: true
-    version: "latest"
-    install_cmd: "uv tool install serena-agent"
-    health_cmd: "serena-agent --help"
+    version: "0.9.1"
+    install_cmd: "uv tool install serena==0.9.1"
+    health_cmd: "serena --version"
     target_ides:
       - codex-cli
       - claude-code
       - antigravity
       - opencode
+    mcp:
+      type: stdio
+      command: "serena"
+      args: []
     runtime: python
 
   llm-tldr:
@@ -55,6 +71,10 @@ tools:
       - codex-cli
       - claude-code
       - opencode
+    mcp:
+      type: stdio
+      command: "tldr-mcp"
+      args: []
     runtime: python
 
 render:

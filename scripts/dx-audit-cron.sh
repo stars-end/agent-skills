@@ -19,9 +19,7 @@ exec >> "$LOG_FILE" 2>&1
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting weekly V8 audit (includes Fleet Sync V2.1 checks)..."
 
 # Generate the message
-# NOTE: Using worktree path until PR #135 merges, then update to ${HOME}/agent-skills/scripts/dx-audit.sh
 AUDIT_SCRIPT="${HOME}/agent-skills/scripts/dx-audit.sh"
-[ ! -f "$AUDIT_SCRIPT" ] && AUDIT_SCRIPT="/tmp/agents/bd-rrb9/agent-skills/scripts/dx-audit.sh"
 MSG=$("$AUDIT_SCRIPT" --slack 2>/dev/null)
 
 if [ -z "$MSG" ]; then

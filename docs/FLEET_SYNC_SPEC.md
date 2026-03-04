@@ -76,7 +76,8 @@ V2.1 decision:
 ### 5.3 Docs
 - this spec (`docs/FLEET_SYNC_SPEC.md`)
 - optional Dolt schema (`docs/FLEET_SYNC_DOLT_SCHEMA.sql`)
-- runbook updates (deployment, rollback, VM rebuild)
+- runbook updates (`docs/FLEET_SYNC_RUNBOOK.md`)
+- post-deploy gate checklist and metric baseline scaffolding
 
 ## 6. Script Contracts (Implementation-Ready)
 
@@ -157,6 +158,8 @@ Agent executes fleet-wide install in one session, with approved SSH/fleet-deploy
 ### 9.4 Verify (automated)
 `dx-audit` posts deterministic status to `#dx-alerts`.
 OpenClaw reasoning triggers only for red/ambiguous states.
+Recommended fast feedback path:
+- `scripts/dx-fleet-daily-check.sh --red-only` via a daily cron job for deterministic failure alerts.
 
 ### 9.5 Fix
 If red, dispatch agent to run `dx-fleet-repair.sh` on failing VMs and re-check.

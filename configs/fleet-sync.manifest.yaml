@@ -43,10 +43,24 @@ distribution:
 ide_configs:
   merge_mode: patch
   targets:
-    codex: ~/.codex/config.toml
-    claude: ~/.claude.json
+    codex-cli: ~/.codex/config.toml
+    claude-code: ~/.claude.json
     antigravity: ~/.gemini/antigravity/mcp_config.json
     opencode: ~/.opencode/config.json
+
+render:
+  merge_mode: patch
+  preserve_user_overrides: true
+  write_paths:
+    codex-cli: ~/.codex/config.toml
+    claude-code: ~/.claude.json
+    antigravity: ~/.gemini/antigravity/mcp_config.json
+    opencode: ~/.opencode/config.json
+  templates:
+    codex-cli: config-templates/fleet-sync-codex-cli.template.toml
+    claude-code: config-templates/fleet-sync-claude-code.template.json
+    antigravity: config-templates/fleet-sync-antigravity.template.json
+    opencode: config-templates/fleet-sync-opencode.template.toml
 
 beads:
   host: 100.107.173.83

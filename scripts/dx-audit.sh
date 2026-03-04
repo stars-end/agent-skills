@@ -123,8 +123,8 @@ parse_fleet_ssh_targets() {
       next
     }
     in_hosts && /ssh:[[:space:]]*"/ {
-      if (match($0, /"([^"]+)"/, m)) {
-        print host "|" m[1]
+      if (match($0, /\"([^\"]+)\"/)) {
+        print host "|" substr($0, RSTART + 1, RLENGTH - 2)
       }
     }
   ' "$cfg"
