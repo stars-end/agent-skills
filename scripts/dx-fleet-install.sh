@@ -89,7 +89,10 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! python3 - <<'PY'
+mkdir -p "$STATE_DIR"
+
+if [[ "$UNINSTALL" -ne 1 ]]; then
+  if ! python3 - <<'PY'
 import importlib
 import sys
 
@@ -118,24 +121,23 @@ if missing:
     print("Missing Python modules: " + ", ".join(missing), file=sys.stderr)
     raise SystemExit(1)
 PY
-then
-  echo "Unable to run Fleet Sync install path: missing required Python modules." >&2
-  echo "Install with: pip3 install pyyaml toml tomli" >&2
-  exit 1
+  then
+    echo "Unable to run Fleet Sync install path: missing required Python modules." >&2
+    echo "Install with: pip3 install pyyaml toml tomli" >&2
+    exit 1
+  fi
 fi
 
-mkdir -p "$STATE_DIR"
-
-if [[ "$UNINSTALL" -eq 1 ]]; then
+if [[ "$UNINSTALL" -eq 1 || "$FORCE_NO_AUTH" -eq 1 ]]; then
   AUTH_OP_READY=1
-  AUTH_OP_REASON="skipped_for_uninstall"
   AUTH_RAILWAY_READY=1
-  AUTH_RAILWAY_REASON="skipped_for_uninstall"
-elif [[ "$FORCE_NO_AUTH" -eq 1 ]]; then
-  AUTH_OP_READY=1
-  AUTH_OP_REASON="skipped"
-  AUTH_RAILWAY_READY=1
-  AUTH_RAILWAY_REASON="skipped"
+  if [[ "$UNINSTALL" -eq 1 ]]; then
+    AUTH_OP_REASON="skipped_for_uninstall"
+    AUTH_RAILWAY_REASON="skipped_for_uninstall"
+  else
+    AUTH_OP_REASON="skipped"
+    AUTH_RAILWAY_REASON="skipped"
+  fi
 else
   AUTH_OP_READY=0
   AUTH_RAILWAY_READY=0

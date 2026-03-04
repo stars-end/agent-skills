@@ -84,7 +84,7 @@ trap 'rm -f "$TMP_CHECK"' EXIT
 TMP_FINAL="$(mktemp)"
 trap 'rm -f "$TMP_CHECK" "$TMP_FINAL"' EXIT
 
-python3 - "$TMP_CHECK" "$FLEET_MANIFEST" "$MCP_MANIFEST" "$STATE_DIR" "$CHECK_MODE" <<'PY'
+python3 - "$TMP_CHECK" "$FLEET_MANIFEST" "$MCP_MANIFEST" "$STATE_DIR" "$CHECK_MODE" > "$TMP_FINAL" <<'PY'
 import json
 import os
 import sys
@@ -134,7 +134,7 @@ payload = {
 }
 
 print(json.dumps(payload, indent=2, sort_keys=True))
-PY > "$TMP_FINAL"
+PY
 
 if [[ "$JSON_ONLY" -eq 1 ]]; then
   cat "$TMP_FINAL"

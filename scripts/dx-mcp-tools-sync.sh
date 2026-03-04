@@ -123,6 +123,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -158,9 +159,16 @@ def prev_state(path: Path):
 
 
 def write_json(path: Path, payload: dict) -> None:
-    tmp = path.with_suffix(path.suffix + ".fleet-sync.tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    tmp.replace(path)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        dir=str(path.parent),
+        suffix=".fleet-sync.tmp",
+        delete=False,
+        encoding="utf-8",
+    ) as fp:
+        json.dump(payload, fp, indent=2, sort_keys=True)
+        tmp_path = Path(fp.name)
+    tmp_path.replace(path)
 
 
 def check_dolt(prev):
