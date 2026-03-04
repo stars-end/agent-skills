@@ -253,10 +253,10 @@ bd dep bd-discovered-bug bd-parent-feature --type discovered-from
 ### DX Tooling (Centralized Database Pattern)
 
 **Automated Beads Operations:**
-- `dx-hydrate.sh` - Auto-persists centralized database safety settings
-- `dx-check.sh` - Auto-exports safety bypasses during bootstrap
-- `dx-doctor.sh` - Verifies centralized database health
-- `dx-status.sh` - Shows database and variable configuration
+- `dx-check.sh` - Primary operator entrypoint (`dx-status` + optional auto-fix via `dx-hydrate`)
+- `dx-status.sh` - Read-only diagnostics
+- `dx-hydrate.sh` - Bootstrap/repair path when setup is missing
+- `dx-doctor.sh` - Optional advanced coordinator diagnostics (not required for normal Beads ops)
 
 **Manual Tools:**
 - `bd-doctor` - Diagnose/repair canonical Beads connectivity and lock issues

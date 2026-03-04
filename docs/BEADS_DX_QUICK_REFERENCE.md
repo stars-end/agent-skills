@@ -19,11 +19,11 @@ The DX scripts provide automated handling for the **Centralized Beads Database P
 
 | Script | Purpose | Usage |
 |--------|---------|-------|
-| `dx-hydrate.sh` | Auto-persists centralized database safety settings | Bootstrapping new environments |
-| `dx-check.sh` | Auto-exports safety bypasses during bootstrap | Pre-flight checks |
-| `dx-doctor.sh` | Verifies centralized database health | Diagnostics |
-| `dx-status.sh` | Shows database and variable configuration | Status checks |
-| `dx-ensure-bins.sh` | Symlinks tools to `~/bin/` | Setup |
+| `dx-check.sh` | Primary DX health command (`dx-status` + optional auto-fix via `dx-hydrate`) | Day-to-day preflight |
+| `dx-status.sh` | Read-only environment diagnostics | Triage and visibility |
+| `dx-hydrate.sh` | Bootstrap/repair host setup and links (calls `dx-ensure-bins`) | One-time setup or explicit repair |
+| `dx-ensure-bins.sh` | Re-link `~/bin` command shims | Rare manual repair only |
+| `dx-doctor.sh` | Advanced coordinator/MCP diagnostics | Optional deep-dive, not default Beads flow |
 | `ensure-shell-path.sh` | Ensures background jobs have same configuration | Cron job setup |
 
 ### Beads Runtime Focus
@@ -59,11 +59,8 @@ beads-dolt dolt test --json
 ### Daily Workflow
 
 ```bash
-# Check database status
-dx-status.sh
-
-# Verify health
-dx-doctor.sh
+# Primary entrypoint (checks + offers auto-fix)
+dx-check.sh
 
 # Validate Beads endpoint from the current host
 beads-dolt dolt test --json && beads-dolt status --json
@@ -91,8 +88,7 @@ export BEADS_DOLT_SERVER_PORT=3307
 # Ensure all safety settings are exported
 dx-check.sh
 
-# Ensure symlinks are in place
-dx-ensure-bins.sh
+# `dx-ensure-bins.sh` is normally invoked by `dx-hydrate.sh`
 ```
 
 ## Background Jobs
@@ -156,6 +152,11 @@ beads-dolt dolt test --json && beads-dolt status --json
 # Verify modern setup
 dx-check.sh
 ```
+
+### Command Naming
+
+- There is no separate `dx-health` command.
+- Use `dx-check` as the standard operator entrypoint.
 
 ## See Also
 
