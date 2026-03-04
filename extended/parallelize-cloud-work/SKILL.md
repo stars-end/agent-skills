@@ -90,7 +90,7 @@ Check:
 **Critical:** Cloud prompts must reference current state from canonical `~/bd`.
 
 ```bash
-(cd ~/bd && bd dolt test --json && bd status --json)
+(beads-dolt dolt test --json && beads-dolt status --json)
 ```
 
 ### 3. Identify Context Skills for Each Issue
@@ -437,12 +437,12 @@ You must:
 ```
 ⚠️ Cloud sessions need healthy canonical Beads state!
 
-Current: `bd dolt test --json` failed
+Current: `beads-dolt dolt test --json` failed
 Problem: prompts may reference stale/unavailable tracker data
 
 REQUIRED STEPS:
 1. Repair Beads service on host (`bd-doctor` / runbook)
-2. Verify: `(cd ~/bd && bd dolt test --json && bd status --json)`
+2. Verify: `(beads-dolt dolt test --json && beads-dolt status --json)`
 3. THEN paste cloud prompts
 
 Why: cloud prompts should be generated from current canonical tracker state.

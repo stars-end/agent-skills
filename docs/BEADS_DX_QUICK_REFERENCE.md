@@ -30,6 +30,7 @@ The DX scripts provide automated handling for the **Centralized Beads Database P
 
 | Tool | Location | Purpose |
 |------|----------|---------|
+| `beads-dolt` | `~/agent-skills/scripts/beads-dolt` | Canonical Beads command wrapper (Dolt SQL mode) |
 | `bd` | `~/bd/.` | Native canonical DB operations |
 | `bd-doctor.sh` | `~/agent-skills/health/bd-doctor` | Health diagnostics |
 
@@ -50,7 +51,7 @@ export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 export BEADS_DOLT_SERVER_PORT=3307
 
 # Spokes and hub connect through this endpoint using Dolt SQL
-cd ~/bd && bd dolt test --json
+beads-dolt dolt test --json
 ```
 
 ## Usage Examples
@@ -65,7 +66,7 @@ dx-status.sh
 dx-doctor.sh
 
 # Validate Beads endpoint from the current host
-cd ~/bd && bd dolt test --json && bd status --json
+beads-dolt dolt test --json && beads-dolt status --json
 ```
 
 ### Manual Large Import
@@ -150,7 +151,7 @@ export BEADS_IGNORE_REPO_MISMATCH=1
 # Keep them only for explicit one-off compatibility work in non-canonical contexts.
 
 # For canonical mode, verify Beads SQL health instead:
-cd ~/bd && bd dolt test --json && bd status --json
+beads-dolt dolt test --json && beads-dolt status --json
 
 # Verify modern setup
 dx-check.sh

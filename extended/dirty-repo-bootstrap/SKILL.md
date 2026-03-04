@@ -53,8 +53,8 @@ git checkout -b wip/$(hostname)-$(date +%Y-%m-%d)-$(basename "$PWD")
 
 # 3. If operating in canonical Beads repo, verify Beads health first
 if [[ "$(git rev-parse --show-toplevel)" = "$HOME/bd" ]]; then
-  bd dolt test --json
-  bd status --json
+  beads-dolt dolt test --json
+  beads-dolt status --json
 fi
 
 # 4. Add all changes and commit
@@ -97,8 +97,8 @@ Safe flow:
 ```bash
 # 1. If snapshotting ~/bd itself, verify Beads backend health
 if [[ "$(git rev-parse --show-toplevel)" = "$HOME/bd" ]]; then
-  bd dolt test --json
-  bd status --json
+  beads-dolt dolt test --json
+  beads-dolt status --json
 fi
 
 # 2. Then proceed with WIP snapshot
@@ -122,7 +122,7 @@ git log -1
 
 # 3. If this is ~/bd, verify Dolt backend connectivity
 if [[ "$(git rev-parse --show-toplevel)" = "$HOME/bd" ]]; then
-  bd dolt test --json || echo "Beads backend unreachable"
+  beads-dolt dolt test --json || echo "Beads backend unreachable"
 fi
 
 # 4. If git is severely damaged, consider:
@@ -286,7 +286,7 @@ systemctl --user restart beads-dolt.service
 launchctl kickstart -k gui/$(id -u)/com.starsend.beads-dolt
 
 # Re-test
-cd ~/bd && bd dolt test --json && bd status --json
+beads-dolt dolt test --json && beads-dolt status --json
 ```
 
 ## Related Documentation

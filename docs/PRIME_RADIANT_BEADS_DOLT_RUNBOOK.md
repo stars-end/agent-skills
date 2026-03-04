@@ -21,9 +21,8 @@ Run on the host where dispatch will run:
 export BEADS_DOLT_SERVER_HOST=100.107.173.83
 export BEADS_DOLT_SERVER_PORT=3307
 
-cd ~/bd
-bd dolt test --json
-bd status --json
+beads-dolt dolt test --json
+beads-dolt status --json
 ```
 
 Linux hosts must pass:
@@ -67,8 +66,8 @@ fi
 ```
 
 Expected result:
-- `bd dolt test --json` shows `"connection_ok": true`
-- `bd status --json` returns non-zero `summary.total_issues`
+- `beads-dolt dolt test --json` shows `"connection_ok": true`
+- `beads-dolt status --json` returns non-zero `summary.total_issues`
 - service is active/running on `epyc12`
 
 ## 2) Prime Radiant Worktree Flow
@@ -111,9 +110,8 @@ dx-batch doctor --wave-id <wave-id> --json
 export BEADS_DOLT_SERVER_HOST=100.107.173.83
 export BEADS_DOLT_SERVER_PORT=3307
 
-cd ~/bd
-bd dolt test --json
-bd ready --limit 5 --json
+beads-dolt dolt test --json
+beads-dolt ready --limit 5 --json
 ```
 
 Fleet checks from macmini:
@@ -125,9 +123,9 @@ if [[ -z "$EPYC12_BEADS_HOST" ]]; then
   exit 1
 fi
 
-ssh epyc12 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=${EPYC12_BEADS_HOST}; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
-ssh homedesktop-wsl "cd ~/bd; export BEADS_DOLT_SERVER_HOST=${EPYC12_BEADS_HOST}; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
-ssh epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=${EPYC12_BEADS_HOST}; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c '.summary'"
+ssh epyc12 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
+ssh homedesktop-wsl "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
+ssh epyc6 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
 ```
 
 ## 5) Incident Triage
@@ -178,7 +176,7 @@ fi
 - Verify all hosts use same server target
   - Hub: `epyc12`
   - Spokes: `BEADS_DOLT_SERVER_HOST` resolves to epyc12 Tailscale IP
-- Compare `bd status --json | jq -c '.summary'` output
+- Compare `beads-dolt status --json | jq -c '.summary'` output
 
 ```bash
 ssh epyc12 "ss -ltnp | grep ':3307' || true"
@@ -207,7 +205,7 @@ cd ~/bd/.beads
 mv dolt dolt.bad.$(date +%Y%m%d%H%M%S)
 # restore copied snapshot into ./dolt
 systemctl --user start beads-dolt.service
-cd ~/bd && bd dolt test --json && bd status --json
+beads-dolt dolt test --json && beads-dolt status --json
 ```
 
 ## 7) Fleet Sync (Canonical: Hub-Spoke Dolt SQL)
@@ -260,18 +258,19 @@ done
 cd ~/bd
 export BEADS_DOLT_SERVER_HOST=100.107.173.83
 export BEADS_DOLT_SERVER_PORT=3307
-bd dolt test --json
-bd status --json | jq -c .summary
-ssh epyc12 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=100.107.173.83; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c .summary"
-ssh homedesktop-wsl "cd ~/bd; export BEADS_DOLT_SERVER_HOST=100.107.173.83; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c .summary"
-ssh epyc6 "cd ~/bd; export BEADS_DOLT_SERVER_HOST=100.107.173.83; export BEADS_DOLT_SERVER_PORT=3307; bd dolt test --json; bd status --json | jq -c .summary"
+cd ~/bd
+beads-dolt dolt test --json
+beads-dolt status --json | jq -c .summary
+ssh epyc12 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c .summary"
+ssh homedesktop-wsl "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c .summary"
+ssh epyc6 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c .summary"
 ```
 
 ### Recovery (Host Divergence)
 
 ```bash
 # 1) validate hub is the source of truth
-ssh epyc12 'cd ~/bd && bd dolt test --json && bd status --json'
+ssh epyc12 '~/.agent/skills/scripts/beads-dolt dolt test --json && ~/.agent/skills/scripts/beads-dolt status --json'
 # 2) validate spoke target points to hub
 ssh homedesktop-wsl 'grep -q "BEADS_DOLT_SERVER_HOST" ~/.zshrc ~/.bashrc'
 # 3) re-run dispatch preflight on each host
@@ -290,7 +289,7 @@ ssh homedesktop-wsl 'grep -q "BEADS_DOLT_SERVER_HOST" ~/.zshrc ~/.bashrc'
 - Do not run mutating `bd` commands from non-`~/bd` repos.
 - Do not launch unmanaged Dolt servers during active waves.
 - Keep one managed service per host and validate before dispatch.
-- Treat `bd status --json` + `bd dolt test --json` as source of truth.
+- Treat `beads-dolt status --json` + `beads-dolt dolt test --json` as source of truth.
 - Do not use local-file or Git-based Beads sync as primary fleet transport.
 
 ## 9) ID Reconciliation (Canonical Contract)

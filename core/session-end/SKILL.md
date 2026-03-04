@@ -28,9 +28,8 @@ mcp__plugin_beads_beads__set_context(workspace_root="/path/to/project")
 **CRITICAL:** confirm Beads is reachable before ending session context.
 
 ```bash
-cd ~/bd
-bd dolt test --json
-bd status --json
+beads-dolt dolt test --json
+beads-dolt status --json
 ```
 
 **What this does:**

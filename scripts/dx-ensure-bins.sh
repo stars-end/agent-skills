@@ -54,6 +54,7 @@ link "$AGENTS_ROOT/scripts/dx-worktree-gc.sh" "$BIN_DIR/dx-worktree-gc"
 link "$AGENTS_ROOT/scripts/dx-delegate.sh" "$BIN_DIR/dx-delegate"
 
 # Beads helpers (used across repos)
+link "$AGENTS_ROOT/scripts/beads-dolt" "$BIN_DIR/beads-dolt"
 link "$AGENTS_ROOT/scripts/bd-context" "$BIN_DIR/bd-context"
 link "$AGENTS_ROOT/scripts/bd-link-pr" "$BIN_DIR/bd-link-pr"
 # Legacy sync wrapper is deprecated in canonical Dolt hub-spoke mode.

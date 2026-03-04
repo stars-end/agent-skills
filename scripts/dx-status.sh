@@ -252,7 +252,7 @@ check_beads_dir() {
     if [ -f "$BEADS_DIR/beads.db" ]; then
         echo -e "${GREEN}✅ Database file present: $BEADS_DIR/beads.db${RESET}"
     elif [ -d "$expected_beads_db" ]; then
-        if (cd "$HOME/bd" && bd dolt test --json >/dev/null 2>&1); then
+        if ("$HOME/.agent/skills/scripts/beads-dolt" dolt test --json >/dev/null 2>&1); then
             echo -e "${GREEN}✅ Beads service reachable in Dolt server mode (expected: no beads.db)${RESET}"
         else
             echo -e "${RED}❌ Beads service unreachable (${HOME}/bd -- dolt server mode)${RESET}"

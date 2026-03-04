@@ -41,9 +41,8 @@ Beads provides persistent task memory across sessions, enabling:
 - Before dispatch waves, verify:
 
 ```bash
-cd ~/bd
-bd dolt test --json
-bd status --json
+beads-dolt dolt test --json
+beads-dolt status --json
 ```
 
 ## When to Use This Skill
@@ -506,19 +505,19 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 - Ensure `~/bin` or `scripts/` in PATH
 
 **Beads service unavailable or stale:**
-- Run: `cd ~/bd && bd dolt test --json`
-- Check: `cd ~/bd && bd status --json`
+- Run: `beads-dolt dolt test --json`
+- Check: `beads-dolt status --json`
 - Verify host service is active (`beads-dolt.service` on Linux or launchd agent on macOS)
 
 **Issue not found:**
 - List all: `bd list --status open`
 - Check ID format: `bd-abc123` (not just abc123)
-- Verify Beads backend is initialized and healthy: `cd ~/bd && bd dolt test --json`
+- Verify Beads backend is initialized and healthy: `beads-dolt dolt test --json`
 
 **Dolt lock contention (`database ... is locked`):**
 - Ensure only one Dolt server process is using `~/bd/.beads/dolt` on the host
 - Restart managed service (`systemctl --user restart beads-dolt.service` on Linux)
-- Re-check with `cd ~/bd && bd dolt test --json`
+- Re-check with `beads-dolt dolt test --json`
 
 ---
 

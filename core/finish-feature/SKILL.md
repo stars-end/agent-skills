@@ -218,7 +218,7 @@ else
     echo ""
     echo "Since work is already merged, close retroactively:"
     echo "  bd close $issueId --reason 'Retroactive closure - work merged in PR'"
-    echo "  cd ~/bd && bd dolt test --json && bd status --json"
+    echo "  beads-dolt dolt test --json && beads-dolt status --json"
     echo ""
     echo "Then retry: Say 'finish this feature'"
     echo ""

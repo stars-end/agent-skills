@@ -73,9 +73,8 @@ bd close $childIssueId --reason "Fixed"
 
 Verify canonical Beads health:
 ```bash
-cd ~/bd
-bd dolt test --json
-bd status --json
+beads-dolt dolt test --json
+beads-dolt status --json
 ```
 
 Commit with child Feature-Key:
