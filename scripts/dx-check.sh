@@ -45,6 +45,20 @@ if [[ "${BEADS_DIR}" == "${DEFAULT_BEADS_DIR}" ]]; then
     export BEADS_IGNORE_REPO_MISMATCH=1
 fi
 
+# Dolt hub defaulting for plain `bd` usability (prevents localhost split-brain on spokes).
+DEFAULT_BEADS_DOLT_SERVER_HOST="${EPYC12_BEADS_HOST:-100.107.173.83}"
+DEFAULT_BEADS_DOLT_SERVER_PORT="${EPYC12_BEADS_PORT:-3307}"
+if [[ -z "${BEADS_DOLT_SERVER_HOST:-}" ]]; then
+    echo -e "${YELLOW}⚠️  BEADS_DOLT_SERVER_HOST not set; defaulting to ${DEFAULT_BEADS_DOLT_SERVER_HOST} for this run.${RESET}"
+    echo "   Tip: persist with: export BEADS_DOLT_SERVER_HOST=\"${DEFAULT_BEADS_DOLT_SERVER_HOST}\" (e.g. ~/.zshenv)"
+    export BEADS_DOLT_SERVER_HOST="${DEFAULT_BEADS_DOLT_SERVER_HOST}"
+fi
+if [[ -z "${BEADS_DOLT_SERVER_PORT:-}" ]]; then
+    echo -e "${YELLOW}⚠️  BEADS_DOLT_SERVER_PORT not set; defaulting to ${DEFAULT_BEADS_DOLT_SERVER_PORT} for this run.${RESET}"
+    echo "   Tip: persist with: export BEADS_DOLT_SERVER_PORT=\"${DEFAULT_BEADS_DOLT_SERVER_PORT}\" (e.g. ~/.zshenv)"
+    export BEADS_DOLT_SERVER_PORT="${DEFAULT_BEADS_DOLT_SERVER_PORT}"
+fi
+
 if [[ -d ".beads" ]]; then
     echo -e "${YELLOW}⚠️  Encountered local .beads/ directory (DEPRECATED)${RESET}"
     echo "   V5 requires this to be removed. Deleting..."
