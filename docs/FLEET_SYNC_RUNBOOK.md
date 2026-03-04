@@ -55,6 +55,7 @@ jq -cn --arg ts "$(date -u +%s)" '{deploy_epoch:($ts|tonumber), pr_number:0, rej
 ## Rollback (Break-Glass)
 
 - Break-glass uninstall: `scripts/dx-fleet-install.sh --uninstall --json`
+- Break-glass uninstall is auth-independent and fail-open by design (best-effort config teardown).
 - Verify recovery with `scripts/dx-fleet-check.sh --json --manifest configs/fleet-sync.manifest.yaml --mcp-manifest configs/mcp-tools.yaml`.
 - If uninstall is confirmed green, proceed to manual IDE bootstrap as needed by the active on-call runbook.
 

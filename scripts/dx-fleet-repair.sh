@@ -96,13 +96,17 @@ with open(check_path, "r", encoding="utf-8") as fp:
 
 tools = base.get("tools", {})
 configs = base.get("configs", {})
+auth = base.get("auth", {})
 checks_ok = bool(configs.get("overall_ok", False)) and bool(tools.get("overall_ok", False))
+auth_ok = bool((auth.get("op", {}) or {}).get("ready", False)) and bool((auth.get("railway", {}) or {}).get("ready", False))
 checks = {
     "applied": bool(mode == "repair"),
     "tool_ok": bool(tools.get("overall_ok", False)),
     "config_ok": bool(configs.get("overall_ok", False)),
     "config_drift_count": int(configs.get("drift_count", 0) or 0),
+    "auth_ok": bool(auth_ok),
 }
+checks_ok = bool(checks_ok and auth_ok)
 
 auth = base.get("auth", {})
 payload = {

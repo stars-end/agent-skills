@@ -89,9 +89,49 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! python3 - <<'PY'
+import importlib
+import sys
+
+mods = ["yaml"]
+missing = []
+for mod in mods:
+    try:
+        importlib.import_module(mod)
+    except ModuleNotFoundError:
+        missing.append(mod)
+
+try:
+    importlib.import_module("tomllib")
+except ModuleNotFoundError:
+    try:
+        importlib.import_module("tomli")
+    except ModuleNotFoundError:
+        missing.append("tomllib (or tomli)")
+
+try:
+    importlib.import_module("toml")
+except ModuleNotFoundError:
+    missing.append("toml")
+
+if missing:
+    print("Missing Python modules: " + ", ".join(missing), file=sys.stderr)
+    raise SystemExit(1)
+PY
+then
+  echo "Unable to run Fleet Sync install path: missing required Python modules." >&2
+  echo "Install with: pip3 install pyyaml toml tomli" >&2
+  exit 1
+fi
+
 mkdir -p "$STATE_DIR"
 
-if [[ "$FORCE_NO_AUTH" -eq 1 ]]; then
+if [[ "$UNINSTALL" -eq 1 ]]; then
+  AUTH_OP_READY=1
+  AUTH_OP_REASON="skipped_for_uninstall"
+  AUTH_RAILWAY_READY=1
+  AUTH_RAILWAY_REASON="skipped_for_uninstall"
+elif [[ "$FORCE_NO_AUTH" -eq 1 ]]; then
   AUTH_OP_READY=1
   AUTH_OP_REASON="skipped"
   AUTH_RAILWAY_READY=1
@@ -505,7 +545,7 @@ auth = {
 if mode == "check":
     auth_ok = bool(auth_op_ready and auth_railway_ready)
 else:
-    # Apply/uninstall are still bounded and should fail fast if auth prerequisites missing.
+    # Apply mode is bounded by auth unless this is uninstall.
     auth_ok = bool(auth_op_ready and auth_railway_ready)
 
 if not tool_state:
@@ -520,10 +560,18 @@ if not tool_state:
 if not isinstance(tool_state, dict):
     tool_state = {}
 
-overall_ok = bool(config_ok and auth_ok and tool_state.get("overall_ok", False))
+tool_ok = bool(tool_state.get("overall_ok", False))
+if uninstall:
+    overall_ok = bool(config_ok)
+else:
+    overall_ok = bool(config_ok and auth_ok and tool_ok)
 
 payload = {
-    "generated_at": __import__("datetime").datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+    "generated_at": __import__("datetime")
+    .datetime.now(__import__("datetime").timezone.utc)
+    .replace(microsecond=0)
+    .isoformat()
+    .replace("+00:00", "Z"),
     "generated_at_epoch": int(__import__("time").time()),
     "host": socket.gethostname(),
     "mode": mode,
@@ -544,7 +592,7 @@ PY
 
 if [[ "$JSON_ONLY" -eq 1 ]]; then
   cat "$STATE_JSON"
-  if [[ "$MODE" == "check" && "$(python3 - "$STATE_JSON" <<'PY'
+  if [[ "$(python3 - "$STATE_JSON" <<'PY'
 import json
 import sys
 with open(sys.argv[1], "r", encoding="utf-8") as fp:

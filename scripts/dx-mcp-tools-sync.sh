@@ -90,6 +90,27 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! python3 - <<'PY'
+import importlib
+import sys
+
+mods = ["yaml"]
+missing = []
+for mod in mods:
+    try:
+        importlib.import_module(mod)
+    except ModuleNotFoundError:
+        missing.append(mod)
+
+if missing:
+    print("Missing Python module(s): " + ", ".join(missing), file=sys.stderr)
+    raise SystemExit(1)
+PY
+then
+  echo "Missing runtime dependency for dx-mcp-tools-sync.sh: install pyyaml" >&2
+  exit 1
+fi
+
 mkdir -p "${STATE_DIR}"
 
 HOSTNAME_SHORT="$(hostname -s 2>/dev/null || hostname)"
@@ -134,6 +155,12 @@ def prev_state(path: Path):
     with path.open("r", encoding="utf-8") as f:
         prev = json.load(f)
     return prev if isinstance(prev, dict) else {}
+
+
+def write_json(path: Path, payload: dict) -> None:
+    tmp = path.with_suffix(path.suffix + ".fleet-sync.tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
 
 
 def check_dolt(prev):
@@ -240,8 +267,7 @@ payload = {
     "tools": rows,
 }
 
-with open(out_json_path, "w", encoding="utf-8") as f:
-    json.dump(payload, f, indent=2, sort_keys=True)
+write_json(Path(out_json_path), payload)
 
 with open(out_lines_path, "w", encoding="utf-8") as f:
     f.write(f"meta|{now_epoch}|{dolt_ok}|{dolt_last_ok_epoch}\n")

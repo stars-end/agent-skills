@@ -227,6 +227,7 @@ fleet_sync_script_present=0
 fleet_sync_tool_version_drift_hosts=0
 fleet_sync_tool_health_stale_hosts=0
 fleet_sync_dolt_stale_hosts=0
+fleet_sync_config_drift_hosts=0
 fleet_sync_hosts_checked=0
 fleet_sync_hosts_missing_reports=0
 fleet_sync_runtime_service_count_epyc12=-1
@@ -288,9 +289,11 @@ if [[ -f "$FLEET_HOSTS_CONFIG" && "$fleet_sync_script_present" -eq 1 ]]; then
     fleet_sync_hosts_checked=$((fleet_sync_hosts_checked + 1))
 
     report_cmd='test -x "$HOME/agent-skills/scripts/dx-mcp-tools-sync.sh" && "$HOME/agent-skills/scripts/dx-mcp-tools-sync.sh" --report-lines'
+    check_cmd='test -x "$HOME/agent-skills/scripts/dx-fleet-check.sh" && "$HOME/agent-skills/scripts/dx-fleet-check.sh" --json --manifest "$HOME/agent-skills/configs/fleet-sync.manifest.yaml" --mcp-manifest "$HOME/agent-skills/configs/mcp-tools.yaml"'
     report_lines="$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$ssh_target" "$report_cmd" 2>/dev/null || true)"
+    check_json="$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$ssh_target" "$check_cmd" 2>/dev/null || true)"
 
-    if [[ -z "$report_lines" ]]; then
+    if [[ -z "$report_lines" && -z "$check_json" ]]; then
       fleet_sync_hosts_missing_reports=$((fleet_sync_hosts_missing_reports + 1))
       add_fleet_issue "No Fleet Sync report from ${host_name} (${ssh_target})"
       continue
@@ -299,55 +302,99 @@ if [[ -f "$FLEET_HOSTS_CONFIG" && "$fleet_sync_script_present" -eq 1 ]]; then
     host_tool_drift=0
     host_tool_health_stale=0
     host_dolt_stale=0
+    host_config_overall=0
+    host_config_drift=0
+    host_config_count=0
     meta_seen=0
 
-    while IFS='|' read -r row_kind c1 c2 c3 c4 c5 c6 c7; do
-      [[ -z "$row_kind" ]] && continue
-      if [[ "$row_kind" == "meta" ]]; then
-        meta_seen=1
-        # meta|generated_at_epoch|dolt_ok|dolt_last_ok_epoch
-        dolt_ok="$c2"
-        dolt_last_ok_epoch="$c3"
-        now_epoch="$(date -u +%s)"
-        max_dolt_stale_seconds=$((FLEET_SYNC_MAX_DOLT_STALE_MINUTES * 60))
-        if [[ "$dolt_ok" != "true" ]]; then
-          host_dolt_stale=1
-        elif [[ -n "$dolt_last_ok_epoch" && "$dolt_last_ok_epoch" =~ ^[0-9]+$ ]]; then
-          if (( now_epoch - dolt_last_ok_epoch > max_dolt_stale_seconds )); then
+    if [[ -n "$report_lines" ]]; then
+      while IFS='|' read -r row_kind c1 c2 c3 c4 c5 c6 c7; do
+        [[ -z "$row_kind" ]] && continue
+        if [[ "$row_kind" == "meta" ]]; then
+          meta_seen=1
+          # meta|generated_at_epoch|dolt_ok|dolt_last_ok_epoch
+          dolt_ok="$c2"
+          dolt_last_ok_epoch="$c3"
+          now_epoch="$(date -u +%s)"
+          max_dolt_stale_seconds=$((FLEET_SYNC_MAX_DOLT_STALE_MINUTES * 60))
+          if [[ "$dolt_ok" != "true" ]]; then
             host_dolt_stale=1
+          elif [[ -n "$dolt_last_ok_epoch" && "$dolt_last_ok_epoch" =~ ^[0-9]+$ ]]; then
+            if (( now_epoch - dolt_last_ok_epoch > max_dolt_stale_seconds )); then
+              host_dolt_stale=1
+            fi
           fi
+          continue
         fi
-        continue
-      fi
 
-      if [[ "$row_kind" != "tool" ]]; then
-        continue
-      fi
+        if [[ "$row_kind" != "tool" ]]; then
+          continue
+        fi
 
-      # tool|name|expected|detected|healthy|last_ok_epoch|last_fail_epoch|error_summary
-      tool_name="$c1"
-      expected_version="$c2"
-      detected_version="$c3"
-      healthy="$c4"
-      last_ok_epoch="$c5"
+        # tool|name|expected|detected|healthy|last_ok_epoch|last_fail_epoch|error_summary
+        tool_name="$c1"
+        expected_version="$c2"
+        detected_version="$c3"
+        healthy="$c4"
+        last_ok_epoch="$c5"
 
-      if [[ -n "$expected_version" && -n "$detected_version" && "$expected_version" != "$detected_version" ]]; then
-        host_tool_drift=1
-        add_fleet_issue "Version drift on ${host_name} (${tool_name}: expected ${expected_version}, got ${detected_version})"
-      fi
+        if [[ -n "$expected_version" && -n "$detected_version" && "$expected_version" != "$detected_version" ]]; then
+          host_tool_drift=1
+          add_fleet_issue "Version drift on ${host_name} (${tool_name}: expected ${expected_version}, got ${detected_version})"
+        fi
 
-      now_epoch="$(date -u +%s)"
-      max_tool_stale_seconds=$((FLEET_SYNC_MAX_TOOL_STALE_HOURS * 3600))
-      if [[ "$healthy" != "true" ]]; then
-        host_tool_health_stale=1
-      elif [[ -n "$last_ok_epoch" && "$last_ok_epoch" =~ ^[0-9]+$ ]]; then
-        if (( now_epoch - last_ok_epoch > max_tool_stale_seconds )); then
+        now_epoch="$(date -u +%s)"
+        max_tool_stale_seconds=$((FLEET_SYNC_MAX_TOOL_STALE_HOURS * 3600))
+        if [[ "$healthy" != "true" ]]; then
+          host_tool_health_stale=1
+        elif [[ -n "$last_ok_epoch" && "$last_ok_epoch" =~ ^[0-9]+$ ]]; then
+          if (( now_epoch - last_ok_epoch > max_tool_stale_seconds )); then
+            host_tool_health_stale=1
+          fi
+        else
           host_tool_health_stale=1
         fi
-      else
-        host_tool_health_stale=1
+      done <<< "$report_lines"
+    else
+      add_fleet_issue "No Fleet Sync tool report from ${host_name} (${ssh_target})"
+      host_dolt_stale=1
+      host_tool_health_stale=1
+    fi
+
+    if [[ -n "$check_json" ]]; then
+      tmp_host_check_json="$(mktemp)"
+      printf '%s\n' "$check_json" > "$tmp_host_check_json"
+      read -r host_config_overall host_config_drift host_config_count <<< "$(python3 - "$tmp_host_check_json" <<'PY'
+import json
+import sys
+
+try:
+    payload = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+except Exception:
+    print("0 1 0")
+    raise SystemExit(0)
+
+configs = payload.get("configs", {})
+if not isinstance(configs, dict):
+    print("0 1 0")
+else:
+    overall = 1 if bool(configs.get("overall_ok", False)) else 0
+    drift = int(configs.get("drift_count", 0) or 0)
+    count = int(configs.get("count", 0) or 0)
+    print(f"{overall} {drift} {count}")
+PY
+)"
+      rm -f "$tmp_host_check_json"
+      if [[ "$host_config_overall" -eq 0 ]]; then
+        add_fleet_issue "Fleet Sync config check failed on ${host_name}"
+      elif [[ "$host_config_drift" -ne 0 ]]; then
+        add_fleet_issue "Config drift on ${host_name}: ${host_config_drift}/${host_config_count} IDE configs"
       fi
-    done <<< "$report_lines"
+    else
+      host_config_drift=1
+      host_config_count=0
+      add_fleet_issue "No Fleet Sync config report from ${host_name} (${ssh_target})"
+    fi
 
     if [[ "$meta_seen" -eq 0 ]]; then
       host_dolt_stale=1
@@ -357,6 +404,7 @@ if [[ -f "$FLEET_HOSTS_CONFIG" && "$fleet_sync_script_present" -eq 1 ]]; then
     [[ "$host_tool_drift" -eq 0 ]] || fleet_sync_tool_version_drift_hosts=$((fleet_sync_tool_version_drift_hosts + 1))
     [[ "$host_tool_health_stale" -eq 0 ]] || fleet_sync_tool_health_stale_hosts=$((fleet_sync_tool_health_stale_hosts + 1))
     [[ "$host_dolt_stale" -eq 0 ]] || fleet_sync_dolt_stale_hosts=$((fleet_sync_dolt_stale_hosts + 1))
+    [[ "$host_config_drift" -eq 0 ]] || fleet_sync_config_drift_hosts=$((fleet_sync_config_drift_hosts + 1))
   done <<< "$(parse_fleet_ssh_targets "$FLEET_HOSTS_CONFIG")"
 
   if [[ "$fleet_sync_hosts_checked" -eq 0 ]]; then
@@ -394,9 +442,11 @@ fi
 fleet_sync_tool_drift_ok=0
 fleet_sync_dolt_fresh_ok=0
 fleet_sync_tool_health_ok=0
+fleet_sync_config_ok=0
 [[ "$fleet_sync_tool_version_drift_hosts" -eq 0 ]] && fleet_sync_tool_drift_ok=1 || add_fleet_issue "Tool version drift detected on ${fleet_sync_tool_version_drift_hosts} host(s)"
 [[ "$fleet_sync_dolt_stale_hosts" -eq 0 ]] && fleet_sync_dolt_fresh_ok=1 || add_fleet_issue "Dolt sync freshness/connectivity issues on ${fleet_sync_dolt_stale_hosts} host(s)"
 [[ "$fleet_sync_tool_health_stale_hosts" -eq 0 ]] && fleet_sync_tool_health_ok=1 || add_fleet_issue "Tool health stale/failing on ${fleet_sync_tool_health_stale_hosts} host(s)"
+[[ "$fleet_sync_config_drift_hosts" -eq 0 ]] && fleet_sync_config_ok=1 || add_fleet_issue "IDE config drift detected on ${fleet_sync_config_drift_hosts} host(s)"
 
 fleet_sync_reports_ok=0
 if [[ "$fleet_sync_hosts_checked" -gt 0 && "$fleet_sync_hosts_missing_reports" -eq 0 ]]; then
@@ -405,7 +455,7 @@ else
   add_fleet_issue "Missing Fleet Sync reports on ${fleet_sync_hosts_missing_reports}/${fleet_sync_hosts_checked} host(s)"
 fi
 
-fleet_sync_total_checks=13
+fleet_sync_total_checks=14
 fleet_sync_passed_checks=$(( \
   fleet_sync_spec_present + \
   fleet_sync_manifest_present + \
@@ -415,6 +465,7 @@ fleet_sync_passed_checks=$(( \
   fleet_sync_service_cap_ok + \
   fleet_sync_forbidden_required_ok + \
   fleet_sync_script_present + \
+  fleet_sync_config_ok + \
   fleet_sync_reports_ok + \
   fleet_sync_tool_drift_ok + \
   fleet_sync_dolt_fresh_ok + \
@@ -442,6 +493,7 @@ Lookback: ${LOOKBACK_DAYS} days
 | Fleet Sync V2.1 contract | ${fleet_sync_passed_checks}/${fleet_sync_total_checks} | $([ "$fleet_sync_failed_checks" -eq 0 ] && echo '✅ OK' || echo '⚠️ REVIEW') |
 | Fleet Sync reports coverage | ${fleet_sync_hosts_checked}-${fleet_sync_hosts_missing_reports} / ${fleet_sync_hosts_checked} hosts | $([ "$fleet_sync_reports_ok" -eq 1 ] && echo '✅ OK' || echo '⚠️ PARTIAL') |
 | Fleet Sync tool drift hosts | ${fleet_sync_tool_version_drift_hosts} | $([ "$fleet_sync_tool_drift_ok" -eq 1 ] && echo '✅ OK' || echo '⚠️ DRIFT') |
+| Fleet Sync config drift hosts | ${fleet_sync_config_drift_hosts} | $([ "$fleet_sync_config_ok" -eq 1 ] && echo '✅ OK' || echo '⚠️ DRIFT') |
 | Fleet Sync Dolt stale hosts | ${fleet_sync_dolt_stale_hosts} | $([ "$fleet_sync_dolt_fresh_ok" -eq 1 ] && echo '✅ OK' || echo '⚠️ STALE') |
 | Fleet Sync tool health stale hosts | ${fleet_sync_tool_health_stale_hosts} | $([ "$fleet_sync_tool_health_ok" -eq 1 ] && echo '✅ OK' || echo '⚠️ FAILING') |
 | epyc12 runtime DX services | ${fleet_sync_runtime_service_count_epyc12} | $([ "$fleet_sync_runtime_service_cap_ok" -eq 1 ] && echo "✅ <=${FLEET_SYNC_RUNTIME_SERVICE_CAP}" || echo "⚠️ >${FLEET_SYNC_RUNTIME_SERVICE_CAP}") |
@@ -490,6 +542,7 @@ $(echo -e "$rescue_events")"
 - Sync script present: $([ "$fleet_sync_script_present" -eq 1 ] && echo '✅' || echo '❌')
 - Cross-VM reports coverage: $((fleet_sync_hosts_checked - fleet_sync_hosts_missing_reports))/${fleet_sync_hosts_checked}
 - Tool version drift hosts: ${fleet_sync_tool_version_drift_hosts}
+- IDE config drift hosts: ${fleet_sync_config_drift_hosts}
 - Dolt stale hosts: ${fleet_sync_dolt_stale_hosts}
 - Tool health stale/failing hosts: ${fleet_sync_tool_health_stale_hosts}
 - epyc12 runtime DX services (cap ${FLEET_SYNC_RUNTIME_SERVICE_CAP}): ${fleet_sync_runtime_service_count_epyc12}
@@ -517,6 +570,7 @@ elif [[ "$OUTPUT_FORMAT" == "json" ]]; then
     "fleet_sync_total_checks": $fleet_sync_total_checks,
     "fleet_sync_hosts_checked": $fleet_sync_hosts_checked,
     "fleet_sync_hosts_missing_reports": $fleet_sync_hosts_missing_reports,
+    "fleet_sync_config_drift_hosts": $fleet_sync_config_drift_hosts,
     "fleet_sync_tool_version_drift_hosts": $fleet_sync_tool_version_drift_hosts,
     "fleet_sync_dolt_stale_hosts": $fleet_sync_dolt_stale_hosts,
     "fleet_sync_tool_health_stale_hosts": $fleet_sync_tool_health_stale_hosts,
@@ -536,6 +590,7 @@ elif [[ "$OUTPUT_FORMAT" == "json" ]]; then
     "forbidden_required_gateway_count": $fleet_sync_forbidden_required_count,
     "sync_script_present": $([ "$fleet_sync_script_present" -eq 1 ] && echo 'true' || echo 'false'),
     "reports_ok": $([ "$fleet_sync_reports_ok" -eq 1 ] && echo 'true' || echo 'false'),
+    "config_drift_hosts": $fleet_sync_config_drift_hosts,
     "tool_version_drift_hosts": $fleet_sync_tool_version_drift_hosts,
     "dolt_stale_hosts": $fleet_sync_dolt_stale_hosts,
     "tool_health_stale_hosts": $fleet_sync_tool_health_stale_hosts,
@@ -586,7 +641,7 @@ elif [[ "$OUTPUT_FORMAT" == "slack" ]]; then
 • Skill Drift: ${total_skill_drift} $([ $total_skill_drift -eq 0 ] && echo '✅' || echo '⚠️')
 • Fleet Sync V2.1: ${fleet_sync_passed_checks}/${fleet_sync_total_checks} $([ "$fleet_sync_failed_checks" -eq 0 ] && echo '✅' || echo '⚠️')
 • Fleet Sync hosts: $((fleet_sync_hosts_checked - fleet_sync_hosts_missing_reports))/${fleet_sync_hosts_checked} | Drift hosts: ${fleet_sync_tool_version_drift_hosts}
-• Dolt stale hosts: ${fleet_sync_dolt_stale_hosts} | Tool health stale: ${fleet_sync_tool_health_stale_hosts}
+• Config drift hosts: ${fleet_sync_config_drift_hosts} | Dolt stale hosts: ${fleet_sync_dolt_stale_hosts} | Tool health stale: ${fleet_sync_tool_health_stale_hosts}
 • Stale PRs: ${total_stale} | Drafts: ${total_draft}"
 
   # Add violation details if any
