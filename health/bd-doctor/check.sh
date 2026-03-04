@@ -66,7 +66,7 @@ if [[ -f "$BEADS_REPO/.beads/beads.db" && -f "$BEADS_REPO/.beads/bd.db" ]]; then
   fail "DB ambiguity detected: both .beads/beads.db and .beads/bd.db exist"
   echo "   Remediation: archive/remove .beads/beads.db"
 else
-  pass "No DB ambiguity (.beads/bd.db is canonical)"
+  pass "No DB ambiguity (Dolt data path in ~/bd/.beads/dolt is canonical for active fleet ops)"
 fi
 
 if command -v bd >/dev/null 2>&1; then
