@@ -136,7 +136,7 @@ build_digest() {
     events_json=$(recent_recovery_entries)
 
     local evacuation_count founder_fail_count
-    evacuation_count=$(echo "$events_json" | jq '[.[] | select(.script | test("canonical-(evacuate|sync)") and (.status == "failed" or .status == "evacuated"))] | length')
+    evacuation_count=$(echo "$events_json" | jq '[.[] | select((.script // "" | test("canonical-(evacuate|sync)")) and ((.status // "") == "failed" or (.status // "") == "evacuated"))] | length')
     founder_fail_count=$(echo "$events_json" | jq '[.[] | select(.script == "founder-briefing" and .status == "failure")] | length')
 
     local has_incidents=false
@@ -154,12 +154,12 @@ build_digest() {
         while IFS= read -r line; do
             [[ -z "$line" ]] && continue
             lines+=("  $line")
-        done < <(echo "$events_json" | jq -r '[.[] | select(.script | test("canonical-(evacuate|sync)") and (.status == "failed" or .status == "evacuated")) | "\(.ts) | \(.repo) | \(.status) | \(.reason) | branch=\(.branch // "") | host=\(.host // "")"] | .[]')
+        done < <(echo "$events_json" | jq -r '[.[] | select((.script // "" | test("canonical-(evacuate|sync)")) and ((.status // "") == "failed" or (.status // "") == "evacuated")) | "\(.ts) | \(.repo) | \(.status) | \(.reason) | branch=\(.branch // "") | host=\(.host // "")"] | .[]')
         lines+=("")
     fi
 
     local evac_counts
-    evac_counts=$(echo "$events_json" | jq -r 'reduce (.[] | select(.script | test("canonical-(evacuate|sync)") and (.status == "failed" or .status == "evacuated")) ) as $event ({}; .[($event.repo // "unknown")] += 1) | to_entries | sort_by(.key) | .[] | "\(.key): \(.value)"' 2>/dev/null || true)
+    evac_counts=$(echo "$events_json" | jq -r 'reduce (.[] | select((.script // "" | test("canonical-(evacuate|sync)")) and ((.status // "") == "failed" or (.status // "") == "evacuated")) ) as $event ({}; .[($event.repo // "unknown")] += 1) | to_entries | sort_by(.key) | .[] | "\(.key): \(.value)"' 2>/dev/null || true)
     if [[ -n "$evac_counts" ]]; then
         lines+=("Evacuations by repo:")
         while IFS= read -r line; do
