@@ -293,9 +293,8 @@ Either no issues have the label, or you're not in a Beads-enabled repo.
 
 ```bash
 # Check canonical Beads health
-cd ~/bd
-bd dolt test --json
-bd status --json
+beads-dolt dolt test --json
+beads-dolt status --json
 
 # Then inspect candidate open issues
 bd list --status open

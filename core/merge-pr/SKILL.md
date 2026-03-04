@@ -141,12 +141,12 @@ if [ "$STATUS" != "closed" ]; then
   echo ""
   echo "Option 1: Close issue now (less ideal but works)"
   echo "  bd close $FEATURE_KEY --reason \"Closing before merge in PR #$PR_NUMBER\""
-  echo "  (cd ~/bd && bd dolt test --json && bd status --json)"
+  echo "  (beads-dolt dolt test --json && beads-dolt status --json)"
   echo "  # Then retry merge"
   echo ""
   echo "Option 2: Close and recreate PR (atomic pattern)"
   echo "  bd close $FEATURE_KEY --reason \"Work complete, ready for review\""
-  echo "  (cd ~/bd && bd dolt test --json && bd status --json)"
+  echo "  (beads-dolt dolt test --json && beads-dolt status --json)"
   echo "  gh pr close $PR_NUMBER"
   echo "  gh pr create  # Creates new PR after Beads state is validated"
   echo ""
@@ -248,7 +248,7 @@ git log --oneline -20 | grep -q "$MERGE_COMMIT"
 git branch -d feature-$FEATURE_KEY 2>/dev/null || echo "Branch already deleted"
 
 # Verify canonical Beads health after merge
-(cd ~/bd && bd dolt test --json && bd status --json)
+(beads-dolt dolt test --json && beads-dolt status --json)
 ```
 
 ### 7.5. Auto-Cache Docs to Serena (If Docs Exist)
@@ -510,12 +510,12 @@ AI:
 
    Option 1: Close issue now (less ideal but works)
      bd close bd-xyz --reason 'Closing before merge in PR #200'
-     (cd ~/bd && bd dolt test --json && bd status --json)
+     (beads-dolt dolt test --json && beads-dolt status --json)
      # Then retry merge
 
    Option 2: Close and recreate PR (atomic pattern)
      bd close bd-xyz --reason 'Work complete, ready for review'
-     (cd ~/bd && bd dolt test --json && bd status --json)
+     (beads-dolt dolt test --json && beads-dolt status --json)
      gh pr close 200
      gh pr create  # Creates new PR after Beads state validation
 

@@ -1,7 +1,7 @@
 ---
 name: beads-guard
 description: |
-  Safe Beads workflow helper (warning-only). Use before bd sync/close/create to
+  Safe Beads workflow helper (warning-only). Use before Beads mutations to
   avoid Beads conflict. Ensures you are on a feature branch, up to date with
   origin/master, and executes Beads operations against the canonical `~/bd` Dolt backend.
 tags: [beads, dx, guardrail]
@@ -22,25 +22,18 @@ git fetch origin master
 git rebase origin/master
 
 # 2) Verify Beads connectivity (server mode)
-cd ~/bd && bd dolt test --json
+beads-dolt dolt test --json
 # If this fails, run `bd-doctor` before proceeding
-cd -
 
 # 3) Do your Beads op in canonical repo context
-cd ~/bd
-export BEADS_DIR="$HOME/bd/.beads"
-export BEADS_IGNORE_REPO_MISMATCH=1
 #   bd close <id> --reason "..."
 #   bd create "..." --type ... --priority ...
-#   bd sync
+#   For rollback-only compatibility (deprecated): bd-sync-safe
 
-# 4) Return and commit code changes only
-cd -
-
-# 5) Commit with Feature-Key trailer (on feature branch)
+# 4) Commit with Feature-Key trailer (on feature branch)
 git commit -m "beads: <summary>\n\nFeature-Key: <id>\nAgent: claude-code\nRole: backend-engineer"
 
-# 7) Push/PR as normal
+# 5) Push/PR as normal
 git push
 ```
 

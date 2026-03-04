@@ -79,11 +79,11 @@ Ensure subtasks exist with clear descriptions.
 ### 2. Verify Beads in Canonical Repo
 
 ```bash
-(cd ~/bd && bd dolt test --json && bd status --json)
-(cd ~/bd && bd show <epic-id>)
+(beads-dolt dolt test --json && beads-dolt status --json)
+(beads-dolt show <epic-id>)
 ```
 
-**Tech lead access:** Tech lead can run `cd ~/bd && bd show <epic-id>` directly.
+**Tech lead access:** Tech lead can run `beads-dolt show <epic-id>` directly.
 
 ### 3. Create Investigation Document
 
@@ -244,7 +244,7 @@ Output the handoff prompt:
 2. <Decision 2>
 
 ### How to View
-- **Beads:** `cd ~/bd && bd show bd-xxxx`
+- **Beads:** `beads-dolt show bd-xxxx`
 - **Docs:** Check docs/investigations/ in repo
 - **PR:** <required link>
 - **Commit:** <required head sha>
@@ -267,7 +267,7 @@ Next action:
 pwd | grep -q "/tmp/agents" || { echo "Use worktree!"; exit 1; }
 
 # 2. Verify Beads
-(cd ~/bd && bd dolt test --json && bd show bd-xxxx)
+(beads-dolt dolt test --json && beads-dolt show bd-xxxx)
 
 # 3. Check git status
 git status
@@ -321,7 +321,7 @@ echo "PR_HEAD_SHA=$PR_HEAD_SHA"
 
 ### Do
 
-✅ Always verify `bd dolt test --json` before handoff
+✅ Always verify `beads-dolt dolt test --json` before handoff
 ✅ Include GitHub permalinks to docs
 ✅ Include `PR_URL` and `PR_HEAD_SHA` in the handoff prompt
 ✅ Keep summary under 10 lines
@@ -361,7 +361,7 @@ User: "create handoff for the eodhd cron investigation"
 
 AI executes:
 1. bd show bd-e6cd  # Verify epic exists
-2. (cd ~/bd && bd dolt test --json && bd show bd-xxxx)
+2. (beads-dolt dolt test --json && beads-dolt show bd-xxxx)
 3. Verify docs/investigations/2026-02-14-eodhd-cron-failure-analysis.md
 4. Verify docs/investigations/TECHLEAD-REVIEW-eodhd-cron-failure.md
 5. git add docs/investigations/

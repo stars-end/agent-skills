@@ -129,7 +129,7 @@ if ! git merge-base --is-ancestor origin/master HEAD; then
 fi
 
 # Canonical Beads health check
-(cd ~/bd && bd dolt test --json && bd status --json)
+(beads-dolt dolt test --json && beads-dolt status --json)
 ```
 
 **Why this is critical:**
@@ -163,7 +163,7 @@ echo "Closing Beads issue ${FEATURE_KEY}..."
 bd close ${FEATURE_KEY} --reason "Work complete, ready for review in PR"
 
 # Verify canonical Beads health and push branch updates
-(cd ~/bd && bd dolt test --json && bd status --json)
+(beads-dolt dolt test --json && beads-dolt status --json)
 echo "Pushing feature branch updates..."
 git push
 

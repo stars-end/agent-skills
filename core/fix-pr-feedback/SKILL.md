@@ -293,9 +293,8 @@ make lint-fast
 bd close ${childIssue.id} --reason "Fixed"
 
 # 5. Verify canonical Beads health
-cd ~/bd
-bd dolt test --json
-bd status --json
+beads-dolt dolt test --json
+beads-dolt status --json
 
 # 6. AUTO-COMMIT with child Feature-Key (inline, not "commit my work")
 git add -A
