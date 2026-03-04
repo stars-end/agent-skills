@@ -1,55 +1,46 @@
-# Fleet Brain Implementation Specification (V1.0)
+# Fleet Brain Implementation Specification (V1.1)
 
 ## 1. Overview
-This specification defines the architecture for a **Centralized Agent Intelligence Gateway** on `epyc12`. It collapses the complexity of a 16-agent fintech fleet (across 4 VMs and 5 repos) into a single, robust, and low-maintenance control plane.
+Centralized Agent Intelligence Gateway on `epyc12`. This spec addresses multi-branch safety, SPOF mitigation, and secure secret injection.
 
-## 2. Core Components
+## 2. Core Components (Hybrid Deployment)
 
-### 2.1 Perception Layer (llm-tldr)
-- **Role**: Context extraction and program slicing.
-- **Implementation**: `llm-tldr` daemon running on `epyc12`.
-- **Value**: 95% token savings and surgical logic tracing.
+### 2.1 Perception & Memory (Centralized on epyc12)
+- **llm-tldr**: Structural summaries and semantic search.
+- **CMS**: Shared procedural playbook and trauma registry.
+- **Why**: These depend on repo-wide history and "collective wisdom," not local branch state.
 
-### 2.2 Symbolic Layer (Serena)
-- **Role**: Semantic code navigation and editing.
-- **Implementation**: MCP server using LSPs (Pyright, gopls, rust-analyzer).
-- **Value**: Type-safe, IDE-level precision for autonomous edits.
-
-### 2.3 Memory Layer (CMS)
-- **Role**: Procedural playbook and "Trauma Registry."
-- **Implementation**: `cass_memory_system` indexing session logs across all VMs.
-- **Value**: Cross-agent learning and "confidence decay" for self-correcting rules.
-
-### 2.4 Navigation Layer (Context+)
-- **Role**: High-level feature mapping and clustering.
-- **Implementation**: "Feature Hubs" (Wikilinks) to group cross-repo logic.
-- **Value**: Solving "Cross-Repo Blindness" for solo agents.
+### 2.2 Symbolic Operations (Local to Worker)
+- **Serena / LSPs**: Language servers MUST run on the local worker VM.
+- **Reasoning**: To ensure accuracy against uncommitted worktree state and per-VM branch drift (resolving P1 finding). Centralized LSPs would produce stale results for local changes.
 
 ## 3. Infrastructure: The "Fleet Brain" Gateway
 
-### 3.1 The Master (epyc12)
-- Runs all "heavy" logic and language servers.
-- Exposes a unified MCP Gateway on `port 3000` via `supergateway` (HTTP/SSE).
-- Handles all API keys ($ZAI_API_KEY, $OPENROUTER_API_KEY) via `op cli`.
+### 3.1 Availability & Degraded Mode (Resolving P1 SPOF)
+- **Primary**: Agents use `http://epyc12:3000/sse`.
+- **Fallback**: If the gateway is unreachable, agents MUST fall back to local `grep_search`, `glob`, and `read_file`.
+- **Contract**: The gateway is an *accelerator*, not a *blocker*. Agents must remain functional in "Offline Mode."
 
-### 3.2 The Workers (macmini, etc.)
-- "Thin Clients" pointing to `http://epyc12:3000/sse`.
-- Zero local dependencies (no LSPs or heavy Python envs required).
+### 3.2 Secret Injection (Resolving P1 Secrets)
+- **Bootstrap**: Use `1Password Service Accounts`.
+- **Security**: Service tokens are stored via `systemd-creds` (encrypted at rest).
+- **Injection**: systemd units use `LoadCredential=` to inject secrets into the service environment without exposing them in `ps` or environment logs.
 
 ## 4. Operational Excellence
 
-### 4.1 Loud Failure & Self-Healing
-- All tools managed by `systemd --user` with `Restart=always`.
-- Failure of the gateway is "Loud" (Connection Refused), eliminating "Drunk Agent" behavior.
+### 4.1 Security & AuthZ (Resolving P2 Security)
+- **Transport**: Tailscale encrypted tunnel.
+- **Handshake**: The Gateway requires an `X-MCP-API-KEY` header.
+- **Audit**: All remote tool calls are logged to a central `brain-audit.log` on `epyc12`.
 
-### 4.2 Zero-Maintenance Sync
-- A single master `fleet.mcp.json` in `agent-skills` repo.
-- Global IDE configs (Claude, Cursor, OpenCode) are symlinked to this file.
+### 4.2 Decoupled Documentation (Resolving P2 Coupling)
+- **Caching**: `make publish-baseline` queries a local `~/.cache/mcp-tools.json`.
+- **Refresh**: A background cron updates the cache if the gateway is up.
+- **Build Safety**: Documentation build defaults to the cache if the gateway is down, preventing build-time coupling.
 
-### 4.3 Live Manifest (AGENTS.md)
-- `make publish-baseline` is updated to query the live `/tools` endpoint of the Gateway.
-- Guaranteed sync between documentation and capability.
-
-## 5. Security
-- Transport over Tailscale (internal IP only).
-- Secrets isolated to the `epyc12` environment.
+## 5. Beads Implementation Plan
+- **bd-d8f4**: Fleet Brain Epic
+- **bd-d8f4.1**: Infrastructure (systemd-creds + supergateway)
+- **bd-d8f4.2**: Logic (Centralized Perception Cloud Bridge)
+- **bd-d8f4.3**: Config (Local LSP + Centralized MCP symlink mapping)
+- **bd-d8f4.4**: Docs (Cached manifest generation)
