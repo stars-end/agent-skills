@@ -752,17 +752,17 @@ load_daily_checks_from_fleet_check_payload() {
 
   while IFS=$'\t' read -r host check_id status severity details; do
     [[ -z "$check_id" ]] && continue
-    if ! is_member "$check_id" "${DAILY_CHECK_IDS[@]}"; then
+    if ! is_member "$check_id" "${DAILY_CHECK_IDS[@]-}"; then
       continue
     fi
     had_rows=1
     host="${host:-local}"
-    if ! is_member "$host" "${observed_host_order_local[@]}"; then
+    if ! is_member "$host" "${observed_host_order_local[@]-}"; then
       observed_host_order_local+=("$host")
     fi
     normalized="$(normalized_status_count "$status")"
     key="${host}:${check_id}"
-    if ! is_member "$key" "${observed_pairs[@]}"; then
+    if ! is_member "$key" "${observed_pairs[@]-}"; then
       observed_pairs+=("$key")
     fi
     append_check "$check_id" "$host" "$normalized" "$severity" "$details"
@@ -773,10 +773,10 @@ load_daily_checks_from_fleet_check_payload() {
   fi
 
   local h
-  for h in "${observed_host_order_local[@]}"; do
-    for check_id in "${DAILY_CHECK_IDS[@]}"; do
+  for h in "${observed_host_order_local[@]-}"; do
+    for check_id in "${DAILY_CHECK_IDS[@]-}"; do
       key="${h}:${check_id}"
-      if ! is_member "$key" "${observed_pairs[@]}"; then
+    if ! is_member "$key" "${observed_pairs[@]-}"; then
         append_reason "missing_expected_daily_check_${check_id}"
         append_check "$check_id" "$h" "warn" "low" "Expected daily check missing from Fleet Sync check output"
         observed_pairs+=("$key")
@@ -826,11 +826,11 @@ load_daily_checks() {
   local normalized
   local key
   local -a observed_pairs=()
-  declare -a observed_host_order=()
+  local -a observed_host_order=()
 
   if ! source_file="$(daily_health_source)"; then
     append_reason "missing_daily_state"
-    for check_id in "${DAILY_CHECK_IDS[@]}"; do
+    for check_id in "${DAILY_CHECK_IDS[@]-}"; do
       append_check "$check_id" "local" "warn" "low" "No Fleet Sync state snapshot found at ${STATE_ROOT}/tool-health.json"
     done
     return 1
@@ -839,17 +839,17 @@ load_daily_checks() {
   if command -v jq >/dev/null 2>&1; then
     while IFS=$'\t' read -r host check_id status severity details; do
       [[ -z "$check_id" ]] && continue
-      if ! is_member "$check_id" "${DAILY_CHECK_IDS[@]}"; then
+      if ! is_member "$check_id" "${DAILY_CHECK_IDS[@]-}"; then
         continue
       fi
       had_rows=1
       host="${host:-local}"
-      if ! is_member "$host" "${observed_host_order[@]}"; then
+      if ! is_member "$host" "${observed_host_order[@]-}"; then
         observed_host_order+=("$host")
       fi
       normalized="$(normalized_status_count "$status")"
       key="${host}:${check_id}"
-      if ! is_member "$key" "${observed_pairs[@]}"; then
+      if ! is_member "$key" "${observed_pairs[@]-}"; then
         observed_pairs+=("$key")
       fi
       append_check "$check_id" "$host" "$normalized" "$severity" "$details"
@@ -857,24 +857,24 @@ load_daily_checks() {
   elif command -v python3 >/dev/null 2>&1; then
     while IFS=$'\t' read -r host check_id status severity details; do
       [[ -z "$check_id" ]] && continue
-      if ! is_member "$check_id" "${DAILY_CHECK_IDS[@]}"; then
+      if ! is_member "$check_id" "${DAILY_CHECK_IDS[@]-}"; then
         continue
       fi
       had_rows=1
       host="${host:-local}"
-      if ! is_member "$host" "${observed_host_order[@]}"; then
+      if ! is_member "$host" "${observed_host_order[@]-}"; then
         observed_host_order+=("$host")
       fi
       normalized="$(normalized_status_count "$status")"
       key="${host}:${check_id}"
-      if ! is_member "$key" "${observed_pairs[@]}"; then
+      if ! is_member "$key" "${observed_pairs[@]-}"; then
         observed_pairs+=("$key")
       fi
       append_check "$check_id" "$host" "$normalized" "$severity" "$details"
     done < <(parse_daily_checks_fallback "$source_file")
   else
     append_reason "missing_payload_parser"
-    for check_id in "${DAILY_CHECK_IDS[@]}"; do
+    for check_id in "${DAILY_CHECK_IDS[@]-}"; do
       append_check "$check_id" "local" "warn" "low" "Missing jq and python3, unable to parse Fleet Sync state snapshot"
     done
     return 1
@@ -884,9 +884,9 @@ load_daily_checks() {
     append_reason "empty_daily_state"
     observed_host_order=(local)
     for host in local; do
-    for check_id in "${DAILY_CHECK_IDS[@]}"; do
+    for check_id in "${DAILY_CHECK_IDS[@]-}"; do
       key="${host}:${check_id}"
-      if ! is_member "$key" "${observed_pairs[@]}"; then
+      if ! is_member "$key" "${observed_pairs[@]-}"; then
         append_check "$check_id" "$host" "warn" "low" "Fleet Sync state payload had no checks"
         observed_pairs+=("$key")
       fi
@@ -896,10 +896,10 @@ load_daily_checks() {
   fi
 
   local h
-  for h in "${observed_host_order[@]}"; do
-    for check_id in "${DAILY_CHECK_IDS[@]}"; do
+  for h in "${observed_host_order[@]-}"; do
+    for check_id in "${DAILY_CHECK_IDS[@]-}"; do
       key="${h}:${check_id}"
-      if ! is_member "$key" "${observed_pairs[@]}"; then
+      if ! is_member "$key" "${observed_pairs[@]-}"; then
         append_reason "missing_expected_daily_check_${check_id}"
         append_check "$check_id" "$h" "warn" "low" "Expected daily check missing from state snapshot"
         observed_pairs+=("$key")
@@ -953,7 +953,7 @@ build_repair_hints() {
   local pair
   local -a seen_pairs=()
   local row
-  for row in "${checks[@]}"; do
+  for row in "${checks[@]-}"; do
     [[ "$row" != *"\"status\":\"fail\""* && "$row" != *"\"status\":\"warn\""* ]] && continue
     local host
     local rid
@@ -963,7 +963,7 @@ build_repair_hints() {
       continue
     fi
     pair="${host}|${rid}"
-    if is_member "$pair" "${seen_pairs[@]}"; then
+    if is_member "$pair" "${seen_pairs[@]-}"; then
       continue
     fi
     seen_pairs+=("$pair")
@@ -971,7 +971,7 @@ build_repair_hints() {
   done
   local json="["
   local first=1
-  for row in "${rows[@]}"; do
+  for row in "${rows[@]-}"; do
     if [[ "$first" -eq 1 ]]; then
       json+="$row"
       first=0
@@ -1048,7 +1048,7 @@ render_payload() {
   local checks_json="["
   local first=1
   local row
-  for row in "${checks[@]}"; do
+  for row in "${checks[@]-}"; do
     if [[ "$first" -eq 1 ]]; then
       checks_json+="$row"
       first=0
