@@ -372,6 +372,18 @@ is_member() {
   return 1
 }
 
+host_index_for_name() {
+  local target="$1"
+  local idx
+  for idx in "${!host_order[@]}"; do
+    if [[ "${host_order[$idx]}" == "$target" ]]; then
+      printf '%s' "$idx"
+      return 0
+    fi
+  done
+  return 1
+}
+
 normalized_status_count() {
   local status="$1"
   case "$status" in
@@ -411,16 +423,19 @@ append_check() {
   fi
   checks+=("$row")
 
-  if [[ -z "${host_seen[$host]:-}" ]]; then
-    host_order+=("$host")
-    host_seen["$host"]=1
-    host_overall["$host"]="green"
-    host_checks["$host"]=""
-  fi
-  if [[ -n "${host_checks[$host]:-}" ]]; then
-    host_checks["$host"]+=",${row}"
+  local host_idx
+  if host_idx="$(host_index_for_name "$host")"; then
+    :
   else
-    host_checks["$host"]="$row"
+    host_idx=${#host_order[@]}
+    host_order+=("$host")
+    host_overall+=("green")
+    host_checks+=("")
+  fi
+  if [[ -n "${host_checks[$host_idx]:-}" ]]; then
+    host_checks[$host_idx]+=",${row}"
+  else
+    host_checks[$host_idx]="$row"
   fi
 
   case "$status" in
@@ -432,18 +447,18 @@ append_check() {
       ;;
     warn)
       warn_count=$((warn_count + 1))
-      if [[ "${host_overall[$host]}" == "green" ]]; then
-        host_overall["$host"]="yellow"
+      if [[ "${host_overall[$host_idx]}" == "green" ]]; then
+        host_overall[$host_idx]="yellow"
       fi
       ;;
     fail)
       fail_count=$((fail_count + 1))
-      host_overall["$host"]="red"
+      host_overall[$host_idx]="red"
       ;;
     unknown)
       unknown_count=$((unknown_count + 1))
-      if [[ "${host_overall[$host]}" == "green" ]]; then
-        host_overall["$host"]="yellow"
+      if [[ "${host_overall[$host_idx]}" == "green" ]]; then
+        host_overall[$host_idx]="yellow"
       fi
       ;;
   esac
@@ -728,8 +743,7 @@ load_daily_checks_from_fleet_check_payload() {
   local details
   local normalized
   local key
-  local -A observed_hosts=()
-  local -A observed_map=()
+  local -a observed_pairs=()
   local -a observed_host_order_local=()
 
   if ! command -v jq >/dev/null 2>&1; then
@@ -743,13 +757,14 @@ load_daily_checks_from_fleet_check_payload() {
     fi
     had_rows=1
     host="${host:-local}"
-    if [[ -z "${observed_hosts["$host"]:-}" ]]; then
-      observed_hosts["$host"]=1
+    if ! is_member "$host" "${observed_host_order_local[@]}"; then
       observed_host_order_local+=("$host")
     fi
     normalized="$(normalized_status_count "$status")"
     key="${host}:${check_id}"
-    observed_map["$key"]=1
+    if ! is_member "$key" "${observed_pairs[@]}"; then
+      observed_pairs+=("$key")
+    fi
     append_check "$check_id" "$host" "$normalized" "$severity" "$details"
   done < <(printf '%s' "$payload" | jq -r '.hosts[]? | .host as $host | .checks[]? | "\($host // "local")\t\(.id // "")\t\(.status // "unknown")\t\(.severity // "low")\t\((.details // "") | gsub("\t"; " ") | gsub("\n"; " ") )"')
 
@@ -761,10 +776,10 @@ load_daily_checks_from_fleet_check_payload() {
   for h in "${observed_host_order_local[@]}"; do
     for check_id in "${DAILY_CHECK_IDS[@]}"; do
       key="${h}:${check_id}"
-      if [[ -z "${observed_map[$key]:-}" ]]; then
+      if ! is_member "$key" "${observed_pairs[@]}"; then
         append_reason "missing_expected_daily_check_${check_id}"
         append_check "$check_id" "$h" "warn" "low" "Expected daily check missing from Fleet Sync check output"
-        observed_map["$key"]=1
+        observed_pairs+=("$key")
       fi
     done
   done
@@ -810,8 +825,7 @@ load_daily_checks() {
   local details
   local normalized
   local key
-  declare -A observed_hosts=()
-  declare -A observed_map=()
+  local -a observed_pairs=()
   declare -a observed_host_order=()
 
   if ! source_file="$(daily_health_source)"; then
@@ -830,13 +844,14 @@ load_daily_checks() {
       fi
       had_rows=1
       host="${host:-local}"
-      if [[ -z "${observed_hosts["$host"]:-}" ]]; then
-        observed_hosts["$host"]=1
+      if ! is_member "$host" "${observed_host_order[@]}"; then
         observed_host_order+=("$host")
       fi
       normalized="$(normalized_status_count "$status")"
       key="${host}:${check_id}"
-      observed_map["$key"]=1
+      if ! is_member "$key" "${observed_pairs[@]}"; then
+        observed_pairs+=("$key")
+      fi
       append_check "$check_id" "$host" "$normalized" "$severity" "$details"
     done < <(parse_daily_checks_with_jq "$source_file")
   elif command -v python3 >/dev/null 2>&1; then
@@ -847,10 +862,14 @@ load_daily_checks() {
       fi
       had_rows=1
       host="${host:-local}"
-      observed_hosts["$host"]=1
+      if ! is_member "$host" "${observed_host_order[@]}"; then
+        observed_host_order+=("$host")
+      fi
       normalized="$(normalized_status_count "$status")"
       key="${host}:${check_id}"
-      observed_map["$key"]=1
+      if ! is_member "$key" "${observed_pairs[@]}"; then
+        observed_pairs+=("$key")
+      fi
       append_check "$check_id" "$host" "$normalized" "$severity" "$details"
     done < <(parse_daily_checks_fallback "$source_file")
   else
@@ -865,14 +884,14 @@ load_daily_checks() {
     append_reason "empty_daily_state"
     observed_host_order=(local)
     for host in local; do
-      for check_id in "${DAILY_CHECK_IDS[@]}"; do
-        key="${host}:${check_id}"
-        if [[ -z "${observed_map[$key]:-}" ]]; then
-          append_check "$check_id" "$host" "warn" "low" "Fleet Sync state payload had no checks"
-          observed_map["$key"]=1
-        fi
-      done
+    for check_id in "${DAILY_CHECK_IDS[@]}"; do
+      key="${host}:${check_id}"
+      if ! is_member "$key" "${observed_pairs[@]}"; then
+        append_check "$check_id" "$host" "warn" "low" "Fleet Sync state payload had no checks"
+        observed_pairs+=("$key")
+      fi
     done
+  done
     return 0
   fi
 
@@ -880,10 +899,10 @@ load_daily_checks() {
   for h in "${observed_host_order[@]}"; do
     for check_id in "${DAILY_CHECK_IDS[@]}"; do
       key="${h}:${check_id}"
-      if [[ -z "${observed_map[$key]:-}" ]]; then
+      if ! is_member "$key" "${observed_pairs[@]}"; then
         append_reason "missing_expected_daily_check_${check_id}"
         append_check "$check_id" "$h" "warn" "low" "Expected daily check missing from state snapshot"
-        observed_map["$key"]=1
+        observed_pairs+=("$key")
       fi
     done
   done
@@ -912,16 +931,18 @@ gather_checks() {
 build_hosts_payload() {
   local host_json="["
   local first_host=1
+  local host_idx
   local host
   local checks_for_host
-  for host in "${host_order[@]}"; do
-    checks_for_host="${host_checks["$host"]:-}"
+  for host_idx in "${!host_order[@]}"; do
+    host="${host_order[$host_idx]}"
+    checks_for_host="${host_checks[$host_idx]:-}"
     if [[ "$first_host" -eq 1 ]]; then
       first_host=0
     else
       host_json+=","
     fi
-    host_json+="{\"host\":\"$(json_escape "$host")\",\"overall\":\"${host_overall[$host]}\",\"checks\":[$checks_for_host]}"
+    host_json+="{\"host\":\"$(json_escape "$host")\",\"overall\":\"${host_overall[$host_idx]}\",\"checks\":[$checks_for_host]}"
   done
   host_json+="]"
   printf '%s' "$host_json"
@@ -930,7 +951,7 @@ build_hosts_payload() {
 build_repair_hints() {
   local -a rows=()
   local pair
-  declare -A seen=()
+  local -a seen_pairs=()
   local row
   for row in "${checks[@]}"; do
     [[ "$row" != *"\"status\":\"fail\""* && "$row" != *"\"status\":\"warn\""* ]] && continue
@@ -942,10 +963,10 @@ build_repair_hints() {
       continue
     fi
     pair="${host}|${rid}"
-    if [[ -n "${seen[$pair]:-}" ]]; then
+    if is_member "$pair" "${seen_pairs[@]}"; then
       continue
     fi
-    seen[$pair]=1
+    seen_pairs+=("$pair")
     rows+=("{\"host\":\"$(json_escape "$host")\",\"check_id\":\"$(json_escape "$rid")\",\"command\":\"dx-fleet repair --json\"}")
   done
   local json="["
@@ -1006,9 +1027,13 @@ render_slack_text() {
 render_payload() {
   local summary_hosts_checked=${#host_order[@]}
   local hosts_failed=0
+  local host_idx
+  local overall
   local host
-  for host in "${host_order[@]}"; do
-    [[ "${host_overall[$host]}" == "red" ]] && hosts_failed=$((hosts_failed + 1))
+  for host_idx in "${!host_order[@]}"; do
+    host="${host_order[$host_idx]}"
+    overall="${host_overall[$host_idx]:-green}"
+    [[ "$overall" == "red" ]] && hosts_failed=$((hosts_failed + 1))
   done
 
   local fleet_status="green"
@@ -1131,9 +1156,8 @@ load_args_state() {
   fail_count=0
   unknown_count=0
   host_order=()
-  declare -A host_seen=()
-  declare -A host_overall=()
-  declare -A host_checks=()
+  host_overall=()
+  host_checks=()
 
   gather_checks
 
