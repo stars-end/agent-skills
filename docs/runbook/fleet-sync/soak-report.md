@@ -1,5 +1,9 @@
 # Fleet Sync 14-Day Soak Report (SLO Gate)
 
+## Readiness Decision
+- Full bd-d8f4 program completion: **NO-GO**
+- Reason: required 14-day soak window is incomplete and unresolved drift remains open.
+
 ## Scope
 bd-d8f4.6 decision artifact for post-rollout reliability gating.
 

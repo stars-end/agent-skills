@@ -1,5 +1,9 @@
 # Fleet Sync Deploy Session — 2026-03-05
 
+## Gate Decision
+- Patch-scope compatibility fixes (bash 3.2 + daily wrapper contract): **GO**
+- Fleet rollout gate for bd-d8f4.2 closure: **NO-GO**
+
 ## Wave Objective
 - Execute Fleet Sync install/check across canonical hosts for bd-d8f4.2 closure evidence.
 - Record per-host command outcomes and collect best-effort evidence payloads.
@@ -40,3 +44,4 @@ done
 ## State & follow-up
 - Preserve collected artifacts above for GA handoff and next-wave deployment planning.
 - Before re-running, ensure `/home/fengning/agent-skills/scripts/dx-fleet-install.sh` exists on all canonical hosts and SSH auth keys are valid.
+- Do not claim epic completion until this deploy wave is rerun with converged host evidence.

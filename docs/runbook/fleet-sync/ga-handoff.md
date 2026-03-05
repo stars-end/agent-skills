@@ -1,4 +1,9 @@
-# Fleet Sync GA Handoff
+# Fleet Sync GA Handoff (Pre-GA, NO-GO)
+
+## Readiness Decision
+- Bash 3.2 daily/weekly audit compatibility: **GO**
+- `dx-fleet-daily-check.sh` contract correctness: **GO**
+- Full bd-d8f4 program completion: **NO-GO** until rollout/soak evidence is complete and Beads subtasks are closed or explicitly deferred.
 
 ## Operating Model
 - Fleet command surface: single family `dx-fleet check|repair|audit`.
