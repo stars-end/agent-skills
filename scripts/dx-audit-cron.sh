@@ -61,6 +61,7 @@ render_payload() {
 main() {
   local payload
   local message
+  local manifest_channel
   local log_file="${HOME}/logs/dx-audit.log"
   local channel="#dx-alerts"
   local audit_exit=0
@@ -81,10 +82,14 @@ main() {
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ERROR: no slack_message in payload" >&2
     exit 1
   fi
+  manifest_channel="$(printf '%s\n' "$payload" | jq -r '.slack_channel // empty')"
+  if [[ -n "$manifest_channel" ]]; then
+    channel="$manifest_channel"
+  fi
 
   {
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] mode=$MODE"
-    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] channel=$channel"
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] channel=${DX_ALERTS_CHANNEL_ID:-$channel}"
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] message=$message"
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] state_dir=$STATE_DIR"
   } >> "$log_file"

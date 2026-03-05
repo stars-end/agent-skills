@@ -182,8 +182,7 @@ manifest_scalar_audit() {
     !in_audit { next }
     in_audit && $0 ~ "^" section "$" { in_section=1; in_key=0; next }
     in_audit && in_section && $0 !~ /^  / { in_section=0; in_key=0; next }
-    in_audit && in_section && $0 ~ "^" key { in_key=1; next }
-    in_audit && in_section && in_key {
+    in_audit && in_section && $0 ~ "^" key {
       value=$0
       sub(/^[^:]+:[[:space:]]*/, "", value)
       gsub(/#.*/, "", value)
@@ -209,8 +208,14 @@ load_manifest_config() {
   local -a daily_from_manifest=()
   local -a weekly_from_manifest=()
   local -a legacy_roots=()
-  mapfile -t daily_from_manifest < <(manifest_list "daily_checks")
-  mapfile -t weekly_from_manifest < <(manifest_list "weekly_checks")
+
+  local line
+  while IFS= read -r line; do
+    daily_from_manifest+=("$line")
+  done < <(manifest_list "daily_checks")
+  while IFS= read -r line; do
+    weekly_from_manifest+=("$line")
+  done < <(manifest_list "weekly_checks")
   if [[ "${#daily_from_manifest[@]}" -gt 0 ]]; then
     DAILY_CHECK_IDS=("${daily_from_manifest[@]}")
   else
@@ -287,7 +292,9 @@ load_manifest_config() {
   AUDIT_WEEKLY_LATEST="${STATE_ROOT}/${layout_weekly_latest:-audit/weekly/latest.json}"
   AUDIT_WEEKLY_HISTORY="${STATE_ROOT}/${layout_weekly_history:-audit/weekly/history}"
 
-  mapfile -t legacy_roots < <(awk -v active="  - " '
+  while IFS= read -r line; do
+    legacy_roots+=("$line")
+  done < <(awk -v active="  - " '
     BEGIN { in_legacy=0 }
     $0 ~ /^legacy_state_roots:/ { in_legacy=1; next }
     in_legacy {
@@ -771,7 +778,7 @@ parse_daily_checks_with_jq() {
 
 parse_daily_checks_fallback() {
   local source_file="$1"
-  python3 "$source_file" <<'PY'
+  python3 - "$source_file" <<'PY'
 import json
 import sys
 with open(sys.argv[1], "r", encoding="utf-8", errors="ignore") as fp:
@@ -803,25 +810,14 @@ load_daily_checks() {
   local details
   local normalized
   local key
-  local check_payload=""
   declare -A observed_hosts=()
   declare -A observed_map=()
   declare -a observed_host_order=()
 
-  if command -v "$SCRIPT_DIR/dx-fleet-check.sh" >/dev/null 2>&1; then
-    check_payload="$("$SCRIPT_DIR/dx-fleet-check.sh" --json --state-dir "$STATE_ROOT" 2>/dev/null || true)"
-    if [[ -n "$check_payload" ]] && printf '%s\n' "$check_payload" | jq -e '.mode == "check" and .hosts' >/dev/null 2>&1; then
-      if load_daily_checks_from_fleet_check_payload "$check_payload"; then
-        return 0
-      fi
-      append_reason "fleet_check_payload_parse_failed"
-    fi
-  fi
-
   if ! source_file="$(daily_health_source)"; then
     append_reason "missing_daily_state"
     for check_id in "${DAILY_CHECK_IDS[@]}"; do
-      append_check "$check_id" "local" "warn" "low" "No Fleet Sync state snapshot found. Run: dx-fleet check --json"
+      append_check "$check_id" "local" "warn" "low" "No Fleet Sync state snapshot found at ${STATE_ROOT}/tool-health.json"
     done
     return 1
   fi
@@ -1095,6 +1091,7 @@ EOF
   "repair_hints":$repair_hints_json,
   "reason_codes":$reasons_json,
   "state_paths":$state_file_json,
+  "slack_channel":"$(json_escape "$SLACK_CHANNEL")",
   "slack_message":"$(json_escape "$(render_slack_text "$fleet_status" "$hosts_failed")")"
 }
 EOF
