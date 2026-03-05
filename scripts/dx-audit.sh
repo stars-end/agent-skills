@@ -711,6 +711,59 @@ daily_health_source() {
   return 1
 }
 
+load_daily_checks_from_fleet_check_payload() {
+  local payload="$1"
+  local had_rows=0
+  local host
+  local check_id
+  local status
+  local severity
+  local details
+  local normalized
+  local key
+  local -A observed_hosts=()
+  local -A observed_map=()
+  local -a observed_host_order_local=()
+
+  if ! command -v jq >/dev/null 2>&1; then
+    return 1
+  fi
+
+  while IFS=$'\t' read -r host check_id status severity details; do
+    [[ -z "$check_id" ]] && continue
+    if ! is_member "$check_id" "${DAILY_CHECK_IDS[@]}"; then
+      continue
+    fi
+    had_rows=1
+    host="${host:-local}"
+    if [[ -z "${observed_hosts["$host"]:-}" ]]; then
+      observed_hosts["$host"]=1
+      observed_host_order_local+=("$host")
+    fi
+    normalized="$(normalized_status_count "$status")"
+    key="${host}:${check_id}"
+    observed_map["$key"]=1
+    append_check "$check_id" "$host" "$normalized" "$severity" "$details"
+  done < <(printf '%s' "$payload" | jq -r '.hosts[]? | .host as $host | .checks[]? | "\($host // "local")\t\(.id // "")\t\(.status // "unknown")\t\(.severity // "low")\t\((.details // "") | gsub("\t"; " ") | gsub("\n"; " ") )"')
+
+  if [[ "$had_rows" -eq 0 ]]; then
+    return 1
+  fi
+
+  local h
+  for h in "${observed_host_order_local[@]}"; do
+    for check_id in "${DAILY_CHECK_IDS[@]}"; do
+      key="${h}:${check_id}"
+      if [[ -z "${observed_map[$key]:-}" ]]; then
+        append_reason "missing_expected_daily_check_${check_id}"
+        append_check "$check_id" "$h" "warn" "low" "Expected daily check missing from Fleet Sync check output"
+        observed_map["$key"]=1
+      fi
+    done
+  done
+  return 0
+}
+
 parse_daily_checks_with_jq() {
   local source_file="$1"
   jq -r '.hosts[]? as $h | $h.host as $host | ($h.checks // [])[]? | "\($host // "local")\t\(.id // "")\t\(.status // "unknown")\t\(.severity // "low")\t\(.details // "")"' "$source_file"
@@ -750,9 +803,20 @@ load_daily_checks() {
   local details
   local normalized
   local key
+  local check_payload=""
   declare -A observed_hosts=()
   declare -A observed_map=()
   declare -a observed_host_order=()
+
+  if command -v "$SCRIPT_DIR/dx-fleet-check.sh" >/dev/null 2>&1; then
+    check_payload="$("$SCRIPT_DIR/dx-fleet-check.sh" --json --state-dir "$STATE_ROOT" 2>/dev/null || true)"
+    if [[ -n "$check_payload" ]] && printf '%s\n' "$check_payload" | jq -e '.mode == "check" and .hosts' >/dev/null 2>&1; then
+      if load_daily_checks_from_fleet_check_payload "$check_payload"; then
+        return 0
+      fi
+      append_reason "fleet_check_payload_parse_failed"
+    fi
+  fi
 
   if ! source_file="$(daily_health_source)"; then
     append_reason "missing_daily_state"

@@ -55,7 +55,7 @@ parse_args() {
 }
 
 render_payload() {
-  "$SCRIPT_DIR/dx-fleet.sh" audit "--$MODE" --json --state-dir "$STATE_DIR" 2>&1
+  "$SCRIPT_DIR/dx-fleet.sh" audit "--$MODE" --json --state-dir "$STATE_DIR" 2>&1 || true
 }
 
 main() {
