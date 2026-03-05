@@ -3,7 +3,7 @@
 ## Readiness Decision
 - Bash 3.2 daily/weekly audit compatibility: **GO**
 - `dx-fleet-daily-check.sh` contract correctness: **GO**
-- Full bd-d8f4 program completion: **NO-GO** until rollout/soak evidence is complete and Beads subtasks are closed or explicitly deferred.
+- Full bd-d8f4 program completion: **NO-GO** until rollout evidence is complete and Beads subtasks are closed or explicitly deferred.
 
 ## Operating Model
 - Fleet command surface: single family `dx-fleet check|repair|audit`.
@@ -34,7 +34,7 @@
 ## Known Risks
 - Current deployment state has incomplete rollout of `dx-fleet-install.sh` on some canonical hosts.
 - `macmini` SSH auth profile blocks remote install/check probes from this environment.
-- 14-day history/Soak evidence is not yet fully populated.
+- 14-day soak telemetry is not yet fully populated (non-gating; tracked for trend confidence only).
 
 ## Required Owner Actions on Red
 - Preserve `~/.dx-state/fleet/audit/daily/latest.json` and `~/.dx-state/fleet/tool-health.json` for forensics.

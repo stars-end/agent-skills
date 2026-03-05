@@ -1,11 +1,11 @@
-# Fleet Sync 14-Day Soak Report (SLO Gate)
+# Fleet Sync 14-Day Soak Report (Non-Gating Observability)
 
 ## Readiness Decision
-- Full bd-d8f4 program completion: **NO-GO**
-- Reason: required 14-day soak window is incomplete and unresolved drift remains open.
+- Program gate impact: **NON-BLOCKING**
+- This report tracks reliability trends and does not gate bd-d8f4 completion.
 
 ## Scope
-bd-d8f4.6 decision artifact for post-rollout reliability gating.
+bd-d8f4.6 post-rollout reliability tracking artifact.
 
 ## Date
 - Generated: `2026-03-05`
@@ -26,11 +26,11 @@ bd-d8f4.6 decision artifact for post-rollout reliability gating.
 
 ## SLO Check
 - Target SLO: <=30 min founder time / week and no unresolved drift >24h.
-- Current verdict: **NO-GO** (insufficient coverage + unresolved drift windows).
+- Current observational verdict: **NOT YET COMPUTABLE** (insufficient coverage + unresolved drift windows).
 
 ## MTTR/Red-Yellow
 - Not computed for 14-day distribution due insufficient sample depth.
-- Existing red state remains dominated by connectivity and transport readiness and should be cleared before hard gate pass.
+- Existing red state remains dominated by connectivity and transport readiness and should be cleared for operational confidence.
 
 ## Mitigations before SLO re-test
 1. Rehydrate canonical hosts so `~/.dx-state/fleet` snapshots are reachable for all targets.

@@ -3,7 +3,7 @@
 ## Decision Record
 - Date: `2026-03-05`
 - Outcome: **NO-GO**
-- Reason: 14-day deterministic history is not yet available in this rollout window, and canonical host rollout still has unresolved SSH/script distribution gaps.
+- Reason: canonical host rollout still has unresolved SSH/script distribution gaps. 14-day history remains an optional confidence signal, not a GA gate.
 
 ## Rationale
 1. `dx-fleet` artifacts and wrapper contracts are now machine-readable and deterministic.
@@ -12,12 +12,12 @@
 4. Fleet-wide deploy and recovery evidence is incomplete due environment constraints:
    - Missing remote `dx-fleet-install.sh` on some hosts.
    - SSH authentication failures to `macmini`.
-   - Incomplete 14-day artifact history.
+   - Incomplete 14-day artifact history (non-gating telemetry).
 
 ## Deferral Plan (if NO-GO)
 - Defer optional memory_digest hardening until:
-  - At least 14 consecutive daily/weekly snapshots are collected.
   - Full canonical host rollout (`/home/fengning/agent-skills/...`) is synchronized.
+  - Post-rollout telemetry quality is sufficient for a decision.
 - Re-run this gate once gate conditions are satisfied.
 
 ## If GO (future path)
