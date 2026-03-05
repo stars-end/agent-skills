@@ -18,13 +18,27 @@ Weekly summary for bd-d8f4.5, using available audit history in `~/.dx-state/flee
   - Daily: red (single snapshot)
   - Weekly: yellow (single snapshot)
 
+## Gate Metrics (Method + Current Value)
+- PR rejection trend:
+  - Method: compare closed-unmerged vs merged PRs in rolling weekly window.
+  - Current value: **not computable in this runbook pass** (historical sample not yet harvested into this doc).
+- Repeated bug recurrence across VMs:
+  - Method: count repeated `reason_codes`/check IDs across host snapshots for same week.
+  - Current value: **2 recurring host drifts** (`tool_mcp_health` on `epyc6`, `epyc12`).
+- Founder weekly intervention minutes:
+  - Method: sum operator command windows from deploy/repair/audit session logs.
+  - Current value: **>30 min** in this pass (manual SSH trust + config remediation required).
+- Drift incidents per week:
+  - Method: count red host rows in daily audit history.
+  - Current value: **2 active host drifts** in latest daily run.
+
 ## Founder-time Indicator
 - No repeat windows exist yet for mean-time-to-detection analysis beyond single-day signal.
 - Baseline remains operationally noisy due remote snapshot read failures and environment drift.
 
 ## Open Risks
-- PR-closure risk from lack of historical coverage (fewer than 14 days).
-- Rollback risk from incomplete remote rollout.
+- PR-closure risk from unresolved rollout gate (`bd-d8f4.2` still red).
+- Operational risk from Slack live transport unavailability in cron wrapper.
 
 ## Weekly Actions Proposed
 1. Keep daily red/yellow review deterministic on Slack.
@@ -32,6 +46,8 @@ Weekly summary for bd-d8f4.5, using available audit history in `~/.dx-state/flee
 3. Rebuild host rollout on canonical machines to collect complete daily/weekly history.
 
 ## Evidence
-- `/tmp/fleet-os-completion/audit-weekly-fleet.json`
-- `/Users/fengning/.dx-state/fleet/audit/weekly/history/2026-10.json`
-- `/Users/fengning/.dx-state/fleet/audit/daily/history/2026-03-05.json`
+- `/tmp/fleet-land-plane-2026-03-05/check-greenrun-summary.txt`
+- `/tmp/fleet-land-plane-2026-03-05/cron-exit-summary.txt`
+- `/tmp/fleet-land-plane-2026-03-05/hosts/*-check-greenrun.json`
+- `/Users/fengning/.dx-state/fleet/audit/weekly/latest.json`
+- `/Users/fengning/.dx-state/fleet/audit/daily/latest.json`

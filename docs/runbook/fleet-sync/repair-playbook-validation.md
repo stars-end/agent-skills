@@ -3,6 +3,11 @@
 ## Scope
 Validation for bd-d8f4.4: prove failure signatures and deterministic recovery commands for red states.
 
+## Landing Pass Update (2026-03-05)
+- Executed fleet-wide repair/check against real hosts with canonical SSH mesh and auth/transport env present.
+- Red states narrowed to deterministic `tool_mcp_health` drift on `epyc6` and `epyc12`.
+- Full red->repair->green proof is still incomplete at fleet level; task remains open.
+
 ## Forced Failure Cases
 
 ### 1) Auth-readiness failure
@@ -55,6 +60,15 @@ For the current canonical environment, the loop is partially simulated with stat
 ## Deterministic Commands
 - Daily remediation: `./scripts/dx-fleet.sh repair --json --state-dir ~/.dx-state/fleet`
 - Weekly + fleet health evidence refresh: `./scripts/dx-fleet.sh check --json --state-dir ~/.dx-state/fleet`
+
+## Landing Pass Evidence
+- `/tmp/fleet-land-plane-2026-03-05/hosts/macmini-repair-auth.json`
+- `/tmp/fleet-land-plane-2026-03-05/hosts/homedesktop-wsl-repair-auth.json`
+- `/tmp/fleet-land-plane-2026-03-05/hosts/epyc6-repair-auth.json`
+- `/tmp/fleet-land-plane-2026-03-05/hosts/epyc12-repair-auth.json`
+- `/tmp/fleet-land-plane-2026-03-05/repair-check-summary.txt`
+- `/tmp/fleet-land-plane-2026-03-05/check-greenrun-summary.txt`
+- `/tmp/fleet-land-plane-2026-03-05/hosts/*-check-greenrun.json`
 
 ## Evidence paths
 - `/tmp/fleet-os-completion/check-red.json`

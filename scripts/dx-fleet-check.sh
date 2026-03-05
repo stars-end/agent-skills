@@ -51,6 +51,15 @@ write_atomic() {
 }
 
 fleet_local_host() {
+  if [[ -n "${CANONICAL_HOST_KEY:-}" ]]; then
+    case "${CANONICAL_HOST_KEY}" in
+      macmini|homedesktop-wsl|epyc6|epyc12)
+        echo "${CANONICAL_HOST_KEY}"
+        return 0
+        ;;
+    esac
+  fi
+
   local current_host
   current_host="$(hostname -s 2>/dev/null | sed 's/\.local$//' | tr '[:upper:]' '[:lower:]')"
   if [[ "$current_host" =~ macmini ]] || [[ "$current_host" =~ mac[-]?mini ]]; then
@@ -61,6 +70,8 @@ fleet_local_host() {
     echo "epyc12"
   elif [[ "$current_host" =~ epyc ]]; then
     echo "epyc6"
+  elif [[ -n "${CANONICAL_HOST_KEY:-}" ]]; then
+    echo "${CANONICAL_HOST_KEY}"
   else
     echo "local"
   fi
@@ -470,19 +481,32 @@ collect_remote_snapshot_rows() {
   local host="$1"
   local target="$2"
   local -a candidates=()
+  local -a home_roots=()
   local candidate
   local snapshot_json=""
   local payload_file
   local parsed
-  local local_paths
+  local target_user
+
+  target_user="${target%%@*}"
+  if [[ -z "$target_user" || "$target_user" == "$target" ]]; then
+    target_user="${USER:-fengning}"
+  fi
+
+  home_roots+=("$HOME")
+  home_roots+=("/home/${target_user}")
+  home_roots+=("/Users/${target_user}")
+
   candidates+=("${STATE_ROOT}/tool-health.json")
   candidates+=("${STATE_ROOT_LEGACY1}/tool-health.json")
   candidates+=("${STATE_ROOT_LEGACY2}/tool-health.json")
-  if [[ -n "${STATE_ROOT:-}" ]]; then
-    candidates+=("$HOME/.dx-state/fleet/tool-health.json")
-    candidates+=("$HOME/.dx-state/fleet-sync/tool-health.json")
-    candidates+=("$HOME/.dx-state/fleet_sync/tool-health.json")
-  fi
+
+  local root
+  for root in "${home_roots[@]}"; do
+    candidates+=("${root}/.dx-state/fleet/tool-health.json")
+    candidates+=("${root}/.dx-state/fleet-sync/tool-health.json")
+    candidates+=("${root}/.dx-state/fleet_sync/tool-health.json")
+  done
 
   for candidate in "${candidates[@]}"; do
     [[ -z "$candidate" ]] && continue

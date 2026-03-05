@@ -32,9 +32,14 @@
 - If remote host snapshots are stale/missing, run host-level SSH repair and validate `~/.dx-state/fleet/tool-health.json` generation on each host.
 
 ## Known Risks
-- Current deployment state has incomplete rollout of `dx-fleet-install.sh` on some canonical hosts.
-- `macmini` SSH auth profile blocks remote install/check probes from this environment.
+- Fleet still red on `epyc6` and `epyc12` due `tool_mcp_health` drift in host snapshots.
+- Live Slack transport path from `dx-audit-cron.sh` is still unavailable in current coordinator environment.
 - 14-day soak telemetry is not yet fully populated (non-gating; tracked for trend confidence only).
+
+## Current Blockers To Clear Program Gate
+1. Converge `epyc6` MCP lane to green (`dx-mcp-tools-sync --check --json` must report `fail=0` in host snapshot consumed by fleet check).
+2. Converge `epyc12` MCP lane to green (same criterion as above).
+3. Restore live transport readiness for cron posting so daily/weekly live runs do not exit with transport unavailable.
 
 ## Required Owner Actions on Red
 - Preserve `~/.dx-state/fleet/audit/daily/latest.json` and `~/.dx-state/fleet/tool-health.json` for forensics.
