@@ -101,7 +101,10 @@ main() {
   fi
 
   echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ERROR: transport unavailable for channel=$channel" >&2
-  return "$audit_exit"
+  if [[ "$audit_exit" -ne 0 ]]; then
+    return "$audit_exit"
+  fi
+  return 1
 }
 
 parse_args "$@"
