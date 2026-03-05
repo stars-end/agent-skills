@@ -170,7 +170,7 @@ EOF
 collect_hosts() {
   local local_host="$1"
   local -a raw=()
-  local -A seen=()
+  local -a seen=()
   local host
   local entry
 
@@ -183,15 +183,15 @@ collect_hosts() {
   fi
 
   echo "$local_host"
-  seen["$local_host"]=1
+  seen+=("$local_host")
   for host in "${raw[@]}"; do
-    if [[ -n "${seen[$host]:-}" ]]; then
+    if is_member "$host" "${seen[@]}"; then
       continue
     fi
     if [[ -z "$host" ]]; then
       continue
     fi
-    seen["$host"]=1
+    seen+=("$host")
     echo "$host"
   done
 }
@@ -304,7 +304,7 @@ snapshot_rows_for_host() {
   local host="$2"
 
   local -a rows=()
-  local -A seen=()
+  local -a seen=()
   local pass_count=0
   local warn_count=0
   local fail_count=0
@@ -339,7 +339,9 @@ snapshot_rows_for_host() {
       row_details="$(json_escape "$raw_details")"
       row="{\"id\":\"$row_id\",\"status\":\"$row_status\",\"severity\":\"$row_severity\",\"details\":\"$row_details\"}"
       rows+=("$row")
-      seen["$raw_id"]=1
+      if ! is_member "$raw_id" "${seen[@]}"; then
+        seen+=("$raw_id")
+      fi
 
       case "$row_status" in
         pass)
@@ -376,7 +378,9 @@ snapshot_rows_for_host() {
       row_details="$(json_escape "$raw_details")"
       row="{\"id\":\"$row_id\",\"status\":\"$row_status\",\"severity\":\"$row_severity\",\"details\":\"$row_details\"}"
       rows+=("$row")
-      seen["$raw_id"]=1
+      if ! is_member "$raw_id" "${seen[@]}"; then
+        seen+=("$raw_id")
+      fi
 
       case "$row_status" in
         pass)
@@ -393,7 +397,7 @@ snapshot_rows_for_host() {
           ;;
       esac
     done < <(
-      python3 "$source_file" "$host" <<'PY'
+      python3 - "$source_file" "$host" <<'PY'
 import json
 import sys
 
@@ -426,13 +430,13 @@ PY
   fi
 
   for check_id in "${DAILY_CHECK_IDS[@]}"; do
-    if [[ -n "${seen[$check_id]:-}" ]]; then
+    if is_member "$check_id" "${seen[@]}"; then
       continue
     fi
     row_status="fail"
     row=("{\"id\":\"$check_id\",\"status\":\"$row_status\",\"severity\":\"medium\",\"details\":\"missing daily check '$check_id' in Fleet Sync snapshot\"}")
     rows+=("${row[@]}")
-    seen["$check_id"]=1
+    seen+=("$check_id")
     fail_count=$((fail_count + 1))
   done
 

@@ -55,7 +55,7 @@ parse_args() {
 }
 
 render_payload() {
-  "$SCRIPT_DIR/dx-fleet.sh" audit "--$MODE" --json --state-dir "$STATE_DIR" 2>&1 || true
+  "$SCRIPT_DIR/dx-fleet.sh" audit "--$MODE" --json --state-dir "$STATE_DIR" 2>&1
 }
 
 main() {
@@ -63,9 +63,13 @@ main() {
   local message
   local log_file="${HOME}/logs/dx-audit.log"
   local channel="#dx-alerts"
+  local audit_exit=0
   mkdir -p "$(dirname "$log_file")"
 
+  set +e
   payload="$(render_payload)"
+  audit_exit=$?
+  set -e
   if ! printf '%s\n' "$payload" | jq -e '.mode' >/dev/null 2>&1; then
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ERROR: invalid JSON from dx-audit.sh" >&2
     echo "$payload" >> "$log_file"
@@ -88,16 +92,16 @@ main() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     printf '%s\n' "$message"
     printf '%s\n' "$payload"
-    return 0
+    return "$audit_exit"
   fi
 
   if agent_coordination_send_message "$message" "${DX_ALERTS_CHANNEL_ID:-$channel}"; then
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] audit message sent to $channel"
-    return 0
+    return "$audit_exit"
   fi
 
   echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ERROR: transport unavailable for channel=$channel" >&2
-  return 1
+  return "$audit_exit"
 }
 
 parse_args "$@"
