@@ -247,6 +247,9 @@ load_manifest_config() {
   enforce_value="$(manifest_scalar_audit "gemini_enforcement" "enforce_after" 2>/dev/null || true)"
   [[ -n "$grace_value" && "$grace_value" =~ ^[0-9]+$ ]] && GEMINI_GRACE_DAYS="$grace_value"
   [[ -n "$enforce_value" && "$enforce_value" =~ ^[0-9]+$ ]] && GEMINI_ENFORCE_AFTER="$enforce_value"
+  if [[ "$GEMINI_ENFORCE_AFTER" -lt "$GEMINI_GRACE_DAYS" ]]; then
+    GEMINI_ENFORCE_AFTER="$GEMINI_GRACE_DAYS"
+  fi
 
   local threshold_tool_stale_hours=""
   local threshold_dolt_stale_minutes=""
@@ -498,23 +501,29 @@ weekly_check_global_constraints() {
   fi
 }
 
-gemini_enforcement_state() {
-  local artifact_missing=0
-  local files=(
-    "${HOME}/.gemini/GEMINI.md"
-    "${HOME}/.gemini/antigravity/mcp_config.json"
-  )
-  if ! command -v gemini >/dev/null 2>&1; then
-    artifact_missing=1
-  fi
-  local path
-  for path in "${files[@]}"; do
-    if [[ ! -f "$path" ]]; then
-      artifact_missing=1
+gemini_artifacts_present() {
+  local missing=0
+  local candidate
+  for candidate in \
+    "${HOME}/.gemini/GEMINI.md" \
+    "${HOME}/.gemini/antigravity/mcp_config.json"; do
+    if [[ ! -f "$candidate" ]]; then
+      missing=1
+      break
     fi
   done
+  if [[ "$missing" -eq 1 ]]; then
+    return 1
+  fi
 
-  if [[ "$artifact_missing" -eq 0 ]]; then
+  if [[ -x "${HOME}/.gemini/gemini" ]] || [[ -x "${HOME}/.gemini/gemini-cli" ]] || command -v gemini >/dev/null 2>&1 || command -v gemini-cli >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+gemini_enforcement_state() {
+  if gemini_artifacts_present; then
     local marker="${STATE_ROOT}/enforcement/gemini-enforcement.json"
     [[ -f "$marker" ]] && rm -f "$marker"
     echo "pass"
@@ -523,29 +532,23 @@ gemini_enforcement_state() {
 
   local marker="${STATE_ROOT}/enforcement/gemini-enforcement.json"
   local now_epoch
-  local first_epoch=""
+  local first_epoch
   now_epoch="$(date -u +%s)"
   mkdir -p "$(dirname "$marker")"
-  if [[ -f "$marker" ]]; then
-    first_epoch="$(sed -n '1p' "$marker" 2>/dev/null || printf "")"
-  fi
-  if [[ -z "$first_epoch" ]]; then
+  first_epoch="$(sed -n '1p' "$marker" 2>/dev/null || printf '')"
+  if [[ -z "$first_epoch" || ! "$first_epoch" =~ ^[0-9]+$ ]]; then
     first_epoch="$now_epoch"
-    printf '%s' "$first_epoch" > "$marker"
-  fi
-
-  if ! [[ "$first_epoch" =~ ^[0-9]+$ ]]; then
-    first_epoch="$now_epoch"
+    printf '%s\n' "$first_epoch" > "$marker"
   fi
 
   local days_missing
   days_missing=$(( (now_epoch - first_epoch) / 86400 ))
   if [[ "$days_missing" -le "$GEMINI_GRACE_DAYS" ]]; then
     echo "warn"
-  elif [[ "$days_missing" -le "$GEMINI_ENFORCE_AFTER" ]]; then
-    echo "warn"
-  else
+  elif [[ "$days_missing" -gt "$GEMINI_ENFORCE_AFTER" ]]; then
     echo "fail"
+  else
+    echo "warn"
   fi
 }
 
@@ -553,25 +556,26 @@ weekly_check_ide_config() {
   local local_host="local"
   local missing=0
   local file
-  for file in "${HOME}/.claude/settings.json" "${HOME}/.claude.json" "${HOME}/.codex/config.toml" "${HOME}/.opencode/config.json" "${HOME}/.gemini/antigravity/mcp_config.json" "${HOME}/.gemini/GEMINI.md"; do
+  for file in "${HOME}/.claude/settings.json" "${HOME}/.claude.json" "${HOME}/.codex/config.toml" "${HOME}/.opencode/config.json" "${HOME}/.gemini/antigravity/mcp_config.json"; do
     [[ -f "$file" ]] || missing=$((missing + 1))
   done
+  if [[ "$missing" -gt 0 ]]; then
+    append_weekly_check "ide_config_presence_and_drift" "$local_host" "fail" "high" "Missing canonical IDE config files required by governance checks"
+    return
+  fi
 
   local gemini_state
   gemini_state="$(gemini_enforcement_state)"
   if [[ "$gemini_state" == "fail" ]]; then
-    append_weekly_check "ide_config_presence_and_drift" "$local_host" "fail" "high" "gemini CLI lane is outside enforcement window and missing required artifacts"
+    append_weekly_check "ide_config_presence_and_drift" "$local_host" "fail" "high" "Gemini CLI lane outside enforcement window: missing ~/.gemini/GEMINI.md, ~/.gemini/antigravity/mcp_config.json, or gemini binary"
     return
   fi
   if [[ "$gemini_state" == "warn" ]]; then
-    missing=$((missing + 1))
+    append_weekly_check "ide_config_presence_and_drift" "$local_host" "warn" "medium" "Gemini CLI lane missing required artifacts: grace window active"
+    return
   fi
 
-  if [[ "$missing" -gt 0 ]]; then
-    append_weekly_check "ide_config_presence_and_drift" "$local_host" "warn" "medium" "Missing canonical IDE config or gemini lane not within policy window"
-  else
-    append_weekly_check "ide_config_presence_and_drift" "$local_host" "pass" "low" "Canonical IDE config files present"
-  fi
+  append_weekly_check "ide_config_presence_and_drift" "$local_host" "pass" "low" "Canonical IDE config files present"
 }
 
 weekly_check_cron_health() {

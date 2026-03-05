@@ -159,12 +159,12 @@ build_check_rows() {
     severity="critical"
     details="bd not installed"
   elif [[ -z "${BEADS_DIR:-}" ]]; then
-    status="warn"
-    severity="medium"
+    status="fail"
+    severity="high"
     details="BEADS_DIR unset"
   elif [[ ! -d "${BEADS_DIR}" ]]; then
-    status="warn"
-    severity="medium"
+    status="fail"
+    severity="high"
     details="BEADS_DIR directory missing (${BEADS_DIR})"
   fi
   rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
@@ -179,16 +179,23 @@ build_check_rows() {
   status="pass"
   severity="low"
   local missing=0
-  [[ -f "${HOME}/.claude/settings.json" ]] || missing=$((missing+1))
-  [[ -f "${HOME}/.claude.json" ]] || missing=$((missing+1))
-  [[ -f "${HOME}/.codex/config.toml" ]] || missing=$((missing+1))
-  [[ -f "${HOME}/.opencode/config.json" ]] || missing=$((missing+1))
-  [[ -f "${HOME}/.gemini/antigravity/mcp_config.json" ]] || missing=$((missing+1))
-  [[ -f "${HOME}/.gemini/GEMINI.md" ]] || missing=$((missing+1))
+  local candidate
+  local detail_parts=()
+  for candidate in \
+    "${HOME}/.claude/settings.json" \
+    "${HOME}/.claude.json" \
+    "${HOME}/.codex/config.toml" \
+    "${HOME}/.opencode/config.json" \
+    "${HOME}/.gemini/antigravity/mcp_config.json"; do
+    if [[ ! -f "$candidate" ]]; then
+      missing=$((missing+1))
+      detail_parts+=("${candidate#"${HOME}/"}")
+    fi
+  done
   if [[ "$missing" -gt 0 ]]; then
-    status="warn"
+    status="fail"
     severity="medium"
-    details="canonical IDE artifacts missing: $missing"
+    details="canonical IDE artifacts missing: ${missing} (${detail_parts[*]})"
   fi
   rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
   [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
@@ -210,7 +217,7 @@ build_check_rows() {
     fi
   done < <(required_tools_for_host "$role")
   if [[ "$missing_service" -gt 0 ]]; then
-    status="warn"
+    status="fail"
     severity="medium"
     details="required tools missing on host role '$role': $missing_service"
   fi
@@ -227,11 +234,11 @@ build_check_rows() {
     severity="low"
     details="OP service-account token detected"
   elif command -v op >/dev/null 2>&1; then
-    status="warn"
+    status="fail"
     severity="low"
     details="op installed but OP_SERVICE_ACCOUNT_TOKEN not set"
   else
-    status="warn"
+    status="fail"
     severity="low"
     details="op CLI unavailable"
   fi
@@ -248,7 +255,7 @@ build_check_rows() {
     severity="low"
     details="deterministic Slack transport configured"
   else
-    status="warn"
+    status="fail"
     severity="low"
     details="Slack transport token/webhook missing"
   fi
