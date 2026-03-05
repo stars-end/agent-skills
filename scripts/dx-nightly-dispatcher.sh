@@ -34,7 +34,8 @@ export SLACK_WEBHOOK="${SLACK_WEBHOOK:-}"
 
 log() { echo -e "\033[0;34m[nightly-dispatch]\033[0m $*"; }
 
-cd "$AGENTSKILLS_DIR"
+# Run from canonical Beads repo (required by dx-runner preflight gates)
+cd "$HOME_DIR/bd"
 
 # Ensure mise is loaded
 if command -v mise &> /dev/null; then
@@ -65,6 +66,6 @@ fi
 log "Starting Nightly Fleet Dispatcher..."
 log "Using dx-runner at: ${DX_RUNNER_PATH}"
 
-"$PYTHON" scripts/nightly_dispatch.py "$@"
+"$PYTHON" "$AGENTSKILLS_DIR/scripts/nightly_dispatch.py" "$@"
 
 log "Nightly Fleet Dispatcher run complete."

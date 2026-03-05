@@ -38,6 +38,18 @@ else
 fi
 
 if command -v bd >/dev/null 2>&1; then
+  BD_PATH="$(command -v bd)"
+  pass "bd binary in PATH: $BD_PATH"
+  if [[ "$BD_PATH" == "/home/linuxbrew/.linuxbrew/bin/bd" ]]; then
+    fail "Legacy Linuxbrew bd is active in PATH (not Dolt-capable for fleet contract)"
+    echo "   Remediation: export PATH=\"$HOME/.local/bin:$PATH\""
+    echo "   Remediation: export BD_BIN=\"$HOME/.local/bin/bd\""
+  fi
+  if [[ -n "${BD_BIN:-}" && "$BD_BIN" != "$HOME/.local/bin/bd" ]]; then
+    fail "BD_BIN override points away from canonical binary: $BD_BIN"
+    echo "   Remediation: unset BD_BIN"
+    echo "   Remediation: export BD_BIN=\"$HOME/.local/bin/bd\""
+  fi
   BD_VERSION="$(bd --version 2>/dev/null | awk '{print $NF}' | head -1 || true)"
   if [[ -n "$BD_VERSION" ]]; then
     if [[ "$(printf '%s\n' "$MIN_BD_VERSION" "$BD_VERSION" | sort -V | head -1)" != "$MIN_BD_VERSION" ]]; then
@@ -47,6 +59,13 @@ if command -v bd >/dev/null 2>&1; then
     fi
   else
     warn "Could not parse bd version"
+  fi
+  if ! bd dolt --help >/dev/null 2>&1; then
+    fail "Active bd binary does not support 'bd dolt' commands"
+    echo "   Remediation: export BD_BIN=\"$HOME/.local/bin/bd\""
+    echo "   Remediation: hash -r"
+  else
+    pass "bd dolt subcommands available"
   fi
 else
   fail "bd CLI not found in PATH"
