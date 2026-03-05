@@ -11,10 +11,10 @@ bd-d8f4.6 post-rollout reliability tracking artifact.
 - Generated: `2026-03-05`
 
 ## Data Availability
-- Current audit history contains:
-  - Daily: 1 sample
-  - Weekly: 1 sample
-- **14-day aggregate not yet available in this worktree session**.
+- Current audit history currently has limited span in this run.
+- Required evidence for 14-day telemetry is tracked under:
+  - `/tmp/fleet-platform-closeout-2026-03-05/` (fresh evidence set)
+- **14-day aggregate not yet available yet in this run**.
 
 ## Computed Baseline (Current Window)
 - Daily latest: red.
@@ -40,4 +40,4 @@ bd-d8f4.6 post-rollout reliability tracking artifact.
 ## Evidence
 - `/Users/fengning/.dx-state/fleet/audit/daily/history/*.json`
 - `/Users/fengning/.dx-state/fleet/audit/weekly/history/*.json`
-- `/tmp/fleet-os-completion/concurrency-stress-summary.txt`
+- `/tmp/fleet-platform-closeout-2026-03-05/concurrency/*-summary.txt`

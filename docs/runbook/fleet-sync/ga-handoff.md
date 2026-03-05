@@ -1,57 +1,35 @@
-# Fleet Sync GA Handoff (Pre-GA, NO-GO)
+# Fleet Sync GA Handoff
 
 ## Readiness Decision
 - Bash 3.2 daily/weekly audit compatibility: **GO**
 - `dx-fleet-daily-check.sh` contract correctness: **GO**
-- Full bd-d8f4 program completion: **NO-GO** until rollout evidence is complete and Beads subtasks are closed or explicitly deferred.
+- Full bd-d8f4 program completion: **NO-GO** until rollout/metrics blockers are cleared.
 
 ## Operating Model
 - Fleet command surface: single family `dx-fleet check|repair|audit`.
-- State write path: `~/.dx-state/fleet/` only.
-- Fallback reads: `~/.dx-state/fleet-sync`, `~/.dx-state/fleet_sync`.
-- Daily mode: runtime checks + deterministic red/yellow/fail behavior.
+- State writes: `~/.dx-state/fleet/` (single canonical root).
+- Legacy fallback reads: `~/.dx-state/fleet-sync`, `~/.dx-state/fleet_sync`.
+- Daily mode: runtime checks.
 - Weekly mode: governance/compliance checks.
-- Primary dispatch target: one-click Slack alert in `#dx-alerts` via `scripts/dx-audit-cron.sh`.
 
 ## Daily Founder Flow
-1. `./scripts/dx-audit-cron.sh --daily --dry-run` (verify deterministic message shape pre-change).
-2. `./scripts/dx-audit-cron.sh --daily` scheduled by cron.
-3. If `fleet_status=green`: no action.
-4. If `fleet_status=yellow`: run `./scripts/dx-fleet.sh repair --json`.
-5. If `fleet_status=red`: run `./scripts/dx-fleet.sh repair --json`, then rerun `./scripts/dx-fleet.sh audit --daily --json`.
+1. `./scripts/dx-audit-cron.sh --daily --dry-run`
+2. `./scripts/dx-audit-cron.sh --daily`
+3. If `fleet_status=red`: `./scripts/dx-fleet.sh repair --json`, then rerun check/audit.
 
 ## Weekly Founder Flow
-1. `./scripts/dx-audit-cron.sh --weekly --dry-run`.
-2. `./scripts/dx-audit-cron.sh --weekly`.
-3. Red/yellow follow-up handled by same repair + rerun loop with weekly-only targets.
+1. `./scripts/dx-audit-cron.sh --weekly --dry-run`
+2. `./scripts/dx-audit-cron.sh --weekly`
+3. If `fleet_status=yellow/red`: same repair loop.
 
 ## Break-Glass
-- If cron wrapper exits non-zero with transport unavailable, rerun check/report manually after `DX_SLACK_*` context is repaired.
-- If `~/.dx-state/fleet` becomes unavailable, run:
-  - `mkdir -p ~/.dx-state/fleet/{audit/{daily,weekly}/{history},repair}` before rerunning `dx-fleet.sh` commands.
-- If remote host snapshots are stale/missing, run host-level SSH repair and validate `~/.dx-state/fleet/tool-health.json` generation on each host.
+- If cron exits non-zero with transport unavailable, capture output and rerun when `DX_SLACK_WEBHOOK` or Slack token is restored.
+- If host snapshots are stale/missing, rerun install/check on that host and compare with `/tmp/fleet-platform-closeout-2026-03-05/hosts/*`.
 
-## Known Risks
-- Fleet still red on `epyc6` and `epyc12` due `tool_mcp_health` drift in host snapshots.
-- Live Slack transport path from `dx-audit-cron.sh` is still unavailable in current coordinator environment.
-- 14-day soak telemetry is not yet fully populated (non-gating; tracked for trend confidence only).
-
-## Current Blockers To Clear Program Gate
-1. Converge `epyc6` MCP lane to green (`dx-mcp-tools-sync --check --json` must report `fail=0` in host snapshot consumed by fleet check).
-2. Converge `epyc12` MCP lane to green (same criterion as above).
-3. Restore live transport readiness for cron posting so daily/weekly live runs do not exit with transport unavailable.
-
-## Required Owner Actions on Red
-- Preserve `~/.dx-state/fleet/audit/daily/latest.json` and `~/.dx-state/fleet/tool-health.json` for forensics.
-- Execute repair command from local operator console and attach new logs/artifacts to follow-up.
-- Escalate if red persists >2 check cycles.
+## Current Blockers To Clear Gate
+1. Fix remote script path consistency on `homedesktop-wsl` for `~/agent-skills/...` install/check helpers.
+2. Restore deterministic live Slack transport in cron (`SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_MCP_XOXP_TOKEN`, `SLACK_MCP_XOXB_TOKEN`, `DX_SLACK_WEBHOOK`, or `DX_ALERTS_WEBHOOK`).
+3. Produce one fresh cross-host green convergence run where all hosts pass required checks under stable auth/transport.
 
 ## Evidence Paths
-- `/tmp/fleet-deploy-session/session-2026-03-05.md`
-- `/tmp/fleet-os-completion/audit-daily-fleet.json`
-- `/tmp/fleet-os-completion/audit-weekly-fleet.json`
-- `/tmp/fleet-os-completion/concurrency-stress-summary.txt`
-- `/tmp/fleet-os-completion/repair-pass.json`
-- `/tmp/fleet-os-completion/repair-fail.json`
-- `/tmp/fleet-os-completion/crons-daily-dryrun-os.txt`
-- `/tmp/fleet-os-completion/crons-weekly-dryrun-os.txt`
+- `/tmp/fleet-platform-closeout-2026-03-05/`

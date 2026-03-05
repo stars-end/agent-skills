@@ -322,6 +322,7 @@ snapshot_rows_for_host() {
   local unknown_count=0
   local row
   local row_check_id
+  local row_id
   local row_status
   local row_severity
   local row_details
@@ -350,7 +351,7 @@ snapshot_rows_for_host() {
       row_details="$(json_escape "$raw_details")"
       row="{\"id\":\"$row_id\",\"status\":\"$row_status\",\"severity\":\"$row_severity\",\"details\":\"$row_details\"}"
       rows+=("$row")
-      if ! is_member "$raw_id" "${seen[@]}"; then
+      if ! is_member "$raw_id" "${seen[@]-}"; then
         seen+=("$raw_id")
       fi
 
@@ -389,7 +390,7 @@ snapshot_rows_for_host() {
       row_details="$(json_escape "$raw_details")"
       row="{\"id\":\"$row_id\",\"status\":\"$row_status\",\"severity\":\"$row_severity\",\"details\":\"$row_details\"}"
       rows+=("$row")
-      if ! is_member "$raw_id" "${seen[@]}"; then
+      if ! is_member "$raw_id" "${seen[@]-}"; then
         seen+=("$raw_id")
       fi
 
@@ -560,20 +561,40 @@ build_check_rows() {
     details="BEADS_DIR directory missing (${BEADS_DIR})"
   fi
   rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
-  [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
-  [[ "$status" == warn ]] && warn_count=$((warn_count+1)) || \
-  [[ "$status" == fail ]] && fail_count=$((fail_count+1)) || \
-  unknown_count=$((unknown_count+1))
+  case "$status" in
+    pass)
+      pass_count=$((pass_count + 1))
+      ;;
+    warn)
+      warn_count=$((warn_count + 1))
+      ;;
+    fail)
+      fail_count=$((fail_count + 1))
+      ;;
+    *)
+      unknown_count=$((unknown_count + 1))
+      ;;
+  esac
 
   # 2) tool_mcp_health
   check_id="tool_mcp_health"
   details="dx-mcp-tools-sync state unavailable"
   IFS='|' read -r status severity details <<< "$(mcp_tools_sync_status "$(get_mcp_tool_health_payload)")"
   rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
-  [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
-  [[ "$status" == warn ]] && warn_count=$((warn_count+1)) || \
-  [[ "$status" == fail ]] && fail_count=$((fail_count+1)) || \
-  unknown_count=$((unknown_count+1))
+  case "$status" in
+    pass)
+      pass_count=$((pass_count + 1))
+      ;;
+    warn)
+      warn_count=$((warn_count + 1))
+      ;;
+    fail)
+      fail_count=$((fail_count + 1))
+      ;;
+    *)
+      unknown_count=$((unknown_count + 1))
+      ;;
+  esac
 
   # 3) required_service_health
   check_id="required_service_health"
@@ -594,10 +615,20 @@ build_check_rows() {
     details="required tools missing on host role '$role': $missing_service"
   fi
   rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
-  [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
-  [[ "$status" == warn ]] && warn_count=$((warn_count+1)) || \
-  [[ "$status" == fail ]] && fail_count=$((fail_count+1)) || \
-  unknown_count=$((unknown_count+1))
+  case "$status" in
+    pass)
+      pass_count=$((pass_count + 1))
+      ;;
+    warn)
+      warn_count=$((warn_count + 1))
+      ;;
+    fail)
+      fail_count=$((fail_count + 1))
+      ;;
+    *)
+      unknown_count=$((unknown_count + 1))
+      ;;
+  esac
 
   # 4) op_auth_readiness
   check_id="op_auth_readiness"
@@ -615,10 +646,20 @@ build_check_rows() {
     details="op CLI unavailable"
   fi
   rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
-  [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
-  [[ "$status" == warn ]] && warn_count=$((warn_count+1)) || \
-  [[ "$status" == fail ]] && fail_count=$((fail_count+1)) || \
-  unknown_count=$((unknown_count+1))
+  case "$status" in
+    pass)
+      pass_count=$((pass_count + 1))
+      ;;
+    warn)
+      warn_count=$((warn_count + 1))
+      ;;
+    fail)
+      fail_count=$((fail_count + 1))
+      ;;
+    *)
+      unknown_count=$((unknown_count + 1))
+      ;;
+  esac
 
   # 5) alerts_transport_readiness
   check_id="alerts_transport_readiness"
@@ -632,10 +673,20 @@ build_check_rows() {
     details="Slack transport token/webhook missing"
   fi
   rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
-  [[ "$status" == pass ]] && pass_count=$((pass_count+1)) || \
-  [[ "$status" == warn ]] && warn_count=$((warn_count+1)) || \
-  [[ "$status" == fail ]] && fail_count=$((fail_count+1)) || \
-  unknown_count=$((unknown_count+1))
+  case "$status" in
+    pass)
+      pass_count=$((pass_count + 1))
+      ;;
+    warn)
+      warn_count=$((warn_count + 1))
+      ;;
+    fail)
+      fail_count=$((fail_count + 1))
+      ;;
+    *)
+      unknown_count=$((unknown_count + 1))
+      ;;
+  esac
 
   local rows_json="["
   local first=1
