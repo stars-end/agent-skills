@@ -92,6 +92,28 @@ railway status            # Should show project context
 - `railway whoami` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
 - Token file not found → Run `~/agent-skills/scripts/create-op-credential.sh`
 
+### 5.2) Railway Link Non-Interactive Usage (CRITICAL)
+
+Agents can ONLY use > Select a workspace fengning-starsend's Projects with ALL required flags:
+
+Required flags: , 
+Optional flags| 
+Recommended  | 
+
+> Select a workspace fengning-starsend's Projects
+> Select a workspace fengning-starsend's Projects
+> Select a workspace fengning-starsend's Projects
+
+**Why**: Railway CLI shows visual prompts but completes successfully when all flags are provided.
+
+**Alternative**: Use  without linking
+
+
+**Context files** (created by worktree-setup.sh)
+- Location: 
+- Contains: , , 
+- Used by:  to provide Railway context in worktrees
+
 ## 6) Parallel Agent Orchestration (V8.4)
 
 ### Pattern: Plan-First, Batch-Second, Commit-Only

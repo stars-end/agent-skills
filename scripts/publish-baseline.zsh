@@ -107,6 +107,41 @@ railway status            # Should show project context
 - \`railway whoami\` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
 - Token file not found → Run \`~/agent-skills/scripts/create-op-credential.sh\`
 
+### 5.2) Railway Link Non-Interactive Usage (CRITICAL)
+
+Agents can ONLY use `railway link` with ALL required flags:
+
+Required flags: `--project <id-or-name>`, `--environment <name>`
+Optional flags| `--service <name>`
+Recommended  | `--json`
+
+```bash
+# CORRECT - Fully non-interactive
+railway link --project <project-id> --environment <env> --service <service> --json
+
+railway link --project my-app --environment staging --json
+
+# WRONG - Will block waiting for input
+railway link
+railway link --project my-project  # missing --environment
+```
+
+**Why**: Railway CLI shows visual prompts but completes successfully when all flags are provided.
+
+**Alternative**: Use `railway run` without linking
+```bash
+# Direct command execution with Railway context
+railway run -p <project-id> -e <env> -s <service> -- <command>
+
+# Using context from worktree
+dx-railway-run.sh -- <command>
+```
+
+**Context files** (created by worktree-setup.sh)
+- Location: `/tmp/agents/.dx-context/<beads-id>/<repo>/railway-context.env`
+- Contains: `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT`, `RAILWAY_SERVICE`
+- Used by: `dx-railway-run.sh` to provide Railway context in worktrees
+
 ## 6) Parallel Agent Orchestration (V8.4)
 
 ### Pattern: Plan-First, Batch-Second, Commit-Only

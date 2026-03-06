@@ -408,8 +408,22 @@ You don't have permission to modify this environment. Check your Railway role.
 ### No Linked Project
 
 ```
-No project linked. Run `railway link` to link a project.
+No project linked to current directory.
+
+CRITICAL: Agents must to link a project with ALL required flags:
+
+```bash
+# CORRECT - Non-interactive
+railway link --project <id-or-name> --environment <env> [--service <service>] --json
+
+# WRONG - Will block waiting for input
+railway link
 ```
+
+> **Alternative**: Use `railway run` without linking:
+> ```bash
+> railway run -p <project-id> -e <env> -s <service> -- <command>
+> ```
 
 ## Composability
 
