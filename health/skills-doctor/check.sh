@@ -33,7 +33,7 @@ if [[ -z "$PROFILE" ]]; then
 fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROFILES_DIR="$HERE/../skill-profiles"
+PROFILES_DIR="$HERE/../../skill-profiles"
 PROFILE_FILE_JSON="$PROFILES_DIR/${PROFILE}.json"
 
 if [[ ! -f "$PROFILE_FILE_JSON" ]]; then
@@ -77,4 +77,3 @@ echo "❌ skills-doctor: $MISSING missing skills ($PROFILE)"
 echo "Fix:"
 echo "  cd \"$SKILLS_DIR\" && git pull"
 exit 1
-
