@@ -53,6 +53,24 @@ export BEADS_DOLT_SERVER_PORT=3307
 beads-dolt dolt test --json
 ```
 
+### Fail-Fast Signatures (Dolt-Only Contract)
+
+If you see either of these, stop and fix runtime environment first:
+- `sqlite3: unable to open database file`
+- `unknown command "dolt" for "bd"`
+
+These indicate wrong binary/runtime, not a valid fallback path.
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+export BD_BIN="$HOME/.local/bin/bd"
+export BEADS_DIR="$HOME/bd/.beads"
+export BEADS_DOLT_SERVER_HOST=100.107.173.83
+export BEADS_DOLT_SERVER_PORT=3307
+hash -r
+~/.agent/skills/health/bd-doctor/check.sh
+```
+
 ## Usage Examples
 
 ### Daily Workflow

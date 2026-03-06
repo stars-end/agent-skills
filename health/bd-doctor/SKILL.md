@@ -42,6 +42,22 @@ beads-dolt status --json
 beads-dolt ready --limit 5 --json
 ```
 
+Fail-fast signatures (treat as misconfiguration, not recovery path):
+- `sqlite3: unable to open database file`
+- `unknown command "dolt" for "bd"`
+
+Immediate response:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+export BD_BIN="$HOME/.local/bin/bd"
+export BEADS_DIR="$HOME/bd/.beads"
+export BEADS_DOLT_SERVER_HOST=100.107.173.83
+export BEADS_DOLT_SERVER_PORT=3307
+hash -r
+~/.agent/skills/health/bd-doctor/check.sh
+```
+
 Service checks:
 
 Linux (hub host):

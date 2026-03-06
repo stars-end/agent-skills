@@ -59,10 +59,30 @@ is_local_target_host() {
     127.0.0.1|localhost|::1)
       return 0
       ;;
-    *)
-      return 1
-      ;;
   esac
+
+  if [[ "$HOST" == "$(hostname)" ]]; then
+    return 0
+  fi
+
+  local fqdn
+  fqdn="$(hostname -f 2>/dev/null || true)"
+  if [[ -n "$fqdn" && "$HOST" == "$fqdn" ]]; then
+    return 0
+  fi
+
+  local local_ips=""
+  if command -v ip >/dev/null 2>&1; then
+    local_ips="$(ip -o addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | sort -u || true)"
+  elif command -v ifconfig >/dev/null 2>&1; then
+    local_ips="$(ifconfig 2>/dev/null | awk '/inet /{print $2}' | sort -u || true)"
+  fi
+
+  if [[ -n "$local_ips" ]] && echo "$local_ips" | grep -Fxq "$HOST"; then
+    return 0
+  fi
+
+  return 1
 }
 
 require_service_online() {
