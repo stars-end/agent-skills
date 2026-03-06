@@ -92,7 +92,7 @@ ls ~/affordabot/.claude/skills/
 
 # Compare with agent-skills core/
 echo -e "\n=== Potential duplicates (exist in both) ==="
-for skill in beads-workflow create-pull-request finish-feature area-context-create skill-creator docs-create parallelize-cloud-work; do
+for skill in beads-workflow create-pull-request finish-feature area-context-create skill-creator docs-create; do
   if [ -d ~/affordabot/.claude/skills/$skill ] && [ -d ~/agent-skills/core/$skill -o -d ~/agent-skills/search/$skill -o -d ~/agent-skills/extended/$skill ]; then
     echo "DUPLICATE: $skill"
   fi
@@ -106,7 +106,6 @@ done
 - `area-context-create` (duplicate of `search/area-context-create`)
 - `skill-creator` (duplicate of `extended/skill-creator`)
 - `docs-create` (duplicate of `search/docs-create`)
-- `parallelize-cloud-work` (duplicate of `extended/parallelize-cloud-work`)
 
 **Verify they are true duplicates:**
 ```bash
@@ -249,7 +248,6 @@ TO_REMOVE=(
   "area-context-create"
   "skill-creator"
   "docs-create"
-  "parallelize-cloud-work"
   "backend-engineer"  # Check if this is a duplicate
 )
 
@@ -273,7 +271,7 @@ TO_REMOVE=(
 cd ~/affordabot
 
 # Remove duplicates (VERIFY EACH ONE FIRST)
-for skill in beads-workflow create-pull-request finish-feature area-context-create skill-creator docs-create parallelize-cloud-work; do
+for skill in beads-workflow create-pull-request finish-feature area-context-create skill-creator docs-create; do
   if [ -d ".claude/skills/$skill" ]; then
     echo "Removing duplicate: $skill"
     rm -rf ".claude/skills/$skill"
@@ -309,7 +307,6 @@ Removed skills that duplicate agent-skills:
 - area-context-create (use search/area-context-create)
 - skill-creator (use extended/skill-creator)
 - docs-create (use search/docs-create)
-- parallelize-cloud-work (use extended/parallelize-cloud-work)
 
 Kept repo-specific context-* skills (11 total).
 
@@ -320,7 +317,7 @@ git push
 
 **Mark complete:**
 ```bash
-bd update agent-skills-aro.4 --status closed --reason "Removed 7 duplicate skills, kept 11 context-* skills"
+bd update agent-skills-aro.4 --status closed --reason "Removed 6 duplicate skills, kept 11 context-* skills"
 ```
 
 ---
@@ -807,7 +804,6 @@ bd update agent-skills-aro --status closed --reason "All subtasks complete"
 | REMOVE | `area-context-create` (use `search/area-context-create`) |
 | REMOVE | `skill-creator` (use `extended/skill-creator`) |
 | REMOVE | `docs-create` (use `search/docs-create`) |
-| REMOVE | `parallelize-cloud-work` (use `extended/parallelize-cloud-work`) |
 | KEEP | `context-admin-ui` |
 | KEEP | `context-analytics` |
 | KEEP | `context-database-schema` |
