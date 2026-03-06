@@ -4,7 +4,11 @@
 #
 # Cron wrapper for Fleet audit posting.
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 # Produces deterministic one-message payloads for #fleet-events.
+=======
+# Produces deterministic one-message payloads for #dx-alerts.
+>>>>>>> Stashed changes
 =======
 # Produces deterministic one-message payloads for #dx-alerts.
 >>>>>>> Stashed changes
@@ -68,7 +72,11 @@ main() {
   local manifest_channel
   local log_file="${HOME}/logs/dx-audit.log"
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   local channel="#fleet-events"
+=======
+  local channel="#dx-alerts"
+>>>>>>> Stashed changes
 =======
   local channel="#dx-alerts"
 >>>>>>> Stashed changes
@@ -95,7 +103,10 @@ main() {
     channel="$manifest_channel"
   fi
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   channel="$(agent_coordination_resolve_channel "${DX_ALERTS_CHANNEL_ID:-$channel}")"
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 
@@ -113,7 +124,11 @@ main() {
   fi
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   if agent_coordination_send_message "$message" "$channel"; then
+=======
+  if agent_coordination_send_message "$message" "${DX_ALERTS_CHANNEL_ID:-$channel}"; then
+>>>>>>> Stashed changes
 =======
   if agent_coordination_send_message "$message" "${DX_ALERTS_CHANNEL_ID:-$channel}"; then
 >>>>>>> Stashed changes

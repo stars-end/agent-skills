@@ -45,6 +45,10 @@ WEEKLY_CHECK_IDS_DEFAULT=(
   cron_health
   service_cap_and_forbidden_components
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+  trailer_compliance
+>>>>>>> Stashed changes
 =======
   trailer_compliance
 >>>>>>> Stashed changes
@@ -188,7 +192,12 @@ manifest_scalar_audit() {
     in_audit && in_section && $0 ~ "^" key {
       value=$0
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
       sub(/^[[:space:]]*[^:]+:[[:space:]]*/, "", value)
+=======
+      sub(/^[^:]+:[[:space:]]*/, "", value)
+      gsub(/#.*/, "", value)
+>>>>>>> Stashed changes
 =======
       sub(/^[^:]+:[[:space:]]*/, "", value)
       gsub(/#.*/, "", value)
@@ -547,6 +556,7 @@ gemini_artifacts_present() {
 
   if [[ -x "${HOME}/.gemini/gemini" ]] || [[ -x "${HOME}/.gemini/gemini-cli" ]] || command -v gemini >/dev/null 2>&1 || command -v gemini-cli >/dev/null 2>&1; then
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     return 0
   fi
   return 1
@@ -761,6 +771,55 @@ weekly_check_ide_config() {
     return
   fi
 
+=======
+    return 0
+  fi
+  return 1
+}
+
+gemini_enforcement_state() {
+  if gemini_artifacts_present; then
+    local marker="${STATE_ROOT}/enforcement/gemini-enforcement.json"
+    [[ -f "$marker" ]] && rm -f "$marker"
+    echo "pass"
+    return
+  fi
+
+  local marker="${STATE_ROOT}/enforcement/gemini-enforcement.json"
+  local now_epoch
+  local first_epoch
+  now_epoch="$(date -u +%s)"
+  mkdir -p "$(dirname "$marker")"
+  first_epoch="$(sed -n '1p' "$marker" 2>/dev/null || printf '')"
+  if [[ -z "$first_epoch" || ! "$first_epoch" =~ ^[0-9]+$ ]]; then
+    first_epoch="$now_epoch"
+    printf '%s\n' "$first_epoch" > "$marker"
+  fi
+
+  local days_missing
+  days_missing=$(( (now_epoch - first_epoch) / 86400 ))
+  if [[ "$days_missing" -le "$GEMINI_GRACE_DAYS" ]]; then
+    echo "warn"
+  elif [[ "$days_missing" -gt "$GEMINI_ENFORCE_AFTER" ]]; then
+    echo "fail"
+  else
+    echo "warn"
+  fi
+}
+
+weekly_check_ide_config() {
+  local local_host="local"
+  local missing=0
+  local file
+  for file in "${HOME}/.claude/settings.json" "${HOME}/.claude.json" "${HOME}/.codex/config.toml" "${HOME}/.opencode/config.json" "${HOME}/.gemini/antigravity/mcp_config.json"; do
+    [[ -f "$file" ]] || missing=$((missing + 1))
+  done
+  if [[ "$missing" -gt 0 ]]; then
+    append_weekly_check "ide_config_presence_and_drift" "$local_host" "fail" "high" "Missing canonical IDE config files required by governance checks"
+    return
+  fi
+
+>>>>>>> Stashed changes
   local gemini_state
   gemini_state="$(gemini_enforcement_state)"
   if [[ "$gemini_state" == "fail" ]]; then
@@ -838,6 +897,9 @@ weekly_check_railway_auth() {
   fi
 }
 
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 weekly_check_gh_readiness() {
   local local_host="local"
@@ -871,6 +933,12 @@ run_weekly_governance() {
         weekly_check_service_capabilities
         ;;
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+      trailer_compliance)
+        weekly_check_trailer_compliance
+        ;;
+>>>>>>> Stashed changes
 =======
       trailer_compliance)
         weekly_check_trailer_compliance

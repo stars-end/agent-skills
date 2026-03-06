@@ -267,7 +267,10 @@ agent_coordination_send_message() {
 
   agent_coordination_prepare_transport
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   channel="$(agent_coordination_resolve_channel "$channel")"
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
   webhook_url="${DX_SLACK_WEBHOOK:-${DX_ALERTS_WEBHOOK:-}}"

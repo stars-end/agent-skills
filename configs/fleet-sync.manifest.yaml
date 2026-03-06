@@ -41,6 +41,10 @@ audit:
     - cron_health
     - service_cap_and_forbidden_components
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+    - trailer_compliance
+>>>>>>> Stashed changes
 =======
     - trailer_compliance
 >>>>>>> Stashed changes
@@ -53,7 +57,11 @@ audit:
     unknown_host_escalation_runs: 3
   slack:
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     channel: "#fleet-events"
+=======
+    channel: "#dx-alerts"
+>>>>>>> Stashed changes
 =======
     channel: "#dx-alerts"
 >>>>>>> Stashed changes
