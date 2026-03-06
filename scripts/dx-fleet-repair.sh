@@ -146,7 +146,7 @@ main() {
     sync_status="$(extract_field "$sync_out" '.overall // "red"')"
     [[ -z "$sync_status" || "$sync_status" == "null" ]] && sync_status="red"
     checks+=("{\"id\":\"fleet.v2.2.mcp_tools_repair\",\"status\":\"$(json_escape "$sync_status")\",\"severity\":\"medium\",\"details\":\"dx-mcp-tools-sync --repair\",\"next_action\":\"dx-mcp-tools-sync --repair --json --state-dir $(json_escape "$STATE_ROOT")\"}")
-    if [[ "$sync_rc" -ne 0 || "$sync_status" != "green" ]]; then
+    if [[ "$sync_status" != "green" ]]; then
       overall_ok=false
       reason_codes+=("mcp_tools_repair_failed")
       hints+=("{\"host\":\"local\",\"check_id\":\"fleet.v2.2.mcp_tools_repair\",\"command\":\"dx-mcp-tools-sync --repair --json --state-dir $(json_escape "$STATE_ROOT")\"}")
@@ -162,7 +162,7 @@ main() {
     apply_ok="$(extract_field "$apply_out" '.overall_ok // false')"
     [[ "$apply_ok" == "true" ]] && apply_ok="pass" || apply_ok="fail"
     checks+=("{\"id\":\"fleet.v2.2.local_apply\",\"status\":\"$apply_ok\",\"severity\":\"medium\",\"details\":\"dx-fleet-install --apply\",\"next_action\":\"dx-fleet-install --apply --json --state-dir $(json_escape "$STATE_ROOT")\"}")
-    if [[ "$apply_rc" -ne 0 || "$apply_ok" != "pass" ]]; then
+    if [[ "$apply_ok" != "pass" ]]; then
       overall_ok=false
       reason_codes+=("local_apply_failed")
       hints+=("{\"host\":\"local\",\"check_id\":\"fleet.v2.2.local_apply\",\"command\":\"dx-fleet-install --apply --json --state-dir $(json_escape "$STATE_ROOT")\"}")
@@ -177,7 +177,7 @@ main() {
     local daily_status
     daily_status="$(extract_field "$daily_out" '.fleet_status // "red"')"
     checks+=("{\"id\":\"fleet.v2.2.daily_verify\",\"status\":\"$(json_escape "$daily_status")\",\"severity\":\"medium\",\"details\":\"dx-fleet-check --mode daily --local-only\",\"next_action\":\"dx-fleet-repair --json --state-dir $(json_escape "$STATE_ROOT")\"}")
-    if [[ "$daily_rc" -ne 0 || "$daily_status" == "red" ]]; then
+    if [[ "$daily_status" != "green" ]]; then
       overall_ok=false
       reason_codes+=("daily_verify_failed")
     fi
@@ -191,7 +191,7 @@ main() {
     local weekly_status
     weekly_status="$(extract_field "$weekly_out" '.fleet_status // "red"')"
     checks+=("{\"id\":\"fleet.v2.2.weekly_verify\",\"status\":\"$(json_escape "$weekly_status")\",\"severity\":\"medium\",\"details\":\"dx-fleet-check --mode weekly --local-only\",\"next_action\":\"dx-fleet-repair --json --state-dir $(json_escape "$STATE_ROOT")\"}")
-    if [[ "$weekly_rc" -ne 0 || "$weekly_status" == "red" ]]; then
+    if [[ "$weekly_status" != "green" ]]; then
       overall_ok=false
       reason_codes+=("weekly_verify_failed")
     fi

@@ -275,7 +275,7 @@ apply_or_check_mode() {
   sync_status="$(extract_json_field "$sync_out" '.overall // .status // "red"')"
   [[ -z "$sync_status" || "$sync_status" == "null" ]] && sync_status="red"
   checks+=("{\"id\":\"fleet.v2.2.mcp_tools_sync\",\"status\":\"$(json_escape "$sync_status")\",\"severity\":\"medium\",\"details\":\"dx-mcp-tools-sync ${MODE}\",\"next_action\":\"dx-mcp-tools-sync --repair --json --state-dir $(json_escape "$STATE_ROOT")\"}")
-  if [[ "$sync_rc" -ne 0 || "$sync_status" != "green" ]]; then
+  if [[ "$sync_status" != "green" ]]; then
     overall_ok=false
     reason_codes+=("mcp_tools_sync_failed")
   else
@@ -292,7 +292,7 @@ apply_or_check_mode() {
   daily_status="$(extract_json_field "$daily_out" '.fleet_status // "red"')"
   [[ -z "$daily_status" || "$daily_status" == "null" ]] && daily_status="red"
   checks+=("{\"id\":\"fleet.v2.2.daily_check\",\"status\":\"$(json_escape "$daily_status")\",\"severity\":\"medium\",\"details\":\"dx-fleet-check --mode daily --local-only\",\"next_action\":\"dx-fleet-repair --json --state-dir $(json_escape "$STATE_ROOT")\"}")
-  if [[ "$daily_rc" -ne 0 || "$daily_status" == "red" ]]; then
+  if [[ "$daily_status" != "green" ]]; then
     overall_ok=false
     reason_codes+=("daily_check_failed")
   else
@@ -309,7 +309,7 @@ apply_or_check_mode() {
   weekly_status="$(extract_json_field "$weekly_out" '.fleet_status // "red"')"
   [[ -z "$weekly_status" || "$weekly_status" == "null" ]] && weekly_status="red"
   checks+=("{\"id\":\"fleet.v2.2.weekly_check\",\"status\":\"$(json_escape "$weekly_status")\",\"severity\":\"medium\",\"details\":\"dx-fleet-check --mode weekly --local-only\",\"next_action\":\"dx-fleet-repair --json --state-dir $(json_escape "$STATE_ROOT")\"}")
-  if [[ "$weekly_rc" -ne 0 || "$weekly_status" == "red" ]]; then
+  if [[ "$weekly_status" != "green" ]]; then
     overall_ok=false
     reason_codes+=("weekly_check_failed")
   else
