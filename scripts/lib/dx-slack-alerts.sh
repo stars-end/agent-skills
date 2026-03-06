@@ -21,7 +21,7 @@ set -euo pipefail
 # - Resolves channel by ENVIRONMENT:
 #   - production/prod -> C0AE2SPCY2Y (#railway-prod-alerts)
 #   - staging       -> C0AG61W6TU5 (#railway-staging-alerts)
-#   - others (default) -> C0AEC54RZ6V (#railway-dev-alerts)
+#   - others (default) -> C0A8YU9JW06 (#fleet-events)
 #
 # Optional override:
 #   - DX_ALERTS_CHANNEL_ID can point to a fixed Slack channel ID.
@@ -165,7 +165,7 @@ agent_coordination_default_channel() {
       echo "C0AG61W6TU5"
       ;;
     *)
-      echo "C0AEC54RZ6V"
+      echo "C0A8YU9JW06"
       ;;
   esac
 }
@@ -177,7 +177,10 @@ agent_coordination_resolve_channel() {
   fi
   # Human-readable alias used by Fleet Sync manifests/runbooks.
   if [[ "$channel" == "#dx-alerts" ]]; then
-    channel="${DX_ALERTS_CHANNEL_ID:-C0AEC54RZ6V}"
+    channel="${DX_ALERTS_CHANNEL_ID:-C0A8YU9JW06}"
+  fi
+  if [[ "$channel" == "#fleet-events" ]]; then
+    channel="${DX_ALERTS_CHANNEL_ID:-C0A8YU9JW06}"
   fi
   printf '%s' "$channel"
 }

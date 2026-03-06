@@ -184,8 +184,7 @@ manifest_scalar_audit() {
     in_audit && in_section && $0 !~ /^  / { in_section=0; in_key=0; next }
     in_audit && in_section && $0 ~ "^" key {
       value=$0
-      sub(/^[^:]+:[[:space:]]*/, "", value)
-      gsub(/#.*/, "", value)
+      sub(/^[[:space:]]*[^:]+:[[:space:]]*/, "", value)
       gsub(/^"|"$/, "", value)
       gsub(/^'\''|'\''$/, "", value)
       value=trim(value)

@@ -3,7 +3,7 @@
 # dx-audit-cron.sh
 #
 # Cron wrapper for Fleet audit posting.
-# Produces deterministic one-message payloads for #dx-alerts.
+# Produces deterministic one-message payloads for #fleet-events.
 #
 set -euo pipefail
 
@@ -63,7 +63,7 @@ main() {
   local message
   local manifest_channel
   local log_file="${HOME}/logs/dx-audit.log"
-  local channel="#dx-alerts"
+  local channel="#fleet-events"
   local audit_exit=0
   mkdir -p "$(dirname "$log_file")"
 

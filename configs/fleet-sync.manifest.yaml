@@ -49,7 +49,7 @@ audit:
     dolt_stale_minutes: 15
     unknown_host_escalation_runs: 3
   slack:
-    channel: "#dx-alerts"
+    channel: "#fleet-events"
     post_on_green: true
     thread_mode: false
   gemini_enforcement:

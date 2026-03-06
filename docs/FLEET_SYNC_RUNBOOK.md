@@ -6,7 +6,7 @@ This runbook defines deterministic fleet health operations for v2.2:
 
 - Daily fleet runtime checks
 - Weekly governance/compliance audits
-- Deterministic Slack alerting to `#dx-alerts`
+- Deterministic Slack alerting to `#fleet-events` via Agent Coordination
 
 ## Commands
 
@@ -41,7 +41,7 @@ Use `scripts/dx-audit-cron.sh`:
 - Daily: `scripts/dx-audit-cron.sh --daily --state-dir ~/.dx-state/fleet`
 - Weekly: `scripts/dx-audit-cron.sh --weekly --state-dir ~/.dx-state/fleet`
 
-Each wrapper invocation emits one deterministic message and sends one `#dx-alerts` post.
+Each wrapper invocation emits one deterministic message and sends one `#fleet-events` post.
 
 Dry-run:
 

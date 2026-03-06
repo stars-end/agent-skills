@@ -50,7 +50,7 @@ Daily JSON must include:
 
 `scripts/dx-audit-cron.sh --daily` is the deterministic daily posting path:
 
-- one daily message in `#dx-alerts`
+- one daily message in `#fleet-events` (Agent Coordination deterministic transport)
 - exact mode in payload: `fleet_status` + check counts
 
 If transport readiness is missing, audit command still writes state but wrapper exits non-zero without silent success.
