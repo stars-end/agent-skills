@@ -1,85 +1,106 @@
-# Fleet Sync Runbook
+# Fleet Sync Runbook (v2.3)
 
-## Scope
+## Purpose
 
-This runbook defines deterministic fleet health operations for v2.2:
+Operate Fleet Sync with low founder load:
 
-- Daily fleet runtime checks
-- Weekly governance/compliance audits
-- Deterministic Slack alerting to `#fleet-events` via Agent Coordination
+- one command family
+- daily runtime checks
+- weekly governance checks
+- deterministic Slack messages to `#fleet-events`
 
-## Commands
+## Canonical Commands
 
-- Daily runtime check snapshot:
+### Host convergence
 
 ```bash
-~/agent-skills/scripts/dx-fleet.sh check --json --state-dir ~/.dx-state/fleet
+~/agent-skills/scripts/dx-fleet-install.sh --apply --json --state-dir ~/.dx-state/fleet
+~/agent-skills/scripts/dx-fleet-check.sh --mode daily --json --state-dir ~/.dx-state/fleet
+~/agent-skills/scripts/dx-fleet-check.sh --mode weekly --json --state-dir ~/.dx-state/fleet
 ```
 
-- Daily repair (lean):
+### Fleet views
+
+```bash
+~/agent-skills/scripts/dx-fleet.sh audit --daily --json --state-dir ~/.dx-state/fleet
+~/agent-skills/scripts/dx-fleet.sh audit --weekly --json --state-dir ~/.dx-state/fleet
+```
+
+### Repair
 
 ```bash
 ~/agent-skills/scripts/dx-fleet.sh repair --json --state-dir ~/.dx-state/fleet
 ```
 
-- Daily audit:
+## Cross-VM Rollout
 
 ```bash
-~/agent-skills/scripts/dx-fleet.sh audit --daily --json --state-dir ~/.dx-state/fleet
+for vm in macmini homedesktop-wsl epyc6 epyc12; do
+  ssh "$vm" "~/agent-skills/scripts/dx-fleet-install.sh --apply --json --state-dir ~/.dx-state/fleet"
+done
+
+for vm in macmini homedesktop-wsl epyc6 epyc12; do
+  ssh "$vm" "~/agent-skills/scripts/dx-fleet-check.sh --mode daily --json --state-dir ~/.dx-state/fleet"
+  ssh "$vm" "~/agent-skills/scripts/dx-fleet-check.sh --mode weekly --json --state-dir ~/.dx-state/fleet"
+done
 ```
 
-- Weekly audit:
+## Cron
 
-```bash
-~/agent-skills/scripts/dx-fleet.sh audit --weekly --json --state-dir ~/.dx-state/fleet
-```
-
-## Cron Wiring
-
-Use `scripts/dx-audit-cron.sh`:
+Single canonical cron wrapper:
 
 - Daily: `scripts/dx-audit-cron.sh --daily --state-dir ~/.dx-state/fleet`
 - Weekly: `scripts/dx-audit-cron.sh --weekly --state-dir ~/.dx-state/fleet`
 
-Each wrapper invocation emits one deterministic message and sends one `#fleet-events` post.
-
-Dry-run:
+Dry-run checks:
 
 ```bash
 ~/agent-skills/scripts/dx-audit-cron.sh --daily --dry-run --state-dir ~/.dx-state/fleet
+~/agent-skills/scripts/dx-audit-cron.sh --weekly --dry-run --state-dir ~/.dx-state/fleet
 ```
 
-## Severity Mapping and Escalation
+## Escalation Mapping
 
-- `green`: no action required
+- `green`: no action
 - `yellow`: run `dx-fleet repair --json`
-- `red`: dispatch repair immediately
-- `unknown`: inspect stale-host history, then dispatch on policy
+- `red`: run repair on failing hosts and rerun checks
+- `unknown`: treat as incident if repeated and investigate host reachability/state freshness
 
-On red/fail from audit:
+## Freshness / Remote Snapshot Rules
 
-- Dispatch `dx-fleet repair --json`.
+Remote host payloads fail deterministically when:
 
-## Backward Compatibility / Migration
+- snapshot missing (`remote_snapshot_missing`)
+- snapshot stale beyond `audit.thresholds.tool_stale_hours` (`remote_snapshot_stale`)
+- payload invalid (`remote_snapshot_unparseable`)
 
-- New writes only to `~/.dx-state/fleet/`.
-- Reads continue from legacy roots for now:
-  - `~/.dx-state/fleet-sync/`
-  - `~/.dx-state/fleet_sync/`
+## Artifact Paths
 
-Rollback:
+- `~/.dx-state/fleet/tool-health.json`
+- `~/.dx-state/fleet/tool-health.lines`
+- `~/.dx-state/fleet/mcp-tools-sync.json`
+- `~/.dx-state/fleet/audit/daily/latest.json`
+- `~/.dx-state/fleet/audit/daily/history/YYYY-MM-DD.json`
+- `~/.dx-state/fleet/audit/weekly/latest.json`
+- `~/.dx-state/fleet/audit/weekly/history/YYYY-WW.json`
 
-- If a script regression is suspected, set `DX_FLEET_STATE_ROOT` back to `~/.dx-state/fleet-sync` in automation temporarily.
-- Temporarily disable weekly governance by running daily mode only (no code changes; do not delete state).
+## Compatibility / Migration
 
-## Failure Modes
+Reads still tolerate:
 
-- Missing `jq`/`python3`: both weekly and daily audit commands use fallback parsing where possible.
-- Invalid JSON from `dx-audit.sh`: cron wrapper exits non-zero and logs failure without sending.
+- `~/.dx-state/fleet-sync/`
+- `~/.dx-state/fleet_sync/`
 
-## Evidence Artifact Paths
+Writes are canonicalized to `~/.dx-state/fleet/`.
 
-- Daily latest: `~/.dx-state/fleet/audit/daily/latest.json`
-- Daily history: `~/.dx-state/fleet/audit/daily/history/YYYY-MM-DD.json`
-- Weekly latest: `~/.dx-state/fleet/audit/weekly/latest.json`
-- Weekly history: `~/.dx-state/fleet/audit/weekly/history/YYYY-WW.json`
+## Disable / Rollback
+
+Temporary disable:
+
+- stop cron entries for `dx-audit-cron.sh`
+
+Fail-open rollback:
+
+```bash
+~/agent-skills/scripts/dx-fleet-install.sh --uninstall --json --state-dir ~/.dx-state/fleet
+```

@@ -71,6 +71,7 @@ tools:
       - codex-cli
       - claude-code
       - opencode
+      - gemini-cli
     mcp:
       type: stdio
       command: "tldr-mcp"
@@ -85,6 +86,7 @@ render:
     claude-code: ~/.claude.json
     antigravity: ~/.gemini/antigravity/mcp_config.json
     opencode: ~/.opencode/config.json
+    gemini-cli: ~/.gemini/antigravity/mcp_config.json
 
 verification:
   require_manifests:

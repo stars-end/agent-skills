@@ -1,8 +1,8 @@
-# Fleet Daily Audit Runbook (V2.2)
+# Fleet Audit Daily Runbook (Fleet Sync v2.3)
 
-## Purpose
+## Goal
 
-Daily audit is deterministic runtime-only validation. It consumes Fleet Sync output artifacts and avoids broad platform checks.
+Provide one deterministic daily fleet runtime health result across all canonical VMs.
 
 ## Command
 
@@ -10,7 +10,7 @@ Daily audit is deterministic runtime-only validation. It consumes Fleet Sync out
 ~/agent-skills/scripts/dx-fleet.sh audit --daily --json --state-dir ~/.dx-state/fleet
 ```
 
-## Exact Required Check IDs
+## Daily required checks
 
 - `beads_dolt`
 - `tool_mcp_health`
@@ -18,39 +18,42 @@ Daily audit is deterministic runtime-only validation. It consumes Fleet Sync out
 - `op_auth_readiness`
 - `alerts_transport_readiness`
 
-## Accepted Severities
+## Host scope
 
-- `green`/`pass`: stable.
-- `yellow`/`warn`: remediation suggestion required (`repair_hints`).
-- `red`/`fail`: immediate repair dispatch.
-- `unknown`: deterministic retry after environment convergence.
+Cross-VM fanout across:
 
-## Failure Handling
+- `macmini`
+- `homedesktop-wsl`
+- `epyc6`
+- `epyc12`
 
-1. On `yellow`: queue normal repair command and rerun audit.
-2. On `red`: dispatch immediate repair:
-   - `~/agent-skills/scripts/dx-fleet.sh repair --json --state-dir ~/.dx-state/fleet`
-3. Preserve output artifact for forensics:
-   - `~/.dx-state/fleet/audit/daily/latest.json`
+## Cron
 
-## Expected JSON
+```bash
+~/agent-skills/scripts/dx-audit-cron.sh --daily --state-dir ~/.dx-state/fleet
+```
 
-Daily JSON must include:
+Dry-run:
 
-- `mode: "daily"`
-- `fleet_status`
-- `summary` with counts and host stats
-- `hosts`
-- `checks`
-- `repair_hints`
-- `reason_codes`
-- `state_paths`
+```bash
+~/agent-skills/scripts/dx-audit-cron.sh --daily --dry-run --state-dir ~/.dx-state/fleet
+```
 
-## Slack Posting
+## Severity semantics
 
-`scripts/dx-audit-cron.sh --daily` is the deterministic daily posting path:
+- `green`: no action
+- `yellow`: run `dx-fleet repair --json`
+- `red`: repair failing hosts, rerun daily audit
 
-- one daily message in `#fleet-events` (Agent Coordination deterministic transport)
-- exact mode in payload: `fleet_status` + check counts
+## Remote freshness enforcement
 
-If transport readiness is missing, audit command still writes state but wrapper exits non-zero without silent success.
+Any host is failed when remote snapshot is stale or missing:
+
+- `remote_snapshot_missing`
+- `remote_snapshot_stale`
+- `remote_snapshot_unparseable`
+
+## Artifacts
+
+- `~/.dx-state/fleet/audit/daily/latest.json`
+- `~/.dx-state/fleet/audit/daily/history/YYYY-MM-DD.json`

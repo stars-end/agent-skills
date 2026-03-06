@@ -6,23 +6,33 @@ echo "🩺 mcp-doctor — canonical MCP + CLI checks (no secrets)"
 STRICT="${MCP_DOCTOR_STRICT:-0}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILLS_DIR="${SKILLS_DIR:-"$(cd "${SCRIPT_DIR}/.." && pwd)"}"
+SKILLS_DIR="${SKILLS_DIR:-"$(cd "${SCRIPT_DIR}/../.." && pwd)"}"
 MANIFEST_PATH="${SKILLS_DIR}/configs/fleet-sync.manifest.yaml"
+CANONICAL_TARGETS="${SKILLS_DIR}/scripts/canonical-targets.sh"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
-FILES=(
+FILES_BASE=(
   "$REPO_ROOT/.claude/settings.json"
   "$REPO_ROOT/.vscode/mcp.json"
   "$REPO_ROOT/codex.mcp.json"
   "$REPO_ROOT/.mcp.json"
   "$REPO_ROOT/opencode.json"
-  "$HOME/.claude/settings.json"
-  "$HOME/.claude.json"
-  "$HOME/.codex/config.toml"
-  "$HOME/.gemini/antigravity/mcp_config.json"
-  "$HOME/.opencode/config.json"
 )
+
+FILES=("${FILES_BASE[@]}")
+
+if [[ -f "$CANONICAL_TARGETS" ]]; then
+  # shellcheck disable=SC1090
+  source "$CANONICAL_TARGETS"
+  if declare -p CANONICAL_IDES >/dev/null 2>&1; then
+    for ide in "${CANONICAL_IDES[@]}"; do
+      while IFS= read -r artifact; do
+        [[ -n "$artifact" ]] && FILES+=("$artifact")
+      done < <(get_ide_artifacts "$ide" 2>/dev/null || true)
+    done
+  fi
+fi
 
 GEMINI_GRACE_DAYS=7
 GEMINI_ENFORCE_AFTER=7
@@ -353,8 +363,9 @@ fi
 echo ""
 echo "SLACK MCP configuration (canonical IDEs):"
 
-# Check for Slack MCP in canonical IDE configs
-# Canonical IDEs: antigravity, claude-code, codex-cli, opencode
+# Check for Slack MCP in canonical IDE configs.
+# Canonical IDEs: antigravity, claude-code, codex-cli, opencode, gemini-cli.
+# gemini-cli shares canonical MCP profile with antigravity.
 SLACK_MCP_CONFIGURED=false
 
 # Check antigravity config

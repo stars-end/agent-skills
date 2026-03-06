@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  dx-fleet check [--json]
+  dx-fleet check [--mode daily|weekly] [--json]
   dx-fleet repair [--json]
   dx-fleet audit --daily|--weekly [--json] [--state-dir DIR]
 
