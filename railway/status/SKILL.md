@@ -64,7 +64,24 @@ If status returns "No linked project":
 
 > No Railway project linked to this directory.
 >
-> To link an existing project: `railway link`
+> **CRITICAL**: Agents must provide ALL required flags for non-interactive use:
+> ```bash
+> # CORRECT - Non-interactive
+> railway link --project <id-or-name> --environment <env> --json
+>
+> # WRONG - Will block waiting for input
+> railway link
+> ```
+>
+> To create a new project: `railway init`
+>
+> Or for linking:
+> ```bash
+> railway link --project <id-or-name> --environment <env> [--service <service>] --json
+> ```
+>
+> **NEVER run**: `railway link` (missing required flags)
+>
 > To create a new project: `railway init`
 
 ## Presenting Status

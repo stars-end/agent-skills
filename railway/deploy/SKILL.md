@@ -96,7 +96,12 @@ more context, use `deployment` skill with `--lines` flag (never stream).
 
 ### No Project Linked
 ```
-No Railway project linked. Run `railway link` first.
+No Railway project linked.
+
+CRITICAL: Agents must use --project and --environment flags with railway up:
+  railway up --project <project-id> --environment <env> --detach
+
+NEVER run: railway link (requires interactive prompts)
 ```
 
 ### No Service Linked

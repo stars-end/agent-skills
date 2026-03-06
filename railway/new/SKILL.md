@@ -416,8 +416,8 @@ User: "add a python api to my project"
 ```
 User: "connect to my backend project and add a worker service"
 
-1. railway list --json → find "backend"
-2. railway link -p backend
+1. railway list --json → find "backend" project ID
+2. railway link --project <backend-id> --environment dev --service backend --json
 3. railway add --service worker
 4. Guide setup based on worker type
 ```
@@ -432,7 +432,7 @@ User: "deploy to railway"
 3. Directory is "my-app", found project "my-app"
 4. Ask: "Found existing project 'my-app'. Link to it or create new?"
 5. User: "link"
-6. railway link -p my-app
+6. railway link --project my-app --environment staging --json
 7. Ask: "Create a service for this code?"
 ```
 
