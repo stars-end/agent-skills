@@ -196,12 +196,14 @@ railway whoami --json | jq '.workspaces[] | select(.name | test("personal"; "i")
 railway link -p <project>
 ```
 
+**CRITICAL**: Never run `railway link` without the `-p` flag. Interactive prompts block agents.
+
 Options:
 
-- `-p, --project` - Project name or ID
+- `-p, --project` - Project name or ID (REQUIRED)
 - `-e, --environment` - Environment (default: production)
 - `-s, --service` - Service to link
-- `-t, --team` - Team/workspace
+- `-w, --workspace` - Workspace name or ID
 
 ## Create Service
 

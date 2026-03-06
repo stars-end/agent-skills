@@ -107,6 +107,31 @@ railway status            # Should show project context
 - \`railway whoami\` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
 - Token file not found → Run \`~/agent-skills/scripts/create-op-credential.sh\`
 
+### 5.2) Railway Link Warning (CRITICAL)
+
+**NEVER run \`railway link\` without arguments.**
+
+Agents get stuck in interactive prompts when running bare \`railway link\`. Always provide full arguments:
+
+\`\`\`bash
+# CORRECT - non-interactive
+railway link -p <project-name-or-id> -e <environment> -s <service>
+
+# WRONG - interactive (blocks agents)
+railway link
+\`\`\`
+
+**Arguments:**
+- \`-p, --project\` - Project name or ID (REQUIRED)
+- \`-e, --environment\` - Environment name (optional, default: linked env)
+- \`-s, --service\` - Service name (optional, for service-specific context)
+- \`-w, --workspace\` - Workspace name or ID (optional)
+
+**Use cases:**
+- Linking a worktree: \`railway link -p prime-radiant-ai -e dev -s backend\`
+- Quick project link: \`railway link -p my-project\`
+- Check current link: \`railway status --json\`
+
 ## 6) Parallel Agent Orchestration (V8.4)
 
 ### Pattern: Plan-First, Batch-Second, Commit-Only

@@ -64,8 +64,10 @@ If status returns "No linked project":
 
 > No Railway project linked to this directory.
 >
-> To link an existing project: `railway link`
+> To link an existing project: `railway link -p <project-name-or-id>`
 > To create a new project: `railway init`
+>
+> **CRITICAL**: Never run `railway link` without arguments. It launches interactive prompts that block agents.
 
 ## Presenting Status
 

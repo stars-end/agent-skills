@@ -96,7 +96,9 @@ more context, use `deployment` skill with `--lines` flag (never stream).
 
 ### No Project Linked
 ```
-No Railway project linked. Run `railway link` first.
+No Railway project linked. Run `railway link -p <project-name-or-id>` first.
+
+CRITICAL: Never run `railway link` without arguments - it launches interactive prompts that block agents.
 ```
 
 ### No Service Linked

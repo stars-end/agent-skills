@@ -408,7 +408,9 @@ You don't have permission to modify this environment. Check your Railway role.
 ### No Linked Project
 
 ```
-No project linked. Run `railway link` to link a project.
+No project linked. Run `railway link -p <project-name-or-id>` to link a project.
+
+CRITICAL: Never run `railway link` without arguments - it launches interactive prompts that block agents.
 ```
 
 ## Composability

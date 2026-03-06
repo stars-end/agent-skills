@@ -49,11 +49,12 @@ Link a different project to the current directory:
 railway link -p <project-id-or-name>
 ```
 
-Or interactively:
+**CRITICAL**: Never run `railway link` without the `-p` flag. Interactive prompts block agents.
 
-```bash
-railway link
-```
+Options:
+- `-p, --project` - Project name or ID (REQUIRED)
+- `-e, --environment` - Environment name (optional)
+- `-s, --service` - Service name (optional)
 
 After switching, use `status` skill to see project details.
 
