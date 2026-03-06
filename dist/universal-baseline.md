@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: ee1c022f835054f2372a82e2073a202946341386 -->
-<!-- Last updated: 2026-03-06 09:39:03 UTC -->
+<!-- Source SHA: 3d17d127fa540ddfb8ae03d2949813eae7869ece -->
+<!-- Last updated: 2026-03-06 10:41:16 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -18,10 +18,10 @@ Support a startup founder balancing high-leverage technical work and family resp
 
 ## 1) Canonical Repository Rules
 **Canonical repositories** (read-mostly clones):
-- `~/agent-skills`
-- `~/prime-radiant-ai`
-- `~/affordabot`
-- `~/llm-common`
+- \`~/agent-skills\`
+- \`~/prime-radiant-ai\`
+- \`~/affordabot\`
+- \`~/llm-common\`
 
 ### Enforcement
 **Primary**: Git pre-commit hook blocks commits when not in worktree
@@ -29,33 +29,33 @@ Support a startup founder balancing high-leverage technical work and family resp
 
 ### Workflow
 Always use worktrees for development:
-```bash
+\`\`\`bash
 dx-worktree create bd-xxxx repo-name
 cd /tmp/agents/bd-xxxx/repo-name
 # Work here
-```
+\`\`\`
 
 ## 1.5) Canonical Beads Contract (V8.4)
-- **Canonical Beads repo is always `~/bd`** (remote must be `stars-end/bd`).
-- **Run `dx-runner` / `dx-batch` control-plane commands from `~/bd`**.
-- **Never run mutating Beads commands from app repos** (`~/prime-radiant-ai`, `~/agent-skills`, etc.) unless explicitly using a documented override.
+- **Canonical Beads repo is always \`~/bd\`** (remote must be \`stars-end/bd\`).
+- **Run \`dx-runner\` / \`dx-batch\` control-plane commands from \`~/bd\`**.
+- **Never run mutating Beads commands from app repos** (\`~/prime-radiant-ai\`, \`~/agent-skills\`, etc.) unless explicitly using a documented override.
 - **Backend must be Dolt server mode** for multi-VM/multi-agent reliability.
-- **Legacy macOS `io.agentskills.ru` LaunchAgent is disabled by policy** (use cron/systemd schedules only).
-- **Before dispatch**: verify `bd dolt test --json` succeeds and Beads service is active on the host.
+- **Legacy macOS \`io.agentskills.ru\` LaunchAgent is disabled by policy** (use cron/systemd schedules only).
+- **Before dispatch**: verify \`bd dolt test --json\` succeeds and Beads service is active on the host.
 - **Host service contract**:
-  - Linux canonical VMs: `systemctl --user is-active beads-dolt.service`
-  - macOS canonical host: `launchctl print gui/$(id -u)/com.starsend.beads-dolt`
-- **Source-of-truth runbook**: `~/agent-skills/docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md`
+  - Linux canonical VMs: \`systemctl --user is-active beads-dolt.service\`
+  - macOS canonical host: \`launchctl print gui/\$(id -u)/com.starsend.beads-dolt\`
+- **Source-of-truth runbook**: \`~/agent-skills/docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md\`
 
 ## 2) V8 DX Automation Rules
 1. **No auto-merge**: never enable auto-merge on PRs — humans merge
 2. **No PR factory**: one PR per meaningful unit of work
 3. **No canonical writes**: always use worktrees
-4. **Feature-Key mandatory**: every commit needs `Feature-Key: bd-<beads-id>`
+4. **Feature-Key mandatory**: every commit needs \`Feature-Key: bd-<beads-id>\`
 
 ## 3) PR Metadata Rules (Blocking In CI)
-- **PR title must include a Feature-Key**: include `bd-<beads-id>` somewhere in the title (e.g. `bd-f6fh: ...`)
-- **PR body must include Agent**: add a line like `Agent: <agent-id>`
+- **PR title must include a Feature-Key**: include \`bd-<beads-id>\` somewhere in the title (e.g. \`bd-f6fh: ...\`)
+- **PR body must include Agent**: add a line like \`Agent: <agent-id>\`
 
 ## 4) Delegation Rule (V8.4 - Batch by Outcome)
 - **Primary rule**: batch by outcome, not by file. One agent per coherent change set.
@@ -67,67 +67,80 @@ cd /tmp/agents/bd-xxxx/repo-name
 
 ## 5) Secrets + Env Sources (V8.4 - Railway Context Mandatory)
 - **Railway context is MANDATORY for dev work**:
-  - interactive: `railway shell`
-  - worktree/automation-safe: `railway run -p <project-id> -e <env> -s <service> -- <cmd>`
+  - interactive: \`railway shell\`
+  - worktree/automation-safe: \`railway run -p <project-id> -e <env> -s <service> -- <cmd>\`
 - **Do not require canonical repo cwd for Railway context**; worktrees are first-class.
-- **API keys**: `op://dev/Agent-Secrets-Production/<FIELD>` (see SECRETS_INDEX.md).
-- **Railway CLI token**: `op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN` for CI/automation.
-- **Quick reference**: use the `op-secrets-quickref` skill.
+- **API keys**: \`op://dev/Agent-Secrets-Production/<FIELD>\` (see SECRETS_INDEX.md).
+- **Railway CLI token**: \`op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN\` for CI/automation.
+- **Quick reference**: use the \`op-secrets-quickref\` skill.
 
 ### 5.1) Agent Onboarding SOP (Required First Steps)
 
 New agents MUST complete these steps before any other work:
 
 **Step 1: Load 1Password Service Account**
-```bash
+\`\`\`bash
 # macOS
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-$(hostname)-token)"
+export OP_SERVICE_ACCOUNT_TOKEN="\$(cat ~/.config/systemd/user/op-\$(hostname)-token)"
 
 # Linux (systemd-creds encrypted)
-export OP_SERVICE_ACCOUNT_TOKEN="$(systemd-creds decrypt ~/.config/systemd/user/op-$(hostname)-token.cred)"
+export OP_SERVICE_ACCOUNT_TOKEN="\$(systemd-creds decrypt ~/.config/systemd/user/op-\$(hostname)-token.cred)"
 
 # Verify
 op whoami  # Must show: User Type: SERVICE_ACCOUNT
-```
+\`\`\`
 
 **Step 2: Authenticate Railway CLI**
-```bash
-export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
+\`\`\`bash
+export RAILWAY_API_TOKEN=\$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
 railway whoami  # Must show: Logged in as <email>
-```
+\`\`\`
 
 **Step 3: Verify Full Stack**
-```bash
+\`\`\`bash
 op item list --vault dev  # Should list items
 railway status            # Should show project context
-```
+\`\`\`
 
 **Common Issues:**
-- `op whoami` shows "account is not signed in" → Load OP_SERVICE_ACCOUNT_TOKEN
-- `railway whoami` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
-- Token file not found → Run `~/agent-skills/scripts/create-op-credential.sh`
+- \`op whoami\` shows "account is not signed in" → Load OP_SERVICE_ACCOUNT_TOKEN
+- \`railway whoami\` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
+- Token file not found → Run \`~/agent-skills/scripts/create-op-credential.sh\`
 
 ### 5.2) Railway Link Non-Interactive Usage (CRITICAL)
 
-Agents can ONLY use > Select a workspace fengning-starsend's Projects with ALL required flags:
+Agents can ONLY use `railway link` with ALL required flags:
 
-Required flags: , 
-Optional flags| 
-Recommended  | 
+Required flags: `--project <id-or-name>`, `--environment <name>`
+Optional flags| `--service <name>`
+Recommended  | `--json`
 
-> Select a workspace fengning-starsend's Projects
-> Select a workspace fengning-starsend's Projects
-> Select a workspace fengning-starsend's Projects
+```bash
+# CORRECT - Fully non-interactive
+railway link --project <project-id> --environment <env> --service <service> --json
+
+railway link --project my-app --environment staging --json
+
+# WRONG - Will block waiting for input
+railway link
+railway link --project my-project  # missing --environment
+```
 
 **Why**: Railway CLI shows visual prompts but completes successfully when all flags are provided.
 
-**Alternative**: Use  without linking
+**Alternative**: Use `railway run` without linking
+```bash
+# Direct command execution with Railway context
+railway run -p <project-id> -e <env> -s <service> -- <command>
 
+# Using context from worktree
+dx-railway-run.sh -- <command>
+```
 
 **Context files** (created by worktree-setup.sh)
-- Location: 
-- Contains: , , 
-- Used by:  to provide Railway context in worktrees
+- Location: `/tmp/agents/.dx-context/<beads-id>/<repo>/railway-context.env`
+- Contains: `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT`, `RAILWAY_SERVICE`
+- Used by: `dx-railway-run.sh` to provide Railway context in worktrees
 
 ## 6) Parallel Agent Orchestration (V8.4)
 
@@ -150,50 +163,50 @@ Recommended  |
 
 **Canonical: dx-runner (governed multi-provider runner)**
 
-```bash
+\`\`\`bash
 # OpenCode throughput lane
 dx-runner start --provider opencode --beads bd-xxx --prompt-file /tmp/p.prompt
 
 # Shared monitoring/reporting
 dx-runner status --json
 dx-runner check --beads bd-xxx --json
-```
+\`\`\`
 
 **Canonical batch orchestrator: dx-batch (orchestration-only over dx-runner)**
 
-```bash
+\`\`\`bash
 # Execute implement -> review waves with deterministic ledger/contracts
 dx-batch start --items bd-aaa,bd-bbb --max-parallel 2
 
 # Diagnose stuck waves
 dx-batch doctor --wave-id <wave-id> --json
-```
+\`\`\`
 
 **Direct OpenCode lane (advanced, non-governed)**
 
-```bash
+\`\`\`bash
 # Headless single-run lane
 opencode run -m zhipuai-coding-plan/glm-5 "Implement task T1 from plan.md"
 
 # Server lane for parallel clients
 opencode serve --hostname 127.0.0.1 --port 4096
 opencode run --attach http://127.0.0.1:4096 -m zhipuai-coding-plan/glm-5 "Implement task T2 from plan.md"
-```
+\`\`\`
 
 **Reliability backstop: cc-glm via dx-runner**
 
-```bash
+\`\`\`bash
 # Start governed fallback job
 dx-runner start --provider cc-glm --beads bd-xxx --prompt-file /tmp/p.prompt
 
 # Monitor fallback jobs
 dx-runner status --json
 dx-runner check --beads bd-xxx --json
-```
+\`\`\`
 
 **Optional: Task tool (Codex runtime only)**
 
-```yaml
+\`\`\`yaml
 Task:
   description: "T1: [batch name]"
   prompt: |
@@ -209,27 +222,27 @@ Task:
     3. Commit (don't push)
     4. Return summary
   run_in_background: true
-```
+\`\`\`
 
-**Cross-VM: dx-dispatch** (compat wrapper to `dx-runner` for remote execution)
+**Cross-VM: dx-dispatch** (compat wrapper to \`dx-runner\` for remote execution)
 
 ### dx-runner Best Practices
 
-- Run `dx-runner preflight --provider <provider>` before starting a wave.
-- Always pass a unique Beads id per run: `--beads bd-...`.
-- Use `--prompt-file` with immutable prompt artifacts, not inline ad hoc prompts.
-- Monitor with `status --json` + `check --json`; automate on `reason_code`/`next_action`.
-- Use `report --format json` as the source of truth for outcome and metrics.
+- Run \`dx-runner preflight --provider <provider>\` before starting a wave.
+- Always pass a unique Beads id per run: \`--beads bd-...\`.
+- Use \`--prompt-file\` with immutable prompt artifacts, not inline ad hoc prompts.
+- Monitor with \`status --json\` + \`check --json\`; automate on \`reason_code\`/\`next_action\`.
+- Use \`report --format json\` as the source of truth for outcome and metrics.
 - Prefer one controlled restart max; then escalate using failure taxonomy.
-- Run `dx-runner prune` periodically to clear stale PID ghosts.
-- For OpenCode, enforce canonical model `zhipuai-coding-plan/glm-5`; fallback provider if unavailable.
+- Run \`dx-runner prune\` periodically to clear stale PID ghosts.
+- For OpenCode, enforce canonical model \`zhipuai-coding-plan/glm-5\`; fallback provider if unavailable.
 
 ### Monitoring (Simplified)
 
 - **Check interval**: 5 minutes
 - **Signals**: 1) Process alive, 2) Log advancing
 - **Restart policy**: 1 restart max, then escalate
-- **Check**: `ps -p [PID]` and `tail -20 [log]`
+- **Check**: \`ps -p [PID]\` and \`tail -20 [log]\`
 
 ### Anti-Patterns
 
@@ -242,7 +255,7 @@ Task:
 
 For 1-2 file changes, use Beads notes instead of plan file:
 
-```markdown
+\`\`\`markdown
 ## bd-xxx: Task Name
 ### Approach
 - File: path/to/file
@@ -252,25 +265,25 @@ For 1-2 file changes, use Beads notes instead of plan file:
 - [ ] File modified
 - [ ] Validation passed
 - [ ] PR merged
-```
+\`\`\`
 
 References:
-- `~/agent-skills/docs/ENV_SOURCES_CONTRACT.md`
-- `~/agent-skills/docs/SECRET_MANAGEMENT.md`
-- `~/agent-skills/scripts/benchmarks/opencode_cc_glm/README.md`
-- `~/agent-skills/extended/dx-runner/SKILL.md`
-- `~/agent-skills/extended/cc-glm/SKILL.md`
+- \`~/agent-skills/docs/ENV_SOURCES_CONTRACT.md\`
+- \`~/agent-skills/docs/SECRET_MANAGEMENT.md\`
+- \`~/agent-skills/scripts/benchmarks/opencode_cc_glm/README.md\`
+- \`~/agent-skills/extended/dx-runner/SKILL.md\`
+- \`~/agent-skills/extended/cc-glm/SKILL.md\`
 
 Notes:
  - PR metadata enforcement exists to keep squash merges ergonomic.
- - If unsure what to use for Agent, use platform id (see `DX_AGENT_ID.md`).
+ - If unsure what to use for Agent, use platform id (see \`DX_AGENT_ID.md\`).
 
 ## 7) Frontend Evidence Contract (Required for UI/UX Claims)
 
-When changing frontend files in `~/prime-radiant-ai`, agents MUST follow this workflow:
+When changing frontend files in \`~/prime-radiant-ai\`, agents MUST follow this workflow:
 
 ### Pre-PR Workflow
-```bash
+\`\`\`bash
 # 1. Build and verify
 pnpm --filter frontend build
 pnpm --filter frontend type-check
@@ -282,23 +295,23 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual
 
 # 3. If baselines need update, justify and commit
 VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
-```
+\`\`\`
 
 ### Route Matrix Verification
-- **no-cookie mode**: `/`, `/sign-in`, `/sign-up`
-- **bypass-cookie mode**: `/v2`, `/brokerage` (if auth bypass available)
+- **no-cookie mode**: \`/\`, \`/sign-in\`, \`/sign-up\`
+- **bypass-cookie mode**: \`/v2\`, \`/brokerage\` (if auth bypass available)
 
 ### Runtime Health Requirements
 - No "Unexpected Application Error" on page
-- No console errors containing: `clerk`, `ClerkProvider`, `Unhandled`, `TypeError`
+- No console errors containing: \`clerk\`, \`ClerkProvider\`, \`Unhandled\`, \`TypeError\`
 - Clean page render for all tested routes
 
 ### CI Workflows (Auto-triggered)
-- `.github/workflows/visual-quality.yml` - Stylelint + Visual Regression
-- `.github/workflows/lighthouse.yml` - Performance budgets
+- \`.github/workflows/visual-quality.yml\` - Stylelint + Visual Regression
+- \`.github/workflows/lighthouse.yml\` - Performance budgets
 
 ### Required PR Body Section
-```markdown
+\`\`\`markdown
 ## Frontend Evidence
 
 ### Route Matrix
@@ -313,9 +326,9 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 ### Evidence
 - Commit SHA: [hash]
 - Visual tests: [X] passed
-```
+\`\`\`
 
-**Full Template:** `~/agent-skills/templates/frontend-evidence-contract.md`
+**Full Template:** \`~/agent-skills/templates/frontend-evidence-contract.md\`
 
 ### Pass/Fail Criteria
 - ✅ Visual tests pass (or baselines updated with justification)
@@ -365,7 +378,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | `dx-runner start --provider opencode --beads bd-xxx --prompt-` | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |
 | **parallelize-cloud-work** | Delegate independent work to Claude Code Web cloud sessions for parallel execution. Generates comprehensive session prompts with context exploration guidance, verifies Beads state, provides tracking commands. Use when user says "parallelize work to cloud", "start cloud sessions", or needs to execute multiple independent tasks simultaneously, or when user mentions cloud sessions, cloud prompts, delegate to cloud, Claude Code Web, generate session prompts, parallel execution, or asks "how do I use cloud sessions". | `bd show <issue-id>` | workflow, cloud, parallelization, dx |
 | **plan-refine** | Iteratively refine implementation plans using the "Convexity" pattern. Simulates a multi-round architectural critique to converge on a secure, robust specification. Use when you have a draft plan that needs deep architectural review or "APR" style optimization. | — | architecture, planning, review, refinement, apr |
-| **prompt-writing** | Drafts robust, low-cognitive-load prompts for other agents that enforce the DX invariants: worktree-first, no canonical writes, and a "done gate" (dx-verify-cle | — |  |
+| **prompt-writing** | Draft self-contained prompts for delegated agents with cross-VM-safe context. MUST BE USED when assigning work to another agent (implementation, QA, rollout, or audit). Enforces: worktree-first, no canonical writes, Beads traceability (epic/subtask/dependencies), and required PR artifacts (PR_URL  PR_HEAD_SHA). Trigger phrases include: "assign to another agent", "write a one-shot prompt", "dispatch this", "prepare autonomous prompt", "QA agent prompt". | — | workflow, prompts, orchestration, dx, safety |
 | **skill-creator** | Create new Claude Code skills following V3 DX patterns with Beads/Serena integration. MUST BE USED when creating skills. Follows tech lead proven patterns from 300k LOC case study. Use when user wants to create a new skill, implement workflow automation, or enhance the skill system, or when user mentions "need a skill for X", "automate this workflow", "create new capability", repetitive manual processes, skill creation, meta-skill, or V3 patterns. | — | meta, skill-creation, automation, v3 |
 | **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lightweight locking). Uses direct Slack Web API calls and/or the slack-coordinator systemd service. Does not require MCP. | — | slack, coordination, workflow, optional |
 | **wooyun-legacy** | WooYun漏洞分析专家系统。提供基于88,636个真实漏洞案例提炼的元思考方法论、测试流程和绕过技巧。适用于漏洞挖掘、渗透测试、安全审计及代码审计。支持SQL注入、XSS、命令执行、逻辑漏洞、文件上传、未授权访问等多种漏洞类型。 | — |  |
