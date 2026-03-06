@@ -1,8 +1,8 @@
 ---
 name: tech-lead-handoff
 description: |
-  Create comprehensive handoff for tech lead review with Beads epic sync, committed docs, and self-contained prompt.
-  MUST BE USED when completing investigation, incident analysis, or feature planning that needs tech lead approval.
+  Create comprehensive handoff for tech lead review with Beads sync, PR artifacts, and self-contained review package.
+  MUST BE USED when returning completed work to a tech lead/orchestrator for review (investigation OR implementation return).
   Use when user says "handoff", "tech lead review", "review this", "create handoff", or after completing significant work.
 tags: [workflow, handoff, review, beads, documentation]
 allowed-tools:
@@ -26,6 +26,16 @@ Ensures tech lead can review your work without needing access to your local envi
 - Beads epics verified in canonical `~/bd` backend
 - Investigation docs committed and pushed to GitHub
 - Self-contained prompt with all context included
+- Required PR artifacts (`PR_URL`, `PR_HEAD_SHA`) for cross-VM review
+
+## Modes
+
+- `MODE: investigation` (default)
+  - for incident analysis / planning / investigation docs
+  - includes `docs/investigations/*` outputs
+- `MODE: implementation_return`
+  - for implementer-to-orchestrator code return handoff
+  - does not require investigation docs when not needed
 
 ## When to Use This Skill
 
@@ -40,7 +50,19 @@ Ensures tech lead can review your work without needing access to your local envi
 - Completing incident investigation
 - Finishing feature planning
 - Creating fix plans that need approval
+- Completing implementation and handing back for orchestrator review
 - Ending a session with significant deliverables
+
+## Implementation Return Minimum Artifacts (`MODE: implementation_return`)
+
+When used for implementation return, require this minimum handoff payload:
+- `PR_URL`
+- `PR_HEAD_SHA`
+- `BEADS_EPIC` / `BEADS_SUBTASK` / `BEADS_DEPENDENCIES`
+- Validation summary (commands + pass/fail)
+- Changed files summary
+- Open blockers / decisions needed
+- How-to-review checklist
 
 ## Workflow
 
