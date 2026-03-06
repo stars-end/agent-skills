@@ -29,6 +29,9 @@ node_modules/
 # DX Session locks (V7.6)
 .dx-session-lock
 
+# Worktree-local Railway context (auto-generated; not source code)
+.dx/railway-context.env
+
 # Temp/debug files (bd-5wys.4 - reduce rescue noise)
 # Patterns based on observed rescue events in agent-skills repo
 tmp_*.py
