@@ -72,7 +72,7 @@ DX_DISPATCH_LEGACY=1 dx-dispatch epyc12 "task"
 | File | Status | Purpose |
 |------|--------|---------|
 | `extended/cc-glm/scripts/cc-glm-job.sh` | **ADVANCED** | Low-level cc-glm control (superseded by `dx-runner --provider cc-glm`) |
-| `extended/jules-dispatch/dispatch.py` | **ADVANCED** | Jules-specific dispatch (can use via `dx-dispatch --jules`) |
+| `scripts/dx-dispatch` (`--jules`) | **ADVANCED** | Jules-specific dispatch path via canonical compatibility shim |
 
 ---
 

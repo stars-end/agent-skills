@@ -55,7 +55,7 @@ def should_route_to_jules(text: str, issue_id: str) -> bool:
 1. User: @jules bd-xyz implement the feature
 2. Coordinator checks three gates
 3. If all pass:
-   → python3 jules-dispatch/dispatch.py bd-xyz --repo affordabot
+   → dx-dispatch --jules --issue bd-xyz
 4. Jules creates cloud session
 5. Jules works on PR
 6. Coordinator posts status to Slack thread
@@ -165,7 +165,7 @@ bd create "Test Jules No Spec" --label jules-ready
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `JULES_DISPATCH_SCRIPT` | `~/agent-skills/jules-dispatch/dispatch.py` | Dispatch script |
+| `JULES_DISPATCH_SCRIPT` | `dx-dispatch --jules --issue <bd-id>` | Canonical dispatch command |
 | `JULES_TIMEOUT` | 30s | Dispatch timeout |
 
 ---
@@ -173,5 +173,5 @@ bd create "Test Jules No Spec" --label jules-ready
 ## Code Location
 
 - Routing: `slack-coordinator.py:65-108`
-- Dispatch: `jules-dispatch/dispatch.py`
+- Dispatch: `scripts/dx-dispatch --jules --issue <bd-id>`
 - Config: `JULES_STRATEGY.md`

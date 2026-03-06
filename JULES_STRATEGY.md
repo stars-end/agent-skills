@@ -147,16 +147,16 @@ This perfectly mirrors your `scripts/setup-env-vars.sh` logic but handles authen
 
 ## Comparison with Existing Skills
 
-| Feature | Existing `jules-dispatch.py` | Proposed Strategy |
+| Feature | Existing `dx-dispatch --jules` | Proposed Strategy |
 | :--- | :--- | :--- |
-| **Trigger** | Manual CLI (`python jules-dispatch.py bd-123`) | Automated Batch (`python dispatch_cron.py`) |
+| **Trigger** | Manual CLI (`dx-dispatch --jules --issue bd-123`) | Automated Batch (`python dispatch_cron.py`) |
 | **Filtering** | None (user relies on judgment) | **Strict** (Label: `jules-ready`) |
 | **Context** | Basic keyword matching | Enhanced Prompting (Design + AC) |
 | **Use Case** | Validating a single task | Nightly "Batch Build" |
 
 ## Implementation Plan
 
-1.  **Reuse Core**: Leverage `agent-skills/scripts/jules-dispatch.py` for the actual `jules remote ...` logic.
+1.  **Reuse Core**: Leverage `scripts/dx-dispatch --jules` as the canonical Jules dispatch entrypoint.
 2.  **New Scanner**: Create `scripts/scan_and_dispatch.py` that implements the filtered loop.
 3.  **Safety**: The scanner will verify `design` field presence as a secondary fail-safe.
 

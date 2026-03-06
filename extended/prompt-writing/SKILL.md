@@ -4,7 +4,7 @@ description: |
   Draft self-contained prompts for delegated agents with cross-VM-safe context.
   MUST BE USED when assigning work to another agent (implementation, QA, rollout, or audit).
   Enforces: worktree-first, no canonical writes, Beads traceability (epic/subtask/dependencies), and required PR artifacts (PR_URL + PR_HEAD_SHA).
-  Trigger phrases include: "assign to another agent", "write a one-shot prompt", "dispatch this", "prepare autonomous prompt", "QA agent prompt".
+  Trigger phrases include: "assign to another agent", "write a one-shot prompt", "dispatch this", "prepare autonomous prompt", "QA agent prompt", "parallelize work to cloud", and "assign to jules".
 tags: [workflow, prompts, orchestration, dx, safety]
 allowed-tools:
   - Read
@@ -21,6 +21,22 @@ Generate a prompt another agent can execute autonomously without local-machine a
 - Beads traceability (epic/subtask/dependencies)
 - Hard delivery contract: `PR_URL` + `PR_HEAD_SHA`
 
+## Re-Scoped Role (2026-03)
+
+`prompt-writing` is the canonical **outbound dispatch contract** skill.
+It replaces prompt-shaping usage that previously lived in:
+- `parallelize-cloud-work` (archived)
+- `jules-dispatch` (archived)
+
+## Lifecycle Modes
+
+Use one explicit mode in each generated prompt:
+- `MODE: initial_implementation`
+- `MODE: pr_repair`
+- `MODE: qa_pass`
+- `MODE: ci_repair`
+- `MODE: review_fix_redispatch`
+
 ## Trigger Conditions (Mandatory)
 
 Use this skill whenever user intent is delegation to another agent, including:
@@ -29,6 +45,10 @@ Use this skill whenever user intent is delegation to another agent, including:
 - "prepare a prompt for QA/dev agent"
 - "dispatch this work"
 - "make this autonomous for jr agent"
+- "parallelize work to cloud"
+- "start cloud sessions"
+- "assign this to jules"
+- "dispatch to jules"
 
 Do not wait for the user to say "prompt-writing" explicitly if delegation intent is clear.
 
@@ -64,6 +84,22 @@ Every generated delegation prompt MUST enforce:
   - `PR_HEAD_SHA: <40-char sha>`
 - If missing, delegate must return blocker with exact next commands.
 
+## Outcome Enforcement Options
+
+Generated prompts should set these options explicitly when relevant:
+- `UPDATE_EXISTING_PR: true|false`
+- `PR_STATE_TARGET: draft|ready_for_review`
+- `REQUIRE_MERGE_READY: true|false`
+- `SELF_REPAIR_ON_CHECK_FAILURE: true|false`
+
+## Final Response Modes
+
+Generated prompts should include one final response mode:
+- `FINAL_RESPONSE_MODE: standard`
+- `FINAL_RESPONSE_MODE: tech_lead_review`
+- `FINAL_RESPONSE_MODE: qa_findings`
+- `FINAL_RESPONSE_MODE: ci_repair_report`
+
 ## Output Contract (Always)
 
 When user asks for a delegated prompt, return:
@@ -84,10 +120,18 @@ you're a full-stack dev agent at a tiny fintech startup:
 5) Final response MUST include `PR_URL` and `PR_HEAD_SHA`
 
 ## Assignment Metadata (Required)
+- MODE: <one lifecycle mode>
 - BEADS_EPIC: <bd-...>
 - BEADS_SUBTASK: <bd-....x>
 - BEADS_DEPENDENCIES: <comma-separated bd ids OR "none">
 - FEATURE_KEY: <bd-...>
+
+## Outcome Enforcement (Required)
+- UPDATE_EXISTING_PR: <true|false>
+- PR_STATE_TARGET: <draft|ready_for_review>
+- REQUIRE_MERGE_READY: <true|false>
+- SELF_REPAIR_ON_CHECK_FAILURE: <true|false>
+- FINAL_RESPONSE_MODE: <standard|tech_lead_review|qa_findings|ci_repair_report>
 
 ## Cross-VM Source of Truth (Required)
 - PR_URL: <required if exists>

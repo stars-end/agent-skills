@@ -222,7 +222,7 @@ def format_agent_message(message: str, vm: str = None) -> str:
 
 
 # Jules Integration (Three-Gate Routing)
-JULES_DISPATCH_SCRIPT = str(Path.home() / "agent-skills" / "jules-dispatch" / "dispatch.py")
+DX_DISPATCH_BIN = "dx-dispatch"
 
 
 def should_route_to_jules(text: str, issue_id: Optional[str]) -> bool:
@@ -271,22 +271,22 @@ def should_route_to_jules(text: str, issue_id: Optional[str]) -> bool:
 
 
 async def dispatch_to_jules(issue_id: str, repo: str) -> Optional[str]:
-    """Dispatch task to Jules using existing skill."""
+    """Dispatch task to Jules via canonical dx-dispatch entrypoint."""
     import subprocess
     
     try:
         result = subprocess.run(
-            ["python3", JULES_DISPATCH_SCRIPT, issue_id, "--repo", repo],
+            [DX_DISPATCH_BIN, "--jules", "--issue", issue_id],
             capture_output=True, text=True, timeout=30,
             cwd=str(Path.home() / repo)
         )
         if result.returncode == 0:
             return result.stdout
         else:
-            logger.error(f"Jules dispatch failed: {result.stderr}")
+            logger.error(f"dx-dispatch --jules failed: {result.stderr}")
             return None
     except Exception as e:
-        logger.error(f"Jules dispatch error: {e}")
+        logger.error(f"dx-dispatch --jules error: {e}")
         return None
 
 
