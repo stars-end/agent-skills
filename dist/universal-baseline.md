@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 694efcd34ba47dee6d17e0c6cea9fa02916dd1f4 -->
-<!-- Last updated: 2026-03-06 12:58:11 UTC -->
+<!-- Source SHA: 67e6ca258bd8d70ac287dc355d33af01721641f3 -->
+<!-- Last updated: 2026-03-06 13:08:35 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -353,7 +353,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **op-secrets-quickref** | Quick reference for 1Password service account auth and secret management. Use for: API keys, tokens, service accounts, op:// references, or auth failures in non-interactive contexts (cron, systemd, CI). Triggers: ZAI_API_KEY, OP_SERVICE_ACCOUNT_TOKEN, 1Password, "where do secrets live", auth failure, 401, permission denied. | — | secrets, auth, token, 1password, op-cli, dx, env, railway |
 | **session-end** | End Claude Code session with Beads health verification and summary. MUST BE USED when user says they're done, ending session, or logging off. Verifies canonical Beads connectivity, shows session stats, and suggests next ready work. Handles cleanup and context saving. Use when user says "goodbye", "bye", "done for now", "logging off", or when user mentions end-of-session, session termination, cleanup, context saving, Beads checks, Dolt status, or export operations. | — | workflow, beads, session, cleanup |
 | **sync-feature-branch** | Commit current work to feature branch with Beads metadata tracking and git integration. MUST BE USED for all commit operations. Handles Feature-Key trailers, Beads status updates, and optional quick linting before commit. Use when user wants to save progress, commit changes, prepare work for review, sync local changes, or finalize current work, or when user mentions "uncommitted changes", "git status shows changes", "Feature-Key missing", commit operations, saving work, git workflows, or syncing changes. | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, git, beads, commit |
-| **tech-lead-handoff** | Create comprehensive handoff for tech lead review with Beads sync, PR artifacts, and self-contained review package. MUST BE USED when returning completed work to a tech lead/orchestrator for review (investigation OR implementation return). Use when user says "handoff", "tech lead review", "review this", "create handoff", or after completing significant work. | `bd show <epic-id>` | workflow, handoff, review, beads, documentation |
+| **tech-lead-handoff** | Create comprehensive handoff for tech lead review with Beads sync, PR artifacts, and self-contained review package. MUST BE USED when returning completed work to a tech lead/orchestrator for review (investigation OR implementation return). Use when user says "handoff", "tech lead review", "review this", "create handoff", or after completing significant work. | `bd show <beads-id>` | workflow, handoff, review, beads, documentation |
 
 
 ## Extended Workflows
