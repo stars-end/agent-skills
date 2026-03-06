@@ -3,11 +3,14 @@
 #
 # Validation tests for DX V8.6 workspace-first canonical isolation
 # Beads: bd-kuhj.7
+#
+# Tests the PR checkout itself, not installed ~/agent-skills
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AGENTS_ROOT="${AGENTS_ROOT:-$HOME/agent-skills}"
+# Test the PR checkout itself, not installed canonical
+AGENTS_ROOT="${AGENTS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

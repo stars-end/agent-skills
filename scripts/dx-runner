@@ -1209,8 +1209,10 @@ is_canonical_repo_path() {
         "$HOME/llm-common"
     )
     
+    # bd-kuhj.3: Reject canonical roots AND their descendants
+    # This prevents ~/agent-skills/subdir from bypassing the canonical rejection
     for canonical in "${canonical_repos[@]}"; do
-        if [[ "$path" == "$canonical" ]]; then
+        if [[ "$path" == "$canonical" || "$path" == "$canonical/"* ]]; then
             return 0
         fi
     done

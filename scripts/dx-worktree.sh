@@ -235,6 +235,12 @@ EOF
   git checkout master 2>/dev/null || git checkout main 2>/dev/null || true
   git pull --ff-only 2>/dev/null || true
   
+  # Build recovery commands
+  local recovery_cmds=()
+  recovery_cmds+=("cd $workspace_path")
+  [[ -f "$workspace_path/.recovery.patch" ]] && recovery_cmds+=("git apply .recovery.patch")
+  [[ -f "$workspace_path/.recovery-staged.patch" ]] && recovery_cmds+=("git apply .recovery-staged.patch")
+  
   cat <<EOF
 repo=$repo
 workspace_path=$workspace_path
@@ -242,7 +248,8 @@ branch=$recovery_branch
 reason=evacuated
 timestamp=$timestamp
 skipped=false
-recovery_command=cd $workspace_path && git apply .recovery.patch
+recovery_command=${recovery_cmds[*]:-cd $workspace_path}
+staged_patch=$([[ -f "$workspace_path/.recovery-staged.patch" ]] && echo ".recovery-staged.patch" || echo "none")
 untracked_files=$([[ -f "$workspace_path/.recovery-untracked.txt" ]] && echo ".recovery-untracked.txt" || echo "none")
 EOF
 }
