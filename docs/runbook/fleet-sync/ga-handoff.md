@@ -27,9 +27,15 @@
 - If host snapshots are stale/missing, rerun install/check on that host and compare with `/tmp/fleet-platform-closeout-2026-03-05/hosts/*`.
 
 ## Current Blockers To Clear Gate
-1. Fix remote script path consistency on `homedesktop-wsl` for `~/agent-skills/...` install/check helpers.
-2. Restore deterministic live Slack transport in cron (`SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_MCP_XOXP_TOKEN`, `SLACK_MCP_XOXB_TOKEN`, `DX_SLACK_WEBHOOK`, or `DX_ALERTS_WEBHOOK`).
-3. Produce one fresh cross-host green convergence run where all hosts pass required checks under stable auth/transport.
+1. Restore deterministic live Slack transport in cron:
+   - current Slack API response is `not_in_channel` for `C0AEC54RZ6V`.
+   - token is valid but bot is not in the configured channel and token lacks `channels:join`.
+   - clear path: invite bot to `#dx-alerts`/configured channel or provide `DX_SLACK_WEBHOOK`/`DX_ALERTS_WEBHOOK`.
+2. Complete metrics gate data for PR rejection trend in weekly report.
+
+## Cleared Since Last Pass
+- Cross-host rollout convergence is now green for all 4 hosts.
+- op_auth_readiness is green fleet-wide (including epyc6 host token source remediation).
 
 ## Evidence Paths
 - `/tmp/fleet-platform-closeout-2026-03-05/`

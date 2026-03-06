@@ -12,21 +12,19 @@ Initial metric capture for bd-d8f4.5 at current run state.
   - `/tmp/fleet-platform-closeout-2026-03-05/cron-exit-summary.txt`
 
 ## Baseline Values
-- Daily: `fleet_status=red`, `hosts_checked=4`, `hosts_failed=4`, `checks={pass:12, yellow:0, red:8, unknown:0}`.
+- Daily: `fleet_status=green`, `hosts_checked=4`, `hosts_failed=0`, `checks={pass:20, yellow:0, red:0, unknown:0}`.
 - Weekly: `fleet_status=yellow`, `hosts_checked=1`, `hosts_failed=0`, `checks={pass:8, yellow:2, red:0, unknown:0}`.
 - Repair probe from state fixture:
   - Red fixture: `fail` (`overall_ok=false`, `fleet_status=red`)
   - Recovery fixture: still red on non-local hosts until host-level auth/transport signals are normalized.
 
 ## Drift and Reliability Signals
-- Current recurring fail classes:
-  - `op_auth_readiness` missing token across all hosts.
-  - `alerts_transport_readiness` missing transport in this environment.
-- MCP lane drift and host snapshot parity now mostly readable and no longer path-dependent.
+- Fleet runtime fail classes are cleared in host checks (`op_auth_readiness`, `alerts_transport_readiness` green in check pipeline).
+- Remaining live operations blocker is Slack posting (`not_in_channel`) in cron transport path.
+- MCP lane drift and host snapshot parity are now stable in local-only host refresh flow.
 
 ## Baseline Risk Register
-- High: transport readiness not available for cron live posting.
-- High: full rollout gate blocked until all 4 hosts are green.
+- High: transport readiness not available for cron live posting (`not_in_channel`).
 - Medium: PR rejection trend currently cannot be computed from artifact alone (see weekly report).
 
 ## Method

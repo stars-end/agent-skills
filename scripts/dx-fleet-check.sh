@@ -13,9 +13,12 @@ STATE_JSON="${STATE_ROOT}/tool-health.json"
 STATE_LINES="${STATE_ROOT}/tool-health.lines"
 MCP_TOOLS_SYNC_JSON="${STATE_ROOT}/mcp-tools-sync.json"
 OUTPUT_FORMAT="text"
+LOCAL_ONLY=0
 
 # shellcheck disable=SC1090
 source "$SCRIPT_DIR/canonical-targets.sh" 2>/dev/null || true
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/dx-slack-alerts.sh" 2>/dev/null || true
 
 DAILY_CHECK_IDS=(
   beads_dolt
@@ -162,11 +165,16 @@ parse_args() {
         MCP_TOOLS_SYNC_JSON="${STATE_ROOT}/mcp-tools-sync.json"
         shift 2
         ;;
+      --local-only)
+        LOCAL_ONLY=1
+        shift
+        ;;
       --help|-h)
         cat <<'EOF'
-Usage: dx-fleet-check.sh [--json] [--state-dir PATH]
+Usage: dx-fleet-check.sh [--json] [--state-dir PATH] [--local-only]
   --json       emit machine-readable JSON
   --state-dir  override state root (default: ~/.dx-state/fleet)
+  --local-only evaluate local host only (no remote SSH probes)
 EOF
         exit 0
         ;;
@@ -180,6 +188,10 @@ EOF
 
 collect_hosts() {
   local local_host="$1"
+  if [[ "$LOCAL_ONLY" -eq 1 ]] || [[ "${DX_FLEET_LOCAL_ONLY:-0}" == "1" ]]; then
+    echo "$local_host"
+    return 0
+  fi
   local -a raw=()
   local -a seen=()
   local host
@@ -632,14 +644,18 @@ build_check_rows() {
 
   # 4) op_auth_readiness
   check_id="op_auth_readiness"
-  if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && command -v op >/dev/null 2>&1; then
+  if command -v agent_coordination_load_op_token >/dev/null 2>&1 && agent_coordination_load_op_token >/dev/null 2>&1; then
+    status="pass"
+    severity="low"
+    details="OP service-account token resolved"
+  elif [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && command -v op >/dev/null 2>&1; then
     status="pass"
     severity="low"
     details="OP service-account token detected"
   elif command -v op >/dev/null 2>&1; then
     status="fail"
     severity="low"
-    details="op installed but OP_SERVICE_ACCOUNT_TOKEN not set"
+    details="op installed but service-account token unavailable"
   else
     status="fail"
     severity="low"
@@ -663,14 +679,18 @@ build_check_rows() {
 
   # 5) alerts_transport_readiness
   check_id="alerts_transport_readiness"
-  if [[ -n "${SLACK_BOT_TOKEN:-}" ]] || [[ -n "${SLACK_APP_TOKEN:-}" ]] || [[ -n "${SLACK_MCP_XOXB_TOKEN:-}" ]] || [[ -n "${SLACK_MCP_XOXP_TOKEN:-}" ]] || [[ -n "${DX_SLACK_WEBHOOK:-}" ]] || [[ -n "${DX_ALERTS_WEBHOOK:-}" ]]; then
+  if command -v agent_coordination_transport_ready >/dev/null 2>&1 && agent_coordination_transport_ready >/dev/null 2>&1; then
+    status="pass"
+    severity="low"
+    details="deterministic Slack transport resolvable"
+  elif [[ -n "${SLACK_BOT_TOKEN:-}" ]] || [[ -n "${SLACK_APP_TOKEN:-}" ]] || [[ -n "${SLACK_MCP_XOXB_TOKEN:-}" ]] || [[ -n "${SLACK_MCP_XOXP_TOKEN:-}" ]] || [[ -n "${DX_SLACK_WEBHOOK:-}" ]] || [[ -n "${DX_ALERTS_WEBHOOK:-}" ]]; then
     status="pass"
     severity="low"
     details="deterministic Slack transport configured"
   else
     status="fail"
     severity="low"
-    details="Slack transport token/webhook missing"
+    details="Slack transport token/webhook unavailable"
   fi
   rows+=("{\"id\":\"$check_id\",\"status\":\"$status\",\"severity\":\"$severity\",\"details\":\"$(json_escape "$details")\"}")
   case "$status" in

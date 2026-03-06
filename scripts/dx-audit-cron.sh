@@ -86,6 +86,7 @@ main() {
   if [[ -n "$manifest_channel" ]]; then
     channel="$manifest_channel"
   fi
+  channel="$(agent_coordination_resolve_channel "${DX_ALERTS_CHANNEL_ID:-$channel}")"
 
   {
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] mode=$MODE"
@@ -100,7 +101,7 @@ main() {
     return "$audit_exit"
   fi
 
-  if agent_coordination_send_message "$message" "${DX_ALERTS_CHANNEL_ID:-$channel}"; then
+  if agent_coordination_send_message "$message" "$channel"; then
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] audit message sent to $channel"
     return "$audit_exit"
   fi

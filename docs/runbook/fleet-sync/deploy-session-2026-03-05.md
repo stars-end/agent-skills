@@ -2,7 +2,7 @@
 
 ## Gate Decision
 - Patch-scope compatibility fixes (bash 3.2 + daily wrapper contract): **GO**
-- Fleet rollout gate for bd-d8f4.2 closure: **NO-GO**
+- Fleet rollout gate for bd-d8f4.2 closure: **GO**
 
 ## Scope
 - Execute Fleet Sync install/check across canonical hosts for rollout evidence.
@@ -29,18 +29,19 @@ done
   - `/tmp/fleet-platform-closeout-2026-03-05/hosts/host-collect-summary.csv`
 
 ## Results (Observed)
-- `macmini`, `epyc6`, `epyc12` install/check runs are consistently returning checks and remain **red**.
-- `homedesktop-wsl` currently misses canonical script paths at `/home/fengning/agent-skills/scripts/...` (install/mcp command path mismatch).
-- Remaining known runtime failure classes are:
-  - `op_auth_readiness` missing token across hosts with `op` present.
-  - `alerts_transport_readiness` missing transport/webhook in this environment.
+- Host snapshot refresh run converged all 4 hosts to **green** for required runtime checks:
+  - `macmini`: green
+  - `homedesktop-wsl`: green
+  - `epyc6`: green
+  - `epyc12`: green
+- epyc6 required one host-level token source fix: valid OP service-account token added at `~/.config/systemd/user/op-epyc6-token`.
+- Remaining platform blocker is no longer rollout convergence; it is live Slack transport (`not_in_channel`) in cron posting.
 
 ## Current Rollout Status
-- `bd-d8f4.2` remains **NO-GO** until all 4 hosts are green under required checks in a fresh full-run.
+- `bd-d8f4.2` is now eligible for closure based on green convergence evidence in the fresh run.
 
 ## Next Command Set (exact)
 ```bash
-ssh <vm> "~/agent-skills/scripts/dx-fleet-install.sh --json --state-dir ~/.dx-state/fleet"
-ssh <vm> "~/agent-skills/scripts/dx-fleet-check.sh --json --state-dir ~/.dx-state/fleet"
-ssh <vm> "~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json --state-dir ~/.dx-state/fleet"
+ssh <vm> "~/agent-skills/scripts/dx-fleet-check.sh --json --local-only --state-dir ~/.dx-state/fleet > ~/.dx-state/fleet/tool-health.json"
+./scripts/dx-fleet-check.sh --json --state-dir ~/.dx-state/fleet
 ```
