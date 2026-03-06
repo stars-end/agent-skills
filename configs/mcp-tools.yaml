@@ -47,7 +47,7 @@ tools:
       disable_env: CASS_NO_SHARE
 
   serena:
-    enabled: true
+    enabled: false
     version: "0.9.1"
     install_cmd: "uv tool install serena==0.9.1"
     health_cmd: "serena --version"
