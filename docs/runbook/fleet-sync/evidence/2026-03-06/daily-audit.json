@@ -1,0 +1,299 @@
+{
+  "mode": "daily",
+  "generated_at": "2026-03-06T21:47:14Z",
+  "generated_at_epoch": 1772833634,
+  "fleet_status": "green",
+  "summary": {
+    "pass": 20,
+    "yellow": 0,
+    "red": 0,
+    "unknown": 0,
+    "hosts_checked": 4,
+    "hosts_failed": 0
+  },
+  "hosts": [
+    {
+      "host": "homedesktop-wsl",
+      "overall": "green",
+      "checks": [
+        {
+          "id": "beads_dolt",
+          "status": "pass",
+          "severity": "low",
+          "details": "Beads runtime ready"
+        },
+        {
+          "id": "tool_mcp_health",
+          "status": "pass",
+          "severity": "low",
+          "details": "converged"
+        },
+        {
+          "id": "required_service_health",
+          "status": "pass",
+          "severity": "low",
+          "details": "required tools present"
+        },
+        {
+          "id": "op_auth_readiness",
+          "status": "pass",
+          "severity": "low",
+          "details": "OP service-account token resolved"
+        },
+        {
+          "id": "alerts_transport_readiness",
+          "status": "pass",
+          "severity": "low",
+          "details": "deterministic Slack transport ready"
+        }
+      ]
+    },
+    {
+      "host": "epyc6",
+      "overall": "green",
+      "checks": [
+        {
+          "id": "beads_dolt",
+          "status": "pass",
+          "severity": "low",
+          "details": "Beads runtime ready"
+        },
+        {
+          "id": "tool_mcp_health",
+          "status": "pass",
+          "severity": "low",
+          "details": "converged"
+        },
+        {
+          "id": "required_service_health",
+          "status": "pass",
+          "severity": "low",
+          "details": "required tools present"
+        },
+        {
+          "id": "op_auth_readiness",
+          "status": "pass",
+          "severity": "low",
+          "details": "OP service-account token resolved"
+        },
+        {
+          "id": "alerts_transport_readiness",
+          "status": "pass",
+          "severity": "low",
+          "details": "deterministic Slack transport ready"
+        }
+      ]
+    },
+    {
+      "host": "epyc12",
+      "overall": "green",
+      "checks": [
+        {
+          "id": "beads_dolt",
+          "status": "pass",
+          "severity": "low",
+          "details": "Beads runtime ready"
+        },
+        {
+          "id": "tool_mcp_health",
+          "status": "pass",
+          "severity": "low",
+          "details": "converged"
+        },
+        {
+          "id": "required_service_health",
+          "status": "pass",
+          "severity": "low",
+          "details": "required tools present"
+        },
+        {
+          "id": "op_auth_readiness",
+          "status": "pass",
+          "severity": "low",
+          "details": "OP service-account token resolved"
+        },
+        {
+          "id": "alerts_transport_readiness",
+          "status": "pass",
+          "severity": "low",
+          "details": "deterministic Slack transport ready"
+        }
+      ]
+    },
+    {
+      "host": "macmini",
+      "overall": "green",
+      "checks": [
+        {
+          "id": "beads_dolt",
+          "status": "pass",
+          "severity": "low",
+          "details": "Beads runtime ready"
+        },
+        {
+          "id": "tool_mcp_health",
+          "status": "pass",
+          "severity": "low",
+          "details": "converged"
+        },
+        {
+          "id": "required_service_health",
+          "status": "pass",
+          "severity": "low",
+          "details": "required tools present"
+        },
+        {
+          "id": "op_auth_readiness",
+          "status": "pass",
+          "severity": "low",
+          "details": "OP service-account token resolved"
+        },
+        {
+          "id": "alerts_transport_readiness",
+          "status": "pass",
+          "severity": "low",
+          "details": "deterministic Slack transport ready"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "id": "beads_dolt",
+      "status": "pass",
+      "severity": "low",
+      "details": "Beads runtime ready"
+    },
+    {
+      "id": "tool_mcp_health",
+      "status": "pass",
+      "severity": "low",
+      "details": "converged"
+    },
+    {
+      "id": "required_service_health",
+      "status": "pass",
+      "severity": "low",
+      "details": "required tools present"
+    },
+    {
+      "id": "op_auth_readiness",
+      "status": "pass",
+      "severity": "low",
+      "details": "OP service-account token resolved"
+    },
+    {
+      "id": "alerts_transport_readiness",
+      "status": "pass",
+      "severity": "low",
+      "details": "deterministic Slack transport ready"
+    },
+    {
+      "id": "beads_dolt",
+      "status": "pass",
+      "severity": "low",
+      "details": "Beads runtime ready"
+    },
+    {
+      "id": "tool_mcp_health",
+      "status": "pass",
+      "severity": "low",
+      "details": "converged"
+    },
+    {
+      "id": "required_service_health",
+      "status": "pass",
+      "severity": "low",
+      "details": "required tools present"
+    },
+    {
+      "id": "op_auth_readiness",
+      "status": "pass",
+      "severity": "low",
+      "details": "OP service-account token resolved"
+    },
+    {
+      "id": "alerts_transport_readiness",
+      "status": "pass",
+      "severity": "low",
+      "details": "deterministic Slack transport ready"
+    },
+    {
+      "id": "beads_dolt",
+      "status": "pass",
+      "severity": "low",
+      "details": "Beads runtime ready"
+    },
+    {
+      "id": "tool_mcp_health",
+      "status": "pass",
+      "severity": "low",
+      "details": "converged"
+    },
+    {
+      "id": "required_service_health",
+      "status": "pass",
+      "severity": "low",
+      "details": "required tools present"
+    },
+    {
+      "id": "op_auth_readiness",
+      "status": "pass",
+      "severity": "low",
+      "details": "OP service-account token resolved"
+    },
+    {
+      "id": "alerts_transport_readiness",
+      "status": "pass",
+      "severity": "low",
+      "details": "deterministic Slack transport ready"
+    },
+    {
+      "id": "beads_dolt",
+      "status": "pass",
+      "severity": "low",
+      "details": "Beads runtime ready"
+    },
+    {
+      "id": "tool_mcp_health",
+      "status": "pass",
+      "severity": "low",
+      "details": "converged"
+    },
+    {
+      "id": "required_service_health",
+      "status": "pass",
+      "severity": "low",
+      "details": "required tools present"
+    },
+    {
+      "id": "op_auth_readiness",
+      "status": "pass",
+      "severity": "low",
+      "details": "OP service-account token resolved"
+    },
+    {
+      "id": "alerts_transport_readiness",
+      "status": "pass",
+      "severity": "low",
+      "details": "deterministic Slack transport ready"
+    }
+  ],
+  "repair_hints": [],
+  "reason_codes": [
+    "ok"
+  ],
+  "state_paths": {
+    "audit_root": "/home/fengning/.dx-state/fleet",
+    "tool_health_json": "/home/fengning/.dx-state/fleet/tool-health.json",
+    "tool_health_lines": "/home/fengning/.dx-state/fleet/tool-health.lines",
+    "audit_latest": "/home/fengning/.dx-state/fleet/audit/daily/latest.json",
+    "audit_history": "/home/fengning/.dx-state/fleet/audit/daily/history",
+    "legacy_state_roots": [
+      "/home/fengning/.dx-state/fleet-sync",
+      "/home/fengning/.dx-state/fleet_sync"
+    ]
+  },
+  "slack_channel": "#fleet-events",
+  "slack_message": "🛰️ dx-audit daily: green. checks pass=20 warn=0 fail=0 unknown=0 hosts_failed=0. ✅ no action needed"
+}
