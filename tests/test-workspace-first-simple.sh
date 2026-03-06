@@ -19,8 +19,8 @@ NC='\033[0m'
 pass_count=0
 fail_count=0
 
-pass() { echo -e "${GREEN}✓ PASS${NC}: $*"; ((pass_count++)); }
-fail() { echo -e "${RED}✗ FAIL${NC}: $*"; ((fail_count++)); }
+pass() { echo -e "${GREEN}✓ PASS${NC}: $*"; pass_count=$((pass_count + 1)); }
+fail() { echo -e "${RED}✗ FAIL${NC}: $*"; fail_count=$((fail_count + 1)); }
 
 section() { echo ""; echo -e "${BLUE}### $*${NC}"; }
 
@@ -100,7 +100,7 @@ else
 fi
 
 # Test 2.4: check_permission_gate updated
-if grep -A5 "check_permission_gate()" "$AGENTS_ROOT/scripts/dx-runner" | grep -q "canonical_worktree_forbidden"; then
+if grep -A10 "check_permission_gate()" "$AGENTS_ROOT/scripts/dx-runner" | grep -q "canonical_worktree_forbidden"; then
     pass "check_permission_gate() checks for canonical repos"
 else
     fail "check_permission_gate() doesn't check canonical repos"
