@@ -43,19 +43,17 @@ Returns user info including all workspaces the user belongs to.
 
 ## Switch Project
 
-Link a different project to the current directory:
+**CRITICAL**: NEVER use `railway link` - it's ALWAYS interactive (blocks agents).
+
+Instead, use `railway run` with context:
 
 ```bash
-railway link -p <project-id-or-name>
+railway run -p <project-id> -e <environment> -s <service> -- <command>
 ```
 
-Or interactively:
+For worktrees, use `dx-railway-run.sh` which reads context from `.dx-context/`.
 
-```bash
-railway link
-```
-
-After switching, use `status` skill to see project details.
+After switching context, use `status` skill to verify.
 
 ## Update Project
 

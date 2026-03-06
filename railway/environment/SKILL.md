@@ -408,7 +408,14 @@ You don't have permission to modify this environment. Check your Railway role.
 ### No Linked Project
 
 ```
-No project linked. Run `railway link` to link a project.
+No project linked.
+
+CRITICAL: NEVER use `railway link` - it's ALWAYS interactive (blocks agents).
+
+Instead, use railway run with context:
+  railway run -p <project-id> -e <environment> -s <service> -- <command>
+
+For worktrees, use dx-railway-run.sh which reads context from .dx-context/
 ```
 
 ## Composability

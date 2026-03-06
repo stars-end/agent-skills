@@ -64,8 +64,14 @@ If status returns "No linked project":
 
 > No Railway project linked to this directory.
 >
-> To link an existing project: `railway link`
-> To create a new project: `railway init`
+> **CRITICAL**: NEVER use `railway link` - it's ALWAYS interactive (blocks agents).
+>
+> Instead, use direct Railway commands with context:
+> ```bash
+> railway run -p <project-id> -e <environment> -s <service> -- <command>
+> ```
+>
+> For worktrees, use `dx-railway-run.sh` which reads context from `.dx-context/`.
 
 ## Presenting Status
 

@@ -96,7 +96,14 @@ more context, use `deployment` skill with `--lines` flag (never stream).
 
 ### No Project Linked
 ```
-No Railway project linked. Run `railway link` first.
+No Railway project linked.
+
+CRITICAL: NEVER use `railway link` - it's ALWAYS interactive (blocks agents).
+
+Instead, use railway up with context:
+  railway up --project <project-id> --environment <env> --detach
+
+For worktrees, use dx-railway-run.sh which reads context from .dx-context/
 ```
 
 ### No Service Linked

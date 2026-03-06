@@ -192,16 +192,15 @@ railway whoami --json | jq '.workspaces[] | select(.name | test("personal"; "i")
 
 ## Link Existing Project
 
+**CRITICAL**: NEVER use `railway link` - it's ALWAYS interactive (blocks agents).
+
+Instead, use `railway run` with context for all operations:
+
 ```bash
-railway link -p <project>
+railway run -p <project-id> -e <environment> -s <service> -- <command>
 ```
 
-Options:
-
-- `-p, --project` - Project name or ID
-- `-e, --environment` - Environment (default: production)
-- `-s, --service` - Service to link
-- `-t, --team` - Team/workspace
+For worktrees, use `dx-railway-run.sh` which reads context from `.dx-context/`.
 
 ## Create Service
 

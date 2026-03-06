@@ -92,6 +92,27 @@ railway status            # Should show project context
 - `railway whoami` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
 - Token file not found → Run `~/agent-skills/scripts/create-op-credential.sh`
 
+### 5.2) Railway Link Warning (CRITICAL)
+
+**NEVER use `railway link` - it's ALWAYS interactive.**
+
+The Railway CLI prompts for workspace selection even with all flags provided. This blocks agents in non-TTY environments.
+
+**Instead, for worktrees/automation, use:**
+
+```bash
+# Direct Railway run (recommended)
+railway run -p <project-id> -e <env> -s <service> -- <command>
+
+# Or use dx-railway-run.sh (reads context from worktree)
+dx-railway-run.sh -- make dev
+```
+
+**Context files (created by worktree-setup.sh):**
+- Location: `/tmp/agents/.dx-context/<beads-id>/<repo>/railway-context.env`
+- Contains: `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT`, `RAILWAY_SERVICE`
+- Used by: `dx-railway-run.sh` to provide Railway context in worktrees
+
 ## 6) Parallel Agent Orchestration (V8.4)
 
 ### Pattern: Plan-First, Batch-Second, Commit-Only
