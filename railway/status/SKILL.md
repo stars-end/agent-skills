@@ -64,7 +64,11 @@ If status returns "No linked project":
 
 > No Railway project linked to this directory.
 >
-> To link an existing project: `railway link`
+> To link non-interactively (for agents):
+> ```
+> railway link --project <id-or-name> --environment <env> [--service <service>] --json
+> ```
+>
 > To create a new project: `railway init`
 
 ## Presenting Status

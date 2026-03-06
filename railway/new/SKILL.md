@@ -192,16 +192,16 @@ railway whoami --json | jq '.workspaces[] | select(.name | test("personal"; "i")
 
 ## Link Existing Project
 
+**CRITICAL: Always provide ALL required flags to `railway link`**
+
 ```bash
-railway link -p <project>
+# CORRECT - Non-interactive (works in agents/CI)
+railway link --project <project-id> --environment <env> [--service <service>] --json
+
+# WRONG - Will block waiting for input
+railway link
+railway link --project my-project  # Missing --environment
 ```
-
-Options:
-
-- `-p, --project` - Project name or ID
-- `-e, --environment` - Environment (default: production)
-- `-s, --service` - Service to link
-- `-t, --team` - Team/workspace
 
 ## Create Service
 

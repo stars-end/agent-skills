@@ -43,19 +43,20 @@ Returns user info including all workspaces the user belongs to.
 
 ## Switch Project
 
-Link a different project to the current directory:
+**CRITICAL: Always provide ALL required flags to `railway link`**
+
+When flags are missing, Railway prompts interactively. With all required flags, it's fully non-interactive.
 
 ```bash
-railway link -p <project-id-or-name>
-```
+# CORRECT - Non-interactive (works in agents/CI)
+railway link --project <project-id> --environment <env> [--service <service>] --json
 
-Or interactively:
-
-```bash
+# WRONG - Will block waiting for input
 railway link
+railway link --project my-project  # Missing --environment
 ```
 
-After switching, use `status` skill to see project details.
+**After switching, use `status` skill to verify the link.
 
 ## Update Project
 

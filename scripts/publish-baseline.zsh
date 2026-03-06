@@ -107,6 +107,32 @@ railway status            # Should show project context
 - \`railway whoami\` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
 - Token file not found → Run \`~/agent-skills/scripts/create-op-credential.sh\`
 
+### 5.2) Railway Link Non-Interactive Usage
+
+**CRITICAL: Always provide ALL required flags to \`railway link\`.**
+
+Railway CLI prompts interactively when flags are missing, blocking agents in non-TTY environments. With all required flags, it's fully non-interactive.
+
+**Required flags:**
+- \`--project <id-or-name>\` - Project ID or name (REQUIRED)
+- \`--environment <name>\` - Environment name (REQUIRED)
+- \`--service <name>\` - Service name (optional, for service context)
+- \`--json\` - Machine-readable output (recommended)
+
+**Examples:**
+
+\`\`\`bash
+# CORRECT - Non-interactive (works in agents/CI)
+railway link --project prime-radiant-ai --environment dev --service backend --json
+railway link -p my-project -e staging --json  # Minimum (no service)
+
+# WRONG - Will block waiting for input
+railway link                              # Missing all flags
+railway link --project my-project          # Missing --environment
+\`\`\`
+
+**Note:** Visual prompts appear (cosmetic) but command completes successfully with JSON output when all required flags are provided.
+
 ## 6) Parallel Agent Orchestration (V8.4)
 
 ### Pattern: Plan-First, Batch-Second, Commit-Only
