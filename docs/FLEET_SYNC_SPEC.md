@@ -171,6 +171,80 @@ Transport failure semantics:
 - preserve underlying audit status if audit failed
 - return non-zero when transport fails after a green audit
 
-## 12) Out of Scope
+## 12) Fail-Closed MCP Semantics (V2.2)
+
+### Overall Truth Model
+
+The `overall` status is computed from BOTH tool rows AND file rows:
+
+```json
+{
+  "overall": "green|yellow|red",
+  "summary": {
+    "tools_pass": N,
+    "tools_warn": N,
+    "tools_fail": N,
+    "files_pass": N,
+    "files_warn": N,
+    "files_fail": N,
+    "pass": N,
+    "warn": N,
+    "fail": N
+  }
+}
+```
+
+**Critical rule**: If `tools_fail > 0` → `overall = "red"` (no exceptions).
+
+### Runtime Error Fail-Closed
+
+On Python runtime errors, `dx-mcp-tools-sync.sh`:
+
+1. **Removes stale cache fallback**: No fallback to cached JSON
+2. **Emits synthetic red JSON**:
+   ```json
+   {
+     "overall": "red",
+     "reason_code": "mcp_tools_sync_runtime_error",
+     "next_action": "Check Python environment, PyYAML availability, and manifest validation",
+     "details": "runtime error - fail-closed"
+   }
+   ```
+3. **Exits non-zero**: Returns exit code 1
+
+### Strict Freshness Enforcement
+
+Both local and remote snapshots must satisfy freshness threshold:
+
+- **Local**: `generated_at_epoch` vs current time
+- **Remote**: `generated_at_epoch` vs current time + transport latency
+- **Threshold**: `audit.thresholds.tool_stale_hours` (default: 6 hours)
+
+**Reason codes**:
+- `local_snapshot_stale`: Local snapshot age > threshold
+- `remote_snapshot_stale`: Remote snapshot age > threshold  
+- `remote_snapshot_missing`: Cannot fetch remote snapshot
+
+### Fleet-Wide Converge Command
+
+`dx-fleet converge [--apply|--check|--repair] [--json]`:
+
+- Runs `dx-mcp-tools-sync.sh` on all canonical VMs
+- Returns non-zero if any host is red
+- Includes host-level summary with reason codes
+
+Example:
+```bash
+dx-fleet converge --check --json | jq '.'
+# {
+#   "overall": "green|yellow|red",
+#   "hosts_checked": 4,
+#   "hosts_passed": 4,
+#   "hosts_failed": 0,
+#   "results": [...]
+# }
+```
+
+## 13) Out of Scope
 
 Fleet Sync does not introduce centralized execution, SSE gateways, or runtime multiplexers.
