@@ -40,6 +40,10 @@ audit:
     - ide_config_presence_and_drift
     - cron_health
     - service_cap_and_forbidden_components
+<<<<<<< Updated upstream
+=======
+    - trailer_compliance
+>>>>>>> Stashed changes
     - deployment_stack_readiness
     - railway_auth_context
     - gh_deploy_readiness
@@ -48,7 +52,11 @@ audit:
     dolt_stale_minutes: 15
     unknown_host_escalation_runs: 3
   slack:
+<<<<<<< Updated upstream
     channel: "#fleet-events"
+=======
+    channel: "#dx-alerts"
+>>>>>>> Stashed changes
     post_on_green: true
     thread_mode: false
   gemini_enforcement:

@@ -44,6 +44,10 @@ WEEKLY_CHECK_IDS_DEFAULT=(
   ide_config_presence_and_drift
   cron_health
   service_cap_and_forbidden_components
+<<<<<<< Updated upstream
+=======
+  trailer_compliance
+>>>>>>> Stashed changes
   deployment_stack_readiness
   railway_auth_context
   gh_deploy_readiness
@@ -183,7 +187,12 @@ manifest_scalar_audit() {
     in_audit && in_section && $0 !~ /^  / { in_section=0; in_key=0; next }
     in_audit && in_section && $0 ~ "^" key {
       value=$0
+<<<<<<< Updated upstream
       sub(/^[[:space:]]*[^:]+:[[:space:]]*/, "", value)
+=======
+      sub(/^[^:]+:[[:space:]]*/, "", value)
+      gsub(/#.*/, "", value)
+>>>>>>> Stashed changes
       gsub(/^"|"$/, "", value)
       gsub(/^'\''|'\''$/, "", value)
       value=trim(value)
@@ -537,6 +546,7 @@ gemini_artifacts_present() {
   fi
 
   if [[ -x "${HOME}/.gemini/gemini" ]] || [[ -x "${HOME}/.gemini/gemini-cli" ]] || command -v gemini >/dev/null 2>&1 || command -v gemini-cli >/dev/null 2>&1; then
+<<<<<<< Updated upstream
     return 0
   fi
   return 1
@@ -703,6 +713,132 @@ weekly_check_railway_auth() {
   append_weekly_check "railway_auth_context" "$local_host" "warn" "low" "Railway auth unavailable (railway whoami failed and OP hydration retry failed)"
 }
 
+=======
+    return 0
+  fi
+  return 1
+}
+
+gemini_enforcement_state() {
+  if gemini_artifacts_present; then
+    local marker="${STATE_ROOT}/enforcement/gemini-enforcement.json"
+    [[ -f "$marker" ]] && rm -f "$marker"
+    echo "pass"
+    return
+  fi
+
+  local marker="${STATE_ROOT}/enforcement/gemini-enforcement.json"
+  local now_epoch
+  local first_epoch
+  now_epoch="$(date -u +%s)"
+  mkdir -p "$(dirname "$marker")"
+  first_epoch="$(sed -n '1p' "$marker" 2>/dev/null || printf '')"
+  if [[ -z "$first_epoch" || ! "$first_epoch" =~ ^[0-9]+$ ]]; then
+    first_epoch="$now_epoch"
+    printf '%s\n' "$first_epoch" > "$marker"
+  fi
+
+  local days_missing
+  days_missing=$(( (now_epoch - first_epoch) / 86400 ))
+  if [[ "$days_missing" -le "$GEMINI_GRACE_DAYS" ]]; then
+    echo "warn"
+  elif [[ "$days_missing" -gt "$GEMINI_ENFORCE_AFTER" ]]; then
+    echo "fail"
+  else
+    echo "warn"
+  fi
+}
+
+weekly_check_ide_config() {
+  local local_host="local"
+  local missing=0
+  local file
+  for file in "${HOME}/.claude/settings.json" "${HOME}/.claude.json" "${HOME}/.codex/config.toml" "${HOME}/.opencode/config.json" "${HOME}/.gemini/antigravity/mcp_config.json"; do
+    [[ -f "$file" ]] || missing=$((missing + 1))
+  done
+  if [[ "$missing" -gt 0 ]]; then
+    append_weekly_check "ide_config_presence_and_drift" "$local_host" "fail" "high" "Missing canonical IDE config files required by governance checks"
+    return
+  fi
+
+  local gemini_state
+  gemini_state="$(gemini_enforcement_state)"
+  if [[ "$gemini_state" == "fail" ]]; then
+    append_weekly_check "ide_config_presence_and_drift" "$local_host" "fail" "high" "Gemini CLI lane outside enforcement window: missing ~/.gemini/GEMINI.md, ~/.gemini/antigravity/mcp_config.json, or gemini binary"
+    return
+  fi
+  if [[ "$gemini_state" == "warn" ]]; then
+    append_weekly_check "ide_config_presence_and_drift" "$local_host" "warn" "medium" "Gemini CLI lane missing required artifacts: grace window active"
+    return
+  fi
+
+  append_weekly_check "ide_config_presence_and_drift" "$local_host" "pass" "low" "Canonical IDE config files present"
+}
+
+weekly_check_cron_health() {
+  local local_host="local"
+  if command -v crontab >/dev/null 2>&1; then
+    if crontab -l >/dev/null 2>&1; then
+      append_weekly_check "cron_health" "$local_host" "pass" "low" "crontab readable"
+    else
+      append_weekly_check "cron_health" "$local_host" "warn" "low" "crontab present but inaccessible"
+    fi
+  else
+    append_weekly_check "cron_health" "$local_host" "warn" "low" "crontab command missing"
+  fi
+}
+
+weekly_check_service_capabilities() {
+  local local_host="local"
+  local blocked=0
+  local forbidden_files=("${HOME}/.agents/tools/prohibited" "${HOME}/.agent/prohibited")
+  local ff
+  for ff in "${forbidden_files[@]}"; do
+    [[ -f "$ff" ]] && blocked=$((blocked + 1))
+  done
+
+  if [[ "$blocked" -gt 0 ]]; then
+    append_weekly_check "service_cap_and_forbidden_components" "$local_host" "warn" "medium" "$blocked forbidden component markers detected"
+  else
+    append_weekly_check "service_cap_and_forbidden_components" "$local_host" "pass" "low" "No blocked legacy markers"
+  fi
+}
+
+weekly_check_trailer_compliance() {
+  local local_host="local"
+  local msg
+  msg="$(git -C "${HOME}/agent-skills" log -1 --pretty=%B 2>/dev/null || true)"
+  if [[ "$msg" == *"Feature-Key:"* ]] && [[ "$msg" == *"Agent:"* ]]; then
+    append_weekly_check "trailer_compliance" "$local_host" "pass" "low" "Latest commit has required trailers"
+  else
+    append_weekly_check "trailer_compliance" "$local_host" "warn" "medium" "Latest commit missing Feature-Key or Agent trailer"
+  fi
+}
+
+weekly_check_deployment_stack() {
+  local local_host="local"
+  local has_railway=0
+  local has_gh=0
+  command -v dx-fleet-check >/dev/null 2>&1 && has_railway=$((has_railway + 1))
+  command -v gh >/dev/null 2>&1 && has_gh=$((has_gh + 1))
+
+  if [[ "$has_railway" -gt 0 ]] || [[ "$has_gh" -gt 0 ]]; then
+    append_weekly_check "deployment_stack_readiness" "$local_host" "pass" "low" "Deployment tooling available"
+  else
+    append_weekly_check "deployment_stack_readiness" "$local_host" "warn" "low" "No deployment tooling detected"
+  fi
+}
+
+weekly_check_railway_auth() {
+  local local_host="local"
+  if [[ -n "${RAILWAY_API_TOKEN:-}" ]] || [[ -n "${RAILWAY_PROJECT_ID:-}" ]] || [[ -n "${RAILWAY_SERVICE_ID:-}" ]]; then
+    append_weekly_check "railway_auth_context" "$local_host" "pass" "low" "Railway auth context set"
+  else
+    append_weekly_check "railway_auth_context" "$local_host" "warn" "low" "RAILWAY_API_TOKEN / project context not set"
+  fi
+}
+
+>>>>>>> Stashed changes
 weekly_check_gh_readiness() {
   local local_host="local"
   if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
@@ -734,6 +870,12 @@ run_weekly_governance() {
       service_cap_and_forbidden_components)
         weekly_check_service_capabilities
         ;;
+<<<<<<< Updated upstream
+=======
+      trailer_compliance)
+        weekly_check_trailer_compliance
+        ;;
+>>>>>>> Stashed changes
       deployment_stack_readiness)
         weekly_check_deployment_stack
         ;;

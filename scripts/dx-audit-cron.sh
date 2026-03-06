@@ -3,7 +3,11 @@
 # dx-audit-cron.sh
 #
 # Cron wrapper for Fleet audit posting.
+<<<<<<< Updated upstream
 # Produces deterministic one-message payloads for #fleet-events.
+=======
+# Produces deterministic one-message payloads for #dx-alerts.
+>>>>>>> Stashed changes
 #
 set -euo pipefail
 
@@ -63,7 +67,11 @@ main() {
   local message
   local manifest_channel
   local log_file="${HOME}/logs/dx-audit.log"
+<<<<<<< Updated upstream
   local channel="#fleet-events"
+=======
+  local channel="#dx-alerts"
+>>>>>>> Stashed changes
   local audit_exit=0
   mkdir -p "$(dirname "$log_file")"
 
@@ -86,7 +94,10 @@ main() {
   if [[ -n "$manifest_channel" ]]; then
     channel="$manifest_channel"
   fi
+<<<<<<< Updated upstream
   channel="$(agent_coordination_resolve_channel "${DX_ALERTS_CHANNEL_ID:-$channel}")"
+=======
+>>>>>>> Stashed changes
 
   {
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] mode=$MODE"
@@ -101,7 +112,11 @@ main() {
     return "$audit_exit"
   fi
 
+<<<<<<< Updated upstream
   if agent_coordination_send_message "$message" "$channel"; then
+=======
+  if agent_coordination_send_message "$message" "${DX_ALERTS_CHANNEL_ID:-$channel}"; then
+>>>>>>> Stashed changes
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] audit message sent to $channel"
     return "$audit_exit"
   fi

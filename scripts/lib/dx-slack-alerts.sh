@@ -266,7 +266,10 @@ agent_coordination_send_message() {
   local webhook_url="${DX_SLACK_WEBHOOK:-}"
 
   agent_coordination_prepare_transport
+<<<<<<< Updated upstream
   channel="$(agent_coordination_resolve_channel "$channel")"
+=======
+>>>>>>> Stashed changes
   webhook_url="${DX_SLACK_WEBHOOK:-${DX_ALERTS_WEBHOOK:-}}"
 
   if agent_coordination_post_message "$message" "$channel"; then
