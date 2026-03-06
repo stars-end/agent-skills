@@ -625,8 +625,9 @@ remote_host_payload() {
   local host="$1"
   local target="$2"
   local remote_script="${REPO_ROOT}/scripts/dx-fleet-check.sh"
+  local remote_script_alt="${remote_script#/private}"
   local cmd
-  cmd="SCRIPT='${remote_script}'; if [ ! -x \"\$SCRIPT\" ]; then SCRIPT=~/agent-skills/scripts/dx-fleet-check.sh; fi; STATE_DIR=\"\$HOME/.dx-state/fleet\"; DX_FLEET_STATE_ROOT=\"\$STATE_DIR\" \"\$SCRIPT\" --mode ${MODE} --local-only --json --state-dir \"\$STATE_DIR\""
+  cmd="SCRIPT='${remote_script}'; ALT='${remote_script_alt}'; if [ ! -x \"\$SCRIPT\" ] && [ -x \"\$ALT\" ]; then SCRIPT=\"\$ALT\"; fi; if [ ! -x \"\$SCRIPT\" ]; then SCRIPT=~/agent-skills/scripts/dx-fleet-check.sh; fi; STATE_DIR=\"\$HOME/.dx-state/fleet\"; DX_FLEET_STATE_ROOT=\"\$STATE_DIR\" \"\$SCRIPT\" --mode ${MODE} --local-only --json --state-dir \"\$STATE_DIR\""
   ssh_canonical_vm "$target" "$cmd" 2>/dev/null || true
 }
 
