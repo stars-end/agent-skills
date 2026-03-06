@@ -1,218 +1,157 @@
+---
 name: prompt-writing
 description: |
-  Drafts robust, low-cognitive-load prompts for other agents that enforce the DX invariants:
-  worktree-first, no canonical writes, and a "done gate" (dx-verify-clean).
-  Use when you are writing an implementation prompt, rollout prompt, or audit prompt for any IDE agent.
+  Draft self-contained prompts for delegated agents with cross-VM-safe context.
+  MUST BE USED when assigning work to another agent (implementation, QA, rollout, or audit).
+  Enforces: worktree-first, no canonical writes, Beads traceability (epic/subtask/dependencies), and required PR artifacts (PR_URL + PR_HEAD_SHA).
+  Trigger phrases include: "assign to another agent", "write a one-shot prompt", "dispatch this", "prepare autonomous prompt", "QA agent prompt".
 tags: [workflow, prompts, orchestration, dx, safety]
 allowed-tools:
   - Read
   - Bash
 ---
 
-# Prompt Writing (DX-Invariants First)
+# Prompt Writing (Delegation Contract First)
 
 ## Goal
 
-Ensure every assigned task stays on the happy path even under agent tunnel-vision:
-- **No canonical writes**
-- **Worktree first**
-- **Done gate**
-- **Bounded output / bounded PR creation** (when applicable)
+Generate a prompt another agent can execute autonomously without local-machine assumptions:
+- Cross-VM safe context via GitHub PR link + commit SHA
+- Self-contained requirements and acceptance criteria
+- Beads traceability (epic/subtask/dependencies)
+- Hard delivery contract: `PR_URL` + `PR_HEAD_SHA`
+
+## Trigger Conditions (Mandatory)
+
+Use this skill whenever user intent is delegation to another agent, including:
+- "assign to another agent"
+- "write me a one-shot prompt"
+- "prepare a prompt for QA/dev agent"
+- "dispatch this work"
+- "make this autonomous for jr agent"
+
+Do not wait for the user to say "prompt-writing" explicitly if delegation intent is clear.
+
+## Core Requirements (Always)
+
+Every generated delegation prompt MUST enforce:
+
+1) **Cross-VM accessibility**
+- Do not reference `/Users/...`, `/tmp/...`, or other local-only paths as source of truth.
+- Primary context must be reachable by URL and commit, ideally:
+  - `PR_URL`
+  - `PR_HEAD_SHA`
+  - repo-relative file paths in that PR/branch.
+
+2) **Self-contained task definition**
+- Objective, scope boundaries, acceptance criteria, and stop conditions must be in the prompt.
+- Delegate must not need hidden context from local docs.
+
+3) **Beads documentation contract**
+- Include and require explicit identifiers:
+  - `BEADS_EPIC`
+  - `BEADS_SUBTASK`
+  - `BEADS_DEPENDENCIES` (or `none`)
+- If unknown, force delegate to return `BLOCKED: MISSING_BEADS_CONTEXT`.
+
+4) **Worktree + canonical safety**
+- No writes in canonical clones.
+- Worktree required before edits.
+
+5) **PR artifact return contract**
+- Final response MUST include:
+  - `PR_URL: https://github.com/<org>/<repo>/pull/<n>`
+  - `PR_HEAD_SHA: <40-char sha>`
+- If missing, delegate must return blocker with exact next commands.
 
 ## Output Contract (Always)
 
-When asked to write a prompt for another agent, output:
-1) A **single copy/paste prompt**
-2) A short **PR description checklist** (optional) if the task requires “proof bundles”
-3) A **Mandatory Review Artifacts** section with:
-   - `PR_URL` (required once PR exists)
-   - `PR_HEAD_SHA` (required once first real commit exists)
-   - `FEATURE_KEY` / work item ID
+When user asks for a delegated prompt, return:
+1) One copy/paste prompt
+2) Optional short "Dispatcher Notes" (only if needed)
+3) Nothing else unless user asks
 
-## PR Artifact Contract (Mandatory)
-
-All generated delegation prompts MUST enforce this behavior:
-1. Delegate opens a draft PR after the first real commit.
-2. Delegate final response MUST include:
-   - `PR_URL: https://github.com/<org>/<repo>/pull/<n>`
-   - `PR_HEAD_SHA: <40-char sha>`
-3. If PR does not exist yet, delegate MUST return:
-   - `BLOCKED: PR_NOT_CREATED`
-   - exact next commands to push branch and create PR
-
-## Invariant First Line (Always)
-
-Start every drafted prompt with this exact line (including punctuation and trailing space):
-
-```text
-you're a full-stack dev agent at a tiny fintech startup: 
-```
-
-## Mandatory Prefix (Always-On)
-
-Paste this prefix at the top of every prompt you generate:
+## Required Prompt Skeleton
 
 ```markdown
-## DX Global Constraints (Always-On)
-1) **NO WRITES** in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
-2) **Worktree first**: `dx-worktree create <id> <repo>`
-3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
-4) If you are about to edit anything under `~/...`, STOP and move to a worktree.
-5) **Draft PR early**: open a draft PR after your FIRST real commit — do NOT wait until done
-6) **Return review artifacts**: `PR_URL` + `PR_HEAD_SHA` are mandatory in final response
-```
-
-Recommended ordering:
-1) fintech first line
-2) DX global constraints block
-3) plan-first gate (if complex)
-4) task body
-5) done gate
-
-## Complex / Multi-Repo Tasks (Plan-First Gate)
-
-If the task touches **2+ repos** or has **3+ phases**, include this section immediately after the prefix:
-
-```markdown
-## Plan-First Gate (Mandatory)
-Before implementing, reply with:
-1) Worktrees you will create (repo → beads-id)
-2) Draft PRs that will exist at end (repo → title + expected PR URL placeholder)
-3) Exact commands you will run for proof (3–8 commands)
-
-Do not start implementation until this plan is written.
-```
-
-## Done Gate (Mandatory)
-
-Every prompt should end with:
-
-```markdown
-## Done Gate (Mandatory)
-Do not claim complete until:
-- All work is committed, pushed, and draft PR(s) exist (opened EARLY, not just at end)
-- `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
-- Final response includes: `PR_URL`, `PR_HEAD_SHA`, and validation summary
-```
-
-> **Note on "draft PR early":** `worktree-push.sh` (3:15 AM) pushes committed branches nightly.
-> Opening a draft PR after the first real commit makes work visible before the nightly push runs.
-> Uncommitted worktree changes older than 48h are GC'd — commit or lose it (by design).
-
-## Minimal PR Proof Bundle Template (Optional)
-
-Use when a task is operational / infra:
-
-```markdown
-## Proof Bundle (paste into PR description)
-- `dx-verify-clean`: PASS
-- `dx-status`: include the summary block
-- Any task-specific checks (1–5 lines each)
-```
-
-## Full Prompt Scaffold (Copy/Paste)
-
-Use this when you need a heavier orchestration scaffold while still keeping the DX invariants:
-
-```text
 you're a full-stack dev agent at a tiny fintech startup:
 
 ## DX Global Constraints (Always-On)
-1) **NO WRITES** in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
-2) **Worktree first**: `dx-worktree create <id> <repo>`
-3) **Before "done"**: run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
-4) If you are about to edit anything under `~/...`, STOP and move to a worktree.
-5) **Draft PR early**: open a draft PR after your FIRST real commit — do NOT wait until done
+1) NO WRITES in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
+2) Worktree first: `dx-worktree create <beads-id> <repo>`
+3) Before "done": run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
+4) Open draft PR after first real commit
+5) Final response MUST include `PR_URL` and `PR_HEAD_SHA`
+
+## Assignment Metadata (Required)
+- BEADS_EPIC: <bd-...>
+- BEADS_SUBTASK: <bd-....x>
+- BEADS_DEPENDENCIES: <comma-separated bd ids OR "none">
+- FEATURE_KEY: <bd-...>
+
+## Cross-VM Source of Truth (Required)
+- PR_URL: <required if exists>
+- PR_HEAD_SHA: <required if exists>
+- Repo paths to read first:
+  - <path1>
+  - <path2>
+
+If PR_URL/PR_HEAD_SHA is not available yet, you must create/refresh branch and open a draft PR before finishing.
 
 ## Objective
-[One sentence: what success means.]
+<single-sentence success condition>
 
-## Context
-[Repo/app context, constraints, deadlines, links, env details.]
+## Scope
+- In scope: <explicit>
+- Out of scope: <explicit>
 
-## Inputs
-- [Links, files, PRs, tickets, logs, commands already run]
+## Acceptance Criteria
+1) <criterion>
+2) <criterion>
+3) <criterion>
 
-## Plan-First Gate (Mandatory)
-Before implementing, reply with:
-1) Worktrees you will create (repo → beads-id)
-2) Draft PRs that will exist at end (repo → title + expected PR URL placeholder)
-3) Exact commands you will run for proof (3–8 commands)
-Do not start implementation until this plan is written.
+## Execution Plan (Mandatory)
+Before coding, reply with:
+1) Worktree path + branch name
+2) Files to modify
+3) Validation commands
 
-## Mandatory Review Artifacts
-In your final response, always include:
-- PR_URL: <required once PR is created>
-- PR_HEAD_SHA: <required once first real commit exists>
-- FEATURE_KEY: <beads/work item id>
+## Required Deliverables
+- Code changes committed and pushed
+- Draft/updated PR
+- Validation summary
+- Return block:
+  - PR_URL: https://github.com/<org>/<repo>/pull/<n>
+  - PR_HEAD_SHA: <40-char sha>
+  - BEADS_SUBTASK: <bd-...>
 
-If blocked:
-- BLOCKED: PR_NOT_CREATED
-- Next actions: exact commands to push and create PR
-
-## Task
-[Concrete deliverable(s) + acceptance criteria.]
+## Blockers Protocol
+If blocked, return exactly:
+- BLOCKED: <reason_code>
+- NEEDS: <single dependency/info needed>
+- NEXT_COMMANDS:
+  1) <command>
+  2) <command>
 
 ## Done Gate (Mandatory)
 Do not claim complete until:
-- All work is committed, pushed, and draft PR(s) exist (opened EARLY, not just at end)
-- `~/agent-skills/scripts/dx-verify-clean.sh` PASS (canonicals clean)
-- Final response includes `PR_URL` + `PR_HEAD_SHA`
-If blocked, explain which gate failed and the smallest next action to unblock.
+- changes are committed/pushed
+- draft PR exists
+- `dx-verify-clean.sh` passes
+- final response includes PR_URL and PR_HEAD_SHA
 ```
 
-## Frontend Verification Appendix (For UI/UX Tasks in prime-radiant-ai)
+## Cross-VM Guardrail (Critical)
 
-**When task involves frontend changes in prime-radiant-ai, append this section:**
+Prompts that reference local absolute paths as required inputs are invalid for cross-VM delegation.
+If there is no PR yet, instruct delegate to create one early and then continue using:
+- PR URL
+- HEAD SHA
+- repo-relative paths
 
-```markdown
-## Frontend Verification (If UI Changes)
+## Relationship to `tech-lead-handoff`
 
-If you modify any frontend files, you MUST:
+- `prompt-writing`: prepares autonomous prompts for another agent to execute.
+- `tech-lead-handoff`: packages completed investigation/planning for human tech-lead review.
 
-### 1. Build and Start Preview
-```bash
-pnpm --filter frontend build
-pnpm --filter frontend preview --port 5173 &
-sleep 3
-```
-
-### 2. Run Visual Regression
-```bash
-# Must use VISUAL_BASE_URL to avoid port conflict with webServer
-VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual
-```
-
-### 3. If Tests Fail
-- Check if change is intentional
-- If intentional: `VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update`
-- Commit baselines with justification
-
-### 4. Run Stylelint
-```bash
-pnpm --filter frontend lint:css
-```
-
-### 5. Required PR Body Section
-```markdown
-## Frontend Evidence
-
-### Route Matrix
-| Route | Desktop | Mobile | Status |
-|-------|---------|--------|--------|
-| / | ✅ | ✅ | Pass |
-
-### Evidence
-- Commit SHA: [sha]
-- Visual tests: [X] passed
-- Stylelint: PASS
-```
-
-### CI Auto-Runs
-- `visual-quality.yml` - Stylelint + Visual Regression
-- `lighthouse.yml` - Performance budgets
-
-**Full template:** `~/agent-skills/templates/frontend-evidence-contract.md`
-```
-
-**Usage:** Add this appendix when delegating UI/UX work to ensure evidence contract compliance.
+Use `prompt-writing` for delegation. Use `tech-lead-handoff` for approval handoffs.
