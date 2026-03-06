@@ -46,6 +46,7 @@ export CANONICAL_IDES=(
   "claude-code"
   "codex-cli"
   "opencode"
+  "gemini-cli"
 )
 
 # ------------------------------------------------------------
@@ -78,6 +79,28 @@ detect_host_key() {
     echo "$CANONICAL_HOST_KEY"
     return 0
   fi
+
+  # Prefer Tailscale self identity when available; this is stable on EPYC hosts
+  # where system hostnames are opaque cloud instance IDs.
+  if command -v tailscale >/dev/null 2>&1; then
+    local ts_dns
+    ts_dns="$(tailscale status --json 2>/dev/null | awk -F'"' '/"DNSName":/ {print $4; exit}')"
+    case "$ts_dns" in
+      *macmini* ) echo "macmini" ; return 0 ;;
+      *homedesktop-wsl*|*homedesktop* ) echo "homedesktop-wsl" ; return 0 ;;
+      *epyc12* ) echo "epyc12" ; return 0 ;;
+      *epyc6* ) echo "epyc6" ; return 0 ;;
+    esac
+  fi
+
+  local short_host
+  short_host="$(hostname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+  case "$short_host" in
+    *macmini* ) echo "macmini" ; return 0 ;;
+    *homedesktop* ) echo "homedesktop-wsl" ; return 0 ;;
+    *epyc12* ) echo "epyc12" ; return 0 ;;
+    *epyc6* ) echo "epyc6" ; return 0 ;;
+  esac
 
   case "$(uname -s 2>/dev/null || true)" in
     Darwin*) echo "macmini" ; return 0 ;;
@@ -188,6 +211,7 @@ get_ide_config() {
     claude-code) echo "$HOME/.claude/settings.json" ;;
     codex-cli) echo "$HOME/.codex/config.toml" ;;
     opencode) echo "$HOME/.opencode/config.json" ;;
+    gemini-cli) echo "$HOME/.gemini/GEMINI.md" ;;
     *)
       echo "Error: Unknown IDE '$ide'" >&2
       return 1
@@ -240,7 +264,7 @@ deploy_to_all_vms() {
   local dest="$2"
   local base
   base="$(basename "$src")"
-  local tmp="/tmp/agentskills-deploy-$base-$$"
+  local tmp="/tmp/agent-skills-deploy-$base-$$"
 
   echo "Deploying $src to all canonical VMs..."
 

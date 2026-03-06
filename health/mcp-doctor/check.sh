@@ -7,6 +7,7 @@ STRICT="${MCP_DOCTOR_STRICT:-0}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_DIR="${SKILLS_DIR:-"$(cd "${SCRIPT_DIR}/.." && pwd)"}"
+MANIFEST_PATH="${SKILLS_DIR}/configs/fleet-sync.manifest.yaml"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
@@ -14,17 +15,53 @@ FILES=(
   "$REPO_ROOT/.claude/settings.json"
   "$REPO_ROOT/.vscode/mcp.json"
   "$REPO_ROOT/codex.mcp.json"
-  # NOTE: gemini is deprecated (V4.2.1) - canonical IDEs: antigravity, claude-code, codex-cli, opencode
   "$REPO_ROOT/.mcp.json"
   "$REPO_ROOT/opencode.json"
   "$HOME/.claude/settings.json"
   "$HOME/.claude.json"
   "$HOME/.codex/config.toml"
-  # Canonical IDE config paths (V4.2.1)
   "$HOME/.gemini/antigravity/mcp_config.json"
   "$HOME/.opencode/config.json"
-  # NOTE: gemini settings deprecated - removed from checks
 )
+
+GEMINI_GRACE_DAYS=7
+GEMINI_ENFORCE_AFTER=7
+
+manifest_scalar() {
+  local section="$1"
+  local key="$2"
+  [[ ! -f "$MANIFEST_PATH" ]] && return
+  awk -v section="  ${section}:" -v key="    ${key}:" '
+    function trim(v) { gsub(/^[[:space:]]+|[[:space:]]+$/,"",v); return v }
+    {
+      if ($0 ~ /^audit:/) { in_audit=1; next }
+      if (in_audit && /^[^[:space:]]/) { in_audit=0; in_section=0; in_key=0 }
+      if (in_audit && $0 ~ "^" section "$") { in_section=1; in_key=0; next }
+      if (in_audit && in_section && $0 ~ "^" key) { in_key=1; next }
+      if (in_audit && in_section && in_key) {
+        value=$0
+        sub(/^[[:space:]]+[^:]+:[[:space:]]*/, "", value)
+        gsub(/#.*/, "", value)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+        gsub(/^"|"$/, "", value)
+        if (value != "") print value
+        exit
+      }
+    }
+  ' "$MANIFEST_PATH"
+}
+
+load_gemini_enforcement() {
+  local grace
+  local enforce
+  grace="$(manifest_scalar "gemini_enforcement" "grace_days" 2>/dev/null || true)"
+  enforce="$(manifest_scalar "gemini_enforcement" "enforce_after" 2>/dev/null || true)"
+  [[ -n "$grace" && "$grace" =~ ^[0-9]+$ ]] && GEMINI_GRACE_DAYS="$grace"
+  [[ -n "$enforce" && "$enforce" =~ ^[0-9]+$ ]] && GEMINI_ENFORCE_AFTER="$enforce"
+  if [[ "$GEMINI_ENFORCE_AFTER" -lt "$GEMINI_GRACE_DAYS" ]]; then
+    GEMINI_ENFORCE_AFTER="$GEMINI_GRACE_DAYS"
+  fi
+}
 
 have_in_files() {
   local needle="$1"
@@ -37,6 +74,62 @@ have_in_files() {
   done
   return 1
 }
+
+gemini_enforcement_state() {
+  local marker="${HOME}/.dx-state/fleet/enforcement/gemini-enforcement.json"
+  local now_epoch
+  local first_epoch=""
+  local missing=0
+  local artifact_paths=(
+    "${HOME}/.gemini/GEMINI.md"
+    "${HOME}/.gemini/antigravity/mcp_config.json"
+  )
+  local artifact
+  local has_binary=0
+
+  if [[ -x "${HOME}/.gemini/gemini" ]] || [[ -x "${HOME}/.gemini/gemini-cli" ]] || command -v gemini >/dev/null 2>&1 || command -v gemini-cli >/dev/null 2>&1; then
+    has_binary=1
+  fi
+
+  for artifact in "${artifact_paths[@]}"; do
+    [[ -f "$artifact" ]] && continue
+    missing=1
+  done
+  if [[ "$missing" -eq 0 ]] && [[ "$has_binary" -eq 1 ]]; then
+    if [[ -f "$marker" ]]; then
+      rm -f "$marker"
+    fi
+    echo "pass"
+    return
+  fi
+
+  if [[ "$missing" -eq 0 ]]; then
+    echo "warn"
+    return
+  fi
+
+  now_epoch="$(date -u +%s)"
+  mkdir -p "$(dirname "$marker")"
+  if [[ -f "$marker" ]]; then
+    first_epoch="$(sed -n '1p' "$marker" 2>/dev/null || printf '')"
+  fi
+  if [[ -z "$first_epoch" || ! "$first_epoch" =~ ^[0-9]+$ ]]; then
+    first_epoch="$now_epoch"
+    printf '%s\n' "$first_epoch" > "$marker"
+  fi
+  local days_missing=$(( (now_epoch - first_epoch) / 86400 ))
+  if [[ "$days_missing" -le "$GEMINI_GRACE_DAYS" ]]; then
+    echo "warn"
+    return
+  fi
+  if [[ "$days_missing" -gt "$GEMINI_ENFORCE_AFTER" ]]; then
+    echo "fail"
+  else
+    echo "warn"
+  fi
+}
+
+load_gemini_enforcement
 
 missing_required=0
 missing_optional=0
@@ -239,6 +332,21 @@ if command -v gh >/dev/null 2>&1; then
   echo "✅ gh ($(gh --version 2>/dev/null | head -1 || echo installed))"
 else
   echo "⚠️  gh (not installed) — optional"
+  missing_optional=$((missing_optional+1))
+fi
+
+echo ""
+echo "Canonical Gemini CLI lane:"
+gemini_state="$(gemini_enforcement_state)"
+if [[ "$gemini_state" == "pass" ]]; then
+  echo "✅ gemini-cli lane present and compliant"
+elif [[ "$gemini_state" == "warn" ]]; then
+  echo "⚠️  gemini-cli lane missing artifacts; allowed in grace window (${GEMINI_GRACE_DAYS} day(s), enforce after ${GEMINI_ENFORCE_AFTER} day(s))"
+  echo "   Ensure: ~/.gemini/GEMINI.md, ~/.gemini/gemini or ~/.gemini/gemini-cli, ~/.gemini/antigravity/mcp_config.json"
+  missing_optional=$((missing_optional+1))
+else
+  echo "❌ gemini-cli lane missing beyond grace window"
+  echo "   Ensure: ~/.gemini/GEMINI.md, ~/.gemini/gemini or ~/.gemini/gemini-cli, ~/.gemini/antigravity/mcp_config.json"
   missing_optional=$((missing_optional+1))
 fi
 

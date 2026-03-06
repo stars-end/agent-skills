@@ -1,0 +1,66 @@
+version: "2.2.0"
+source: "agent-skills/fleet-sync"
+coordinator_host: "macmini"
+hosts:
+  - host: "macmini"
+    role: "canonical"
+    checks:
+      - beads_dolt
+      - required_service_health
+  - host: "homedesktop-wsl"
+    role: "workstation"
+    checks:
+      - beads_dolt
+      - required_service_health
+  - host: "epyc6"
+    role: "linux"
+    checks:
+      - beads_dolt
+      - required_service_health
+  - host: "epyc12"
+    role: "linux"
+    checks:
+      - beads_dolt
+      - required_service_health
+audit:
+  coordinator_host: "macmini"
+  schedule:
+    daily: "0 6 * * *"
+    weekly: "0 7 * * 0"
+  daily_checks:
+    - beads_dolt
+    - tool_mcp_health
+    - required_service_health
+    - op_auth_readiness
+    - alerts_transport_readiness
+  weekly_checks:
+    - canonical_repo_hygiene
+    - skills_symlink_integrity
+    - global_constraints_rails
+    - ide_config_presence_and_drift
+    - cron_health
+    - service_cap_and_forbidden_components
+    - deployment_stack_readiness
+    - railway_auth_context
+    - gh_deploy_readiness
+  thresholds:
+    tool_stale_hours: 6
+    dolt_stale_minutes: 15
+    unknown_host_escalation_runs: 3
+  slack:
+    channel: "#fleet-events"
+    post_on_green: true
+    thread_mode: false
+  gemini_enforcement:
+    grace_days: 7
+    enforce_after: 7
+legacy_state_roots:
+  - ~/.dx-state/fleet-sync
+  - ~/.dx-state/fleet_sync
+state_layout:
+  tool_health_json: "tool-health.json"
+  tool_health_lines: "tool-health.lines"
+  daily_audit_latest: "audit/daily/latest.json"
+  daily_audit_history: "audit/daily/history"
+  weekly_audit_latest: "audit/weekly/latest.json"
+  weekly_audit_history: "audit/weekly/history"

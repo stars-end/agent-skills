@@ -1,0 +1,43 @@
+# Fleet Sync 14-Day Soak Report (Non-Gating Observability)
+
+## Readiness Decision
+- Program gate impact: **NON-BLOCKING**
+- This report tracks reliability trends and does not gate bd-d8f4 completion.
+
+## Scope
+bd-d8f4.6 post-rollout reliability tracking artifact.
+
+## Date
+- Generated: `2026-03-05`
+
+## Data Availability
+- Current audit history currently has limited span in this run.
+- Required evidence for 14-day telemetry is tracked under:
+  - `/tmp/fleet-platform-closeout-2026-03-05/` (fresh evidence set)
+- **14-day aggregate not yet available yet in this run**.
+
+## Computed Baseline (Current Window)
+- Daily latest: red.
+- Weekly latest: yellow.
+- Known unresolved drift:
+  - Remote host snapshot reachability for `epyc6`, `epyc12`, `homedesktop-wsl` unresolved.
+- Repair coverage:
+  - Repair command contract validated with fixture pass/fail and structured JSON outputs.
+
+## SLO Check
+- Target SLO: <=30 min founder time / week and no unresolved drift >24h.
+- Current observational verdict: **NOT YET COMPUTABLE** (insufficient coverage + unresolved drift windows).
+
+## MTTR/Red-Yellow
+- Not computed for 14-day distribution due insufficient sample depth.
+- Existing red state remains dominated by connectivity and transport readiness and should be cleared for operational confidence.
+
+## Mitigations before SLO re-test
+1. Rehydrate canonical hosts so `~/.dx-state/fleet` snapshots are reachable for all targets.
+2. Run 14 consecutive daily sessions with persisted artifacts.
+3. Recalculate MTTR and unresolved windows from real history.
+
+## Evidence
+- `/Users/fengning/.dx-state/fleet/audit/daily/history/*.json`
+- `/Users/fengning/.dx-state/fleet/audit/weekly/history/*.json`
+- `/tmp/fleet-platform-closeout-2026-03-05/concurrency/*-summary.txt`

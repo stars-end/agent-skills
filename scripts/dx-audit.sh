@@ -1,481 +1,1226 @@
 #!/usr/bin/env bash
 #
-# dx-audit.sh - V8 Invariant Audit
+# dx-audit.sh
 #
-# Checks V8 DX invariants across all repos and outputs structured data
-# for LLM analysis (openclawd, gemini, etc.)
-#
-# Usage: dx-audit.sh [--json] [--slack] [--output FILE]
-#
-# Invariants checked:
-#   1. Canonical repos read-only (rescue branch evidence)
-#   2. Feature-Key trailer compliance
-#   3. No auto-merge enabled on PRs
-#   4. Agent: trailer present on commits
-#   5. PR-to-beads linkage
-#
-# Schedule: Weekly via system cron (OpenClaw native cron is broken)
-# Cron: 0 7 * * 0 /bin/bash -c 'source ~/.bashrc; MSG=$(~/agent-skills/scripts/dx-audit.sh --slack); /bin/bash ~/agent-skills/scripts/dx-audit-cron.sh'
+# Fleet audit command for daily and weekly checks.
+# Produces a machine-readable contract for downstream automation.
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPOS=("stars-end/agent-skills" "stars-end/prime-radiant-ai" "stars-end/affordabot" "stars-end/llm-common")
-LOOKBACK_DAYS=7
-OUTPUT_FORMAT="markdown"
-OUTPUT_FILE=""
-RECOVERY_LOG="$HOME/.dx-state/recovery-commands.log"
+MANIFEST_PATH="${SCRIPT_DIR}/../configs/fleet-sync.manifest.yaml"
+STATE_ROOT="${DX_FLEET_STATE_ROOT:-${HOME}/.dx-state/fleet}"
+STATE_ROOT_LEGACY1="${HOME}/.dx-state/fleet-sync"
+STATE_ROOT_LEGACY2="${HOME}/.dx-state/fleet_sync"
 
-FOUNDER_STATUS="unknown"
-FOUNDER_LAST_SUCCESS_AT=""
-FOUNDER_LAST_SUCCESS_AGE_MIN=""
-FOUNDER_LAST_FAILURE_AT=""
-FOUNDER_LAST_FAILURE_REASON=""
-FOUNDER_LAST_FAILURE_AGE_MIN=""
-FOUNDER_LAST_TRANSPORT_FAILURE_AT=""
-FOUNDER_LAST_TRANSPORT_FAILURE_AGE_MIN=""
-FOUNDER_LAST_SUCCESS_SOURCE=""
-FOUNDER_LAST_FAILURE_SOURCE=""
-FOUNDER_LAST_TRANSPORT_FAILURE_SOURCE=""
+MODE="weekly"
+OUTPUT_SLACK=0
+STATE_ONLY=0
 
-# Parse args
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --json) OUTPUT_FORMAT="json"; shift ;;
-    --slack) OUTPUT_FORMAT="slack"; shift ;;
-    --output) OUTPUT_FILE="$2"; shift 2 ;;
-    --help) echo "Usage: dx-audit.sh [--json] [--slack] [--output FILE]"; exit 0 ;;
-    *) echo "Unknown option: $1"; exit 1 ;;
-  esac
-done
+if [[ -f "${SCRIPT_DIR}/canonical-targets.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${SCRIPT_DIR}/canonical-targets.sh"
+fi
 
-# Timestamp
-TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-CUTOFF_DATE=$(date -u -v-${LOOKBACK_DAYS}d +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "${LOOKBACK_DAYS} days ago" +"%Y-%m-%dT%H:%M:%SZ")
-CUTOFF_EPOCH=$(date -u -v-${LOOKBACK_DAYS}d +%s 2>/dev/null || date -u -d "${LOOKBACK_DAYS} days ago" +%s)
+if ! declare -p CANONICAL_REQUIRED_REPOS >/dev/null 2>&1 || [[ "${#CANONICAL_REQUIRED_REPOS[@]}" -eq 0 ]]; then
+  CANONICAL_REQUIRED_REPOS=(agent-skills prime-radiant-ai affordabot llm-common)
+fi
+if ! declare -p CANONICAL_IDES >/dev/null 2>&1 || [[ "${#CANONICAL_IDES[@]}" -eq 0 ]]; then
+  CANONICAL_IDES=(antigravity claude-code codex-cli opencode gemini-cli)
+fi
 
-iso_to_epoch() {
-  local iso="$1"
-  date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$iso" +%s 2>/dev/null || date -u -d "$iso" +%s 2>/dev/null || echo ""
+DAILY_CHECK_IDS_DEFAULT=(
+  beads_dolt
+  tool_mcp_health
+  required_service_health
+  op_auth_readiness
+  alerts_transport_readiness
+)
+
+WEEKLY_CHECK_IDS_DEFAULT=(
+  canonical_repo_hygiene
+  skills_symlink_integrity
+  global_constraints_rails
+  ide_config_presence_and_drift
+  cron_health
+  service_cap_and_forbidden_components
+  deployment_stack_readiness
+  railway_auth_context
+  gh_deploy_readiness
+)
+
+DAILY_CHECK_IDS=()
+WEEKLY_CHECK_IDS=()
+SLACK_CHANNEL="#dx-alerts"
+AUDIT_COORDINATOR_HOST=""
+SLACK_POST_ON_GREEN=true
+SLACK_THREAD_MODE=false
+TOOL_HEALTH_JSON=""
+TOOL_HEALTH_LINES=""
+AUDIT_DAILY_LATEST=""
+AUDIT_DAILY_HISTORY=""
+AUDIT_WEEKLY_LATEST=""
+AUDIT_WEEKLY_HISTORY=""
+GEMINI_GRACE_DAYS=7
+GEMINI_ENFORCE_AFTER=7
+
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
 }
 
-json_or_null() {
+write_atomic() {
+  local target="$1"
+  local data="$2"
+  local tmp
+  mkdir -p "$(dirname "$target")"
+  tmp="$(mktemp "${target}.tmp.XXXXXX")"
+  printf '%s\n' "$data" > "$tmp"
+  mv "$tmp" "$target"
+}
+
+manifest_list() {
+  local list_name="$1"
+  if [[ ! -f "$MANIFEST_PATH" ]]; then
+    return
+  fi
+  awk -v section="  ${list_name}:" '
+    function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/,"", s); return s }
+    $0 ~ /^audit:/ { in_audit=1; next }
+    in_audit && /^[^[:space:]]/ { in_audit=0 }
+    in_audit && $0 ~ "^" section "$" { in_list=1; next }
+    in_audit && in_list {
+      if ($0 ~ /^[^[:space:]]/) {
+        in_list=0
+        next
+      }
+      if ($0 ~ /^[[:space:]]{2}[^[:space:]]+:[[:space:]]*$/) {
+        in_list=0
+        next
+      }
+      if ($0 ~ /^[[:space:]]*-[[:space:]]*/) {
+        s=$0
+        sub(/^[[:space:]]*-[[:space:]]*/, "", s)
+      sub(/[[:space:]]*#.*/, "", s)
+      gsub(/^"|"$/, "", s)
+      gsub(/^'\''|'\''$/, "", s)
+      s=trim(s)
+      if (s != "") print s
+      }
+      next
+    }
+  ' "$MANIFEST_PATH"
+}
+
+manifest_scalar() {
+  local section="$1"
+  local key="$2"
+  if [[ ! -f "$MANIFEST_PATH" ]]; then
+    return
+  fi
+  awk -v section="  ${section}:" -v key="    ${key}:" -v want="$section" '
+    function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/,"", s); return s }
+    $0 ~ /^audit:/ { in_audit=1; next }
+    in_audit && /^[^[:space:]]/ { in_audit=0; in_section=0; in_key=0 }
+    !in_audit { next }
+    in_audit && $0 ~ "^" section "$" { in_section=1; in_key=0; next }
+    in_audit && in_section && $0 !~ /^  / { in_section=0; in_key=0; next }
+    in_audit && in_section && $0 ~ "^" key { in_key=1; next }
+    in_audit && in_section && in_key {
+      value=$0
+      sub(/^[[:space:]]+[^:]+:[[:space:]]*/, "", value)
+      gsub(/#.*/, "", value)
+      gsub(/^"|"$/, "", value)
+      gsub(/^'\''|'\''$/, "", value)
+      value=trim(value)
+      print value
+      exit
+    }
+  ' "$MANIFEST_PATH"
+}
+
+manifest_scalar_top() {
+  local key="$1"
+  if [[ ! -f "$MANIFEST_PATH" ]]; then
+    return
+  fi
+  awk -v raw_key="$key" '
+    function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/,"", s); return s }
+    {
+      line=$0
+      sub(/^[[:space:]]+/, "", line)
+    if (line ~ ("^" raw_key ":")) {
+        value=$0
+        sub(/^[[:space:]]*[^:]+:[[:space:]]*/, "", value)
+        gsub(/#.*/, "", value)
+        gsub(/^"|"$/, "", value)
+        gsub(/^'\''|'\''$/, "", value)
+        value=trim(value)
+        print value
+        exit
+      }
+    }
+  ' "$MANIFEST_PATH"
+}
+
+manifest_scalar_audit() {
+  local section="$1"
+  local key="$2"
+  if [[ ! -f "$MANIFEST_PATH" ]]; then
+    return
+  fi
+  awk -v section="  ${section}:" -v key="    ${key}:" '
+    function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/,"", s); return s }
+    $0 ~ /^audit:/ { in_audit=1; next }
+    in_audit && /^[^[:space:]]/ { in_audit=0; in_section=0; in_key=0 }
+    !in_audit { next }
+    in_audit && $0 ~ "^" section "$" { in_section=1; in_key=0; next }
+    in_audit && in_section && $0 !~ /^  / { in_section=0; in_key=0; next }
+    in_audit && in_section && $0 ~ "^" key {
+      value=$0
+      sub(/^[[:space:]]*[^:]+:[[:space:]]*/, "", value)
+      gsub(/^"|"$/, "", value)
+      gsub(/^'\''|'\''$/, "", value)
+      value=trim(value)
+      print value
+      exit
+    }
+  ' "$MANIFEST_PATH"
+}
+
+expand_path_like() {
   local value="$1"
-  if [[ -n "$value" && "$value" != "null" ]]; then
-    printf '"%s"' "$value"
+  if [[ "$value" == "~/"* ]]; then
+    printf '%s\n' "${value/#~\//$HOME/}"
+    return
+  fi
+  printf '%s\n' "$value"
+}
+
+load_manifest_config() {
+  local -a daily_from_manifest=()
+  local -a weekly_from_manifest=()
+  local -a legacy_roots=()
+
+  local line
+  while IFS= read -r line; do
+    daily_from_manifest+=("$line")
+  done < <(manifest_list "daily_checks")
+  while IFS= read -r line; do
+    weekly_from_manifest+=("$line")
+  done < <(manifest_list "weekly_checks")
+  if [[ "${#daily_from_manifest[@]}" -gt 0 ]]; then
+    DAILY_CHECK_IDS=("${daily_from_manifest[@]}")
   else
-    printf 'null'
+    DAILY_CHECK_IDS=("${DAILY_CHECK_IDS_DEFAULT[@]}")
+  fi
+  if [[ "${#weekly_from_manifest[@]}" -gt 0 ]]; then
+    WEEKLY_CHECK_IDS=("${weekly_from_manifest[@]}")
+  else
+    WEEKLY_CHECK_IDS=("${WEEKLY_CHECK_IDS_DEFAULT[@]}")
+  fi
+
+  local coord=""
+  coord="$(manifest_scalar_top "coordinator_host" 2>/dev/null || true)"
+  if [[ -n "$coord" ]]; then
+    AUDIT_COORDINATOR_HOST="$coord"
+  fi
+
+  local pgl="$(manifest_scalar_audit "slack" "channel" 2>/dev/null || true)"
+  [[ -n "$pgl" ]] && SLACK_CHANNEL="$pgl"
+  local post_on_green_value
+  post_on_green_value="$(manifest_scalar_audit "slack" "post_on_green" 2>/dev/null || true)"
+  local thread_mode_value
+  thread_mode_value="$(manifest_scalar_audit "slack" "thread_mode" 2>/dev/null || true)"
+  if [[ "${post_on_green_value:-}" == "false" ]]; then
+    SLACK_POST_ON_GREEN=false
+  fi
+  if [[ "${thread_mode_value:-}" == "true" ]]; then
+    SLACK_THREAD_MODE=true
+  fi
+
+  local grace_value
+  local enforce_value
+  grace_value="$(manifest_scalar_audit "gemini_enforcement" "grace_days" 2>/dev/null || true)"
+  enforce_value="$(manifest_scalar_audit "gemini_enforcement" "enforce_after" 2>/dev/null || true)"
+  [[ -n "$grace_value" && "$grace_value" =~ ^[0-9]+$ ]] && GEMINI_GRACE_DAYS="$grace_value"
+  [[ -n "$enforce_value" && "$enforce_value" =~ ^[0-9]+$ ]] && GEMINI_ENFORCE_AFTER="$enforce_value"
+  if [[ "$GEMINI_ENFORCE_AFTER" -lt "$GEMINI_GRACE_DAYS" ]]; then
+    GEMINI_ENFORCE_AFTER="$GEMINI_GRACE_DAYS"
+  fi
+
+  local threshold_tool_stale_hours=""
+  local threshold_dolt_stale_minutes=""
+  local threshold_unknown_host_escalation_runs=""
+  threshold_tool_stale_hours="$(manifest_scalar_audit "thresholds" "tool_stale_hours" 2>/dev/null || true)"
+  threshold_dolt_stale_minutes="$(manifest_scalar_audit "thresholds" "dolt_stale_minutes" 2>/dev/null || true)"
+  threshold_unknown_host_escalation_runs="$(manifest_scalar_audit "thresholds" "unknown_host_escalation_runs" 2>/dev/null || true)"
+  if [[ -n "$threshold_tool_stale_hours" && "$threshold_tool_stale_hours" =~ ^[0-9]+$ ]]; then
+    TOOL_STALE_HOURS="$threshold_tool_stale_hours"
+  fi
+  if [[ -n "$threshold_dolt_stale_minutes" && "$threshold_dolt_stale_minutes" =~ ^[0-9]+$ ]]; then
+    DOLT_STALE_MINUTES="$threshold_dolt_stale_minutes"
+  fi
+  if [[ -n "$threshold_unknown_host_escalation_runs" && "$threshold_unknown_host_escalation_runs" =~ ^[0-9]+$ ]]; then
+    UNKNOWN_HOST_ESCALATION_RUNS="$threshold_unknown_host_escalation_runs"
+  fi
+
+  local layout_tool_health_json=""
+  local layout_tool_health_lines=""
+  local layout_daily_latest=""
+  local layout_daily_history=""
+  local layout_weekly_latest=""
+  local layout_weekly_history=""
+  layout_tool_health_json="$(manifest_scalar_top "tool_health_json" 2>/dev/null || true)"
+  layout_tool_health_lines="$(manifest_scalar_top "tool_health_lines" 2>/dev/null || true)"
+  layout_daily_latest="$(manifest_scalar_top "daily_audit_latest" 2>/dev/null || true)"
+  layout_daily_history="$(manifest_scalar_top "daily_audit_history" 2>/dev/null || true)"
+  layout_weekly_latest="$(manifest_scalar_top "weekly_audit_latest" 2>/dev/null || true)"
+  layout_weekly_history="$(manifest_scalar_top "weekly_audit_history" 2>/dev/null || true)"
+
+  TOOL_HEALTH_JSON="${STATE_ROOT}/${layout_tool_health_json:-tool-health.json}"
+  TOOL_HEALTH_LINES="${STATE_ROOT}/${layout_tool_health_lines:-tool-health.lines}"
+  AUDIT_DAILY_LATEST="${STATE_ROOT}/${layout_daily_latest:-audit/daily/latest.json}"
+  AUDIT_DAILY_HISTORY="${STATE_ROOT}/${layout_daily_history:-audit/daily/history}"
+  AUDIT_WEEKLY_LATEST="${STATE_ROOT}/${layout_weekly_latest:-audit/weekly/latest.json}"
+  AUDIT_WEEKLY_HISTORY="${STATE_ROOT}/${layout_weekly_history:-audit/weekly/history}"
+
+  while IFS= read -r line; do
+    legacy_roots+=("$line")
+  done < <(awk -v active="  - " '
+    BEGIN { in_legacy=0 }
+    $0 ~ /^legacy_state_roots:/ { in_legacy=1; next }
+    in_legacy {
+      if ($0 ~ /^[^[:space:]]/) { in_legacy=0 }
+      else if ($0 ~ "^[[:space:]]*- ") {
+        s=$0; sub(/^[[:space:]]*-[[:space:]]*/, "", s); gsub(/#.*/, "", s); gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); if (s!="") print s
+      }
+    }
+  ' "$MANIFEST_PATH")
+  if [[ "${#legacy_roots[@]}" -gt 0 ]]; then
+    STATE_ROOT_LEGACY1="$(expand_path_like "${legacy_roots[0]:-"${STATE_ROOT_LEGACY1}"}")"
+    STATE_ROOT_LEGACY2="$(expand_path_like "${legacy_roots[1]:-"${STATE_ROOT_LEGACY2}"}")"
   fi
 }
 
-get_founder_health_from_recovery_log() {
-  local now epoch_now founder_now
-  now="$(date -u +%s)"
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --daily)
+        MODE="daily"
+        shift
+        ;;
+      --weekly)
+        MODE="weekly"
+        shift
+        ;;
+      --state-dir)
+        STATE_ROOT="$2"
+        shift 2
+        ;;
+      --json|--json-only)
+        shift
+        ;;
+      --state-only)
+        STATE_ONLY=1
+        shift
+        ;;
+      --slack)
+        OUTPUT_SLACK=1
+        shift
+        ;;
+      --help|-h)
+        cat <<'EOF'
+Usage:
+  dx-audit.sh --daily [--state-dir PATH]
+  dx-audit.sh --weekly [--state-dir PATH]
+  dx-audit.sh --slack (prints deterministic slack message)
+EOF
+        exit 0
+        ;;
+      *)
+        echo "Unknown arg: $1" >&2
+        exit 1
+        ;;
+    esac
+  done
+}
 
-  if [[ ! -f "$RECOVERY_LOG" ]]; then
+append_reason() {
+  local code="$1"
+  [[ -z "$code" ]] && return
+  for existing in "${reason_codes[@]-}"; do
+    [[ "$existing" == "$code" ]] && return
+  done
+  reason_codes+=("$code")
+}
+
+is_member() {
+  local target="$1"
+  shift
+  local item
+  for item in "$@"; do
+    [[ "$item" == "$target" ]] && return 0
+  done
+  return 1
+}
+
+host_index_for_name() {
+  local target="$1"
+  local idx
+  for idx in "${!host_order[@]}"; do
+    if [[ "${host_order[$idx]}" == "$target" ]]; then
+      printf '%s' "$idx"
+      return 0
+    fi
+  done
+  return 1
+}
+
+normalized_status_count() {
+  local status="$1"
+  case "$status" in
+    pass|green)
+      echo pass
+      ;;
+    warn|yellow)
+      echo warn
+      ;;
+    fail|red)
+      echo fail
+      ;;
+    *)
+      echo unknown
+      ;;
+  esac
+}
+
+append_check() {
+  local check_id="$1"
+  local host="$2"
+  local status="$3"
+  local severity="$4"
+  local details="$5"
+  local next_action="${6:-}"
+
+  [[ -z "$check_id" ]] && return
+  [[ -z "$host" ]] && host="local"
+  check_id="${check_id#fleet.v2.2.}"
+  check_id="fleet.v2.2.${check_id}"
+
+  local row
+  if [[ -n "$next_action" ]]; then
+    row="{\"id\":\"$check_id\",\"host\":\"$(json_escape "$host")\",\"status\":\"$status\",\"severity\":\"$(json_escape "$severity")\",\"details\":\"$(json_escape "$details")\",\"next_action\":\"$(json_escape "$next_action")\"}"
+  else
+    row="{\"id\":\"$check_id\",\"host\":\"$(json_escape "$host")\",\"status\":\"$status\",\"severity\":\"$(json_escape "$severity")\",\"details\":\"$(json_escape "$details")\"}"
+  fi
+  checks+=("$row")
+
+  local host_idx
+  if host_idx="$(host_index_for_name "$host")"; then
+    :
+  else
+    host_idx=${#host_order[@]}
+    host_order+=("$host")
+    host_overall+=("green")
+    host_checks+=("")
+  fi
+  if [[ -n "${host_checks[$host_idx]:-}" ]]; then
+    host_checks[$host_idx]+=",${row}"
+  else
+    host_checks[$host_idx]="$row"
+  fi
+
+  case "$status" in
+    pass)
+      pass_count=$((pass_count + 1))
+      if [[ "$status" == "pass" ]]; then
+        :
+      fi
+      ;;
+    warn)
+      warn_count=$((warn_count + 1))
+      if [[ "${host_overall[$host_idx]}" == "green" ]]; then
+        host_overall[$host_idx]="yellow"
+      fi
+      ;;
+    fail)
+      fail_count=$((fail_count + 1))
+      host_overall[$host_idx]="red"
+      ;;
+    unknown)
+      unknown_count=$((unknown_count + 1))
+      if [[ "${host_overall[$host_idx]}" == "green" ]]; then
+        host_overall[$host_idx]="yellow"
+      fi
+      ;;
+  esac
+}
+
+append_weekly_check() {
+  local check_id="$1"
+  local host="$2"
+  local status="$3"
+  local severity="$4"
+  local details="$5"
+  append_check "$check_id" "$host" "$status" "$severity" "$details"
+}
+
+weekly_check_canonical_repo_hygiene() {
+  local local_host="local"
+  local missing=0
+  local repo
+  for repo in "${CANONICAL_REQUIRED_REPOS[@]}"; do
+    local repo_path="${HOME}/${repo}"
+    if [[ ! -d "$repo_path/.git" ]]; then
+      missing=$((missing + 1))
+      continue
+    fi
+    if ! git -C "$repo_path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      missing=$((missing + 1))
+      continue
+    fi
+  done
+  if [[ "$missing" -gt 0 ]]; then
+    append_weekly_check "canonical_repo_hygiene" "$local_host" "warn" "medium" "$missing required canonical repos missing"
+  else
+    append_weekly_check "canonical_repo_hygiene" "$local_host" "pass" "low" "All required canonical repos present"
+  fi
+}
+
+weekly_check_skills_symlink() {
+  local local_host="local"
+  local target="${HOME}/.agent/skills"
+  if [[ -L "$target" ]] || [[ -d "$target" ]]; then
+    if [[ -L "$target" ]] && [[ "$(readlink "$target")" == *"agent-skills"* ]]; then
+      append_weekly_check "skills_symlink_integrity" "$local_host" "pass" "low" "~/.agent/skills points to canonical path"
+      return
+    fi
+    if [[ -d "$target" ]] && [[ "$target" == "$HOME/agent-skills" ]]; then
+      append_weekly_check "skills_symlink_integrity" "$local_host" "pass" "low" "~/.agent/skills is canonical directory"
+      return
+    fi
+    append_weekly_check "skills_symlink_integrity" "$local_host" "warn" "medium" "~/.agent/skills exists but not canonical"
+    return
+  fi
+  append_weekly_check "skills_symlink_integrity" "$local_host" "warn" "medium" "~/.agent/skills missing"
+}
+
+weekly_check_global_constraints() {
+  local local_host="local"
+  local constraint_file="${SCRIPT_DIR}/../dist/dx-global-constraints.md"
+  if [[ -f "$constraint_file" ]]; then
+    append_weekly_check "global_constraints_rails" "$local_host" "pass" "low" "Global constraints present"
+  else
+    append_weekly_check "global_constraints_rails" "$local_host" "warn" "low" "Global constraints file missing"
+  fi
+}
+
+gemini_artifacts_present() {
+  local missing=0
+  local candidate
+  for candidate in \
+    "${HOME}/.gemini/GEMINI.md" \
+    "${HOME}/.gemini/antigravity/mcp_config.json"; do
+    if [[ ! -f "$candidate" ]]; then
+      missing=1
+      break
+    fi
+  done
+  if [[ "$missing" -eq 1 ]]; then
+    return 1
+  fi
+
+  if [[ -x "${HOME}/.gemini/gemini" ]] || [[ -x "${HOME}/.gemini/gemini-cli" ]] || command -v gemini >/dev/null 2>&1 || command -v gemini-cli >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+gemini_enforcement_state() {
+  if gemini_artifacts_present; then
+    local marker="${STATE_ROOT}/enforcement/gemini-enforcement.json"
+    [[ -f "$marker" ]] && rm -f "$marker"
+    echo "pass"
+    return
+  fi
+
+  local marker="${STATE_ROOT}/enforcement/gemini-enforcement.json"
+  local now_epoch
+  local first_epoch
+  now_epoch="$(date -u +%s)"
+  mkdir -p "$(dirname "$marker")"
+  first_epoch="$(sed -n '1p' "$marker" 2>/dev/null || printf '')"
+  if [[ -z "$first_epoch" || ! "$first_epoch" =~ ^[0-9]+$ ]]; then
+    first_epoch="$now_epoch"
+    printf '%s\n' "$first_epoch" > "$marker"
+  fi
+
+  local days_missing
+  days_missing=$(( (now_epoch - first_epoch) / 86400 ))
+  if [[ "$days_missing" -le "$GEMINI_GRACE_DAYS" ]]; then
+    echo "warn"
+  elif [[ "$days_missing" -gt "$GEMINI_ENFORCE_AFTER" ]]; then
+    echo "fail"
+  else
+    echo "warn"
+  fi
+}
+
+weekly_check_ide_config() {
+  local local_host="local"
+  local missing=0
+  local file
+  for file in "${HOME}/.claude/settings.json" "${HOME}/.claude.json" "${HOME}/.codex/config.toml" "${HOME}/.opencode/config.json" "${HOME}/.gemini/antigravity/mcp_config.json"; do
+    [[ -f "$file" ]] || missing=$((missing + 1))
+  done
+  if [[ "$missing" -gt 0 ]]; then
+    append_weekly_check "ide_config_presence_and_drift" "$local_host" "fail" "high" "Missing canonical IDE config files required by governance checks"
+    return
+  fi
+
+  local gemini_state
+  gemini_state="$(gemini_enforcement_state)"
+  if [[ "$gemini_state" == "fail" ]]; then
+    append_weekly_check "ide_config_presence_and_drift" "$local_host" "fail" "high" "Gemini CLI lane outside enforcement window: missing ~/.gemini/GEMINI.md, ~/.gemini/antigravity/mcp_config.json, or gemini binary"
+    return
+  fi
+  if [[ "$gemini_state" == "warn" ]]; then
+    append_weekly_check "ide_config_presence_and_drift" "$local_host" "warn" "medium" "Gemini CLI lane missing required artifacts: grace window active"
+    return
+  fi
+
+  append_weekly_check "ide_config_presence_and_drift" "$local_host" "pass" "low" "Canonical IDE config files present"
+}
+
+weekly_check_cron_health() {
+  local local_host="local"
+  if command -v crontab >/dev/null 2>&1; then
+    if crontab -l >/dev/null 2>&1; then
+      append_weekly_check "cron_health" "$local_host" "pass" "low" "crontab readable"
+    else
+      append_weekly_check "cron_health" "$local_host" "warn" "low" "crontab present but inaccessible"
+    fi
+  else
+    append_weekly_check "cron_health" "$local_host" "warn" "low" "crontab command missing"
+  fi
+}
+
+weekly_check_service_capabilities() {
+  local local_host="local"
+  local blocked=0
+  local forbidden_files=("${HOME}/.agents/tools/prohibited" "${HOME}/.agent/prohibited")
+  local ff
+  for ff in "${forbidden_files[@]}"; do
+    [[ -f "$ff" ]] && blocked=$((blocked + 1))
+  done
+
+  if [[ "$blocked" -gt 0 ]]; then
+    append_weekly_check "service_cap_and_forbidden_components" "$local_host" "warn" "medium" "$blocked forbidden component markers detected"
+  else
+    append_weekly_check "service_cap_and_forbidden_components" "$local_host" "pass" "low" "No blocked legacy markers"
+  fi
+}
+
+weekly_check_deployment_stack() {
+  local local_host="local"
+  local has_railway=0
+  local has_gh=0
+  command -v dx-fleet-check >/dev/null 2>&1 && has_railway=$((has_railway + 1))
+  command -v gh >/dev/null 2>&1 && has_gh=$((has_gh + 1))
+
+  if [[ "$has_railway" -gt 0 ]] || [[ "$has_gh" -gt 0 ]]; then
+    append_weekly_check "deployment_stack_readiness" "$local_host" "pass" "low" "Deployment tooling available"
+  else
+    append_weekly_check "deployment_stack_readiness" "$local_host" "warn" "low" "No deployment tooling detected"
+  fi
+}
+
+weekly_load_op_token_for_railway() {
+  if ! command -v op >/dev/null 2>&1; then
+    return 1
+  fi
+  if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && OP_SERVICE_ACCOUNT_TOKEN="${OP_SERVICE_ACCOUNT_TOKEN}" op whoami >/dev/null 2>&1; then
     return 0
   fi
 
-  python3 - "$RECOVERY_LOG" "$now" <<'PY'
-import json
-import re
-import sys
-
-path = sys.argv[1]
-now = int(sys.argv[2])
-
-def to_epoch(iso):
-    try:
-        import datetime
-        return int(__import__('datetime').datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=__import__('datetime').timezone.utc).timestamp())
-    except Exception:
-        return None
-
-success_epoch = None
-success_source = None
-failure_epoch = None
-failure_reason = ""
-failure_source = None
-transport_failure_epoch = None
-transport_failure_source = None
-
-line_re = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z) \| (.*)$")
-
-with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-    for raw in f:
-        raw = raw.strip()
-        if not raw:
-            continue
-        m = line_re.match(raw)
-        if not m:
-            continue
-        ts = m.group(1)
-        payload = m.group(2)
-        parts = [p.strip() for p in payload.split(' | ') if p.strip()]
-        kv = {}
-        for part in parts:
-            if '=' in part:
-                k, v = part.split('=', 1)
-                kv[k] = v
-        if kv.get('script') != 'founder-briefing':
-            continue
-
-        status = kv.get('status', 'unknown')
-        reason = kv.get('reason', '')
-        epoch = to_epoch(ts)
-        if not epoch:
-            continue
-
-        if status == 'success':
-            if success_epoch is None or epoch > success_epoch:
-                success_epoch = epoch
-                success_source = kv.get('source', None)
-        else:
-            if failure_epoch is None or epoch > failure_epoch:
-                failure_epoch = epoch
-                failure_reason = reason
-                failure_source = kv.get('source', None)
-
-        if status == 'failure' and reason.startswith('transport'):
-            if transport_failure_epoch is None or epoch > transport_failure_epoch:
-                transport_failure_epoch = epoch
-                transport_failure_source = kv.get('source', None)
-
-def age_mins(e):
-    if e is None:
-        return None
-    return max(0, (now - e) // 60)
-
-out = {
-    "status": "unknown",
-    "last_success_at": None,
-    "last_success_age_min": None,
-    "last_success_source": None,
-    "last_failure_at": None,
-    "last_failure_reason": None,
-    "last_failure_source": None,
-    "last_failure_age_min": None,
-    "last_transport_failure_at": None,
-    "last_transport_failure_age_min": None,
-    "last_transport_failure_source": None,
+  local host_short
+  host_short="$(hostname -s 2>/dev/null || hostname 2>/dev/null || printf 'unknown')"
+  local host_full
+  host_full="$(hostname 2>/dev/null || printf '%s' "$host_short")"
+  local -a candidates=(
+    "${HOME}/.config/systemd/user/op-${host_short}-token"
+    "${HOME}/.config/systemd/user/op-${host_full}-token"
+    "${HOME}/.config/systemd/user/op-${CANONICAL_HOST_KEY:-}-token"
+    "${HOME}/.config/systemd/user/op-macmini-token"
+    "${HOME}/.config/systemd/user/op-homedesktop-wsl-token"
+    "${HOME}/.config/systemd/user/op-epyc6-token"
+    "${HOME}/.config/systemd/user/op-epyc12-token"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -r "$candidate" ]]; then
+      local tok
+      tok="$(cat "$candidate" 2>/dev/null || true)"
+      if [[ -n "$tok" ]] && OP_SERVICE_ACCOUNT_TOKEN="$tok" op whoami >/dev/null 2>&1; then
+        export OP_SERVICE_ACCOUNT_TOKEN="$tok"
+        return 0
+      fi
+    fi
+  done
+  return 1
 }
 
-if success_epoch is not None:
-    out["last_success_at"] = success_epoch
-    out["last_success_age_min"] = age_mins(success_epoch)
-    out["last_success_source"] = success_source
+weekly_check_railway_auth() {
+  local local_host="local"
+  if ! command -v railway >/dev/null 2>&1; then
+    append_weekly_check "railway_auth_context" "$local_host" "warn" "low" "railway CLI missing"
+    return
+  fi
 
-if failure_epoch is not None:
-    out["last_failure_at"] = failure_epoch
-    out["last_failure_reason"] = failure_reason
-    out["last_failure_age_min"] = age_mins(failure_epoch)
-    out["last_failure_source"] = failure_source
+  if railway whoami >/dev/null 2>&1; then
+    append_weekly_check "railway_auth_context" "$local_host" "pass" "low" "Railway auth verified (railway whoami)"
+    return
+  fi
 
-if transport_failure_epoch is not None:
-    out["last_transport_failure_at"] = transport_failure_epoch
-    out["last_transport_failure_age_min"] = age_mins(transport_failure_epoch)
-    out["last_transport_failure_source"] = transport_failure_source
+  local token_from_op=""
+  if weekly_load_op_token_for_railway >/dev/null 2>&1 && command -v op >/dev/null 2>&1; then
+    token_from_op="$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN" 2>/dev/null || true)"
+  fi
+  if [[ -n "$token_from_op" ]]; then
+    RAILWAY_API_TOKEN="$token_from_op" railway whoami >/dev/null 2>&1 && {
+      export RAILWAY_API_TOKEN="$token_from_op"
+      append_weekly_check "railway_auth_context" "$local_host" "pass" "low" "Railway auth verified via OP token hydration"
+      return
+    }
+  fi
 
-if success_epoch is None and failure_epoch is None:
-    out["status"] = "unknown"
-elif failure_epoch is not None and (success_epoch is None or failure_epoch >= success_epoch):
-    out["status"] = "failed"
-else:
-    out["status"] = "ok"
+  append_weekly_check "railway_auth_context" "$local_host" "warn" "low" "Railway auth unavailable (railway whoami failed and OP hydration retry failed)"
+}
 
-print(json.dumps(out))
+weekly_check_gh_readiness() {
+  local local_host="local"
+  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    append_weekly_check "gh_deploy_readiness" "$local_host" "pass" "low" "gh authenticated"
+  else
+    append_weekly_check "gh_deploy_readiness" "$local_host" "warn" "low" "gh missing or unauthenticated"
+  fi
+}
+
+run_weekly_governance() {
+  local check_id
+  for check_id in "${WEEKLY_CHECK_IDS[@]}"; do
+    case "$check_id" in
+      canonical_repo_hygiene)
+        weekly_check_canonical_repo_hygiene
+        ;;
+      skills_symlink_integrity)
+        weekly_check_skills_symlink
+        ;;
+      global_constraints_rails)
+        weekly_check_global_constraints
+        ;;
+      ide_config_presence_and_drift)
+        weekly_check_ide_config
+        ;;
+      cron_health)
+        weekly_check_cron_health
+        ;;
+      service_cap_and_forbidden_components)
+        weekly_check_service_capabilities
+        ;;
+      deployment_stack_readiness)
+        weekly_check_deployment_stack
+        ;;
+      railway_auth_context)
+        weekly_check_railway_auth
+        ;;
+      gh_deploy_readiness)
+        weekly_check_gh_readiness
+        ;;
+      *)
+        append_weekly_check "$check_id" "local" "warn" "low" "Unknown weekly check id in manifest"
+        ;;
+    esac
+  done
+  append_reason "weekly_check_suite_complete"
+}
+
+daily_health_source() {
+  local source="${TOOL_HEALTH_JSON:-${STATE_ROOT}/tool-health.json}"
+  if [[ -f "$source" ]]; then
+    echo "$source"
+    return 0
+  fi
+  if [[ -f "${STATE_ROOT_LEGACY1}/tool-health.json" ]]; then
+    append_reason "fallback_from_legacy_fleet_sync"
+    echo "${STATE_ROOT_LEGACY1}/tool-health.json"
+    return 0
+  fi
+  if [[ -f "${STATE_ROOT_LEGACY2}/tool-health.json" ]]; then
+    append_reason "fallback_from_legacy_fleet_sync_alt"
+    echo "${STATE_ROOT_LEGACY2}/tool-health.json"
+    return 0
+  fi
+  return 1
+}
+
+load_daily_checks_from_fleet_check_payload() {
+  local payload="$1"
+  local had_rows=0
+  local host
+  local check_id
+  local status
+  local severity
+  local details
+  local normalized
+  local key
+  local -a observed_pairs=()
+  local -a observed_host_order_local=()
+
+  if ! command -v jq >/dev/null 2>&1; then
+    return 1
+  fi
+
+  while IFS=$'\t' read -r host check_id status severity details; do
+    [[ -z "$check_id" ]] && continue
+    if ! is_member "$check_id" "${DAILY_CHECK_IDS[@]-}"; then
+      continue
+    fi
+    had_rows=1
+    host="${host:-local}"
+    if ! is_member "$host" "${observed_host_order_local[@]-}"; then
+      observed_host_order_local+=("$host")
+    fi
+    normalized="$(normalized_status_count "$status")"
+    key="${host}:${check_id}"
+    if ! is_member "$key" "${observed_pairs[@]-}"; then
+      observed_pairs+=("$key")
+    fi
+    append_check "$check_id" "$host" "$normalized" "$severity" "$details"
+  done < <(printf '%s' "$payload" | jq -r '.hosts[]? | .host as $host | .checks[]? | "\($host // "local")\t\(.id // "")\t\(.status // "unknown")\t\(.severity // "low")\t\((.details // "") | gsub("\t"; " ") | gsub("\n"; " ") )"')
+
+  if [[ "$had_rows" -eq 0 ]]; then
+    return 1
+  fi
+
+  local h
+  for h in "${observed_host_order_local[@]-}"; do
+    for check_id in "${DAILY_CHECK_IDS[@]-}"; do
+      key="${h}:${check_id}"
+    if ! is_member "$key" "${observed_pairs[@]-}"; then
+        append_reason "missing_expected_daily_check_${check_id}"
+        append_check "$check_id" "$h" "warn" "low" "Expected daily check missing from Fleet Sync check output"
+        observed_pairs+=("$key")
+      fi
+    done
+  done
+  return 0
+}
+
+parse_daily_checks_with_jq() {
+  local source_file="$1"
+  jq -r '.hosts[]? as $h | $h.host as $host | ($h.checks // [])[]? | "\($host // "local")\t\(.id // "")\t\(.status // "unknown")\t\(.severity // "low")\t\(.details // "")"' "$source_file"
+}
+
+parse_daily_checks_fallback() {
+  local source_file="$1"
+  python3 - "$source_file" <<'PY'
+import json
+import sys
+with open(sys.argv[1], "r", encoding="utf-8", errors="ignore") as fp:
+    data = json.load(fp)
+for host_obj in data.get("hosts", []):
+    host = host_obj.get("host", "local")
+    for c in host_obj.get("checks", []):
+        print(
+            "\t".join(
+                [
+                    host,
+                    c.get("id", ""),
+                    c.get("status", "unknown"),
+                    c.get("severity", "low"),
+                    c.get("details", ""),
+                ]
+            )
+        )
 PY
 }
 
-founder_health_json="$(get_founder_health_from_recovery_log || true)"
-if [[ -n "$founder_health_json" ]]; then
-  FOUNDER_STATUS="$(jq -r '.status' <<<"$founder_health_json")"
-  raw_epoch="$(jq -r '.last_success_at // empty' <<<"$founder_health_json")"
-  if [[ -n "$raw_epoch" && "$raw_epoch" != "null" ]]; then
-    FOUNDER_LAST_SUCCESS_AT="$(date -u -d "@$raw_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$raw_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
-    FOUNDER_LAST_SUCCESS_AGE_MIN="$(jq -r '.last_success_age_min // empty' <<<"$founder_health_json")"
-    FOUNDER_LAST_SUCCESS_SOURCE="$(jq -r '.last_success_source // empty' <<<"$founder_health_json")"
-  fi
-  raw_epoch="$(jq -r '.last_failure_at // empty' <<<"$founder_health_json")"
-  if [[ -n "$raw_epoch" && "$raw_epoch" != "null" ]]; then
-    FOUNDER_LAST_FAILURE_AT="$(date -u -d "@$raw_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$raw_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
-    FOUNDER_LAST_FAILURE_AGE_MIN="$(jq -r '.last_failure_age_min // empty' <<<"$founder_health_json")"
-    FOUNDER_LAST_FAILURE_REASON="$(jq -r '.last_failure_reason // empty' <<<"$founder_health_json")"
-    FOUNDER_LAST_FAILURE_SOURCE="$(jq -r '.last_failure_source // empty' <<<"$founder_health_json")"
-  fi
-  raw_epoch="$(jq -r '.last_transport_failure_at // empty' <<<"$founder_health_json")"
-  if [[ -n "$raw_epoch" && "$raw_epoch" != "null" ]]; then
-    FOUNDER_LAST_TRANSPORT_FAILURE_AT="$(date -u -d "@$raw_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$raw_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
-    FOUNDER_LAST_TRANSPORT_FAILURE_AGE_MIN="$(jq -r '.last_transport_failure_age_min // empty' <<<"$founder_health_json")"
-    FOUNDER_LAST_TRANSPORT_FAILURE_SOURCE="$(jq -r '.last_transport_failure_source // empty' <<<"$founder_health_json")"
-  fi
-fi
+load_daily_checks() {
+  local source_file=""
+  local had_rows=0
+  local host
+  local check_id
+  local status
+  local severity
+  local details
+  local normalized
+  local key
+  local -a observed_pairs=()
+  local -a observed_host_order=()
 
-rescue_branch_to_iso() {
-  local branch="$1"
-  local ts
-  ts=$(echo "$branch" | sed -nE 's/.*-([0-9]{8}T[0-9]{6}Z)$/\1/p')
-  [[ -z "$ts" ]] && return 1
-  echo "${ts:0:4}-${ts:4:2}-${ts:6:2}T${ts:9:2}:${ts:11:2}:${ts:13:2}Z"
+  if ! source_file="$(daily_health_source)"; then
+    append_reason "missing_daily_state"
+    for check_id in "${DAILY_CHECK_IDS[@]-}"; do
+      append_check "$check_id" "local" "warn" "low" "No Fleet Sync state snapshot found at ${STATE_ROOT}/tool-health.json"
+    done
+    return 1
+  fi
+
+  if command -v jq >/dev/null 2>&1; then
+    while IFS=$'\t' read -r host check_id status severity details; do
+      [[ -z "$check_id" ]] && continue
+      if ! is_member "$check_id" "${DAILY_CHECK_IDS[@]-}"; then
+        continue
+      fi
+      had_rows=1
+      host="${host:-local}"
+      if ! is_member "$host" "${observed_host_order[@]-}"; then
+        observed_host_order+=("$host")
+      fi
+      normalized="$(normalized_status_count "$status")"
+      key="${host}:${check_id}"
+      if ! is_member "$key" "${observed_pairs[@]-}"; then
+        observed_pairs+=("$key")
+      fi
+      append_check "$check_id" "$host" "$normalized" "$severity" "$details"
+    done < <(parse_daily_checks_with_jq "$source_file")
+  elif command -v python3 >/dev/null 2>&1; then
+    while IFS=$'\t' read -r host check_id status severity details; do
+      [[ -z "$check_id" ]] && continue
+      if ! is_member "$check_id" "${DAILY_CHECK_IDS[@]-}"; then
+        continue
+      fi
+      had_rows=1
+      host="${host:-local}"
+      if ! is_member "$host" "${observed_host_order[@]-}"; then
+        observed_host_order+=("$host")
+      fi
+      normalized="$(normalized_status_count "$status")"
+      key="${host}:${check_id}"
+      if ! is_member "$key" "${observed_pairs[@]-}"; then
+        observed_pairs+=("$key")
+      fi
+      append_check "$check_id" "$host" "$normalized" "$severity" "$details"
+    done < <(parse_daily_checks_fallback "$source_file")
+  else
+    append_reason "missing_payload_parser"
+    for check_id in "${DAILY_CHECK_IDS[@]-}"; do
+      append_check "$check_id" "local" "warn" "low" "Missing jq and python3, unable to parse Fleet Sync state snapshot"
+    done
+    return 1
+  fi
+
+  if [[ "$had_rows" -eq 0 ]]; then
+    append_reason "empty_daily_state"
+    observed_host_order=(local)
+    for host in local; do
+    for check_id in "${DAILY_CHECK_IDS[@]-}"; do
+      key="${host}:${check_id}"
+      if ! is_member "$key" "${observed_pairs[@]-}"; then
+        append_check "$check_id" "$host" "warn" "low" "Fleet Sync state payload had no checks"
+        observed_pairs+=("$key")
+      fi
+    done
+  done
+    return 0
+  fi
+
+  local h
+  for h in "${observed_host_order[@]-}"; do
+    for check_id in "${DAILY_CHECK_IDS[@]-}"; do
+      key="${h}:${check_id}"
+      if ! is_member "$key" "${observed_pairs[@]-}"; then
+        append_reason "missing_expected_daily_check_${check_id}"
+        append_check "$check_id" "$h" "warn" "low" "Expected daily check missing from state snapshot"
+        observed_pairs+=("$key")
+      fi
+    done
+  done
+  return 0
 }
 
-# Initialize counters
-declare -A rescue_counts
-declare -A missing_feature_key
-declare -A missing_agent_trailer
-declare -A auto_merge_enabled
-declare -A stale_prs
-declare -A draft_prs
-declare -A skill_drift_count
-total_rescue=0
-total_missing_fk=0
-total_missing_agent=0
-total_auto_merge=0
-total_stale=0
-total_draft=0
-total_skill_drift=0
-rescue_events=""
-
-echo "# V8 Invariant Audit" >&2
-echo "# Generated: $TS" >&2
-echo "# Lookback: ${LOOKBACK_DAYS} days" >&2
-echo "" >&2
-
-# Check each repo
-for repo in "${REPOS[@]}"; do
-  repo_name=$(basename "$repo")
-  echo "Auditing $repo..." >&2
-
-  # 1. Rescue branch events within lookback window (canonical violation evidence)
-  rescue_branches=$(gh api "repos/$repo/branches" --paginate --jq '.[].name | select(startswith("rescue-"))' 2>/dev/null || echo "")
-  rescue_count=0
-
-  if [[ -n "$rescue_branches" ]]; then
-    while IFS= read -r branch; do
-      [[ -z "$branch" ]] && continue
-      branch_ts="$(rescue_branch_to_iso "$branch" || true)"
-      if [[ -z "$branch_ts" ]]; then
-        continue
+gather_checks() {
+  case "$MODE" in
+    daily)
+      if ! load_daily_checks; then
+        :
       fi
-      branch_epoch="$(iso_to_epoch "$branch_ts")"
-      if [[ -z "$branch_epoch" || "$branch_epoch" -lt "$CUTOFF_EPOCH" ]]; then
-        continue
-      fi
-      rescue_count=$((rescue_count + 1))
-      rescue_events="${rescue_events}| ${branch_ts} | ${branch} | ${repo_name} |\n"
-    done <<< "$rescue_branches"
+      append_reason "daily_check_suite_complete"
+      ;;
+    weekly)
+      run_weekly_governance
+      append_reason "weekly_check_suite_complete"
+      ;;
+    *)
+      echo "Unknown mode: $MODE" >&2
+      exit 2
+      ;;
+  esac
+}
+
+build_hosts_payload() {
+  local host_json="["
+  local first_host=1
+  local host_idx
+  local host
+  local checks_for_host
+  for host_idx in "${!host_order[@]}"; do
+    host="${host_order[$host_idx]}"
+    checks_for_host="${host_checks[$host_idx]:-}"
+    if [[ "$first_host" -eq 1 ]]; then
+      first_host=0
+    else
+      host_json+=","
+    fi
+    host_json+="{\"host\":\"$(json_escape "$host")\",\"overall\":\"${host_overall[$host_idx]}\",\"checks\":[$checks_for_host]}"
+  done
+  host_json+="]"
+  printf '%s' "$host_json"
+}
+
+build_repair_hints() {
+  local -a rows=()
+  local pair
+  local -a seen_pairs=()
+  local row
+  for row in "${checks[@]-}"; do
+    [[ "$row" != *"\"status\":\"fail\""* && "$row" != *"\"status\":\"warn\""* ]] && continue
+    local host
+    local rid
+    host="$(printf '%s' "$row" | sed -n 's/.*"host":"\([^"]*\)".*/\1/p')"
+    rid="$(printf '%s' "$row" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+    if [[ -z "$rid" ]]; then
+      continue
+    fi
+    pair="${host}|${rid}"
+    if is_member "$pair" "${seen_pairs[@]-}"; then
+      continue
+    fi
+    seen_pairs+=("$pair")
+    rows+=("{\"host\":\"$(json_escape "$host")\",\"check_id\":\"$(json_escape "$rid")\",\"command\":\"dx-fleet repair --json\"}")
+  done
+  local json="["
+  local first=1
+  for row in "${rows[@]-}"; do
+    if [[ "$first" -eq 1 ]]; then
+      json+="$row"
+      first=0
+    else
+      json+=",$row"
+    fi
+  done
+  json+="]"
+  printf '%s' "$json"
+}
+
+build_reason_codes_json() {
+  local out="["
+  local first=1
+  local row
+  for row in "${reason_codes[@]-}"; do
+    if [[ "$first" -eq 1 ]]; then
+      out+="\"$row\""
+      first=0
+    else
+      out+=",\"$row\""
+    fi
+  done
+  out+="]"
+  printf '%s' "$out"
+}
+
+render_slack_text() {
+  local fleet_status="$1"
+  local hosts_failed="$2"
+  local summary_green summary_yellow summary_red summary_unknown
+  summary_green="$pass_count"
+  summary_yellow="$warn_count"
+  summary_red="$fail_count"
+  summary_unknown="$unknown_count"
+
+  local line
+  line="🛰️ dx-audit ${MODE}: ${fleet_status}. checks pass=$summary_green warn=$summary_yellow fail=$summary_red unknown=$summary_unknown hosts_failed=$hosts_failed."
+  if [[ "$fleet_status" == "green" ]]; then
+    if [[ "$SLACK_POST_ON_GREEN" == "true" ]]; then
+      line+=" ✅ no action needed"
+    else
+      line+=" no action needed"
+    fi
+  elif [[ "$fleet_status" == "yellow" ]]; then
+    line+=" ⚠️ run: dx-fleet repair --json"
+  else
+    line+=" ❗ remediation required: dx-fleet repair --json"
   fi
-  rescue_counts[$repo_name]=$rescue_count
-  total_rescue=$((total_rescue + rescue_count))
+  printf '%s' "$line"
+}
 
-  # 2. Feature-Key trailer compliance (recent commits on master)
-  # Check last 20 commits for Feature-Key trailer
-  commits_without_fk=$(gh api "repos/$repo/commits?sha=master&per_page=20" \
-    --jq '.[].commit.message' 2>/dev/null | \
-    grep -v "Feature-Key:" | grep -v "^\[" | grep -v "^Merge" | wc -l || echo "0")
-  commits_without_fk=$(echo "$commits_without_fk" | tr -d ' ')
-  missing_feature_key[$repo_name]=$commits_without_fk
-  total_missing_fk=$((total_missing_fk + commits_without_fk))
-
-  # 3. Agent: trailer compliance
-  commits_without_agent=$(gh api "repos/$repo/commits?sha=master&per_page=20" \
-    --jq '.[].commit.message' 2>/dev/null | \
-    grep -v "Agent:" | grep -v "^\[" | grep -v "^Merge" | grep -v "github-actions" | wc -l || echo "0")
-  commits_without_agent=$(echo "$commits_without_agent" | tr -d ' ')
-  missing_agent_trailer[$repo_name]=$commits_without_agent
-  total_missing_agent=$((total_missing_agent + commits_without_agent))
-
-  # 4. Auto-merge enabled PRs
-  auto_merge_prs=$(gh pr list --repo "$repo" --json autoMergeRequest,number \
-    --jq '[.[] | select(.autoMergeRequest != null)] | length' 2>/dev/null || echo "0")
-  auto_merge_enabled[$repo_name]=$auto_merge_prs
-  total_auto_merge=$((total_auto_merge + auto_merge_prs))
-
-  # 5. Stale PRs (>7 days)
-  stale=$(gh pr list --repo "$repo" --json updatedAt \
-    --jq "[.[] | select(.updatedAt < \"$CUTOFF_DATE\")] | length" 2>/dev/null || echo "0")
-  stale_prs[$repo_name]=$stale
-  total_stale=$((total_stale + stale))
-
-  # 6. Draft PRs
-  drafts=$(gh pr list --repo "$repo" --json isDraft \
-    --jq '[.[] | select(.isDraft == true)] | length' 2>/dev/null || echo "0")
-  draft_prs[$repo_name]=$drafts
-  total_draft=$((total_draft + drafts))
-
-  # 7. Skill Drift (Local Check)
-  repo_path="$HOME/$repo_name"
-  drift_count=0
-  if [[ -d "$repo_path/.claude/skills" ]]; then
-    for skill_file in "$repo_path"/.claude/skills/*/SKILL.md; do
-      [[ -e "$skill_file" ]] || continue
-      missing=$(perl -lne 'print $1 while /`([^`]+\.(?:py|ts|tsx|sql|sh|yml|yaml))` /g' "$skill_file" | while read -r f; do
-        [[ -f "$repo_path/$f" ]] || echo "$f"
-      done | wc -l)
-      drift_count=$((drift_count + missing))
-    done
-  fi
-  skill_drift_count[$repo_name]=$drift_count
-  total_skill_drift=$((total_skill_drift + drift_count))
-done
-
-# Generate output
-founder_success_at_json="$(json_or_null "$FOUNDER_LAST_SUCCESS_AT")"
-founder_success_age_json="$(json_or_null "$FOUNDER_LAST_SUCCESS_AGE_MIN")"
-founder_success_source_json="$(json_or_null "$FOUNDER_LAST_SUCCESS_SOURCE")"
-founder_failure_at_json="$(json_or_null "$FOUNDER_LAST_FAILURE_AT")"
-founder_failure_age_json="$(json_or_null "$FOUNDER_LAST_FAILURE_AGE_MIN")"
-founder_failure_reason_json="$(json_or_null "$FOUNDER_LAST_FAILURE_REASON")"
-founder_failure_source_json="$(json_or_null "$FOUNDER_LAST_FAILURE_SOURCE")"
-founder_transport_at_json="$(json_or_null "$FOUNDER_LAST_TRANSPORT_FAILURE_AT")"
-founder_transport_age_json="$(json_or_null "$FOUNDER_LAST_TRANSPORT_FAILURE_AGE_MIN")"
-founder_transport_source_json="$(json_or_null "$FOUNDER_LAST_TRANSPORT_FAILURE_SOURCE")"
-
-output=""
-
-if [[ "$OUTPUT_FORMAT" == "markdown" ]]; then
-  output="## V8 Invariant Audit
-Generated: $TS
-Lookback: ${LOOKBACK_DAYS} days
-
-### Summary
-| Metric | Count | Status |
-|--------|-------|--------|
-| Rescue branch events (${LOOKBACK_DAYS}d) | $total_rescue | $([ $total_rescue -eq 0 ] && echo '✅ OK' || echo '⚠️ VIOLATION') |
-| Founder Pipeline | $FOUNDER_STATUS | $([ "$FOUNDER_STATUS" = "ok" ] && echo '✅ OK' || ([ "$FOUNDER_STATUS" = "failed" ] && echo '🚨 ACTION NEEDED' || echo '⚠️ UNKNOWN')) |
-| Founder failure reason | ${FOUNDER_LAST_FAILURE_REASON:-none} | $([ "$FOUNDER_STATUS" = "failed" ] && echo '🚨' || echo 'ℹ️') |
-| Founder pipeline source (last success/failure) | ${FOUNDER_LAST_SUCCESS_SOURCE:-unknown} / ${FOUNDER_LAST_FAILURE_SOURCE:-none} | ℹ️ INFO |
-| Founder last success (mins ago) | ${FOUNDER_LAST_SUCCESS_AGE_MIN:-unknown} | $(if [[ -n "${FOUNDER_LAST_SUCCESS_AGE_MIN}" ]]; then echo 'ℹ️ INFO'; else echo '⚠️ UNKNOWN'; fi) |
-| Founder transport failure age (mins ago) | ${FOUNDER_LAST_TRANSPORT_FAILURE_AGE_MIN:-none} | $(if [[ -n "${FOUNDER_LAST_TRANSPORT_FAILURE_AGE_MIN}" ]]; then echo '⚠️ WATCH'; else echo '✅ OK'; fi) |
-| Commits missing Feature-Key | $total_missing_fk | $([ $total_missing_fk -lt 5 ] && echo '✅ OK' || echo '⚠️ CHECK') |
-| Commits missing Agent: trailer | $total_missing_agent | $([ $total_missing_agent -lt 5 ] && echo '✅ OK' || echo '⚠️ CHECK') |
-| PRs with auto-merge enabled | $total_auto_merge | $([ $total_auto_merge -eq 0 ] && echo '✅ OK' || echo '❌ VIOLATION') |
-| Skill Drift (missing files) | $total_skill_drift | $([ $total_skill_drift -eq 0 ] && echo '✅ OK' || echo '⚠️ DRIFT') |
-| Stale PRs (>${LOOKBACK_DAYS}d) | $total_stale | $([ $total_stale -lt 3 ] && echo '✅ OK' || echo '⚠️ ATTENTION') |
-| Draft PRs | $total_draft | ℹ️ INFO |
-
-### Per-Repo Breakdown
-| Repo | Rescue | Missing FK | Missing Agent | Auto-Merge | Drift | Stale | Draft |
-|------|--------|------------|---------------|------------|-------|-------|-------|
-"
-
-  for repo in "${REPOS[@]}"; do
-    name=$(basename "$repo")
-    output="${output}
-| $name | ${rescue_counts[$name]:-0} | ${missing_feature_key[$name]:-0} | ${missing_agent_trailer[$name]:-0} | ${auto_merge_enabled[$name]:-0} | ${skill_drift_count[$name]:-0} | ${stale_prs[$name]:-0} | ${draft_prs[$name]:-0} |"
+render_payload() {
+  local summary_hosts_checked=${#host_order[@]}
+  local hosts_failed=0
+  local host_idx
+  local overall
+  local host
+  for host_idx in "${!host_order[@]}"; do
+    host="${host_order[$host_idx]}"
+    overall="${host_overall[$host_idx]:-green}"
+    [[ "$overall" == "red" ]] && hosts_failed=$((hosts_failed + 1))
   done
 
-  if [[ -n "$rescue_events" ]]; then
-    output="${output}
-
-### Rescue Branch Events (Canonical Violations, ${LOOKBACK_DAYS}d)
-| Timestamp | Branch | Repo |
-|-----------|--------|------|
-$(echo -e "$rescue_events")"
+  local fleet_status="green"
+  if [[ "$fail_count" -gt 0 ]]; then
+    fleet_status="red"
+  elif [[ "$warn_count" -gt 0 ]]; then
+    fleet_status="yellow"
+  elif [[ "$unknown_count" -gt 0 ]]; then
+    fleet_status="unknown"
   fi
 
-  output="${output}
+  local checks_json="["
+  local first=1
+  local row
+  for row in "${checks[@]-}"; do
+    if [[ "$first" -eq 1 ]]; then
+      checks_json+="$row"
+      first=0
+    else
+      checks_json+=",$row"
+    fi
+  done
+  checks_json+="]"
 
-### Invariant Definitions
-1. **Rescue branch events (${LOOKBACK_DAYS}d)**: New rescue branches created during lookback. High count = canonical workflow violations.
-2. **Feature-Key**: Every commit should have \`Feature-Key: bd-XXXX\` trailer for traceability.
-3. **Agent trailer**: Every agent commit should have \`Agent: <name>\` trailer for attribution.
-4. **Auto-merge**: Should NEVER be enabled. Humans merge, not bots.
-5. **Stale PRs**: PRs not updated in >${LOOKBACK_DAYS} days may indicate blocked work.
-6. **Founder pipeline**: Founder briefing should run successfully and post, including successful transport.
-7. **Founder transport health**: Any transport failures indicate immediate action needed.
-8. **Controller-only writes**: Only controller hosts execute destructive canonical operations.
-"
-
-elif [[ "$OUTPUT_FORMAT" == "json" ]]; then
-  output=$(cat <<EOF
+  local host_payload
+  host_payload="$(build_hosts_payload)"
+  local repair_hints_json
+  repair_hints_json="$(build_repair_hints)"
+  local reasons_json
+  reasons_json="$(build_reason_codes_json)"
+  local state_latest="$AUDIT_DAILY_LATEST"
+  local state_history="$AUDIT_DAILY_HISTORY"
+  local state_file_json
+  if [[ "$MODE" == "weekly" ]]; then
+    state_file_json="$(cat <<EOF
 {
-  "generated_at": "$TS",
-  "lookback_days": $LOOKBACK_DAYS,
-  "summary": {
-    "rescue_branches_lookback": $total_rescue,
-    "rescue_branches": $total_rescue,
-    "missing_feature_key": $total_missing_fk,
-    "missing_agent_trailer": $total_missing_agent,
-    "auto_merge_enabled": $total_auto_merge,
-    "stale_prs": $total_stale,
-    "draft_prs": $total_draft,
-    "founder_pipeline": {
-      "status": "$FOUNDER_STATUS",
-      "last_success_at": $founder_success_at_json,
-      "last_success_age_min": $founder_success_age_json,
-      "last_success_source": $founder_success_source_json,
-      "last_failure_at": $founder_failure_at_json,
-      "last_failure_reason": $founder_failure_reason_json,
-      "last_failure_source": $founder_failure_source_json,
-      "last_failure_age_min": $founder_failure_age_json,
-      "last_transport_failure_at": $founder_transport_at_json,
-      "last_transport_failure_age_min": $founder_transport_age_json,
-      "last_transport_failure_source": $founder_transport_source_json
-    }
-  },
-  "by_repo": {
-$(for repo in "${REPOS[@]}"; do
-  name=$(basename "$repo")
-  echo "    \"$name\": {"
-  echo "      \"rescue_branches_lookback\": ${rescue_counts[$name]:-0},"
-  echo "      \"rescue_branches\": ${rescue_counts[$name]:-0},"
-  echo "      \"missing_feature_key\": ${missing_feature_key[$name]:-0},"
-  echo "      \"missing_agent_trailer\": ${missing_agent_trailer[$name]:-0},"
-  echo "      \"auto_merge_enabled\": ${auto_merge_enabled[$name]:-0},"
-  echo "      \"stale_prs\": ${stale_prs[$name]:-0},"
-  echo "      \"draft_prs\": ${draft_prs[$name]:-0}"
-  echo "    },"
-done | sed '$ s/,$//')
-  },
-  "violations": {
-    "canonical_protection": $([ $total_rescue -gt 0 ] && echo 'true' || echo 'false'),
-    "auto_merge": $([ $total_auto_merge -gt 0 ] && echo 'true' || echo 'false')
-  }
+  "audit_root":"$STATE_ROOT",
+  "tool_health_json":"${TOOL_HEALTH_JSON}",
+  "tool_health_lines":"${TOOL_HEALTH_LINES}",
+  "audit_latest":"$AUDIT_WEEKLY_LATEST",
+  "audit_history":"$AUDIT_WEEKLY_HISTORY",
+  "legacy_state_roots":["$STATE_ROOT_LEGACY1","$STATE_ROOT_LEGACY2"]
 }
 EOF
-)
-
-elif [[ "$OUTPUT_FORMAT" == "slack" ]]; then
-  # Determine overall status
-  status_emoji="✅"
-  status_text="All green"
-
-  if [ "$total_rescue" -gt 0 ] || [ "$total_auto_merge" -gt 0 ]; then
-    status_emoji="🚨"
-    status_text="V8 violations detected"
-  elif [ "$total_stale" -gt 2 ] || [ "$total_skill_drift" -gt 0 ]; then
-    status_emoji="⚠️"
-    status_text="PR or Skill Drift detected"
+)"
+  else
+    state_file_json="$(cat <<EOF
+{
+  "audit_root":"$STATE_ROOT",
+  "tool_health_json":"${TOOL_HEALTH_JSON}",
+  "tool_health_lines":"${TOOL_HEALTH_LINES}",
+  "audit_latest":"$AUDIT_DAILY_LATEST",
+  "audit_history":"$AUDIT_DAILY_HISTORY",
+  "legacy_state_roots":["$STATE_ROOT_LEGACY1","$STATE_ROOT_LEGACY2"]
+}
+EOF
+)"
   fi
 
-  # Build main message (≤300 chars)
-  output="${status_emoji} *V8 Weekly Audit* (${LOOKBACK_DAYS}d):
-• Rescue events (${LOOKBACK_DAYS}d): ${total_rescue} $([ $total_rescue -eq 0 ] && echo '✅' || echo '❌')
-• Auto-merge PRs: ${total_auto_merge} $([ $total_auto_merge -eq 0 ] && echo '✅' || echo '❌')
-• Skill Drift: ${total_skill_drift} $([ $total_skill_drift -eq 0 ] && echo '✅' || echo '⚠️')
-• Stale PRs: ${total_stale} | Drafts: ${total_draft}
-• Founder Pipeline: ${FOUNDER_STATUS} | source=${FOUNDER_LAST_SUCCESS_SOURCE:-unknown} | reason=${FOUNDER_LAST_FAILURE_REASON:-none}
-• Founder Transport Failure (mins ago): ${FOUNDER_LAST_TRANSPORT_FAILURE_AGE_MIN:-none}"
+  local timestamp
+  local epoch
+  timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  epoch="$(date -u +%s)"
+  cat <<EOF
+{
+  "mode":"$MODE",
+  "generated_at":"$timestamp",
+  "generated_at_epoch":$epoch,
+  "fleet_status":"$fleet_status",
+  "summary":{
+    "pass":$pass_count,
+    "yellow":$warn_count,
+    "red":$fail_count,
+    "unknown":$unknown_count,
+    "hosts_checked":$summary_hosts_checked,
+    "hosts_failed":$hosts_failed
+  },
+  "hosts":$host_payload,
+  "checks":$checks_json,
+  "repair_hints":$repair_hints_json,
+  "reason_codes":$reasons_json,
+  "state_paths":$state_file_json,
+  "slack_channel":"$(json_escape "$SLACK_CHANNEL")",
+  "slack_message":"$(json_escape "$(render_slack_text "$fleet_status" "$hosts_failed")")"
+}
+EOF
+}
 
-  # Add violation details if any
-  if [ "$total_rescue" -gt 0 ] && [[ -n "$rescue_events" ]]; then
-    output="${output}
----THREAD---
-*Rescue Branch Events (Canonical Violations):*"
-    # Parse rescue_events and format
-    while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
-      output="${output}
-${line}"
-    done <<< "$(echo -e "$rescue_events")"
+save_audit_artifact() {
+  local payload="$1"
+  local latest="$AUDIT_DAILY_LATEST"
+  local history_dir="$AUDIT_DAILY_HISTORY"
+  if [[ "$MODE" == "weekly" ]]; then
+    latest="$AUDIT_WEEKLY_LATEST"
+    history_dir="$AUDIT_WEEKLY_HISTORY"
   fi
-fi
+  local history
+  mkdir -p "$history_dir"
+  if [[ "$MODE" == "daily" ]]; then
+    history="${history_dir}/$(date -u +%Y-%m-%d).json"
+  else
+    history="${history_dir}/$(date -u +%G-%V).json"
+  fi
+  write_atomic "$latest" "$payload"
+  write_atomic "$history" "$payload"
+}
 
-# Output
-if [[ -n "$OUTPUT_FILE" ]]; then
-  echo "$output" > "$OUTPUT_FILE"
-  echo "Audit written to: $OUTPUT_FILE" >&2
-else
-  echo "$output"
-fi
+load_args_state() {
+  TOOL_HEALTH_JSON="${TOOL_HEALTH_JSON:-${STATE_ROOT}/tool-health.json}"
+  TOOL_HEALTH_LINES="${TOOL_HEALTH_LINES:-${STATE_ROOT}/tool-health.lines}"
+  AUDIT_DAILY_LATEST="${AUDIT_DAILY_LATEST:-${STATE_ROOT}/audit/daily/latest.json}"
+  AUDIT_DAILY_HISTORY="${AUDIT_DAILY_HISTORY:-${STATE_ROOT}/audit/daily/history}"
+  AUDIT_WEEKLY_LATEST="${AUDIT_WEEKLY_LATEST:-${STATE_ROOT}/audit/weekly/latest.json}"
+  AUDIT_WEEKLY_HISTORY="${AUDIT_WEEKLY_HISTORY:-${STATE_ROOT}/audit/weekly/history}"
+
+  reason_codes=()
+  checks=()
+  pass_count=0
+  warn_count=0
+  fail_count=0
+  unknown_count=0
+  host_order=()
+  host_overall=()
+  host_checks=()
+
+  gather_checks
+
+  local payload
+  payload="$(render_payload)"
+  mkdir -p "${STATE_ROOT}/audit/$MODE"
+  if [[ "$STATE_ONLY" -eq 0 ]]; then
+    save_audit_artifact "$payload"
+  fi
+  if [[ "$OUTPUT_SLACK" -eq 1 ]]; then
+    printf '%s\n' "$(echo "$payload" | sed -n 's/.*"slack_message":"\([^"]*\)".*/\1/p' | sed 's/\\n/\n/g')"
+  else
+    printf '%s\n' "$payload"
+  fi
+  local fleet_status
+  fleet_status="$(printf '%s\n' "$payload" | sed -n 's/.*"fleet_status":[[:space:]]*"\([a-z]*\)".*/\1/p')"
+  if [[ "$fleet_status" == "red" ]]; then
+    return 2
+  fi
+  return 0
+}
+
+TOOL_STALE_HOURS=6
+DOLT_STALE_MINUTES=15
+UNKNOWN_HOST_ESCALATION_RUNS=3
+parse_args "$@"
+load_manifest_config
+load_args_state
+exit $?

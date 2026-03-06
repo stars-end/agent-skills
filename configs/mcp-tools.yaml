@@ -1,0 +1,96 @@
+# Fleet Sync V2.1 tool manifest
+# Primary source for local-first MCP tool distribution and IDE rendering.
+schema_version: 1
+strategy:
+  distribution: git_pull
+  execution: local_stdio
+  fallback: last_known_good_local
+
+tools:
+  context-plus:
+    enabled: true
+    version: "0.4.2"
+    install_cmd: "npx -y @forloopcodes/contextplus@0.4.2"
+    health_cmd: "npx -y @forloopcodes/contextplus@0.4.2 --version"
+    target_ides:
+      - codex-cli
+      - claude-code
+      - antigravity
+      - opencode
+    mcp:
+      type: stdio
+      command: "npx"
+      args:
+        - "-y"
+        - "@forloopcodes/contextplus@0.4.2"
+        - "--transport"
+        - "stdio"
+    runtime: node
+
+  cass-memory:
+    enabled: true
+    version: "1.0.0"
+    install_cmd: "bun install --global cass-memory-system@1.0.0"
+    health_cmd: "cass-memory --version"
+    target_ides:
+      - codex-cli
+      - claude-code
+      - opencode
+    mcp:
+      type: stdio
+      command: "cass-memory"
+      args: []
+    runtime: bun
+    sharing:
+      default: local_only
+      opt_in_env: CASS_SHARE_MEMORY
+      disable_env: CASS_NO_SHARE
+
+  serena:
+    enabled: true
+    version: "0.9.1"
+    install_cmd: "uv tool install serena==0.9.1"
+    health_cmd: "serena --version"
+    target_ides:
+      - codex-cli
+      - claude-code
+      - antigravity
+      - opencode
+    mcp:
+      type: stdio
+      command: "serena"
+      args: []
+    runtime: python
+
+  llm-tldr:
+    enabled: true
+    version: "1.5.2"
+    install_cmd: "uv tool install \"llm-tldr==1.5.2\""
+    health_cmd: "tldr-mcp --version || llm-tldr --version"
+    target_ides:
+      - codex-cli
+      - claude-code
+      - opencode
+    mcp:
+      type: stdio
+      command: "tldr-mcp"
+      args: []
+    runtime: python
+
+render:
+  merge_mode: patch
+  preserve_user_overrides: true
+  write_paths:
+    codex-cli: ~/.codex/config.toml
+    claude-code: ~/.claude.json
+    antigravity: ~/.gemini/antigravity/mcp_config.json
+    opencode: ~/.opencode/config.json
+
+verification:
+  require_manifests:
+    - configs/fleet-sync.manifest.yaml
+    - configs/mcp-tools.yaml
+  require_skill_stubs:
+    - extended/context-plus/SKILL.md
+    - extended/cass-memory/SKILL.md
+    - extended/llm-tldr/SKILL.md
