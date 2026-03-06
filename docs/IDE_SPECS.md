@@ -125,6 +125,50 @@ The following VMs are defined in `scripts/canonical-targets.sh`:
 - Expected: All 5 canonical IDEs installed and configured
 - Verified: ✅ All services passing as of 2026-01-22
 
+## Workspace-First Manual Sessions (DX V8.6)
+
+Manual IDE sessions on canonical VMs use `dx-worktree open` and `resume`:
+
+### Open New Workspace
+
+```bash
+dx-worktree open <beads-id> <repo> -- <ide>
+```
+
+Examples:
+```bash
+dx-worktree open bd-kuhj.4 agent-skills -- opencode
+dx-worktree open bd-kuhj.4 prime-radiant-ai -- antigravity
+dx-worktree open bd-kuhj.4 affordabot -- codex
+dx-worktree open bd-kuhj.4 llm-common -- claude
+dx-worktree open bd-kuhj.4 agent-skills -- gemini
+```
+
+### Resume Existing Workspace
+
+```bash
+dx-worktree resume <beads-id> <repo> -- <ide>
+```
+
+### Workspace-First Policy
+
+- **Canonical repos** (`~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`) are read-only for agents
+- **All mutating work** happens in `/tmp/agents/<beads-id>/<repo>`
+- **Recovery** uses named worktree paths (`recovery/canonical-<repo>-<timestamp>`), not stash
+- **Governed dispatch** (`dx-runner`, `dx-batch`) rejects canonical paths with:
+  ```
+  reason_code=canonical_worktree_forbidden
+  remedy=dx-worktree create <beads-id> <repo>
+  ```
+
+### Normal Operations Still Work
+
+These operations are unaffected in canonical repos:
+- `git fetch`, `git pull --ff-only`
+- `railway status`, `railway run`, `railway shell`
+- Normal shell startup
+- Loading skills from `~/agent-skills`
+
 ## agentskills.io Verification
 
 For each IDE, verify agentskills.io support:

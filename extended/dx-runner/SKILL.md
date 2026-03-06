@@ -181,6 +181,37 @@ dx-runner integrity-gate --worktree <path> --reported-commit <sha>
 dx-runner feature-key-gate --worktree <path> --feature-key <bd-id>
 ```
 
+### Workspace-First Gate (bd-kuhj.3)
+
+`dx-runner` enforces workspace-first isolation by rejecting canonical repo paths:
+
+**Allowed mutating paths:**
+- `/tmp/agents/*`
+- `/tmp/dx-runner/*`
+- `/tmp/dxbench/*`
+- `$HOME/agent-skills` (only for non-mutating read operations)
+
+**Forbidden paths** (exit code 22, reason `canonical_worktree_forbidden`):
+- `$HOME/agent-skills`
+- `$HOME/prime-radiant-ai`
+- `$HOME/affordabot`
+- `$HOME/llm-common`
+
+**Example rejection:**
+```
+reason_code=canonical_worktree_forbidden
+rejected_path=/Users/fengning/agent-skills
+policy=workspace_first_v86
+remedy=dx-worktree create bd-xxx agent-skills
+ERROR: Mutating execution forbidden in canonical repo: /Users/fengning/agent-skills
+Canonical repos are clean mirrors. Use: dx-worktree create bd-xxx agent-skills
+```
+
+**Normal operations still work** in canonical repos:
+- `git fetch`, `git pull --ff-only`
+- `railway status`, `railway run`, `railway shell`
+- Loading skills from `~/agent-skills`
+
 ## Providers
 
 ### cc-glm (Reliability Backstop)
