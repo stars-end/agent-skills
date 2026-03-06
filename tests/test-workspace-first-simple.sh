@@ -2,11 +2,13 @@
 # test-workspace-first-simple.sh - Simpler validation for bd-kuhj
 #
 # This version validates implementation without creating worktrees
+# Tests the PR checkout, not installed ~/agent-skills
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AGENTS_ROOT="${AGENTS_ROOT:-$HOME/agent-skills}"
+# Test the PR checkout itself, not installed canonical
+AGENTS_ROOT="${AGENTS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -25,6 +27,8 @@ section() { echo ""; echo -e "${BLUE}### $*${NC}"; }
 echo "========================================"
 echo "DX V8.6 Workspace-First Validation"
 echo "========================================"
+echo "Testing PR checkout: $AGENTS_ROOT"
+echo ""
 
 # ============================================================================
 # Test 1: dx-worktree command existence (bd-kuhj.1)
@@ -85,6 +89,14 @@ if grep -q "remedy=dx-worktree create" "$AGENTS_ROOT/scripts/dx-runner"; then
     pass "dx-runner provides remediation command"
 else
     fail "dx-runner missing remediation command"
+fi
+
+# Test 2.4: worktree enforcement for ALL providers (not just opencode)
+# bd-kuhj.3: gemini must also be blocked from canonical repos
+if grep -A30 "# Resolve and pin worktree" "$AGENTS_ROOT/scripts/dx-runner" | grep -q "PROVIDER.*opencode"; then
+    fail "dx-runner still has provider-specific worktree check (gemini bypass)"
+else
+    pass "dx-runner enforces worktree for all providers"
 fi
 
 # Test 2.4: check_permission_gate updated

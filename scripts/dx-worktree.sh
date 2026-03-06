@@ -116,7 +116,8 @@ open() {
   
   # No command: print structured output
   local branch="unknown"
-  if [[ -d "$workspace_path/.git" ]]; then
+  # Git worktrees have .git as a file (not a directory), so use git rev-parse
+  if (cd "$workspace_path" && git rev-parse --git-dir >/dev/null 2>&1); then
     branch="$(cd "$workspace_path" && git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
   fi
   
@@ -205,10 +206,28 @@ EOF
     die "failed to create recovery worktree at $workspace_path"
   fi
   
-  # Copy dirty state to recovery worktree
+  # Preserve dirty state to recovery worktree
   cd "$repo_path"
+  
+  # Save unstaged changes
   git diff --quiet || git diff > "$workspace_path/.recovery.patch"
+  
+  # Save staged changes  
   git diff --cached --quiet || git diff --cached > "$workspace_path/.recovery-staged.patch"
+  
+  # Save untracked files (copy them to recovery worktree)
+  local untracked_list
+  untracked_list="$(git ls-files --others --exclude-standard 2>/dev/null || true)"
+  if [[ -n "$untracked_list" ]]; then
+    echo "$untracked_list" > "$workspace_path/.recovery-untracked.txt"
+    while IFS= read -r file; do
+      [[ -n "$file" ]] || continue
+      if [[ -f "$file" ]]; then
+        mkdir -p "$workspace_path/$(dirname "$file")"
+        cp "$file" "$workspace_path/$file"
+      fi
+    done <<< "$untracked_list"
+  fi
   
   # Reset canonical to clean state
   git reset --hard HEAD
@@ -224,6 +243,7 @@ reason=evacuated
 timestamp=$timestamp
 skipped=false
 recovery_command=cd $workspace_path && git apply .recovery.patch
+untracked_files=$([[ -f "$workspace_path/.recovery-untracked.txt" ]] && echo ".recovery-untracked.txt" || echo "none")
 EOF
 }
 

@@ -2496,27 +2496,27 @@ start_cmd() {
     fi
 
     # Resolve and pin worktree to avoid cwd drift/external_directory failures.
-    if [[ "$PROVIDER" == "opencode" || -n "$WORKTREE" ]]; then
-        WORKTREE="$(resolve_worktree "$BEADS" "$WORKTREE" "$PROMPT_FILE")"
-        if [[ -z "$WORKTREE" || ! -d "$WORKTREE" ]]; then
-            echo "reason_code=worktree_missing" >&2
-            echo "worktree resolution failed for beads=$BEADS (cwd=$(pwd)); pass --worktree /tmp/agents/<beads>/<repo>" >&2
-            exit 22
-        fi
+    # bd-kuhj.3: ALL mutating providers must use worktree (not just opencode)
+    WORKTREE="$(resolve_worktree "$BEADS" "$WORKTREE" "$PROMPT_FILE")"
+    if [[ -z "$WORKTREE" || ! -d "$WORKTREE" ]]; then
+        echo "reason_code=worktree_missing" >&2
+        echo "worktree resolution failed for beads=$BEADS (cwd=$(pwd)); pass --worktree /tmp/agents/<beads>/<repo>" >&2
+        exit 22
+    fi
 
-        # Permission gate (bd-cbsb.16 + bd-kuhj.3)
-        local perm_result perm_rc
-        set +e
-        perm_result="$(check_permission_gate "$BEADS" "$WORKTREE")"
-        perm_rc=$?
-        set -e
-        
-        if [[ $perm_rc -ne 0 ]]; then
-            # bd-kuhj.3: Special handling for canonical rejection
-            if [[ "$perm_result" == *"canonical_worktree_forbidden"* ]]; then
-                local repo_name
-                repo_name="$(basename "$WORKTREE")"
-                cat >&2 <<EOF
+    # Permission gate (bd-cbsb.16 + bd-kuhj.3)
+    local perm_result perm_rc
+    set +e
+    perm_result="$(check_permission_gate "$BEADS" "$WORKTREE")"
+    perm_rc=$?
+    set -e
+    
+    if [[ $perm_rc -ne 0 ]]; then
+        # bd-kuhj.3: Special handling for canonical rejection
+        if [[ "$perm_result" == *"canonical_worktree_forbidden"* ]]; then
+            local repo_name
+            repo_name="$(basename "$WORKTREE")"
+            cat >&2 <<EOF
 reason_code=canonical_worktree_forbidden
 rejected_path=$WORKTREE
 policy=workspace_first_v86
@@ -2524,15 +2524,15 @@ remedy=dx-worktree create $BEADS $repo_name
 ERROR: Mutating execution forbidden in canonical repo: $WORKTREE
 Canonical repos are clean mirrors. Use: dx-worktree create $BEADS $repo_name
 EOF
-                exit 22
-            fi
-            
-            echo "permission gate failed: $perm_result" >&2
             exit 22
         fi
         
-        # bd-8wdg.11: Auto-remediate mise trust only for concrete .mise targets.
-        if [[ "${DX_RUNNER_AUTO_TRUST_MISE:-1}" == "1" ]] && command -v mise >/dev/null 2>&1; then
+        echo "permission gate failed: $perm_result" >&2
+        exit 22
+    fi
+    
+    # bd-8wdg.11: Auto-remediate mise trust only for concrete .mise targets.
+    if [[ "${DX_RUNNER_AUTO_TRUST_MISE:-1}" == "1" ]] && command -v mise >/dev/null 2>&1; then
             local trust_target trust_before trust_after
             trust_target=""
             if [[ -d "$WORKTREE" && -f "$WORKTREE/.mise.toml" ]]; then
@@ -2551,7 +2551,6 @@ EOF
                 fi
             fi
         fi
-    fi
     
     # Baseline gate (optional)
     if [[ -n "$REQUIRED_BASELINE" ]]; then
