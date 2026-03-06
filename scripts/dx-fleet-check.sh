@@ -8,6 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 STATE_ROOT="${DX_FLEET_STATE_ROOT:-${HOME}/.dx-state/fleet}"
 STATE_JSON="${STATE_ROOT}/tool-health.json"
 STATE_LINES="${STATE_ROOT}/tool-health.lines"
@@ -591,7 +592,10 @@ build_missing_rows() {
 remote_host_payload() {
   local host="$1"
   local target="$2"
-  ssh_canonical_vm "$target" "DX_FLEET_STATE_ROOT='$STATE_ROOT' ~/agent-skills/scripts/dx-fleet-check.sh --mode $MODE --local-only --json --state-dir '$STATE_ROOT'" 2>/dev/null || true
+  local remote_script="${REPO_ROOT}/scripts/dx-fleet-check.sh"
+  local cmd
+  cmd="SCRIPT='${remote_script}'; if [ ! -x \"\$SCRIPT\" ]; then SCRIPT=~/agent-skills/scripts/dx-fleet-check.sh; fi; DX_FLEET_STATE_ROOT='${STATE_ROOT}' \"\$SCRIPT\" --mode ${MODE} --local-only --json --state-dir '${STATE_ROOT}'"
+  ssh_canonical_vm "$target" "$cmd" 2>/dev/null || true
 }
 
 parse_remote_rows() {
