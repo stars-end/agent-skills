@@ -498,14 +498,22 @@ for ide, artifacts in sorted(canon_artifacts.items()):
             }
         )
 
-pass_count = sum(1 for r in file_rows if r["status"] == "pass")
-warn_count = sum(1 for r in file_rows if r["status"] == "warn")
-fail_count = sum(1 for r in file_rows if r["status"] == "fail")
+tools_pass = sum(1 for r in tool_rows if r["status"] == "pass")
+tools_warn = sum(1 for r in tool_rows if r["status"] == "warn")
+tools_fail = sum(1 for r in tool_rows if r["status"] == "fail")
+
+files_pass = sum(1 for r in file_rows if r["status"] == "pass")
+files_warn = sum(1 for r in file_rows if r["status"] == "warn")
+files_fail = sum(1 for r in file_rows if r["status"] == "fail")
+
+total_pass = tools_pass + files_pass
+total_warn = tools_warn + files_warn
+total_fail = tools_fail + files_fail
 
 overall = "green"
-if fail_count > 0:
+if tools_fail > 0 or files_fail > 0:
     overall = "red"
-elif warn_count > 0:
+elif tools_warn > 0 or files_warn > 0:
     overall = "yellow"
 
 if not reason_codes:
@@ -521,9 +529,15 @@ payload = {
     "details": "converged" if overall == "green" else "drift detected",
     "reason_code": reason_codes[0],
     "summary": {
-        "pass": pass_count,
-        "warn": warn_count,
-        "fail": fail_count,
+        "pass": total_pass,
+        "warn": total_warn,
+        "fail": total_fail,
+        "tools_pass": tools_pass,
+        "tools_warn": tools_warn,
+        "tools_fail": tools_fail,
+        "files_pass": files_pass,
+        "files_warn": files_warn,
+        "files_fail": files_fail,
         "tools_total": len(tool_rows),
         "files_total": len(file_rows),
     },
@@ -572,8 +586,56 @@ main() {
     return 0
   fi
 
-  if [[ "$OUTPUT_JSON" -eq 1 && -f "$STATE_PATH" ]]; then
-    cat "$STATE_PATH"
+  # FAIL-CLOSED: Remove stale cached JSON fallback,  # Emit synthetic red JSON with deterministic error details
+  local now_iso now_epoch
+  now_iso="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  now_epoch="$(date -u +%s)"
+  
+  local error_json
+  error_json=$(cat <<ERROR_JSON
+{
+  "mode": "mcp-tools-sync",
+  "generated_at": "${now_iso}",
+  "generated_at_epoch": ${now_epoch},
+  "mode_action": "${MODE}",
+  "overall": "red",
+  "status": "red",
+  "details": "runtime error - fail-closed",
+  "reason_code": "mcp_tools_sync_runtime_error",
+  "next_action": "Check Python environment, PyYAML availability, and # Install validation",
+  "summary": {
+    "pass": 0,
+    "warn": 0,
+    "fail": 1,
+    "tools_pass": 0,
+    "tools_warn": 0,
+    "tools_fail": 1,
+    "files_pass": 1,
+    "files_warn": 0,
+    "files_fail": 1
+  },
+  "reason_codes": ["mcp_tools_sync_runtime_error"],
+  "tools": [],
+  "files": [],
+  "state_paths": {"state_dir": "${STATE_ROOT}", "file": "${STATE_PATH}"}
+}
+ERROR_JSON
+)
+
+  if [[ "$OUTPUT_JSON" -eq 1 ]]; then
+    printf '%s\n' "$error_json"
+  fi
+  if [[ "$REPORT_LINES" -eq 1 ]]; then
+    local lines_file="${STATE_ROOT}/mcp-tools-sync.lines"
+    [[ -f "$lines_file" ]] && cat "$lines_file"
+  fi
+  return 1
+}
+ERROR_JSON
+)
+
+  if [[ "$OUTPUT_JSON" -eq 1 ]]; then
+    printf '%s\n' "$error_json"
   fi
   if [[ "$REPORT_LINES" -eq 1 ]]; then
     local lines_file="${STATE_ROOT}/mcp-tools-sync.lines"

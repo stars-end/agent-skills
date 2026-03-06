@@ -310,8 +310,9 @@ json_array_from_objects() {
 
 mcp_tools_sync_status() {
   local status="fail"
-  local severity="medium"
+  local severity="high"
   local details="dx-mcp-tools-sync check failed"
+  local tools_fail=0
 
   local out=""
   if [[ -x "$SCRIPT_DIR/dx-mcp-tools-sync.sh" ]]; then
@@ -321,8 +322,35 @@ mcp_tools_sync_status() {
   fi
 
   if [[ -n "$out" ]] && command -v jq >/dev/null 2>&1; then
+    # STRICT INTERPRETATION: Check tools_fail count
+    tools_fail="$(printf '%s' "$out" | jq -r '.summary.tools_fail // 0' 2>/dev/null || echo 0)"
+    if [[ "$tools_fail" -gt 0 ]]; then
+      status="fail"
+      severity="high"
+      details="MCP tools health fail: tools_fail=$tools_fail"
+      printf '%s|%s|%s' "$status" "$severity" "$details"
+      return
+    fi
+
+    # Check overall status (fail-closed: never trust green if tools failed)
     status="$(printf '%s' "$out" | jq -r '.overall // .status // "red"' 2>/dev/null || echo red)"
     details="$(printf '%s' "$out" | jq -r '.details // "mcp-tools-sync state"' 2>/dev/null || echo 'mcp-tools-sync state')"
+    
+    # FRESHNESS CHECK: Verify snapshot is not stale
+    local generated_epoch now age
+    generated_epoch="$(printf '%s' "$out" | jq -r '.generated_at_epoch // 0' 2>/dev/null || echo 0)"
+    now="$(date -u +%s)"
+    
+    if [[ "$generated_epoch" =~ ^[0-9]+$ ]]; then
+      age=$((now - generated_epoch))
+      if [[ "$age" -gt "$SNAPSHOT_STALE_SECONDS" ]]; then
+        status="fail"
+        severity="high"
+        details="local_snapshot_stale: age=${age}s threshold=${SNAPSHOT_STALE_SECONDS}s"
+        printf '%s|%s|%s' "$status" "$severity" "$details"
+        return
+      fi
+    fi
   fi
 
   case "$status" in
@@ -640,6 +668,7 @@ parse_remote_rows() {
     return 0
   fi
 
+  # FRESHNESS CHECK
   local now epoch age
   now="$(date -u +%s)"
   epoch="$(printf '%s' "$payload" | jq -r '.generated_at_epoch // 0' 2>/dev/null || echo 0)"
@@ -650,6 +679,19 @@ parse_remote_rows() {
   if [[ "$age" -gt "$SNAPSHOT_STALE_SECONDS" ]]; then
     build_missing_rows "$host" "remote_snapshot_stale" "remote snapshot stale age=${age}s threshold=${SNAPSHOT_STALE_SECONDS}s"
     return 0
+  fi
+
+  # STRICT MCP TOOLS FAIL CHECK: Check if tool_mcp_health has tools_fail > 0
+  local mcp_check
+  mcp_check="$(printf '%s' "$payload" | jq -r '.hosts[0].checks[] | select(.id == "tool_mcp_health") | .details // ""' 2>/dev/null || true)"
+  if [[ "$mcp_check" =~ "MCP tools health fail" ]] || [[ "$mcp_check" =~ "tools_fail=" ]]; then
+    # Extract tools_fail count if present
+    local tools_fail_count
+    tools_fail_count="$(echo "$mcp_check" | grep -oE 'tools_fail=[0-9]+' | cut -d= -f2 || echo 0)"
+    if [[ "$tools_fail_count" -gt 0 ]]; then
+      build_missing_rows "$host" "mcp_tools_fail" "remote MCP tools health fail: $mcp_check"
+      return 0
+    fi
   fi
 
   local expected ids_json

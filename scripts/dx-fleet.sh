@@ -16,7 +16,14 @@ usage() {
 Usage:
   dx-fleet check [--mode daily|weekly] [--json]
   dx-fleet repair [--json]
+  dx-fleet converge [--apply|--check|--repair] [--json]
   dx-fleet audit --daily|--weekly [--json] [--state-dir DIR]
+
+Commands:
+  check      Run fleet health check (local + remote hosts)
+  repair     Repair local host
+  converge   Fleet-wide converge/apply/check/repair across all canonical VMs
+  audit      Run audit (daily or weekly mode)
 
 Daily audit consumes Fleet Sync health artifacts.
 Weekly audit is governance/compliance-heavy.
@@ -37,6 +44,9 @@ case "$COMMAND" in
     ;;
   repair)
     exec "$SCRIPT_DIR/dx-fleet-repair.sh" "$@"
+    ;;
+  converge)
+    exec "$SCRIPT_DIR/dx-fleet-converge.sh" "$@"
     ;;
   audit)
     exec "$SCRIPT_DIR/dx-audit.sh" "$@"
