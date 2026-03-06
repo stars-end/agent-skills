@@ -276,6 +276,38 @@ json_array_from_rows() {
   echo "$out"
 }
 
+json_array_from_strings() {
+  local out="["
+  local first=1
+  local item
+  for item in "$@"; do
+    if [[ "$first" -eq 1 ]]; then
+      first=0
+    else
+      out+=","
+    fi
+    out+="\"$(json_escape "$item")\""
+  done
+  out+="]"
+  echo "$out"
+}
+
+json_array_from_objects() {
+  local out="["
+  local first=1
+  local item
+  for item in "$@"; do
+    if [[ "$first" -eq 1 ]]; then
+      first=0
+    else
+      out+=","
+    fi
+    out+="$item"
+  done
+  out+="]"
+  echo "$out"
+}
+
 mcp_tools_sync_status() {
   local status="fail"
   local severity="medium"
@@ -594,7 +626,7 @@ remote_host_payload() {
   local target="$2"
   local remote_script="${REPO_ROOT}/scripts/dx-fleet-check.sh"
   local cmd
-  cmd="SCRIPT='${remote_script}'; if [ ! -x \"\$SCRIPT\" ]; then SCRIPT=~/agent-skills/scripts/dx-fleet-check.sh; fi; DX_FLEET_STATE_ROOT='${STATE_ROOT}' \"\$SCRIPT\" --mode ${MODE} --local-only --json --state-dir '${STATE_ROOT}'"
+  cmd="SCRIPT='${remote_script}'; if [ ! -x \"\$SCRIPT\" ]; then SCRIPT=~/agent-skills/scripts/dx-fleet-check.sh; fi; STATE_DIR=\"\$HOME/.dx-state/fleet\"; DX_FLEET_STATE_ROOT=\"\$STATE_DIR\" \"\$SCRIPT\" --mode ${MODE} --local-only --json --state-dir \"\$STATE_DIR\""
   ssh_canonical_vm "$target" "$cmd" 2>/dev/null || true
 }
 
@@ -754,22 +786,17 @@ main() {
   if [[ ${#reason_codes[@]} -eq 0 ]]; then
     reason_codes_json='["ok"]'
   else
-    reason_codes_json="$(printf '%s\n' "${reason_codes[@]}" | python3 - <<'PY'
-import json,sys
-rows=[x.rstrip('\n') for x in sys.stdin if x.rstrip('\n')!='']
-print(json.dumps(sorted(set(rows))))
-PY
-)"
+    local -a deduped=()
+    local code
+    for code in "${reason_codes[@]}"; do
+      is_member "$code" "${deduped[@]-}" || deduped+=("$code")
+    done
+    reason_codes_json="$(json_array_from_strings "${deduped[@]-}")"
   fi
   if [[ ${#repair_hints[@]} -eq 0 ]]; then
     repair_hints_json='[]'
   else
-    repair_hints_json="$(printf '%s\n' "${repair_hints[@]}" | python3 - <<'PY'
-import sys
-rows=[x.rstrip('\n') for x in sys.stdin if x.rstrip('\n')!='']
-print('[' + ','.join(rows) + ']')
-PY
-)"
+    repair_hints_json="$(json_array_from_objects "${repair_hints[@]-}")"
   fi
 
   local result_json summary_json state_paths_json
