@@ -152,7 +152,7 @@ railway list --json
 ### Decision Logic
 
 1. **User explicitly says "new project"** → Use `railway init`
-2. **User names an existing project** → Use `railway link`
+2. **User names an existing project** → Use `railway link --project <id> --environment <env> --json`
 3. **Directory name matches existing project** → Ask: link existing or create new?
 4. **No matching projects** → Use `railway init`
 5. **Ambiguous** → Ask user
@@ -368,7 +368,7 @@ No workspaces found. Create one at railway.com or verify authentication.
 
 ```
 Project name already exists. Either:
-- Link to existing: railway link -p <name>
+- Link to existing: railway link --project <name> --environment <env> --json
 - Use different name: railway init -n <other-name>
 ```
 
