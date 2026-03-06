@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 #
-# Fleet Sync installer and lifecycle helper for deterministic operations.
-# - install / check: runs health + MCP-tool checks and writes install state
-# - uninstall: best-effort teardown, no optional Python dependencies required
+# Fleet Sync convergent install/check lifecycle helper.
+#
+# Modes:
+#   --apply      converge local host tools + IDE configs
+#   --check      verify local host convergence
+#   --uninstall  fail-open best-effort cleanup
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATE_ROOT="${DX_FLEET_STATE_ROOT:-${HOME}/.dx-state/fleet}"
 MANIFEST_PATH="${SCRIPT_DIR}/../configs/fleet-sync.manifest.yaml"
-MODE="install"
+MODE="apply"
+
 STATE_ROOT_LEGACY1="${HOME}/.dx-state/fleet-sync"
 STATE_ROOT_LEGACY2="${HOME}/.dx-state/fleet_sync"
 
@@ -33,32 +37,50 @@ write_atomic() {
   mv "$tmp" "$target"
 }
 
-expand_home() {
-  local value="$1"
-  if [[ "$value" == "~/"* ]]; then
-    printf '%s\n' "${value/#~\//$HOME/}"
-  else
-    printf '%s\n' "$value"
-  fi
+json_array_from_strings() {
+  local out="["
+  local first=1
+  local item
+  for item in "$@"; do
+    if [[ "$first" -eq 1 ]]; then
+      first=0
+    else
+      out+=","
+    fi
+    out+="\"$(json_escape "$item")\""
+  done
+  out+="]"
+  printf '%s' "$out"
+}
+
+json_array_from_objects() {
+  local out="["
+  local first=1
+  local item
+  for item in "$@"; do
+    if [[ "$first" -eq 1 ]]; then
+      first=0
+    else
+      out+=","
+    fi
+    out+="$item"
+  done
+  out+="]"
+  printf '%s' "$out"
 }
 
 usage() {
-  cat <<'EOF'
+  cat <<'USAGE'
 Usage:
-  dx-fleet-install.sh [--state-dir PATH]
-  dx-fleet-install.sh --check [--state-dir PATH]
-  dx-fleet-install.sh --uninstall [--state-dir PATH]
-
-Defaults: install mode (deterministic check and state write).
-Uninstall is best-effort and does not require optional Python modules.
-EOF
+  dx-fleet-install.sh [--apply|--check|--uninstall] [--state-dir PATH] [--json]
+USAGE
 }
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --install)
-        MODE="install"
+      --apply|--install)
+        MODE="apply"
         shift
         ;;
       --check)
@@ -89,72 +111,48 @@ parse_args() {
   done
 }
 
-load_manifest_roots() {
-  if [[ ! -f "$MANIFEST_PATH" ]]; then
-    return
-  fi
-  local -a roots=()
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    line="$(printf '%s' "$line" | sed -e 's/[[:space:]]*//g' -e 's/^-"//;s/"$//')"
-    [[ -z "$line" ]] && continue
-    roots+=("$(expand_home "$line")")
-  done < <(
-    awk '
-      /^legacy_state_roots:/ { in_legacy=1; next }
-      in_legacy {
-        if ($0 ~ /^[^[:space:]]/) { in_legacy=0; exit }
-        if ($0 ~ /^[[:space:]]*-[[:space:]]*/) {
-          s=$0
-          sub(/^[[:space:]]*-[[:space:]]*/, "", s)
-          gsub(/#.*/, "", s)
-          gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
-          if (s != "") print s
-        }
-      }
-    ' "$MANIFEST_PATH"
-  )
-  if [[ "${#roots[@]}" -gt 0 ]]; then
-    STATE_ROOT_LEGACY1="${roots[0]:-"$STATE_ROOT_LEGACY1"}"
-    STATE_ROOT_LEGACY2="${roots[1]:-"$STATE_ROOT_LEGACY2"}"
+load_manifest_legacy_roots() {
+  [[ -f "$MANIFEST_PATH" ]] || return 0
+  local roots
+  roots="$(python3 - <<'PY' "$MANIFEST_PATH" 2>/dev/null || true
+import sys, yaml
+p=sys.argv[1]
+try:
+    data=yaml.safe_load(open(p, 'r', encoding='utf-8')) or {}
+except Exception:
+    sys.exit(0)
+for r in (data.get('legacy_state_roots') or [])[:2]:
+    print(r)
+PY
+)"
+  if [[ -n "$roots" ]]; then
+    local i=0 line
+    while IFS= read -r line; do
+      case "$i" in
+        0)
+          [[ -n "$line" ]] && STATE_ROOT_LEGACY1="${line/#\~\//$HOME/}"
+          ;;
+        1)
+          [[ -n "$line" ]] && STATE_ROOT_LEGACY2="${line/#\~\//$HOME/}"
+          ;;
+      esac
+      i=$((i + 1))
+    done <<<"$roots"
   fi
 }
 
 state_paths_json() {
-  cat <<EOF
+  cat <<EOF_JSON
 {
   "state_dir": "$(json_escape "$STATE_ROOT")",
   "tool_health_json": "$(json_escape "${STATE_ROOT}/tool-health.json")",
   "tool_health_lines": "$(json_escape "${STATE_ROOT}/tool-health.lines")",
+  "mcp_tools_sync_json": "$(json_escape "${STATE_ROOT}/mcp-tools-sync.json")",
   "audit_daily_latest": "$(json_escape "${STATE_ROOT}/audit/daily/latest.json")",
   "audit_weekly_latest": "$(json_escape "${STATE_ROOT}/audit/weekly/latest.json")",
-  "legacy_state_roots": [
-    "$(json_escape "$STATE_ROOT_LEGACY1")",
-    "$(json_escape "$STATE_ROOT_LEGACY2")"
-  ]
+  "legacy_state_roots": ["$(json_escape "$STATE_ROOT_LEGACY1")", "$(json_escape "$STATE_ROOT_LEGACY2")"]
 }
-EOF
-}
-
-json_list() {
-  if [[ "$#" -eq 0 ]]; then
-    printf '%s\n' "[]"
-    return
-  fi
-
-  local out="["
-  local first=1
-  local entry
-  for entry in "$@"; do
-    if [[ "$first" -eq 1 ]]; then
-      out+="\"$(json_escape "$entry")\""
-      first=0
-    else
-      out+=",\"$(json_escape "$entry")\""
-    fi
-  done
-  out+="]"
-  printf '%s' "$out"
+EOF_JSON
 }
 
 run_json_command() {
@@ -165,212 +163,177 @@ run_json_command() {
   set +e
   "$@" >"$tmp" 2>&1
   local rc=$?
+  set -e
   printf -v "$out_ref" '%s' "$(cat "$tmp")"
   rm -f "$tmp"
-  set -e
   return $rc
 }
 
-extract_field() {
+extract_json_field() {
   local payload="$1"
-  local field="$2"
-  printf '%s' "$payload" | sed -n "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\"\\([a-zA-Z0-9_:-]*\\)\".*/\\1/p"
+  local expr="$2"
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$payload" | jq -r "$expr" 2>/dev/null || true
+    return 0
+  fi
+  printf ''
 }
 
-uninstall() {
-  local timestamp
-  local epoch
+uninstall_mode() {
+  local timestamp epoch
   timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   epoch="$(date -u +%s)"
 
   local overall_ok=true
-  local reason_code="ok"
+  local reason_code="uninstall_complete"
   local next_action="noop"
-  local -a targets=(
-    "${STATE_ROOT}"
-    "${HOME}/.config/fleet-sync"
-    "${HOME}/.cache/fleet-sync"
-    "${HOME}/.dx-state/fleet-link"
-    "$STATE_ROOT_LEGACY1"
-    "$STATE_ROOT_LEGACY2"
-  )
   local -a actions=()
   local -a failures=()
+  local -a targets=(
+    "$STATE_ROOT"
+    "$STATE_ROOT_LEGACY1"
+    "$STATE_ROOT_LEGACY2"
+    "${HOME}/.config/fleet-sync"
+    "${HOME}/.cache/fleet-sync"
+  )
 
   local target
   for target in "${targets[@]}"; do
     if [[ ! -e "$target" ]]; then
-      actions+=("missing_ok:${target}")
+      actions+=("missing_ok:$target")
       continue
     fi
     if rm -rf "$target" >/dev/null 2>&1; then
-      actions+=("removed:${target}")
+      actions+=("removed:$target")
     else
-      actions+=("failed_remove:${target}")
-      failures+=("failed_remove:${target}")
       overall_ok=false
+      actions+=("failed_remove:$target")
+      failures+=("failed_remove:$target")
     fi
   done
 
   if [[ "$overall_ok" == "false" ]]; then
-    reason_code="partial_failure"
+    reason_code="uninstall_partial"
     next_action="rerun"
   fi
 
-  local reason_codes
-  if [[ "$overall_ok" == "false" ]]; then
-    reason_codes='["partial_failure","partial_uninstall_remediation_required"]'
-  else
-    reason_codes='["uninstall_complete"]'
-  fi
-
-  local actions_json="[]"
-  local failures_json="[]"
-  if [[ ${#actions[@]} -gt 0 ]]; then
-    actions_json="$(json_list "${actions[@]}")"
-  fi
-  if [[ ${#failures[@]} -gt 0 ]]; then
-    failures_json="$(json_list "${failures[@]}")"
-  fi
+  local actions_json failures_json
+  actions_json="$(json_array_from_strings "${actions[@]-}")"
+  failures_json="$(json_array_from_strings "${failures[@]-}")"
 
   local out
-  out="$(cat <<EOF
+  out="$(cat <<EOF_JSON
 {
   "mode": "uninstall",
-  "generated_at": "$(json_escape "$timestamp")",
+  "generated_at": "$timestamp",
   "generated_at_epoch": $epoch,
   "overall_ok": $overall_ok,
   "reason_code": "$(json_escape "$reason_code")",
   "next_action": "$(json_escape "$next_action")",
-  "reason_codes": $reason_codes,
+  "checks": [],
+  "reason_codes": ["$(json_escape "$reason_code")"],
   "summary": {
     "actions_attempted": ${#actions[@]},
-    "errors": ${#failures[@]},
-    "manifest_present": $([[ -f "$MANIFEST_PATH" ]] && echo true || echo false)
+    "errors": ${#failures[@]}
   },
   "actions": $actions_json,
   "failures": $failures_json,
-  "state_paths": $(state_paths_json),
-  "remediation_hints": [
-    "Run dx-fleet-install.sh --uninstall --state-dir $(json_escape "$STATE_ROOT") again for remaining paths"
-  ]
+  "state_paths": $(state_paths_json)
 }
-EOF
+EOF_JSON
 )"
-
   write_atomic "${STATE_ROOT}/uninstall.json" "$out"
   printf '%s\n' "$out"
-  if [[ "$overall_ok" == "true" ]]; then
-    return 0
-  fi
-  return 2
+  [[ "$overall_ok" == "true" ]]
 }
 
-run_install_or_check() {
-  local timestamp
-  local epoch
+apply_or_check_mode() {
+  local timestamp epoch
   timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   epoch="$(date -u +%s)"
-
   mkdir -p "$STATE_ROOT"
 
   local -a checks=()
-  local -a reason_codes=("install_suite_started")
+  local -a reason_codes=()
   local overall_ok=true
-  local reason_code="install_complete"
-  local next_action="noop"
-  local fail_count=0
 
-  local fleet_check_out=""
-  local tools_check_out=""
-  local check_status="red"
-  local tools_status="red"
-  local check_rc=0
-  local tools_rc=0
+  local sync_cmd=("${SCRIPT_DIR}/dx-mcp-tools-sync.sh")
+  if [[ "$MODE" == "apply" ]]; then
+    sync_cmd+=(--apply)
+  else
+    sync_cmd+=(--check)
+  fi
+  sync_cmd+=(--json --state-dir "$STATE_ROOT")
 
-  if run_json_command fleet_check_out "${SCRIPT_DIR}/dx-fleet-check.sh" --json --state-dir "$STATE_ROOT"; then
-    check_rc=0
+  local sync_out="" sync_rc=0
+  if run_json_command sync_out "${sync_cmd[@]}"; then
+    sync_rc=0
   else
-    check_rc=$?
+    sync_rc=$?
   fi
-  if [[ "$check_rc" -eq 0 ]]; then
-    check_status="$(extract_field "$fleet_check_out" "fleet_status")"
-    [[ -z "$check_status" ]] && check_status="unknown"
-  else
-    check_status="$(extract_field "$fleet_check_out" "fleet_status")"
-    [[ -z "$check_status" ]] && check_status="red"
-  fi
-  checks+=("{\"id\":\"fleet.v2.2.fleet_check\",\"status\":\"$check_status\",\"severity\":\"medium\",\"details\":\"dx-fleet-check --json --state-dir $(json_escape "$STATE_ROOT")\",\"next_action\":\"dx-fleet-repair --json\"}")
-  if [[ "$check_rc" -ne 0 || "$check_status" == "red" || "$check_status" == "unknown" ]]; then
+  local sync_status
+  sync_status="$(extract_json_field "$sync_out" '.overall // .status // "red"')"
+  [[ -z "$sync_status" || "$sync_status" == "null" ]] && sync_status="red"
+  checks+=("{\"id\":\"fleet.v2.2.mcp_tools_sync\",\"status\":\"$(json_escape "$sync_status")\",\"severity\":\"medium\",\"details\":\"dx-mcp-tools-sync ${MODE}\",\"next_action\":\"dx-mcp-tools-sync --repair --json --state-dir $(json_escape "$STATE_ROOT")\"}")
+  if [[ "$sync_status" != "green" ]]; then
     overall_ok=false
-    next_action="rerun"
-    reason_codes+=("fleet_check_failed")
-  else
-    reason_codes+=("fleet_check_pass")
-  fi
-
-  if run_json_command tools_check_out "${SCRIPT_DIR}/dx-mcp-tools-sync.sh" --check --json --state-dir "$STATE_ROOT"; then
-    tools_rc=0
-  else
-    tools_rc=$?
-  fi
-  if [[ "$tools_rc" -eq 0 ]]; then
-    tools_status="$(extract_field "$tools_check_out" "overall")"
-    [[ -z "$tools_status" ]] && tools_status="unknown"
-  else
-    tools_status="$(extract_field "$tools_check_out" "overall")"
-    [[ -z "$tools_status" ]] && tools_status="red"
-  fi
-  checks+=("{\"id\":\"fleet.v2.2.mcp_tools\",\"status\":\"$tools_status\",\"severity\":\"medium\",\"details\":\"dx-mcp-tools-sync --check --json --state-dir $(json_escape "$STATE_ROOT")\",\"next_action\":\"dx-mcp-tools-sync --repair --state-dir $(json_escape "$STATE_ROOT") --json\"}")
-  if [[ "$tools_rc" -ne 0 || "$tools_status" == "red" || "$tools_status" == "yellow" || "$tools_status" == "unknown" ]]; then
-    overall_ok=false
-    next_action="rerun"
     reason_codes+=("mcp_tools_sync_failed")
   else
     reason_codes+=("mcp_tools_sync_pass")
   fi
 
-  if [[ "$overall_ok" == "false" ]]; then
-    fail_count=1
-  fi
-
-  [[ "$overall_ok" == "true" ]] && reason_codes+=("install_complete") || reason_codes+=("install_partial")
-  if [[ "$overall_ok" == "true" ]]; then
-    reason_code="install_complete"
+  local daily_out="" daily_rc=0
+  if run_json_command daily_out "${SCRIPT_DIR}/dx-fleet-check.sh" --mode daily --local-only --json --state-dir "$STATE_ROOT"; then
+    daily_rc=0
   else
-    reason_code="install_partial"
+    daily_rc=$?
+  fi
+  local daily_status
+  daily_status="$(extract_json_field "$daily_out" '.fleet_status // "red"')"
+  [[ -z "$daily_status" || "$daily_status" == "null" ]] && daily_status="red"
+  checks+=("{\"id\":\"fleet.v2.2.daily_check\",\"status\":\"$(json_escape "$daily_status")\",\"severity\":\"medium\",\"details\":\"dx-fleet-check --mode daily --local-only\",\"next_action\":\"dx-fleet-repair --json --state-dir $(json_escape "$STATE_ROOT")\"}")
+  if [[ "$daily_status" != "green" ]]; then
+    overall_ok=false
+    reason_codes+=("daily_check_failed")
+  else
+    reason_codes+=("daily_check_pass")
   fi
 
-  local checks_json="["
-  local first=1
-  local row
-  for row in "${checks[@]}"; do
-    if [[ "$first" -eq 1 ]]; then
-      checks_json+="$row"
-      first=0
-    else
-      checks_json+=",$row"
-    fi
-  done
-  checks_json+="]"
+  local weekly_out="" weekly_rc=0
+  if run_json_command weekly_out "${SCRIPT_DIR}/dx-fleet-check.sh" --mode weekly --local-only --json --state-dir "$STATE_ROOT"; then
+    weekly_rc=0
+  else
+    weekly_rc=$?
+  fi
+  local weekly_status
+  weekly_status="$(extract_json_field "$weekly_out" '.fleet_status // "red"')"
+  [[ -z "$weekly_status" || "$weekly_status" == "null" ]] && weekly_status="red"
+  checks+=("{\"id\":\"fleet.v2.2.weekly_check\",\"status\":\"$(json_escape "$weekly_status")\",\"severity\":\"medium\",\"details\":\"dx-fleet-check --mode weekly --local-only\",\"next_action\":\"dx-fleet-repair --json --state-dir $(json_escape "$STATE_ROOT")\"}")
+  if [[ "$weekly_status" != "green" ]]; then
+    overall_ok=false
+    reason_codes+=("weekly_check_failed")
+  else
+    reason_codes+=("weekly_check_pass")
+  fi
 
-  local reasons_json="["
-  first=1
-  for row in "${reason_codes[@]}"; do
-    if [[ "$first" -eq 1 ]]; then
-      reasons_json+="\"$(json_escape "$row")\""
-      first=0
-    else
-      reasons_json+=",\"$(json_escape "$row")\""
-    fi
-  done
-  reasons_json+="]"
+  local checks_json reasons_json
+  checks_json="$(json_array_from_objects "${checks[@]-}")"
+  reasons_json="$(json_array_from_strings "${reason_codes[@]-}")"
+
+  local reason_code next_action
+  if [[ "$overall_ok" == "true" ]]; then
+    reason_code="${MODE}_complete"
+    next_action="noop"
+  else
+    reason_code="${MODE}_partial"
+    next_action="rerun"
+  fi
 
   local out
-  out="$(cat <<EOF
+  out="$(cat <<EOF_JSON
 {
   "mode": "${MODE}",
-  "generated_at": "$(json_escape "$timestamp")",
+  "generated_at": "$timestamp",
   "generated_at_epoch": $epoch,
   "overall_ok": $overall_ok,
   "reason_code": "$(json_escape "$reason_code")",
@@ -378,35 +341,36 @@ run_install_or_check() {
   "reason_codes": $reasons_json,
   "checks": $checks_json,
   "summary": {
-    "fleet_check_status": "$(json_escape "$check_status")",
-    "mcp_tools_sync_status": "$(json_escape "$tools_status")",
-    "fail_count": $fail_count,
-    "manifest_present": $([[ -f "$MANIFEST_PATH" ]] && echo true || echo false)
+    "mcp_tools_sync": "$(json_escape "$sync_status")",
+    "daily_check": "$(json_escape "$daily_status")",
+    "weekly_check": "$(json_escape "$weekly_status")"
   },
-  "state_paths": $(state_paths_json),
-  "remediation_hints": [
-    "Run: dx-fleet-check --json --state-dir $(json_escape "$STATE_ROOT")",
-    "Run: dx-fleet-repair --json --state-dir $(json_escape "$STATE_ROOT")"
-  ]
+  "state_paths": $(state_paths_json)
 }
-EOF
+EOF_JSON
 )"
-  if [[ "$MODE" == "install" ]]; then
-    write_atomic "${STATE_ROOT}/install.json" "$out"
-  fi
+
+  write_atomic "${STATE_ROOT}/${MODE}.json" "$out"
   printf '%s\n' "$out"
-  if [[ "$overall_ok" == "true" ]]; then
-    return 0
-  fi
-  return 2
+  [[ "$overall_ok" == "true" ]]
 }
 
-parse_args "$@"
-load_manifest_roots
-if [[ "$MODE" == "uninstall" ]]; then
-  uninstall
-  exit $?
-fi
+main() {
+  parse_args "$@"
+  load_manifest_legacy_roots
 
-run_install_or_check
-exit $?
+  case "$MODE" in
+    uninstall)
+      uninstall_mode
+      ;;
+    apply|check)
+      apply_or_check_mode
+      ;;
+    *)
+      echo "Unsupported mode: $MODE" >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

@@ -208,13 +208,27 @@ get_ide_config() {
 
   case "$ide" in
     antigravity) echo "$HOME/.gemini/antigravity/mcp_config.json" ;;
-    claude-code) echo "$HOME/.claude/settings.json" ;;
+    claude-code) echo "$HOME/.claude.json" ;;
     codex-cli) echo "$HOME/.codex/config.toml" ;;
     opencode) echo "$HOME/.opencode/config.json" ;;
-    gemini-cli) echo "$HOME/.gemini/GEMINI.md" ;;
+    gemini-cli) echo "$HOME/.gemini/antigravity/mcp_config.json" ;;
     *)
       echo "Error: Unknown IDE '$ide'" >&2
       return 1
+      ;;
+  esac
+}
+
+# Get all canonical artifacts for an IDE (newline-delimited absolute paths).
+# The first line is always the primary MCP config path from get_ide_config.
+get_ide_artifacts() {
+  local ide="$1"
+  local primary
+  primary="$(get_ide_config "$ide")" || return 1
+  echo "$primary"
+  case "$ide" in
+    gemini-cli)
+      echo "$HOME/.gemini/GEMINI.md"
       ;;
   esac
 }

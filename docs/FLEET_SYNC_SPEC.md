@@ -1,46 +1,110 @@
-# Fleet Sync Specification (v2.2)
+# Fleet Sync Specification (v2.3)
 
-## Command Family
+## 1) Architecture Contract
 
-Fleet Sync health is surfaced through one command family:
+Fleet Sync is local-first execution with small shared governance state.
 
-- `dx-fleet check [--json]`
-- `dx-fleet repair [--simulate]`
+Non-negotiable constraints:
+
+- one command family: `dx-fleet check|repair|audit`
+- no centralized MCP gateway
+- no parallel audit framework
+- single manifest source: `configs/fleet-sync.manifest.yaml`
+- canonical state root: `~/.dx-state/fleet/` (legacy read fallback only)
+- deterministic Slack path via Agent Coordination (`#fleet-events`)
+
+## 2) Canonical Surfaces
+
+### Canonical VMs
+
+- `macmini`
+- `homedesktop-wsl`
+- `epyc6`
+- `epyc12`
+
+### Canonical IDE lanes
+
+- `antigravity` -> `~/.gemini/antigravity/mcp_config.json`
+- `claude-code` -> `~/.claude.json`
+- `codex-cli` -> `~/.codex/config.toml`
+- `opencode` -> `~/.opencode/config.json`
+- `gemini-cli` -> `~/.gemini/antigravity/mcp_config.json` (+ `~/.gemini/GEMINI.md` rail)
+
+Source of truth for IDE paths/artifacts is `scripts/canonical-targets.sh`.
+
+## 3) Command Surface
+
+- `dx-fleet check --mode daily|weekly [--json]`
+- `dx-fleet repair [--json]`
 - `dx-fleet audit --daily|--weekly [--json]`
 
-`dx-fleet` in this release is thin orchestration that delegates to:
+Wrapper: `scripts/dx-fleet.sh` (thin dispatch only).
+
+Engine scripts:
 
 - `scripts/dx-fleet-check.sh`
 - `scripts/dx-fleet-repair.sh`
 - `scripts/dx-audit.sh`
+- `scripts/dx-mcp-tools-sync.sh`
 
-## State Layout
+## 4) Convergent Sync Contract
 
-Canonical write root:
+`dx-mcp-tools-sync.sh` modes:
 
-- `~/.dx-state/fleet/`
+- `--check`: detect drift only
+- `--apply`: converge tool installation and IDE MCP config rendering
+- `--repair`: force converge + verify
 
-Artifacts:
+Convergence sources:
 
-- `tool-health.json`
-- `tool-health.lines`
-- `audit/daily/latest.json`
-- `audit/daily/history/YYYY-MM-DD.json`
-- `audit/weekly/latest.json`
-- `audit/weekly/history/YYYY-WW.json`
+- tools + versions + health checks from `configs/mcp-tools.yaml`
+- canonical IDE paths/artifacts from `scripts/canonical-targets.sh`
+- template bootstrap from `config-templates/fleet-sync-*`
 
-Read-fallback roots (migration compatibility):
+Convergence outputs:
 
-- `~/.dx-state/fleet-sync/`
-- `~/.dx-state/fleet_sync/`
+- `~/.dx-state/fleet/mcp-tools-sync.json`
+- per-file hash, per-tool version, per-tool health, reason codes
 
-## Audit Contract
+## 5) Daily vs Weekly Split
 
-`dx-fleet audit --daily` is lean runtime-focused.
+### Daily (runtime, fast)
 
-`dx-fleet audit --weekly` is governance/config/compliance.
+- `beads_dolt`
+- `tool_mcp_health`
+- `required_service_health`
+- `op_auth_readiness`
+- `alerts_transport_readiness`
 
-Both modes emit stable JSON keys:
+### Weekly (governance/config)
+
+- `canonical_repo_hygiene`
+- `skills_symlink_integrity`
+- `global_constraints_rails`
+- `ide_config_presence_and_drift`
+- `cron_health`
+- `service_cap_and_forbidden_components`
+- `deployment_stack_readiness`
+- `railway_auth_context`
+- `gh_deploy_readiness`
+
+Both daily and weekly run cross-VM fanout against all canonical hosts.
+
+## 6) Snapshot Freshness and Remote Safety
+
+Remote host payloads are rejected when stale beyond threshold:
+
+- threshold source: `audit.thresholds.tool_stale_hours` in `configs/fleet-sync.manifest.yaml`
+- reason codes:
+  - `remote_snapshot_missing`
+  - `remote_snapshot_stale`
+  - `remote_snapshot_unparseable`
+
+Stale/missing remote payloads fail host checks deterministically.
+
+## 7) Audit JSON Contract
+
+Both `dx-fleet audit --daily --json` and `--weekly --json` must include:
 
 - `mode`
 - `generated_at`
@@ -53,60 +117,60 @@ Both modes emit stable JSON keys:
 - `reason_codes`
 - `state_paths`
 
-## Check IDs (Manifest-Backed)
+`summary` includes severity counts and host counts.
 
-Default check IDs in `configs/fleet-sync.manifest.yaml`:
+## 8) State Layout
 
-- Daily:
-  - `beads_dolt`
-  - `tool_mcp_health`
-  - `required_service_health`
-  - `op_auth_readiness`
-  - `alerts_transport_readiness`
+Canonical write root:
 
-- Weekly:
-  - `canonical_repo_hygiene`
-  - `skills_symlink_integrity`
-  - `global_constraints_rails`
-  - `ide_config_presence_and_drift`
-  - `cron_health`
-  - `service_cap_and_forbidden_components`
-  - `deployment_stack_readiness`
-  - `railway_auth_context`
-  - `gh_deploy_readiness`
+- `~/.dx-state/fleet/`
 
-Required on-demand (not daily):
+Required artifacts:
 
-- `deployment_stack_readiness`
-- `railway_auth_context`
-- `gh_deploy_readiness`
+- `tool-health.json`
+- `tool-health.lines`
+- `mcp-tools-sync.json`
+- `audit/daily/latest.json`
+- `audit/daily/history/YYYY-MM-DD.json`
+- `audit/weekly/latest.json`
+- `audit/weekly/history/YYYY-WW.json`
 
-## Manifest Extensions (Required)
+Legacy read fallback roots:
 
-`configs/fleet-sync.manifest.yaml` includes:
+- `~/.dx-state/fleet-sync/`
+- `~/.dx-state/fleet_sync/`
 
-- `audit.coordinator_host`
-- `audit.schedule.daily`
-- `audit.schedule.weekly`
-- `audit.daily_checks[]`
-- `audit.weekly_checks[]`
-- `audit.thresholds`
-- `audit.slack`
-- `audit.gemini_enforcement`
+## 9) Cron Entrypoints
 
-Unknown keys must be ignored.
+Single canonical cron wrapper:
 
-## Gemini Canonical IDEs
+- `scripts/dx-audit-cron.sh --daily`
+- `scripts/dx-audit-cron.sh --weekly`
 
-`gemini-cli` is part of canonical IDE set.
+`dx-fleet-daily-check.sh` is compatibility-only and proxies to daily cron wrapper.
 
-Artifacts:
+## 10) Gemini Enforcement
+
+`gemini-cli` is canonical and staged by manifest policy:
+
+- grace: `audit.gemini_enforcement.grace_days`
+- enforce: `audit.gemini_enforcement.enforce_after`
+
+Required lane artifacts:
 
 - `~/.gemini/GEMINI.md`
-- `~/.gemini/gemini`
-- `~/.gemini/antigravity/mcp_config.json` (canonical profile path)
+- `~/.gemini/antigravity/mcp_config.json`
+- `~/.gemini/gemini` or `~/.gemini/gemini-cli` (or command on PATH)
 
-Enforcement:
+## 11) Slack and Determinism
 
-- Week 1 / grace: missing lane is yellow.
-- After grace: missing lane is red in weekly governance checks.
+Daily and weekly emit one deterministic message each to `#fleet-events` through Agent Coordination.
+
+Transport failure semantics:
+
+- preserve underlying audit status if audit failed
+- return non-zero when transport fails after a green audit
+
+## 12) Out of Scope
+
+Fleet Sync does not introduce centralized execution, SSE gateways, or runtime multiplexers.
