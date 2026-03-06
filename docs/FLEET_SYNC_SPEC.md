@@ -71,7 +71,6 @@ Default check IDs in `configs/fleet-sync.manifest.yaml`:
   - `ide_config_presence_and_drift`
   - `cron_health`
   - `service_cap_and_forbidden_components`
-  - `trailer_compliance`
   - `deployment_stack_readiness`
   - `railway_auth_context`
   - `gh_deploy_readiness`

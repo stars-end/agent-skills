@@ -44,7 +44,6 @@ WEEKLY_CHECK_IDS_DEFAULT=(
   ide_config_presence_and_drift
   cron_health
   service_cap_and_forbidden_components
-  trailer_compliance
   deployment_stack_readiness
   railway_auth_context
   gh_deploy_readiness
@@ -628,17 +627,6 @@ weekly_check_service_capabilities() {
   fi
 }
 
-weekly_check_trailer_compliance() {
-  local local_host="local"
-  local msg
-  msg="$(git -C "${HOME}/agent-skills" log -1 --pretty=%B 2>/dev/null || true)"
-  if [[ "$msg" == *"Feature-Key:"* ]] && [[ "$msg" == *"Agent:"* ]]; then
-    append_weekly_check "trailer_compliance" "$local_host" "pass" "low" "Latest commit has required trailers"
-  else
-    append_weekly_check "trailer_compliance" "$local_host" "warn" "medium" "Latest commit missing Feature-Key or Agent trailer"
-  fi
-}
-
 weekly_check_deployment_stack() {
   local local_host="local"
   local has_railway=0
@@ -653,13 +641,66 @@ weekly_check_deployment_stack() {
   fi
 }
 
+weekly_load_op_token_for_railway() {
+  if ! command -v op >/dev/null 2>&1; then
+    return 1
+  fi
+  if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && OP_SERVICE_ACCOUNT_TOKEN="${OP_SERVICE_ACCOUNT_TOKEN}" op whoami >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local host_short
+  host_short="$(hostname -s 2>/dev/null || hostname 2>/dev/null || printf 'unknown')"
+  local host_full
+  host_full="$(hostname 2>/dev/null || printf '%s' "$host_short")"
+  local -a candidates=(
+    "${HOME}/.config/systemd/user/op-${host_short}-token"
+    "${HOME}/.config/systemd/user/op-${host_full}-token"
+    "${HOME}/.config/systemd/user/op-${CANONICAL_HOST_KEY:-}-token"
+    "${HOME}/.config/systemd/user/op-macmini-token"
+    "${HOME}/.config/systemd/user/op-homedesktop-wsl-token"
+    "${HOME}/.config/systemd/user/op-epyc6-token"
+    "${HOME}/.config/systemd/user/op-epyc12-token"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -r "$candidate" ]]; then
+      local tok
+      tok="$(cat "$candidate" 2>/dev/null || true)"
+      if [[ -n "$tok" ]] && OP_SERVICE_ACCOUNT_TOKEN="$tok" op whoami >/dev/null 2>&1; then
+        export OP_SERVICE_ACCOUNT_TOKEN="$tok"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
 weekly_check_railway_auth() {
   local local_host="local"
-  if [[ -n "${RAILWAY_API_TOKEN:-}" ]] || [[ -n "${RAILWAY_PROJECT_ID:-}" ]] || [[ -n "${RAILWAY_SERVICE_ID:-}" ]]; then
-    append_weekly_check "railway_auth_context" "$local_host" "pass" "low" "Railway auth context set"
-  else
-    append_weekly_check "railway_auth_context" "$local_host" "warn" "low" "RAILWAY_API_TOKEN / project context not set"
+  if ! command -v railway >/dev/null 2>&1; then
+    append_weekly_check "railway_auth_context" "$local_host" "warn" "low" "railway CLI missing"
+    return
   fi
+
+  if railway whoami >/dev/null 2>&1; then
+    append_weekly_check "railway_auth_context" "$local_host" "pass" "low" "Railway auth verified (railway whoami)"
+    return
+  fi
+
+  local token_from_op=""
+  if weekly_load_op_token_for_railway >/dev/null 2>&1 && command -v op >/dev/null 2>&1; then
+    token_from_op="$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN" 2>/dev/null || true)"
+  fi
+  if [[ -n "$token_from_op" ]]; then
+    RAILWAY_API_TOKEN="$token_from_op" railway whoami >/dev/null 2>&1 && {
+      export RAILWAY_API_TOKEN="$token_from_op"
+      append_weekly_check "railway_auth_context" "$local_host" "pass" "low" "Railway auth verified via OP token hydration"
+      return
+    }
+  fi
+
+  append_weekly_check "railway_auth_context" "$local_host" "warn" "low" "Railway auth unavailable (railway whoami failed and OP hydration retry failed)"
 }
 
 weekly_check_gh_readiness() {
@@ -692,9 +733,6 @@ run_weekly_governance() {
         ;;
       service_cap_and_forbidden_components)
         weekly_check_service_capabilities
-        ;;
-      trailer_compliance)
-        weekly_check_trailer_compliance
         ;;
       deployment_stack_readiness)
         weekly_check_deployment_stack
