@@ -12,7 +12,7 @@ TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S UTC')
 mkdir -p "$DIST_DIR"
 
 # 1. Generate Global Constraints (Layer A subset)
-cat > "$CONSTRAINTS_FILE" <<EOF
+cat > "$CONSTRAINTS_FILE" <<'EOF'
 # DX Global Constraints (V8.4)
 <!-- AUTO-GENERATED - DO NOT EDIT -->
 
