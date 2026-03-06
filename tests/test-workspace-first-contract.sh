@@ -5,6 +5,12 @@
 # Beads: bd-kuhj.7
 #
 # Tests the PR checkout itself, not installed ~/agent-skills
+#
+# NOTE: This script and dx-runner both require bash >= 4 for associative arrays.
+# On macOS, the shebang #!/usr/bin/env bash resolves to Homebrew bash (5.x) when
+# /opt/homebrew/bin is in PATH before /bin. To run explicitly with modern bash:
+#   /opt/homebrew/bin/bash tests/test-workspace-first-contract.sh
+# Or simply ensure /opt/homebrew/bin appears before /bin in your PATH.
 
 set -euo pipefail
 

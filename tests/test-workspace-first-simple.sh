@@ -3,6 +3,10 @@
 #
 # This version validates implementation without creating worktrees
 # Tests the PR checkout, not installed ~/agent-skills
+#
+# NOTE: This script uses grep-based checks only and works with bash 3.2+.
+# However, dx-runner itself requires bash >= 4. On macOS, ensure /opt/homebrew/bin
+# is in PATH before /bin so the shebang resolves to modern bash.
 
 set -euo pipefail
 
