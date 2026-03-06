@@ -54,6 +54,26 @@ Only the controller host (`DX_CONTROLLER=1`) performs enforcer actions.
      - `git -C ~/agent-skills checkout master`
      - `git -C ~/agent-skills reset --hard origin/master && git -C ~/agent-skills clean -fdq`
 
+## If Action Needed: Founder Briefing Pipeline Only
+Use these exact steps to diagnose founder-briefing failures:
+
+1. Source check:
+   - `~/agent-skills/scripts/dx-founder-daily.sh --json | jq '.founder_pipeline'`
+2. Verify transport auth:
+   - `~/agent-skills/scripts/founder-briefing-cron.sh --dry-run`
+3. Inspect root-cause lines:
+   - `tail -n 140 ~/logs/founder-briefing.log`
+4. Check recovery log record:
+   - `grep "script=founder-briefing" "$HOME/.dx-state/recovery-commands.log"`
+
+If source is `jsonl`/`legacy` (missing Dolt SQL): run once with explicit fallback
+and continue by re-running once:
+   - `ALLOW_BEADS_LEGACY_SOURCE=1 ~/agent-skills/scripts/founder-briefing-cron.sh --dry-run`
+   - `~/agent-skills/scripts/founder-briefing-cron.sh`
+
+Expected no-fail fix:
+- `~/agent-skills/scripts/dx-audit.sh --json | jq '.summary.founder_pipeline'`
+
 ## Policy Guardrails
 - Canonical repos are read-mostly.
 - Work must happen in `/tmp/agents/...` worktrees.

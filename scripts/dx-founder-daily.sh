@@ -28,6 +28,28 @@ OUTPUT_FILE="${TEMP_DIR}/founder-daily-data.json"
 LOG_FILE="${TEMP_DIR}/founder-daily.log"
 BEADS_SOURCE="auto"
 BEADS_CLI_OPEN_CACHE=""
+QUERY_SOURCE_RESOLVED="false"
+P0_ISSUES_JSON="[]"
+P1_ISSUES_JSON="[]"
+BLOCKING_ISSUES_JSON="[]"
+STALE_ISSUES_JSON="[]"
+ALERTS_JSON='{"alerts": [], "summary": {"total": 0, "critical": 0, "warning": 0, "info": 0}}'
+CRITICAL_COUNT=0
+DRIFT_STATUS="unknown"
+FAILED_RUNS_JSON="[]"
+FAILED_COUNT=0
+WORKFLOW_HEALTH_JSON="[]"
+STALE_PRS_COUNT=0
+BACKLOG_COUNT=0
+RESCUE_COUNT=0
+
+# Founder pipeline telemetry (machine-readable classification for founders + digests)
+PIPELINE_STARTED_AT="$(date -u +%s)"
+PIPELINE_STARTED_TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+PIPELINE_STATUS="ok"
+PIPELINE_REASON="none"
+PIPELINE_SOURCE="auto"
+PIPELINE_ERROR=""
 
 # Colors for logging
 RED='\033[0;31m'
@@ -55,10 +77,110 @@ warn() {
   echo -e "${YELLOW}⚠️  $1${NC}" >&2
 }
 
+pipeline_fail() {
+  local reason="$1"
+  local context="${2:-}"
+  PIPELINE_STATUS="failed"
+  PIPELINE_REASON="$reason"
+  PIPELINE_ERROR="${context:-$PIPELINE_ERROR}"
+}
+
+pipeline_warn() {
+  local reason="$1"
+  local context="${2:-}"
+  if [[ "$PIPELINE_STATUS" == "failed" ]]; then
+    return
+  fi
+  PIPELINE_STATUS="warning"
+  PIPELINE_REASON="$reason"
+  PIPELINE_ERROR="${context:-$PIPELINE_ERROR}"
+}
+
+mark_pipeline_resolved() {
+  if [[ "$PIPELINE_STATUS" == "failed" ]]; then
+    return
+  fi
+  if [[ "$PIPELINE_STATUS" == "warning" ]]; then
+    return
+  fi
+  PIPELINE_STATUS="ok"
+  PIPELINE_REASON="none"
+}
+
+finalize_source() {
+  PIPELINE_SOURCE="$1"
+}
+
+build_pipeline_payload() {
+  local status="$1"
+  local reason="$2"
+  local source="$3"
+  local context="${4:-}"
+
+  local now_ts completed_ts age_ms
+  now_ts="$(date -u +%s)"
+  completed_ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  age_ms=$(( (now_ts - PIPELINE_STARTED_AT) * 1000 ))
+
+  jq -n \
+    --arg timestamp "$completed_ts" \
+    --arg started_at "$PIPELINE_STARTED_TS" \
+    --arg source "$source" \
+    --arg status "$status" \
+    --arg reason "$reason" \
+    --arg context "${context:-$PIPELINE_ERROR}" \
+    --argjson duration_ms "$age_ms" \
+    --argjson p0 "${P0_ISSUES_JSON:-[]}" \
+    --argjson p1 "${P1_ISSUES_JSON:-[]}" \
+    --argjson blocking "${BLOCKING_ISSUES_JSON:-[]}" \
+    --argjson stale "${STALE_ISSUES_JSON:-[]}" \
+    --argjson alerts "${ALERTS_JSON:-[]}" \
+    --argjson critical "$CRITICAL_COUNT" \
+    --arg drift "$DRIFT_STATUS" \
+    --argjson failed "${FAILED_RUNS_JSON:-[]}" \
+    --argjson failed_count "$FAILED_COUNT" \
+    --argjson stale_prs_count "$STALE_PRS_COUNT" \
+    --argjson backlog_count "$BACKLOG_COUNT" \
+    --argjson rescue_count "$RESCUE_COUNT" \
+    --argjson workflow_health "${WORKFLOW_HEALTH_JSON:-[]}" \
+    '{
+      timestamp: $timestamp,
+      founder_pipeline: {
+        status: $status,
+        source: $source,
+        reason: $reason,
+        reason_context: $context,
+        duration_ms: $duration_ms,
+        started_at: $started_at
+      },
+      beads: {
+        p0_issues: $p0,
+        p1_issues: $p1,
+        blocking_issues: $blocking,
+        stale_issues: $stale,
+        backlog_count: $backlog_count,
+        robot_alerts: {
+          critical: $critical,
+          alerts: $alerts
+        },
+        drift_status: $drift
+      },
+      github: {
+        failed_runs: $failed,
+        failed_count: $failed_count,
+        stale_prs_count: $stale_prs_count,
+        rescue_count: $rescue_count,
+        workflow_health: $workflow_health
+      }
+    }' > "$OUTPUT_FILE"
+}
+
 # Cleanup on exit
 cleanup() {
   if [ -d "$TEMP_DIR" ]; then
-    cat "$LOG_FILE" 2>/dev/null || true
+    if [[ -f "$LOG_FILE" ]]; then
+      cat "$LOG_FILE" 2>/dev/null >&2 || true
+    fi
     rm -rf "$TEMP_DIR"
   fi
 }
@@ -114,61 +236,103 @@ query_cli_open_issues() {
   return 0
 }
 
-query_source() {
-  if [ "$BEADS_SOURCE" = "auto" ]; then
-    if query_cli_open_issues >/dev/null 2>&1; then
-      BEADS_SOURCE="cli"
-      return
-    fi
-
-    if [ "$ALLOW_BEADS_LEGACY_SOURCE" != "1" ]; then
-      BEADS_SOURCE="missing"
-      return
-    fi
-
-    warn "Dolt CLI unavailable; using transitional compatibility source."
-
-    if [ -f "$BEADS_DB" ] && sqlite3 "$BEADS_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='issues';" >/dev/null 2>&1; then
-      BEADS_SOURCE="sqlite"
-      return
-    fi
-
-    if [ -f "$BEADS_ISSUES_JSONL" ]; then
-      BEADS_SOURCE="jsonl"
-      return
-    fi
-
-    if [ -f "$BEADS_DB" ]; then
-      BEADS_SOURCE="bad-sqlite"
-      return
-    fi
-
-    BEADS_SOURCE="missing"
-    if [ -f "$BEADS_ISSUES_JSONL" ]; then
-      BEADS_SOURCE="jsonl"
-      return
-    fi
+query_jsonl_open_issues() {
+  if [[ ! -f "$BEADS_ISSUES_JSONL" ]]; then
+    echo "[]"
+    return 1
   fi
+
+  local raw
+  raw="$(jq -c '[inputs | select((.status // "open") == "open") | select(((.issue_type // .type // "") != "epic")]' "$BEADS_ISSUES_JSONL" 2>>"$LOG_FILE" || true)"
+  if [ -z "$raw" ]; then
+    echo "[]"
+    return 1
+  fi
+
+  echo "$raw"
+  return 0
 }
 
-require_active_dolt_source() {
-  if [ "$ALLOW_BEADS_LEGACY_SOURCE" = "1" ]; then
+query_source() {
+  if [[ "$QUERY_SOURCE_RESOLVED" == "true" ]]; then
     return 0
   fi
 
-  if [ "$BEADS_SOURCE" != "cli" ]; then
-    error "Unable to resolve canonical Beads source (bd CLI required)."
-    error "Run from an environment where ~/bd + Beads SQL service are available."
-    error "Set ALLOW_BEADS_LEGACY_SOURCE=1 only for compatibility troubleshooting."
+  QUERY_SOURCE_RESOLVED="true"
+
+  if query_cli_open_issues >/dev/null 2>&1; then
+    BEADS_SOURCE="cli"
+    finalize_source "cli"
+    return 0
+  fi
+
+  warn "Dolt CLI unavailable; checking compatibility source fallback."
+
+  if [[ "$ALLOW_BEADS_LEGACY_SOURCE" != "1" ]]; then
+    BEADS_SOURCE="missing"
+    pipeline_fail "beads_source_missing" "bd CLI unavailable and compatibility source disabled"
     return 1
   fi
+
+  if [[ -f "$BEADS_DB" ]]; then
+    if sqlite3 "$BEADS_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='issues';" >/dev/null 2>&1; then
+      BEADS_SOURCE="sqlite"
+      finalize_source "sqlite"
+      return 0
+    fi
+
+    # Legacy DB exists but schema is incomplete for issue extraction.
+    if [[ -f "$BEADS_ISSUES_JSONL" ]]; then
+      BEADS_SOURCE="jsonl"
+      pipeline_warn "legacy_db_no_issues_table" "legacy SQLite exists but missing issues table; fallback to JSONL compatibility"
+      finalize_source "jsonl"
+      return 0
+    fi
+
+    BEADS_SOURCE="bad-sqlite"
+    pipeline_fail "legacy_db_no_issues_table" "legacy SQLite database exists but no issues table and no JSONL fallback"
+    return 1
+  fi
+
+  if [[ -f "$BEADS_ISSUES_JSONL" ]]; then
+    BEADS_SOURCE="jsonl"
+    pipeline_warn "legacy_jsonl_fallback" "fallback to JSONL compatibility source"
+    finalize_source "jsonl"
+    return 0
+  fi
+
+  BEADS_SOURCE="missing"
+  pipeline_fail "beads_source_missing" "no usable Beads source found"
+  return 1
+}
+
+require_active_dolt_source() {
+  if [ "$BEADS_SOURCE" = "cli" ]; then
+    mark_pipeline_resolved
+    return 0
+  fi
+
+  case "$BEADS_SOURCE" in
+    sqlite|jsonl)
+      if [ "$ALLOW_BEADS_LEGACY_SOURCE" = "1" ]; then
+        # Compatibility sources are accepted with warning/fallback semantics.
+        return 0
+      fi
+      ;;
+  esac
+
+  error "Unable to resolve canonical Beads source (bd CLI required)."
+  error "Run from an environment where ~/bd + Beads SQL service are available."
+  error "Set ALLOW_BEADS_LEGACY_SOURCE=1 only for compatibility troubleshooting."
+  pipeline_fail "${PIPELINE_REASON:-beads_source_missing}" "${PIPELINE_ERROR:-expected CLI but got ${BEADS_SOURCE}}"
+  return 1
 }
 
 # Query BEADS for P0 issues
 query_p0_issues() {
   log "Querying BEADS for P0 issues..."
 
-  query_source
+  query_source || return 1
 
   if [ "$BEADS_SOURCE" = "sqlite" ]; then
     sqlite3 "$BEADS_DB" "
@@ -187,7 +351,7 @@ query_p0_issues() {
       ORDER BY updated_at DESC
       LIMIT 10;
     " 2>>"$LOG_FILE" || echo "[]"
-    return
+    return 0
   fi
 
   if [ "$BEADS_SOURCE" = "cli" ]; then
@@ -198,17 +362,26 @@ query_p0_issues() {
       | select((.priority // "P99" | tostring | ascii_downcase) | test("^p?0$") )
       | {id: .id, title: .title, priority: (.priority // ""), status: .status, issue_type: (.issue_type // .type // ""), updated_at: .updated_at}
     ] | sort_by(.updated_at // "") | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
-    return
+    return 0
   fi
 
-  echo "[]"
+  if [ "$BEADS_SOURCE" = "jsonl" ]; then
+    query_jsonl_open_issues | jq -c '[
+      .[]
+      | select((.priority // "P99" | tostring | ascii_downcase) | test("^p?0$") )
+      | {id: .id, title: .title, priority: (.priority // ""), status: .status, issue_type: (.issue_type // .type // ""), updated_at: .updated_at}
+    ] | sort_by(.updated_at // "") | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
+    return 0
+  fi
+
+  echo "[]"; return 0
 }
 
 # Query BEADS for P1 issues
 query_p1_issues() {
   log "Querying BEADS for P1 issues..."
 
-  query_source
+  query_source || return 1
 
   if [ "$BEADS_SOURCE" = "sqlite" ]; then
     sqlite3 "$BEADS_DB" "
@@ -227,7 +400,7 @@ query_p1_issues() {
       ORDER BY updated_at DESC
       LIMIT 10;
     " 2>>"$LOG_FILE" || echo "[]"
-    return
+    return 0
   fi
 
   if [ "$BEADS_SOURCE" = "cli" ]; then
@@ -238,17 +411,26 @@ query_p1_issues() {
       | select((.priority // "P99" | tostring | ascii_downcase) | test("^p?1$") )
       | {id: .id, title: .title, priority: (.priority // ""), status: .status, issue_type: (.issue_type // .type // ""), updated_at: .updated_at}
     ] | sort_by(.updated_at // "") | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
-    return
+    return 0
   fi
 
-  echo "[]"
+  if [ "$BEADS_SOURCE" = "jsonl" ]; then
+    query_jsonl_open_issues | jq -c '[
+      .[]
+      | select((.priority // "P99" | tostring | ascii_downcase) | test("^p?1$") )
+      | {id: .id, title: .title, priority: (.priority // ""), status: .status, issue_type: (.issue_type // .type // ""), updated_at: .updated_at}
+    ] | sort_by(.updated_at // "") | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
+    return 0
+  fi
+
+  echo "[]"; return 0
 }
 
 # Query BEADS for blocking issues
 query_blocking_issues() {
   log "Querying BEADS for blocking issues..."
 
-  query_source
+  query_source || return 1
 
   if [ "$BEADS_SOURCE" = "sqlite" ]; then
     sqlite3 "$BEADS_DB" "
@@ -277,7 +459,7 @@ query_blocking_issues() {
         LIMIT 10
       );
     " 2>>"$LOG_FILE" || echo "[]"
-    return
+    return 0
   fi
 
   if [ "$BEADS_SOURCE" = "cli" ]; then
@@ -295,17 +477,33 @@ query_blocking_issues() {
           blocked_count: ($issue.dependency_count // 0)
         }
     ] | sort_by(.blocked_count | tonumber?) | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
-    return
+    return 0
   fi
 
-  echo "[]"
+  if [ "$BEADS_SOURCE" = "jsonl" ]; then
+    query_jsonl_open_issues | jq -c '[
+      .[]
+      | select((.dependency_count // 0) | tonumber? > 0)
+      | . as $issue
+      | {
+          id: $issue.id,
+          title: $issue.title,
+          priority: ($issue.priority // ""),
+          status: $issue.status,
+          blocked_count: ($issue.dependency_count // 0)
+        }
+    ] | sort_by(.blocked_count | tonumber?) | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
+    return 0
+  fi
+
+  echo "[]"; return 0
 }
 
 # Query BEADS for stale issues (>14 days)
 query_stale_issues() {
   log "Querying BEADS for stale issues..."
 
-  query_source
+  query_source || return 1
 
   if [ "$BEADS_SOURCE" = "sqlite" ]; then
     sqlite3 "$BEADS_DB" "
@@ -330,7 +528,7 @@ query_stale_issues() {
         LIMIT 10
       );
     " 2>>"$LOG_FILE" || echo "[]"
-    return
+    return 0
   fi
 
   if [ "$BEADS_SOURCE" = "cli" ]; then
@@ -350,10 +548,28 @@ query_stale_issues() {
              days_stale: ($age / 86400 | floor)
            })
     ] | sort_by(.days_stale) | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
-    return
+    return 0
   fi
 
-  echo "[]"
+  if [ "$BEADS_SOURCE" = "jsonl" ]; then
+    local now
+    now=$(date -u +%s)
+    query_jsonl_open_issues | jq --argjson now "$now" -c '[
+      .[]
+      | . as $issue
+      | (($now - (($issue.updated_at // "1970-01-01T00:00:00Z") | fromdate? // 0)) as $age
+         | select($age > 1209600)
+         | {
+             id: $issue.id,
+             title: $issue.title,
+             updated_at: $issue.updated_at,
+             days_stale: ($age / 86400 | floor)
+           })
+    ] | sort_by(.days_stale) | reverse | .[:10]' 2>>"$LOG_FILE" || echo "[]"
+    return 0
+  fi
+
+  echo "[]"; return 0
 }
 
 # Get robot alerts from bv
@@ -390,19 +606,24 @@ query_stale_prs() {
 # Query Backlog Size (Open Beads)
 query_backlog_count() {
   log "Querying Backlog Size..."
-  query_source
+  query_source || return 1
 
   if [ "$BEADS_SOURCE" = "sqlite" ]; then
     sqlite3 "$BEADS_DB" "SELECT count(*) FROM issues WHERE status = 'open';" 2>>"$LOG_FILE" || echo "0"
-    return
+    return 0
   fi
 
   if [ "$BEADS_SOURCE" = "cli" ]; then
     query_cli_open_issues | jq -c 'map(select((.status // "open") == "open" and ((.issue_type // .type // "") != "epic"))) | length' 2>>"$LOG_FILE" | tr -d '\n' | tr -dc '0-9'
-    return
+    return 0
   fi
 
-  echo "0"
+  if [ "$BEADS_SOURCE" = "jsonl" ]; then
+    query_jsonl_open_issues | jq -c 'length' 2>>"$LOG_FILE" | tr -d '\n' | tr -dc '0-9'
+    return 0
+  fi
+
+  echo "0"; return 0
 }
 
 # Query Rescue PRs
@@ -472,102 +693,100 @@ query_github_health() {
 main() {
   log "Starting founder daily data gathering..."
 
-  check_dependencies || exit 1
-  query_source
-  require_active_dolt_source || exit 1
+  if ! check_dependencies; then
+    pipeline_fail "dependency_missing"
+    build_pipeline_payload "$PIPELINE_STATUS" "$PIPELINE_REASON" "$PIPELINE_SOURCE" "$PIPELINE_ERROR"
+    cat "$OUTPUT_FILE"
+    return 1
+  fi
+
+  # Source resolution is now taxonomy-aware and memoized.
+  if ! query_source; then
+    require_active_dolt_source || true
+    build_pipeline_payload "$PIPELINE_STATUS" "$PIPELINE_REASON" "$PIPELINE_SOURCE" "$PIPELINE_ERROR"
+    cat "$OUTPUT_FILE"
+    return 1
+  fi
+
+  if ! require_active_dolt_source; then
+    build_pipeline_payload "$PIPELINE_STATUS" "$PIPELINE_REASON" "$PIPELINE_SOURCE" "$PIPELINE_ERROR"
+    cat "$OUTPUT_FILE"
+    return 1
+  fi
 
   # Gather all data
-  local p0_issues
-  p0_issues=$(query_p0_issues)
+  P0_ISSUES_JSON=$(query_p0_issues)
+  if [[ -z "$P0_ISSUES_JSON" ]]; then P0_ISSUES_JSON="[]"; fi
+  if ! jq -e 'type == "array"' <<<"${P0_ISSUES_JSON}" >/dev/null 2>&1; then
+    pipeline_fail "beads_query_failed" "p0 issues query returned non-array JSON"
+    build_pipeline_payload "$PIPELINE_STATUS" "$PIPELINE_REASON" "$PIPELINE_SOURCE" "$PIPELINE_ERROR"
+    cat "$OUTPUT_FILE"
+    return 1
+  fi
 
-  local p1_issues
-  p1_issues=$(query_p1_issues)
+  P1_ISSUES_JSON=$(query_p1_issues)
+  if [[ -z "$P1_ISSUES_JSON" ]]; then P1_ISSUES_JSON="[]"; fi
+  if ! jq -e 'type == "array"' <<<"${P1_ISSUES_JSON}" >/dev/null 2>&1; then
+    pipeline_fail "beads_query_failed" "p1 issues query returned non-array JSON"
+    build_pipeline_payload "$PIPELINE_STATUS" "$PIPELINE_REASON" "$PIPELINE_SOURCE" "$PIPELINE_ERROR"
+    cat "$OUTPUT_FILE"
+    return 1
+  fi
 
-  local blocking_issues
-  blocking_issues=$(query_blocking_issues)
+  BLOCKING_ISSUES_JSON=$(query_blocking_issues)
+  if [[ -z "$BLOCKING_ISSUES_JSON" ]]; then BLOCKING_ISSUES_JSON="[]"; fi
+  if ! jq -e 'type == "array"' <<<"${BLOCKING_ISSUES_JSON}" >/dev/null 2>&1; then
+    pipeline_fail "beads_query_failed" "blocking issues query returned non-array JSON"
+    build_pipeline_payload "$PIPELINE_STATUS" "$PIPELINE_REASON" "$PIPELINE_SOURCE" "$PIPELINE_ERROR"
+    cat "$OUTPUT_FILE"
+    return 1
+  fi
 
-  local stale_issues
-  stale_issues=$(query_stale_issues)
+  STALE_ISSUES_JSON=$(query_stale_issues)
+  if [[ -z "$STALE_ISSUES_JSON" ]]; then STALE_ISSUES_JSON="[]"; fi
+  if ! jq -e 'type == "array"' <<<"${STALE_ISSUES_JSON}" >/dev/null 2>&1; then
+    pipeline_fail "beads_query_failed" "stale issues query returned non-array JSON"
+    build_pipeline_payload "$PIPELINE_STATUS" "$PIPELINE_REASON" "$PIPELINE_SOURCE" "$PIPELINE_ERROR"
+    cat "$OUTPUT_FILE"
+    return 1
+  fi
 
   local alerts_json
   alerts_json=$(get_robot_alerts)
 
-  local drift_status
-  drift_status=$(check_drift)
+  DRIFT_STATUS=$(check_drift)
 
-  local failed_runs
-  failed_runs=$(query_github_failed)
-  local failed_count
-  failed_count=$(echo "$failed_runs" | jq 'length // 0')
+  FAILED_RUNS_JSON=$(query_github_failed)
+  FAILED_COUNT=$(echo "$FAILED_RUNS_JSON" | jq 'length // 0')
 
-  local workflow_health
-  workflow_health=$(query_github_health)
+  WORKFLOW_HEALTH_JSON=$(query_github_health)
 
-  local critical_count
-  critical_count=$(echo "$alerts_json" | jq -r '.summary.critical // 0' 2>/dev/null || echo "0")
+  CRITICAL_COUNT=$(echo "$alerts_json" | jq -r '.summary.critical // 0' 2>/dev/null || echo "0")
   
   # Hygiene Metrics
   local stale_prs
   stale_prs=$(query_stale_prs)
-  local stale_prs_count
-  stale_prs_count=$(echo "$stale_prs" | jq 'length // 0')
+  STALE_PRS_COUNT=$(echo "$stale_prs" | jq 'length // 0')
   
-  local backlog_count
-  backlog_count=$(query_backlog_count)
+  BACKLOG_COUNT=$(query_backlog_count)
   
   local rescue_prs
   rescue_prs=$(query_rescue_prs)
-  local rescue_count
-  rescue_count=$(echo "$rescue_prs" | jq 'length // 0')
+  RESCUE_COUNT=$(echo "$rescue_prs" | jq 'length // 0')
 
-  # Build final JSON - ensure all variables have valid defaults
   local alerts_array
   alerts_array=$(echo "$alerts_json" | jq -c '.alerts[:5] // []' 2>/dev/null || echo "[]")
+
+  ALERTS_JSON=$alerts_array
   
   # Ensure numeric values have valid defaults
-  critical_count=${critical_count:-0}
-  failed_count=${failed_count:-0}
-  stale_prs_count=${stale_prs_count:-0}
-  backlog_count=${backlog_count:-0}
-  rescue_count=${rescue_count:-0}
+  CRITICAL_COUNT=${CRITICAL_COUNT:-0}
+  FAILED_COUNT=${FAILED_COUNT:-0}
+  STALE_PRS_COUNT=${STALE_PRS_COUNT:-0}
+  BACKLOG_COUNT=${BACKLOG_COUNT:-0}
+  RESCUE_COUNT=${RESCUE_COUNT:-0}
   
-  jq -n \
-    --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-    --argjson p0 "${p0_issues:-[]}" \
-    --argjson p1 "${p1_issues:-[]}" \
-    --argjson blocking "${blocking_issues:-[]}" \
-    --argjson stale "${stale_issues:-[]}" \
-    --argjson alerts "$alerts_array" \
-    --argjson critical "$critical_count" \
-    --arg drift "$drift_status" \
-    --argjson failed "${failed_runs:-[]}" \
-    --argjson failed_count "$failed_count" \
-    --argjson health "${workflow_health:-[]}" \
-    --argjson stale_prs_count "$stale_prs_count" \
-    --argjson backlog_count "$backlog_count" \
-    --argjson rescue_count "$rescue_count" \
-    '{
-      timestamp: $timestamp,
-      beads: {
-        p0_issues: $p0,
-        p1_issues: $p1,
-        blocking_issues: $blocking,
-        stale_issues: $stale,
-        backlog_count: $backlog_count,
-        robot_alerts: {
-          critical: $critical,
-          alerts: $alerts
-        },
-        drift_status: $drift
-      },
-      github: {
-        failed_runs: $failed,
-        failed_count: $failed_count,
-        stale_prs_count: $stale_prs_count,
-        rescue_count: $rescue_count,
-        workflow_health: $health
-      }
-    }' > "$OUTPUT_FILE"
+  build_pipeline_payload "$PIPELINE_STATUS" "$PIPELINE_REASON" "$PIPELINE_SOURCE" "$PIPELINE_ERROR"
 
   success "Data gathering complete"
   log "Output: $OUTPUT_FILE"
@@ -590,6 +809,10 @@ format_slack_message() {
   failed_count=$(jq '.github.failed_count' "$json_file")
   critical_count=$(jq '.beads.robot_alerts.critical' "$json_file")
   drift_status=$(jq -r '.beads.drift_status' "$json_file")
+  local founder_status founder_reason founder_source
+  founder_status=$(jq -r '.founder_pipeline.status // "unknown"' "$json_file")
+  founder_source=$(jq -r '.founder_pipeline.source // "unknown"' "$json_file")
+  founder_reason=$(jq -r '.founder_pipeline.reason // "unknown"' "$json_file")
   
   local stale_prs_count backlog_count rescue_count
   stale_prs_count=$(jq '.github.stale_prs_count' "$json_file")
@@ -600,7 +823,10 @@ format_slack_message() {
   local status_emoji="✅"
   local status_text="All clear"
   
-  if [ "$drift_status" = "critical" ] || [ "$failed_count" -gt 0 ] || [ "$p0_count" -gt 5 ] || [ "$rescue_count" -gt 0 ]; then
+  if [ "$founder_status" != "ok" ]; then
+    status_emoji="🚨"
+    status_text="Action needed"
+  elif [ "$drift_status" = "critical" ] || [ "$failed_count" -gt 0 ] || [ "$p0_count" -gt 5 ] || [ "$rescue_count" -gt 0 ]; then
     status_emoji="🚨"
     status_text="Action needed"
   elif [ "$drift_status" = "warning" ] || [ "$critical_count" -gt 50 ] || [ "$stale_prs_count" -gt 5 ] || [ "$backlog_count" -gt 20 ]; then
@@ -614,7 +840,8 @@ format_slack_message() {
   
   local main_msg="${status_emoji} *DX Daily* (${today}): ${status_text}
 • P0: ${p0_count} | P1: ${p1_count} | GH fails: ${failed_count} | Rescue: ${rescue_count}
-• Stale PRs: ${stale_prs_count} | Backlog: ${backlog_count} | Drift: ${drift_status}"
+• Stale PRs: ${stale_prs_count} | Backlog: ${backlog_count} | Drift: ${drift_status}
+• Founder source: ${founder_source} (${founder_reason})"
   
   echo "$main_msg"
   
@@ -632,6 +859,12 @@ format_slack_message() {
         jq -r '.beads.p0_issues[:3] | .[] | "• \(.id): \(.title | .[0:60])"' "$json_file" 2>/dev/null || true
     fi
     
+    if [ "$founder_status" != "ok" ]; then
+      echo ""
+      echo "*Founder Pipeline:*"
+      echo "• status=${founder_status} reason=${founder_reason} source=${founder_source}"
+    fi
+
     if [ "$failed_count" -gt 0 ]; then
       echo ""
       echo "*Failed GitHub Actions:*"

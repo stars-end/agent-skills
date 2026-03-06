@@ -2,13 +2,12 @@
 # dx-alerts-digest.sh - Daily digest for DX alerts
 # Usage: dx-alerts-digest.sh [--dry-run]
 #
-# Posts to #dx-alerts using Agent Coordination (Slack API) with webhook fallback
-# Summarizes evacuation events from recovery-commands.log
+# Posts to #dx-alerts using Agent Coordination (Slack API) with webhook fallback.
+# Summarizes events from recovery-commands.log, including:
+#  - canonical-evacuate-active
+#  - canonical-sync-v8
+#  - founder-briefing failures and transport failures
 #
-# Note: Dirty incident tracking is now handled by canonical-evacuate-active.sh
-# which provides real-time alerts with 15/45m thresholds. This digest
-# provides a daily summary of any evacuations that occurred.
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,70 +30,161 @@ format_alert() {
     echo "[DX-ALERT][$severity][$scope] $message"
 }
 
-recent_recovery_entries() {
-    if [[ ! -f "$RECOVERY_LOG" ]]; then
-        return 0
-    fi
+parse_recent_events() {
+    local cutoff_epoch
+    cutoff_epoch=$(date -u +%s)
+    cutoff_epoch=$(( cutoff_epoch - 24*60*60 ))
 
-    python3 - "$RECOVERY_LOG" <<'PY'
-import datetime as dt
+    python3 - "$RECOVERY_LOG" "$cutoff_epoch" <<'PY'
+import datetime
+import json
+import re
 import sys
 
 path = sys.argv[1]
-now = dt.datetime.now(dt.timezone.utc)
-cutoff = now - dt.timedelta(hours=24)
+cutoff = int(sys.argv[2])
+
+if not path or not path:
+    print("[]")
+    sys.exit(0)
+
+records = []
+
+key_value_pat = re.compile(r"^(?P<k>[^=]+)=(?P<v>.*)$")
 
 with open(path, "r", encoding="utf-8", errors="ignore") as f:
     for raw in f:
-        line = raw.rstrip("\n")
+        line = raw.strip()
         if not line:
             continue
-        ts = line.split(" | ", 1)[0].strip()
-        try:
-            when = dt.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
-        except ValueError:
+
+        parts = [p.strip() for p in line.split(" | ")]
+        if not parts:
             continue
-        if when >= cutoff:
-            print(line)
+
+        ts_str = parts[0]
+        try:
+            when = int(datetime.datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp())
+        except Exception:
+            continue
+
+        if when < cutoff:
+            continue
+
+        rec = {
+            "ts": ts_str,
+            "status": "unknown",
+            "reason": "unknown",
+            "script": "legacy",
+            "repo": "unknown",
+            "host": "unknown",
+            "branch": "",
+            "raw": line,
+        }
+
+        kv_seen = False
+        for part in parts[1:]:
+            m = key_value_pat.match(part)
+            if not m:
+                continue
+            k = m.group("k")
+            v = m.group("v")
+            kv_seen = True
+            rec[k] = v
+
+        # Legacy parser path (pre-schema logs)
+        if not kv_seen and len(parts) >= 2:
+            rec["script"] = "canonical-sync-v8-legacy"
+            rec["repo"] = parts[1]
+            if len(parts) >= 3:
+                rec["branch"] = parts[2]
+            if len(parts) >= 4:
+                rec["reason"] = parts[3]
+            # Legacy reason/status ambiguity fallback
+            if len(parts) >= 4 and parts[3]:
+                rec["status"] = parts[3]
+        elif not kv_seen and len(parts) >= 4:
+            # Some scripts log 4-part legacy with status in final field
+            rec["script"] = "canonical-sync-v8-legacy"
+            rec["repo"] = parts[1]
+            rec["reason"] = parts[2] if len(parts) > 2 else "unknown"
+            rec["status"] = parts[3]
+
+        # Normalize status to canonical labels where missing
+        if rec["status"] in ("", None):
+            rec["status"] = rec.get("result", "unknown")
+
+        records.append(rec)
+
+# sort ascending by ts (newest first)
+records.sort(key=lambda r: r.get("ts", ""), reverse=True)
+print(json.dumps(records))
 PY
 }
 
-# Get evacuations from the last 24 hours
-get_evacuation_summary() {
+recent_recovery_entries() {
     if [[ ! -f "$RECOVERY_LOG" ]]; then
-        echo "No evacuations"
+        echo "[]"
         return
     fi
 
-    local recent
-    recent=$(recent_recovery_entries | tail -20)
-
-    if [[ -z "$recent" ]]; then
-        echo "No evacuations in last 24h"
-        return
-    fi
-
-    echo "Recent evacuations (last 24h):"
-    echo "$recent" | while IFS= read -r line; do
-        echo "  $line"
-    done
+    parse_recent_events
 }
 
-# Get count of evacuations by repo
-get_evacuation_counts() {
-    if [[ ! -f "$RECOVERY_LOG" ]]; then
-        return
+build_digest() {
+    local events_json
+    events_json=$(recent_recovery_entries)
+
+    local evacuation_count founder_fail_count
+    evacuation_count=$(echo "$events_json" | jq '[.[] | select((.script // "" | test("canonical-(evacuate|sync)")) and ((.status // "") == "failed" or (.status // "") == "evacuated"))] | length')
+    founder_fail_count=$(echo "$events_json" | jq '[.[] | select(.script == "founder-briefing" and .status == "failure")] | length')
+
+    local has_incidents=false
+    if (( evacuation_count > 0 || founder_fail_count > 0 )); then
+        has_incidents=true
     fi
 
-    local counts
-    counts=$(recent_recovery_entries | awk -F ' \\| ' '{gsub(/^ +| +$/, "", $2); if ($2 != "") print $2}' | sort | uniq -c | sort -rn)
+    local lines=()
+    lines+=("📊 DX Daily Digest - $(date -u +"%Y-%m-%dT%H:%M:%SZ")")
+    lines+=("")
 
-    if [[ -n "$counts" ]]; then
-        echo "Evacuations by repo:"
-        echo "$counts" | while read -r count repo; do
-            echo "  - $repo: $count"
-        done
+    # Evacuation summary
+    if (( evacuation_count > 0 )); then
+        lines+=("Recent evacuations (last 24h):")
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            lines+=("  $line")
+        done < <(echo "$events_json" | jq -r '[.[] | select((.script // "" | test("canonical-(evacuate|sync)")) and ((.status // "") == "failed" or (.status // "") == "evacuated")) | "\(.ts) | \(.repo) | \(.status) | \(.reason) | branch=\(.branch // "") | host=\(.host // "")"] | .[]')
+        lines+=("")
     fi
+
+    local evac_counts
+    evac_counts=$(echo "$events_json" | jq -r 'reduce (.[] | select((.script // "" | test("canonical-(evacuate|sync)")) and ((.status // "") == "failed" or (.status // "") == "evacuated")) ) as $event ({}; .[($event.repo // "unknown")] += 1) | to_entries | sort_by(.key) | .[] | "\(.key): \(.value)"' 2>/dev/null || true)
+    if [[ -n "$evac_counts" ]]; then
+        lines+=("Evacuations by repo:")
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            lines+=("  - $line")
+        done <<< "$evac_counts"
+        lines+=("")
+    fi
+
+    # Founder transport failures (high priority)
+    if (( founder_fail_count > 0 )); then
+        lines+=("Founder briefing failures (last 24h):")
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            lines+=("  $line")
+        done < <(echo "$events_json" | jq -r '[.[] | select(.script == "founder-briefing" and .status == "failure") | "\(.ts) | \(.host // "?") | \(.reason // "transport") | \(.raw)"] | .[]')
+        lines+=("")
+    fi
+
+    if [[ "$has_incidents" == "false" ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "${lines[@]}"
+    return 0
 }
 
 # Post to Slack (with local fallback)
@@ -120,44 +210,6 @@ post_digest() {
 
 # Main: Build and post digest
 # Returns: 0 = post digest, 1 = skip (green)
-build_digest() {
-    local timestamp
-    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-    local lines=()
-    local has_incidents=false
-
-    lines+=("📊 DX Daily Digest - $timestamp")
-    lines+=("")
-
-    # Evacuation summary
-    local evac_summary
-    evac_summary=$(get_evacuation_summary)
-    if [[ "$evac_summary" != "No evacuations in last 24h" && "$evac_summary" != "No evacuations" ]]; then
-        has_incidents=true
-        lines+=("$evac_summary")
-        lines+=("")
-    fi
-
-    # Evacuation counts
-    local evac_counts
-    evac_counts=$(get_evacuation_counts)
-    if [[ -n "$evac_counts" ]]; then
-        lines+=("$evac_counts")
-        lines+=("")
-    fi
-
-    # Skip if no incidents (everything green)
-    if [[ "$has_incidents" == "false" ]]; then
-        return 1
-    fi
-
-    # Join with newlines
-    printf '%s\n' "${lines[@]}"
-    return 0
-}
-
-# Main
 main() {
     if [[ "${1:-}" == "--dry-run" ]]; then
         DRY_RUN=true
@@ -166,7 +218,7 @@ main() {
     local digest
     if ! digest=$(build_digest); then
         # build_digest returned 1 = skip (everything green)
-        echo "✅ No evacuations to report - skipping Slack post"
+        echo "✅ No evacuations or founder failures to report - skipping Slack post"
         exit 0
     fi
 

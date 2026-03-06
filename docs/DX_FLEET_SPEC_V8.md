@@ -73,6 +73,16 @@ DX_CONTROLLER=1
 The queue-hygiene-enforcer checks this variable and exits immediately if
 not set to 1. This prevents duplicate actions across VMs.
 
+### Controller Contract (Strict)
+- Controller writes: `DX_CONTROLLER=1` host may perform GitHub writes and canonical reset/write scripts.
+- Replica behavior: every non-controller host (`DX_CONTROLLER` unset/0) must skip write paths in:
+  - `canonical-sync-v8.sh` (no push/reset)
+  - `queue-hygiene-enforcer.sh`
+  - Any GitHub state-changing ops.
+- If a replica attempts controller-only paths, scripts log an explicit skip reason in
+  `~/.dx-state/recovery-commands.log` (`status=skip`, `reason=off_trunk_controller_only` etc).
+- `canonical-evacuate-active.sh` still reports read-only diagnostics on replicas.
+
 ## VM Rollout
 
 | VM | Cron jobs | DX_CONTROLLER | Status |
