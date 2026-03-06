@@ -38,11 +38,24 @@ Beads provides persistent task memory across sessions, enabling:
 - Canonical Beads repo is `~/bd` (remote `stars-end/bd`).
 - Canonical backend is Dolt server mode.
 - Run Beads mutations from `~/bd` by default; app repos should use worktrees for code and reference Beads IDs.
+- No SQLite fallback for active fleet operation. If you see `sqlite3: unable to open database file` or `unknown command "dolt"`, stop and repair runtime/binary first.
 - Before dispatch waves, verify:
 
 ```bash
 beads-dolt dolt test --json
 beads-dolt status --json
+```
+
+Fail-loud remediation (first response):
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+export BD_BIN="$HOME/.local/bin/bd"
+export BEADS_DIR="$HOME/bd/.beads"
+export BEADS_DOLT_SERVER_HOST=100.107.173.83
+export BEADS_DOLT_SERVER_PORT=3307
+hash -r
+~/.agent/skills/health/bd-doctor/check.sh
 ```
 
 ## When to Use This Skill

@@ -13,6 +13,17 @@ Operational contract:
 - `macmini` is a control-pane host only (no local Beads SQL service).
 - `homedesktop-wsl` and `epyc6` are spokes only.
 
+Fail-fast contract (no silent fallback):
+- There is no supported SQLite fallback for active fleet operation.
+- If you see `sqlite3: unable to open database file` or `unknown command "dolt"`, stop immediately.
+- Treat this as runtime misconfiguration (usually wrong `bd` binary/env), not as missing local `.beads` init.
+- Do not run `bd init --prefix`, `bd --db`, or `bd sync --no-daemon` as recovery for fleet mode.
+- Required runtime pins:
+  - `BD_BIN=$HOME/.local/bin/bd`
+  - `BEADS_DIR=$HOME/bd/.beads`
+  - `BEADS_DOLT_SERVER_HOST=100.107.173.83`
+  - `BEADS_DOLT_SERVER_PORT=3307`
+
 ## 1) Preflight (Required Before Dispatch)
 
 Run on the host where dispatch will run:
@@ -69,6 +80,18 @@ Expected result:
 - `beads-dolt dolt test --json` shows `"connection_ok": true`
 - `beads-dolt status --json` returns non-zero `summary.total_issues`
 - service is active/running on `epyc12`
+
+If preflight fails with SQLite/legacy signatures:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+export BD_BIN="$HOME/.local/bin/bd"
+export BEADS_DIR="$HOME/bd/.beads"
+export BEADS_DOLT_SERVER_HOST=100.107.173.83
+export BEADS_DOLT_SERVER_PORT=3307
+hash -r
+~/.agent/skills/health/bd-doctor/check.sh
+```
 
 ## 2) Prime Radiant Worktree Flow
 
