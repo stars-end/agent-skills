@@ -631,17 +631,5 @@ ERROR_JSON
   fi
   return 1
 }
-ERROR_JSON
-)
-
-  if [[ "$OUTPUT_JSON" -eq 1 ]]; then
-    printf '%s\n' "$error_json"
-  fi
-  if [[ "$REPORT_LINES" -eq 1 ]]; then
-    local lines_file="${STATE_ROOT}/mcp-tools-sync.lines"
-    [[ -f "$lines_file" ]] && cat "$lines_file"
-  fi
-  return 1
-}
 
 main "$@"
