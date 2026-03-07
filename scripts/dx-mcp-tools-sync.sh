@@ -498,14 +498,26 @@ for ide, artifacts in sorted(canon_artifacts.items()):
             }
         )
 
-pass_count = sum(1 for r in file_rows if r["status"] == "pass")
-warn_count = sum(1 for r in file_rows if r["status"] == "warn")
-fail_count = sum(1 for r in file_rows if r["status"] == "fail")
+# FAIL-OPEN BUG FIX: Count tools separately (must include tool health in overall)
+tools_pass = sum(1 for r in tool_rows if r["status"] == "pass")
+tools_warn = sum(1 for r in tool_rows if r["status"] == "warn")
+tools_fail = sum(1 for r in tool_rows if r["status"] == "fail")
 
+# Count files separately
+files_pass = sum(1 for r in file_rows if r["status"] == "pass")
+files_warn = sum(1 for r in file_rows if r["status"] == "warn")
+files_fail = sum(1 for r in file_rows if r["status"] == "fail")
+
+# Aggregate counts for summary
+pass_count = tools_pass + files_pass
+warn_count = tools_warn + files_warn
+fail_count = tools_fail + files_fail
+
+# Overall status MUST include tool failures (fail-closed, not fail-open)
 overall = "green"
-if fail_count > 0:
+if tools_fail > 0 or files_fail > 0:
     overall = "red"
-elif warn_count > 0:
+elif tools_warn > 0 or files_warn > 0:
     overall = "yellow"
 
 if not reason_codes:
@@ -518,12 +530,18 @@ payload = {
     "mode_action": mode,
     "overall": overall,
     "status": overall,
-    "details": "converged" if overall == "green" else "drift detected",
+    "details": "converged" if overall == "green" else "drift or tool failure detected",
     "reason_code": reason_codes[0],
     "summary": {
         "pass": pass_count,
         "warn": warn_count,
         "fail": fail_count,
+        "tools_pass": tools_pass,
+        "tools_warn": tools_warn,
+        "tools_fail": tools_fail,
+        "files_pass": files_pass,
+        "files_warn": files_warn,
+        "files_fail": files_fail,
         "tools_total": len(tool_rows),
         "files_total": len(file_rows),
     },

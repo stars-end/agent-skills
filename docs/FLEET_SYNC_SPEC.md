@@ -171,6 +171,39 @@ Transport failure semantics:
 - preserve underlying audit status if audit failed
 - return non-zero when transport fails after a green audit
 
-## 12) Out of Scope
+## 12) Platform Status Contract
+
+Fleet Sync has two operational states:
+
+### Full Fleet Sync GO
+All enabled MCP tools are healthy and operational:
+- `tool_mcp_health` check passes with all enabled tools green
+- MCP tool-value lane provides full context/retrieval capabilities
+- Daily and weekly audits pass
+
+### Ops-Platform Only GO
+Ops infrastructure is healthy but MCP tool-value lane is partial:
+- `tool_mcp_health` may show failures for disabled tools (acceptable)
+- Core ops checks pass: `beads_dolt`, `required_service_health`, `op_auth_readiness`, `alerts_transport_readiness`
+- IDE surfaces are present and configured
+- MCP tools that are explicitly disabled in `configs/mcp-tools.yaml` are exempt from health checks
+
+**Current State (as of 2026-03-07): GO: ops-platform only**
+
+Enabled MCP tools:
+- `llm-tldr` (working)
+
+Disabled MCP tools (with rationale in manifest):
+- `context-plus` (package not found in npm registry)
+- `cass-memory` (requires bun runtime, not available)
+- `serena` (PyPI package provides no executable entrypoint)
+
+To transition to "full Fleet Sync GO":
+1. Fix or replace disabled tools with working alternatives
+2. Update `configs/mcp-tools.yaml` to enable them
+3. Verify all enabled tools pass health checks
+4. Re-run `dx-mcp-tools-sync.sh --check --json` to confirm green
+
+## 13) Out of Scope
 
 Fleet Sync does not introduce centralized execution, SSE gateways, or runtime multiplexers.
