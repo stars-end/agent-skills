@@ -300,6 +300,80 @@ CI auto-runs these workflows on frontend changes:
 
 **Full Template:** `~/agent-skills/templates/frontend-evidence-contract.md`
 
+## Prime V2 Product Verification (EXCEPTION)
+
+> ⚠️ **CRITICAL**: For Prime `/v2` and `/brokerage` routes, visual/style verification is **evidence only**.
+
+### Three-Command Founder Surface
+
+Prime V2 has a dedicated three-command release path:
+
+```bash
+# 1. Fast local checks (lint, unit tests) — NO network
+make verify-local
+
+# 2. V2 product contract gate — enforces hard invariants
+make verify-v2-contract
+
+# 3. Pre-release checks — local + contract (NOT final approval)
+make verify-release
+```
+
+### What `verify-v2-contract` Actually Checks
+
+Unlike visual/style checks, the contract gate enforces:
+
+| Check | What It Proves |
+|-------|----------------|
+| No "Demo Data" badge | Real data for authenticated users |
+| Holdings in workspace | Quantitative artifact in left pane |
+| No fake finance cards | No mock/demo metrics |
+| Reload continuity | Server-backed state restoration |
+
+### What Visual Checks CANNOT Certify for V2
+
+| Visual Check | Proves | Does NOT Prove |
+|--------------|--------|----------------|
+| Screenshot of UI | Pixels match | Real vs demo data |
+| Route 200 OK | Server responds | Correct product behavior |
+| No console errors | No JS crashes | Business logic correctness |
+| Stylelint pass | Code quality | Product invariants |
+
+### When to Use Which Verification
+
+| Change Type | Use This Verification |
+|-------------|----------------------|
+| Generic frontend (not /v2) | Visual + Stylelint (this skill) |
+| `/v2` or `/brokerage` routes | `make verify-v2-contract` |
+| `docs/TESTING/STORIES/production_v2/` | `make verify-v2-contract` |
+| `docs/v2/` documentation | `make verify-v2-contract` |
+
+### V2 Contract Documentation
+
+- `docs/v2/PRODUCT_CONTRACT.md` — Hard product invariants
+- `docs/v2/RELEASE_GATE.md` — Binary YES/NO checks
+- `docs/v2/FOUNDER_SIGNOFF_FLOW.md` — Authenticated signoff process
+- `docs/v2/FAKE_METRIC_GUARDRAILS.md` — No demo/fake metrics
+
+### Required PR Body Section for V2 Changes
+
+If PR touches `/v2`, `/brokerage`, or V2 stories:
+
+```markdown
+## V2 Product Signoff Status
+
+- [ ] `make verify-v2-contract` passed
+- [ ] Founder live validation completed (see `docs/v2/FOUNDER_SIGNOFF_FLOW.md`)
+
+**Contract Docs:**
+- `docs/v2/PRODUCT_CONTRACT.md`
+- `docs/v2/RELEASE_GATE.md`
+
+⚠️ Visual evidence alone cannot certify V2 product correctness.
+```
+
+**Note:** `make verify-release` outputs "RELEASE NOT APPROVED YET" — it is pre-release only.
+
  ## Best Practices
 
 - **Always run from root** (where Makefile is).

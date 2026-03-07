@@ -564,6 +564,70 @@ bd create "Blocker: Evidence contradicts claims in PR #${PR_NUMBER}" \
 - Enforces evidence-first approach
 - Reduces post-merge rollbacks
 
+### Prime V2 Contract Review (EXCEPTION)
+
+> ⚠️ **CRITICAL**: For Prime `/v2` and `/brokerage`, visual contradiction triage is **necessary but NOT sufficient**.
+
+**When PR touches V2 routes/stories, also check:**
+
+```bash
+# Check if V2 routes/stories changed
+V2_CHANGES=$(git diff origin/master --name-only | grep -E "(^frontend/src/(pages|routes|components)/(v2|brokerage)|^docs/TESTING/STORIES/production_v2/|^docs/v2/" | head -1)
+
+if [ -n "$V2_CHANGES" ]; then
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "📋 V2 PRODUCT CONTRACT REVIEW"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "V2 changes detected. Visual evidence is NOT sufficient."
+  echo ""
+  echo "Required checks:"
+  echo "1. Contract gate: make verify-v2-contract"
+  echo "2. Contract docs: docs/v2/PRODUCT_CONTRACT.md"
+  echo "3. Release gate: docs/v2/RELEASE_GATE.md"
+  echo "4. Founder flow: docs/v2/FOUNDER_SIGNOFF_FLOW.md"
+  echo ""
+  echo "Key invariants:"
+  echo "  - No demo data badge for auth users"
+  echo "  - Real holdings only (no fake metrics)"
+  echo "  - Left pane = artifacts, right pane = chat"
+  echo "  - Reload restores server-backed state"
+  echo ""
+  echo "⚠️ Even if visual tests pass, V2 correctness requires contract gate + founder validation."
+  echo ""
+fi
+```
+
+**V2 Contract Document Review:**
+
+When fixing V2-related issues, review against:
+
+| Document | What It Defines | Fix Must Satisfy |
+|----------|-----------------|------------------|
+| `PRODUCT_CONTRACT.md` | Hard product invariants | No demo data, real holdings, left-pane artifacts |
+| `RELEASE_GATE.md` | Binary YES/NO checks | All gates must be YES |
+| `FOUNDER_SIGNOFF_FLOW.md` | Signoff process | Live validation required |
+| `FAKE_METRIC_GUARDRAILS.md` | No fake/demo metrics | Provenance on all financial metrics |
+
+**V2 Fix Validation:**
+
+After fixing V2 issues:
+
+1. Run contract gate:
+   ```bash
+   make verify-v2-contract
+   ```
+
+2. Verify against contract docs:
+   - Check: no demo badge appears for auth users
+   - Check: portfolio value shows real data
+   - Check: quantitative artifacts in left pane
+
+3. Note that `verify-release` is pre-release only:
+   - Output: "RELEASE NOT APPROVED YET"
+   - Final approval requires founder live validation
+
  ## Safety Guardrails
 
 **Before auto-fixing:**
