@@ -25,7 +25,7 @@ description: |
   changes, prepare work for review, sync local changes, or finalize current work. Invoke
   when seeing "uncommitted changes", "git status shows changes", "Feature-Key missing",
   or discussing commit operations, saving work, or git workflows. Keywords: commit, git,
-  save work, Feature-Key, beads sync, git add, git commit, sync, save progress
+  save work, Feature-Key, bd show, bd ready, git add, git commit, save progress
 tags: [workflow, git, beads, commit]
 ```
 
@@ -42,7 +42,7 @@ tags: [workflow, git, beads, commit]
 3. **Semantic keywords** related to the domain
    - Domain terms: commit, git, save, beads
    - Related concepts: feature key, sync, progress
-   - CLI commands: git add, git commit, bd sync
+   - CLI commands: git add, git commit, bd show
 
 4. **Conversational context**
    - Discussing commits → sync-feature-branch becomes relevant
@@ -123,7 +123,7 @@ Observable signals that skill is relevant:
 ### "Keywords" clause
 Semantic terms for matching:
 - Domain terms: commit, git, beads
-- CLI commands: git add, git commit, bd sync
+- CLI commands: git add, git commit, bd show
 - Related concepts: Feature-Key, save work, sync
 - Natural phrases: save progress, commit changes
 
