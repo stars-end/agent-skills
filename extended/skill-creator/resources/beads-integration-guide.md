@@ -497,14 +497,13 @@ for task in ready:
 
 **Session end (CRITICAL):**
 ```bash
-# Force sync to git (auto-sync has 30s debounce)
-bd sync
-
-# OR via MCP:
-bash: bd sync
+# Dolt fleet mode does not use session-end bd sync.
+# Validate the canonical backend instead:
+beads-dolt dolt test --json
+beads-dolt status --json
 ```
 
-**Why critical:** Beads has 30s debounce on auto-sync. Force sync ensures all work persisted to git before session ends.
+**Why critical:** Fleet mode is Dolt-backed and fail-fast. Session end should verify canonical Beads connectivity, not attempt repo-local sync.
 
 ## Common Patterns
 
@@ -619,7 +618,7 @@ mcp__plugin_beads_beads__update(
 ✅ Use hierarchical IDs for children
 ✅ Link discoveries with discovered-from
 ✅ Close with descriptive reason
-✅ Force bd sync at session end
+✅ Verify canonical Dolt Beads connectivity at session end
 ✅ Update status during work
 ✅ Use ready() to find next work
 
@@ -629,7 +628,7 @@ mcp__plugin_beads_beads__update(
 ❌ Assume issue exists (check first)
 ❌ Create orphan issues (link to parent)
 ❌ Skip close reason (loses context)
-❌ Rely only on auto-sync (force sync)
+❌ Assume repo-local sync is part of fleet mode
 ❌ Leave status stale (update regularly)
 ❌ Block workflow on Beads errors (warn and continue)
 
@@ -652,8 +651,8 @@ bd show bd-abc
 ### Check Database
 
 ```bash
-cat .beads/issues.jsonl | grep bd-abc
-# Raw JSONL entry
+bd show bd-abc --json
+# Canonical issue record from Dolt-backed Beads
 ```
 
 ### Test MCP Connection
