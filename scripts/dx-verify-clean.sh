@@ -7,6 +7,9 @@
 # This is a safety gate for "I am done" claims. It is intentionally simple and
 # does not try to auto-fix anything.
 #
+# Environment Variables:
+#   DX_VERIFY_ALLOW_STASHES=1  Allow stashes (use when you've verified they're safe)
+#
 set -euo pipefail
 
 CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
@@ -43,15 +46,22 @@ for repo in "${CANONICAL_REPOS[@]}"; do
   stashes="$(git -C "$repo_path" stash list 2>/dev/null || true)"
   if [[ -n "$stashes" ]]; then
     stash_count=$(echo "$stashes" | wc -l | tr -d ' ')
-    echo "❌ $repo: has $stash_count stash(es) (hidden state)"
-    echo "$stashes" | sed 's/^/   /'
-    fail=1
+    if [[ "${DX_VERIFY_ALLOW_STASHES:-0}" == "1" ]]; then
+      echo "⚠️  $repo: has $stash_count stash(es) (hidden state - allowed by DX_VERIFY_ALLOW_STASHES)"
+      echo "$stashes" | sed 's/^/   /'
+    else
+      echo "❌ $repo: has $stash_count stash(es) (hidden state)"
+      echo "$stashes" | sed 's/^/   /'
+      fail=1
+    fi
   fi
 done
 
 if [[ "$fail" -ne 0 ]]; then
   echo ""
   echo "🚨 FAIL: Canonical clones must be clean. Move work to a worktree and open a PR."
+  echo ""
+  echo "💡 TIP: If stashes are verified safe, run with DX_VERIFY_ALLOW_STASHES=1"
   exit 1
 fi
 

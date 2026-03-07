@@ -1197,8 +1197,28 @@ feature_key_gate_eval() {
 }
 
 # ============================================================================
-# PERMISSION GATE (Worktree-only - bd-cbsb.16)
+# PERMISSION GATE (Worktree-only - bd-cbsb.16 + bd-kuhj.3 canonical rejection)
 # ============================================================================
+
+is_canonical_repo_path() {
+    local path="$1"
+    local canonical_repos=(
+        "$HOME/agent-skills"
+        "$HOME/prime-radiant-ai"
+        "$HOME/affordabot"
+        "$HOME/llm-common"
+    )
+    
+    # bd-kuhj.3: Reject canonical roots AND their descendants
+    # This prevents ~/agent-skills/subdir from bypassing the canonical rejection
+    for canonical in "${canonical_repos[@]}"; do
+        if [[ "$path" == "$canonical" || "$path" == "$canonical/"* ]]; then
+            return 0
+        fi
+    done
+    
+    return 1
+}
 
 validate_worktree_path() {
     local path="$1"
@@ -1216,6 +1236,11 @@ validate_worktree_path() {
         allowed_prefixes+=("${extra[@]}")
     fi
     
+    # bd-kuhj.3: Reject canonical repo paths (workspace-first enforcement)
+    if is_canonical_repo_path "$path"; then
+        return 2  # Special exit code for canonical rejection
+    fi
+    
     # Check if path starts with any allowed prefix
     for prefix in "${allowed_prefixes[@]}"; do
         if [[ "$path" == "$prefix"* ]]; then
@@ -1229,6 +1254,12 @@ validate_worktree_path() {
 check_permission_gate() {
     local beads="$1"
     local worktree="$2"
+    
+    # bd-kuhj.3: Check for canonical repo rejection first
+    if is_canonical_repo_path "$worktree"; then
+        echo "DENIED:canonical_worktree_forbidden:$worktree"
+        return 22
+    fi
     
     if ! validate_worktree_path "$worktree"; then
         echo "DENIED:non_worktree_path:$worktree"
@@ -2467,24 +2498,43 @@ start_cmd() {
     fi
 
     # Resolve and pin worktree to avoid cwd drift/external_directory failures.
-    if [[ "$PROVIDER" == "opencode" || -n "$WORKTREE" ]]; then
-        WORKTREE="$(resolve_worktree "$BEADS" "$WORKTREE" "$PROMPT_FILE")"
-        if [[ -z "$WORKTREE" || ! -d "$WORKTREE" ]]; then
-            echo "reason_code=worktree_missing" >&2
-            echo "worktree resolution failed for beads=$BEADS (cwd=$(pwd)); pass --worktree /tmp/agents/<beads>/<repo>" >&2
-            exit 22
-        fi
+    # bd-kuhj.3: ALL mutating providers must use worktree (not just opencode)
+    WORKTREE="$(resolve_worktree "$BEADS" "$WORKTREE" "$PROMPT_FILE")"
+    if [[ -z "$WORKTREE" || ! -d "$WORKTREE" ]]; then
+        echo "reason_code=worktree_missing" >&2
+        echo "worktree resolution failed for beads=$BEADS (cwd=$(pwd)); pass --worktree /tmp/agents/<beads>/<repo>" >&2
+        exit 22
+    fi
 
-        # Permission gate (bd-cbsb.16)
-        local perm_result
-        perm_result="$(check_permission_gate "$BEADS" "$WORKTREE")"
-        if [[ "$perm_result" != OK* ]]; then
-            echo "permission gate failed: $perm_result" >&2
+    # Permission gate (bd-cbsb.16 + bd-kuhj.3)
+    local perm_result perm_rc
+    set +e
+    perm_result="$(check_permission_gate "$BEADS" "$WORKTREE")"
+    perm_rc=$?
+    set -e
+    
+    if [[ $perm_rc -ne 0 ]]; then
+        # bd-kuhj.3: Special handling for canonical rejection
+        if [[ "$perm_result" == *"canonical_worktree_forbidden"* ]]; then
+            local repo_name
+            repo_name="$(basename "$WORKTREE")"
+            cat >&2 <<EOF
+reason_code=canonical_worktree_forbidden
+rejected_path=$WORKTREE
+policy=workspace_first_v86
+remedy=dx-worktree create $BEADS $repo_name
+ERROR: Mutating execution forbidden in canonical repo: $WORKTREE
+Canonical repos are clean mirrors. Use: dx-worktree create $BEADS $repo_name
+EOF
             exit 22
         fi
         
-        # bd-8wdg.11: Auto-remediate mise trust only for concrete .mise targets.
-        if [[ "${DX_RUNNER_AUTO_TRUST_MISE:-1}" == "1" ]] && command -v mise >/dev/null 2>&1; then
+        echo "permission gate failed: $perm_result" >&2
+        exit 22
+    fi
+    
+    # bd-8wdg.11: Auto-remediate mise trust only for concrete .mise targets.
+    if [[ "${DX_RUNNER_AUTO_TRUST_MISE:-1}" == "1" ]] && command -v mise >/dev/null 2>&1; then
             local trust_target trust_before trust_after
             trust_target=""
             if [[ -d "$WORKTREE" && -f "$WORKTREE/.mise.toml" ]]; then
@@ -2503,7 +2553,6 @@ start_cmd() {
                 fi
             fi
         fi
-    fi
     
     # Baseline gate (optional)
     if [[ -n "$REQUIRED_BASELINE" ]]; then

@@ -1,10 +1,22 @@
 ---
 name: worktree-workflow
 description: |
-  Create and manage task workspaces using git worktrees (without exposing worktree complexity).
-  Use this when starting work on a Beads ID, when an agent needs a clean workspace, or when a repo is dirty and blocks sync.
-  Provides a single command (`dx-worktree`) for create/cleanup/prune and a recovery path via dirty-repo-bootstrap.
-tags: [dx, git, worktree, workspace, workflow]
+  Workspace-first git worktree management (DX V8.6).
+  Create, open, resume, and recover workspaces while keeping canonical repos clean.
+  All mutating work happens in /tmp/agents/<beads-id>/<repo>.
+  
+  Commands:
+    create <beads-id> <repo>              - Create workspace (prints path)
+    open <beads-id> <repo> [-- <cmd>]     - Show status or exec command
+    resume <beads-id> <repo> [-- <cmd>]   - Resume workspace
+    evacuate-canonical <repo>             - Recover dirty canonical repo
+    cleanup <beads-id>                    - Remove workspace
+    prune <repo>                          - Prune worktree metadata
+    explain                               - Show workspace-first policy
+  
+  Use when starting work on a Beads ID, when an agent needs a clean workspace,
+  or when recovering from dirty canonical repos.
+tags: [dx, git, worktree, workspace, workflow, v86]
 allowed-tools:
   - Bash(scripts/dx-worktree.sh:*)
   - Bash(scripts/worktree-setup.sh:*)
@@ -12,56 +24,109 @@ allowed-tools:
   - Bash(dirty-repo-bootstrap/snapshot.sh:*)
 ---
 
-# Worktree Workflow (Workspace-First)
+# Worktree Workflow (Workspace-First V8.6)
 
 ## Goal
 
-Keep canonical clones clean and on `master`, while agents do all work in isolated workspaces:
+Keep canonical clones clean mirrors and put all writable work in isolated workspaces:
 
-`/tmp/agents/<beads-id>/<repo>`
+- **Canonical repos**: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}` (read-only for agents)
+- **Workspaces**: `/tmp/agents/<beads-id>/<repo>` (all mutating work happens here)
 
-## Commands
+## Workspace-First Contract (DX V8.6)
 
-### Create workspace (recommended default)
+### 1. Create Workspace (Recommended Default)
 
 ```bash
 dx-worktree create <beads-id> <repo>
+# Prints workspace path: /tmp/agents/<beads-id>/<repo>
 ```
 
-Returns a path you can `cd` into.
+For Railway-linked repos, this also seeds `.dx/railway-context.env` and attempts a non-interactive `railway link` in the worktree.
 
-For Railway-linked repos, this also seeds `.dx/railway-context.env` and attempts a
-non-interactive `railway link` in the worktree so `railway status` / `railway run`
-work without falling back to canonical repo directories.
+### 2. Open/Resume Workspace (Manual IDE Sessions)
 
-### Cleanup a task workspace
+```bash
+# Path-only mode (prints status)
+dx-worktree open <beads-id> <repo>
+dx-worktree resume <beads-id> <repo>
+
+# Command execution mode
+dx-worktree open <beads-id> <repo> -- opencode
+dx-worktree open <beads-id> <repo> -- antigravity
+dx-worktree open <beads-id> <repo> -- codex
+dx-worktree open <beads-id> <repo> -- claude
+dx-worktree open <beads-id> <repo> -- gemini
+```
+
+### 3. Recover Dirty Canonical Repo
+
+```bash
+dx-worktree evacuate-canonical <repo>
+# Creates recovery worktree: /tmp/agents/recovery-<timestamp>/<repo>
+# Resets canonical to clean state
+```
+
+**Skip conditions** (no destructive recovery):
+- `.git/index.lock` present
+- merge/rebase in progress
+- active session lock
+- repo already clean
+
+### 4. Cleanup Workspace
 
 ```bash
 dx-worktree cleanup <beads-id>
 dx-worktree prune <repo>
 ```
 
-### Recovery if workspace is dirty and you need to switch
+## Guidance for Agents (Simple Rules)
 
-```bash
-~/.agent/skills/dirty-repo-bootstrap/snapshot.sh
+- **Never edit in canonical repos** (`~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`)
+- **Always work inside workspace paths** (`/tmp/agents/<beads-id>/<repo>`)
+- **Recovery uses named worktrees**, not stash
+- If stuck: `dx-worktree evacuate-canonical <repo>` → `dx-worktree create <beads-id> <repo>`
+
+## DX V8.6 Governance
+
+### dx-runner and dx-batch Enforcement
+
+Both tools **reject** canonical repo paths for mutating execution with:
+
+```
+reason_code=canonical_worktree_forbidden
+rejected_path=~/agent-skills
+remedy=dx-worktree create <beads-id> <repo>
 ```
 
-## Guidance for agents (simple rules)
+### Normal Operations Still Work
 
-- Never edit code in `~/<repo>` (canonical clones).
-- Always work inside the returned workspace path.
-- If stuck: snapshot → cleanup → recreate.
+These operations are **unaffected** in canonical repos:
+- `git fetch`, `git checkout master`, `git pull --ff-only`
+- `railway status`, `railway run`, `railway shell`
+- Normal shell startup
+- Loading skills from `~/agent-skills`
+
+**Blocked**: Mutating agent execution against canonical roots
 
 ## Keep Your Work Safe
 
-> **Policy (DX V8):** `auto-checkpoint` was removed — it conflicted with canonical pre-commit
-> hooks. The replacement is: commit your work, `worktree-push.sh` pushes it nightly (3:15 AM),
-> and `worktree-gc-v8.sh` prunes worktrees older than 48h. **Uncommitted work older than 48h
-> is considered stale and will be GC'd. This is intentional.** Commit or lose it.
+> **Policy (DX V8.6):** Uncommitted work older than 48h is considered stale and will be GC'd. Commit your work at logical milestones.
 
 ### Rules
 
-- **Open a draft PR after your first real commit** — makes work visible before the 3:15 AM push
-- **Commit at logical milestones** — not on a timer; `worktree-push.sh` handles the rest
+- **Open a draft PR after your first real commit** — makes work visible
+- **Commit at logical milestones** — not on a timer
 - **Uncommitted changes are your responsibility** — no cron will save them
+
+## Recovery Branch Naming
+
+When evacuating canonical repos:
+```
+recovery/canonical-<repo>-<timestamp>
+```
+
+Example:
+```
+recovery/canonical-agent-skills-20260306T101530Z
+```
