@@ -17,6 +17,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Test the PR checkout itself, not installed canonical
 AGENTS_ROOT="${AGENTS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+CURRENT_BASH="${BASH:-bash}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -47,7 +48,7 @@ echo "Test 1.1: dx-worktree create"
 # Use unique test ID to avoid conflicts
 test_beads_id="bd-test-ws-$$"
 set +e
-create_result="$("$AGENTS_ROOT/scripts/dx-worktree.sh" create "$test_beads_id" agent-skills 2>&1)"
+create_result="$("$CURRENT_BASH" "$AGENTS_ROOT/scripts/dx-worktree.sh" create "$test_beads_id" agent-skills 2>&1)"
 create_rc=$?
 set -e
 if [[ $create_rc -eq 0 && -n "$create_result" ]]; then
@@ -56,9 +57,9 @@ if [[ $create_rc -eq 0 && -n "$create_result" ]]; then
     test_workspace_path="$create_result"
 else
     # If create fails, workspace might already exist - try to cleanup and retry
-    "$AGENTS_ROOT/scripts/dx-worktree.sh" cleanup "$test_beads_id" >/dev/null 2>&1 || true
+    "$CURRENT_BASH" "$AGENTS_ROOT/scripts/dx-worktree.sh" cleanup "$test_beads_id" >/dev/null 2>&1 || true
     set +e
-    create_result="$("$AGENTS_ROOT/scripts/dx-worktree.sh" create "$test_beads_id" agent-skills 2>&1)"
+    create_result="$("$CURRENT_BASH" "$AGENTS_ROOT/scripts/dx-worktree.sh" create "$test_beads_id" agent-skills 2>&1)"
     create_rc=$?
     set -e
     if [[ $create_rc -eq 0 && -n "$create_result" ]]; then
@@ -71,7 +72,7 @@ fi
 
 # Test 1.2: open workspace (path mode)
 echo "Test 1.2: dx-worktree open (path mode)"
-result="$("$AGENTS_ROOT/scripts/dx-worktree.sh" open "$test_beads_id" agent-skills 2>&1)" || true
+result="$("$CURRENT_BASH" "$AGENTS_ROOT/scripts/dx-worktree.sh" open "$test_beads_id" agent-skills 2>&1)" || true
 if [[ "$result" == *"workspace_path="* ]] || [[ -n "$result" && "$result" == *"/tmp/agents"* ]]; then
     pass "dx-worktree open returns workspace status"
 else
@@ -80,7 +81,7 @@ fi
 
 # Test 1.3: resume workspace
 echo "Test 1.3: dx-worktree resume"
-result="$("$AGENTS_ROOT/scripts/dx-worktree.sh" resume "$test_beads_id" agent-skills 2>&1)" || true
+result="$("$CURRENT_BASH" "$AGENTS_ROOT/scripts/dx-worktree.sh" resume "$test_beads_id" agent-skills 2>&1)" || true
 if [[ "$result" == *"workspace_path="* ]] || [[ -n "$result" && "$result" == *"/tmp/agents"* ]]; then
     pass "dx-worktree resume works (alias)"
 else
@@ -89,14 +90,14 @@ fi
 
 # Test 1.4: explain command
 echo "Test 1.4: dx-worktree explain"
-if "$AGENTS_ROOT/scripts/dx-worktree.sh" explain | grep -q "Workspace-First"; then
+if "$CURRENT_BASH" "$AGENTS_ROOT/scripts/dx-worktree.sh" explain | grep -q "Workspace-First"; then
     pass "dx-worktree explain reflects V8.6 contract"
 else
     fail "dx-worktree explain missing V8.6 contract"
 fi
 
 # Cleanup
-"$AGENTS_ROOT/scripts/dx-worktree.sh" cleanup "$test_beads_id" >/dev/null 2>&1 || true
+"$CURRENT_BASH" "$AGENTS_ROOT/scripts/dx-worktree.sh" cleanup "$test_beads_id" >/dev/null 2>&1 || true
 
 # ============================================================================
 # Test 2: Canonical path rejection (bd-kuhj.3)
@@ -107,7 +108,7 @@ section "bd-kuhj.3: Canonical path rejection"
 # Test 2.1: dx-runner rejects canonical path
 echo "Test 2.1: dx-runner rejects canonical repo"
 set +e
-result="$("$AGENTS_ROOT/scripts/dx-runner" start \
+result="$("$CURRENT_BASH" "$AGENTS_ROOT/scripts/dx-runner" start \
     --beads bd-test-canonical \
     --provider opencode \
     --worktree "$HOME/agent-skills" \
@@ -183,7 +184,7 @@ section "bd-kuhj.5: Recovery with named worktrees"
 echo "Test 4.1: evacuate-canonical skip conditions"
 # This test requires modifying an actual canonical repo, which we can't do safely
 # So we test that the function properly validates canonical repo names
-result="$("$AGENTS_ROOT/scripts/dx-worktree.sh" evacuate-canonical non-canonical-test-repo 2>&1)" || true
+result="$("$CURRENT_BASH" "$AGENTS_ROOT/scripts/dx-worktree.sh" evacuate-canonical non-canonical-test-repo 2>&1)" || true
 if [[ "$result" == *"not a canonical repo"* ]]; then
     pass "evacuate-canonical validates repo is canonical"
 else
