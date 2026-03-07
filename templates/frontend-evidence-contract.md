@@ -206,3 +206,74 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 # Preview server
 pnpm --filter frontend preview --port 5173
 ```
+
+---
+
+## Prime V2 Product Signoff (EXCEPTION)
+
+> ⚠️ **CRITICAL**: For Prime `/v2` and `/brokerage` routes, visual evidence is **evidence only**.
+
+If PR changes files in:
+- `/v2` or `/brokerage` route components
+- `docs/TESTING/STORIES/production_v2/`
+- `docs/v2/`
+
+Then PR MUST also include:
+
+### Required V2 Product Signoff Section
+
+```markdown
+## V2 Product Signoff Status
+
+### Contract Gate
+- [ ] `make verify-v2-contract` passed
+- [ ] Contract artifacts: `artifacts/verification/contract/`
+
+### Founder Live Validation
+- [ ] Live validation completed per `docs/v2/FOUNDER_SIGNOFF_FLOW.md`
+- [ ] Routes validated: `/v2`, `/brokerage`
+
+### Evidence vs Certification
+| Evidence Type | Included | Can Certify V2? |
+|---------------|----------|-----------------|
+| Screenshots | ✅/❌ | ❌ NO |
+| Style/lint | ✅/❌ | ❌ NO |
+| Route health | ✅/❌ | ❌ NO |
+| Contract gate | ✅/❌ | ✅ YES |
+| Founder validation | ✅/❌ | ✅ YES |
+
+### Contract Docs
+- `docs/v2/PRODUCT_CONTRACT.md` — Hard invariants
+- `docs/v2/RELEASE_GATE.md` — Binary YES/NO checks
+- `docs/v2/FAKE_METRIC_GUARDRAILS.md` — No demo/fake metrics
+
+⚠️ Visual evidence alone cannot certify V2 product correctness.
+```
+
+### V2 Commands
+
+```bash
+# V2 contract gate (MUST pass for V2 routes)
+make verify-v2-contract
+
+# Full release checks (pre-release only, not final approval)
+make verify-release
+
+# Three-command founder surface:
+make verify-local        # 1. Fast local checks
+make verify-v2-contract  # 2. V2 product contract gate
+make verify-release      # 3. Pre-release (awaits founder validation)
+```
+
+### What Visual Evidence Cannot Certify for V2
+
+| Visual Check | What It Proves | Does NOT Prove |
+|--------------|----------------|----------------|
+| Screenshot shows portfolio value | UI renders | Real data vs demo |
+| Route 200 OK | Server responds | Correct data |
+| No console errors | No JS crashes | Product correctness |
+| Visual test pass | Pixels match | Business logic |
+
+**For V2, only these certify:**
+- `make verify-v2-contract` — Enforces contract invariants
+- Live founder validation — Real user, real data

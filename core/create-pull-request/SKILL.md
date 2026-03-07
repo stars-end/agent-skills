@@ -433,6 +433,76 @@ fi
 - Catches visual regressions before merge
 - CI validates automatically - trust the pipeline
 
+### 2.8. Prime V2 Product Contract (If V2 Routes/Stories Changed)
+
+> ⚠️ **CRITICAL EXCEPTION**: For Prime `/v2` and `/brokerage`, visual evidence is **evidence only**.
+
+**When PR touches V2 routes or contract docs, enforce product signoff:**
+
+```bash
+# Check if V2 routes/stories changed
+V2_CHANGES=$(git diff origin/master --name-only | grep -E "(^frontend/src/(pages|routes|components)/(v2|brokerage)|^docs/TESTING/STORIES/production_v2/|^docs/v2/)" | head -1)
+
+if [ -n "$V2_CHANGES" ]; then
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "⚠️  V2 PRODUCT CONTRACT DETECTED"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "V2 product changes detected. Visual evidence is NOT sufficient."
+  echo ""
+  echo "REQUIRED before merge:"
+  echo "1. Contract gate MUST pass:"
+  echo "   make verify-v2-contract"
+  echo ""
+  echo "2. Founder live validation REQUIRED:"
+  echo "   See: docs/v2/FOUNDER_SIGNOFF_FLOW.md"
+  echo ""
+  echo "3. Add V2 Product Signoff section to PR body (see below)"
+  echo ""
+  echo "Contract docs:"
+  echo "  • docs/v2/PRODUCT_CONTRACT.md — Hard invariants"
+  echo "  • docs/v2/RELEASE_GATE.md — Binary YES/NO checks"
+  echo "  • docs/v2/FAKE_METRIC_GUARDRAILS.md — No demo/fake metrics"
+  echo ""
+fi
+```
+
+**Required V2 Product Signoff section for PR body:**
+
+```markdown
+## V2 Product Signoff Status
+
+### Contract Gate
+- [ ] `make verify-v2-contract` passed
+- [ ] Contract artifacts: `artifacts/verification/contract/`
+
+### Founder Live Validation
+- [ ] Validation completed per `docs/v2/FOUNDER_SIGNOFF_FLOW.md`
+- [ ] Routes validated: `/v2`, `/brokerage`
+
+### Evidence vs Certification
+| Evidence Type | Included | Can Certify V2? |
+|---------------|----------|-----------------|
+| Screenshots | ✅/❌ | ❌ NO |
+| Style/lint | ✅/❌ | ❌ NO |
+| Route health | ✅/❌ | ❌ NO |
+| Contract gate | ✅/❌ | ✅ YES |
+| Founder validation | ✅/❌ | ✅ YES |
+
+### Contract Docs
+- `docs/v2/PRODUCT_CONTRACT.md` — Hard invariants
+- `docs/v2/RELEASE_GATE.md` — Binary YES/NO checks
+
+⚠️ Visual evidence alone cannot certify V2 product correctness.
+```
+
+**Why V2 requires extra steps:**
+- V2 has hard product invariants beyond visual correctness
+- Real data vs demo data is a binary state that screenshots cannot verify
+- Founder validation ensures business logic works with real holdings
+- `verify-release` output "RELEASE NOT APPROVED YET" is intentional
+
  ## Best Practices
 
 - **Create Beads issue if missing** - Never block on missing metadata

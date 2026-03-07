@@ -335,6 +335,70 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 
 ---
 
+### 7.5) Prime V2 Product Contract (EXCEPTION to Generic Frontend Evidence)
+
+> ⚠️ **CRITICAL EXCEPTION**: For Prime Radiant AI `/v2` and `/brokerage` routes, visual/route/runtime evidence is **evidence only**. It cannot certify product correctness.
+
+**The V2 workspace has hard product invariants that go beyond visual consistency:**
+
+| Evidence Type | Can Certify Generic Frontend? | Can Certify Prime V2 Correctness? |
+|---------------|-------------------------------|-----------------------------------|
+| Screenshot of UI | ✅ YES (visual only) | ❌ NO |
+| Style/Lint checks | ✅ YES (code quality) | ❌ NO |
+| Route health (200 OK) | ✅ YES | ❌ NO |
+| Visual regression pass | ✅ YES | ❌ NO |
+| `make verify-v2-contract` | N/A | ✅ YES |
+| Live founder validation | N/A | ✅ YES |
+
+**Prime V2 Shipping Requirements:**
+
+1. **Contract Gate MUST Pass:**
+   \`\`\`bash
+   make verify-v2-contract
+   \`\`\`
+   - Runs `v2-contract-gate.yml` story
+   - Enforces: no demo badge, real data only, left-pane artifacts, reload continuity
+
+2. **Live Founder Validation REQUIRED:**
+   - Follow: \`docs/v2/FOUNDER_SIGNOFF_FLOW.md\`
+   - One authenticated user validates with real holdings data
+   - Route matrix: \`/v2\`, \`/brokerage\`
+
+3. **`verify-release` is Pre-Release Only:**
+   - \`make verify-release\` = local checks + contract gate
+   - Output: "PRE-RELEASE CHECKS PASSED — RELEASE NOT APPROVED YET"
+   - Does NOT constitute final approval
+
+**When touching Prime V2 routes or stories:**
+
+If PR changes files in:
+- \`/v2\` or \`/brokerage\` routes
+- \`docs/TESTING/STORIES/production_v2/\`
+- \`docs/v2/\`
+
+Then PR body MUST include:
+\`\`\`markdown
+## V2 Product Signoff Status
+
+- [ ] \`make verify-v2-contract\` passed
+- [ ] Founder live validation completed (see \`docs/v2/FOUNDER_SIGNOFF_FLOW.md\`)
+
+**Contract Docs:**
+- \`docs/v2/PRODUCT_CONTRACT.md\` — Hard invariants
+- \`docs/v2/RELEASE_GATE.md\` — Binary YES/NO checks
+- \`docs/v2/FAKE_METRIC_GUARDRAILS.md\` — No demo/fake metrics
+
+⚠️ Screenshots/style review are evidence only and cannot certify V2 product correctness.
+\`\`\`
+
+**Key Documents:**
+- \`docs/v2/PRODUCT_CONTRACT.md\` — Non-negotiable product invariants
+- \`docs/v2/RELEASE_GATE.md\` — Binary validation checks
+- \`docs/v2/FOUNDER_SIGNOFF_FLOW.md\` — Authenticated signoff process
+- \`docs/v2/FAKE_METRIC_GUARDRAILS.md\` — Guardrails against fake/demo data
+
+---
+
 ## Core Workflows
 
 | Skill | Description | Example | Tags |
