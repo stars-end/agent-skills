@@ -13,6 +13,11 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
 
+### Writing Style (Strunk & White)
+- Omit needless words. Be concise.
+- Use active voice. Prefer concrete, specific language.
+- One idea per sentence. Clear over clever.
+
 ## 1) Canonical Repository Rules
 **Canonical repositories** (read-mostly clones):
 - \`~/agent-skills\`
