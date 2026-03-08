@@ -43,7 +43,7 @@ Ensures **Issue-First** pattern: All implementation work tracked in Beads BEFORE
 
 ```typescript
 mcp__plugin_beads_beads__set_context(
-  workspace_root="/Users/fengning/prime-radiant-ai"
+  workspace_root="$HOME/prime-radiant-ai"
 )
 ```
 

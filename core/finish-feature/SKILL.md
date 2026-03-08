@@ -47,7 +47,7 @@ Ensures **clean completion** of epics/features: Verify work done, archive docs, 
 
 ```bash
 mcp__plugin_beads_beads__set_context(
-  workspace_root="/Users/fengning/prime-radiant-ai"
+  workspace_root="$HOME/prime-radiant-ai"
 )
 ```
 

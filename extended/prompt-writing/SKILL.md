@@ -107,52 +107,66 @@ When user asks for a delegated prompt, return:
 2) Optional short "Dispatcher Notes" (only if needed)
 3) Nothing else unless user asks
 
+## Before Emitting (Mandatory)
+
+STOP if ANY check fails:
+
+- [ ] `BEADS_EPIC` is concrete ID (e.g., `bd-sg2v.13`), not `<bd-...>`
+- [ ] `BEADS_SUBTASK` is concrete ID, not placeholder
+- [ ] No `/Users/...`, `/tmp/...`, or `/home/...` local paths
+- [ ] Paths are repo-relative or GitHub URLs
+- [ ] If Beads IDs unknown, resolve via `cd ~/bd && bd ready` first
+
+If you can't resolve: return blocker, don't emit prompt.
+
 ## Required Prompt Skeleton
+
+**NOTE**: Skeleton shows structure. Actual dispatched prompts must have concrete values.
 
 ```markdown
 you're a full-stack dev agent at a tiny fintech startup:
 
 ## DX Global Constraints (Always-On)
 1) NO WRITES in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
-2) Worktree first: `dx-worktree create <beads-id> <repo>`
+2) Worktree first: `dx-worktree create bd-sg2v.13.1 prime-radiant-ai`
 3) Before "done": run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
 4) Open draft PR after first real commit
 5) Final response MUST include `PR_URL` and `PR_HEAD_SHA`
 
 ## Assignment Metadata (Required)
-- MODE: <one lifecycle mode>
-- BEADS_EPIC: <bd-...>
-- BEADS_SUBTASK: <bd-....x>
-- BEADS_DEPENDENCIES: <comma-separated bd ids OR "none">
-- FEATURE_KEY: <bd-...>
+- MODE: initial_implementation
+- BEADS_EPIC: bd-sg2v.13  # ← actual ID, never <bd-...>
+- BEADS_SUBTASK: bd-sg2v.13.1
+- BEADS_DEPENDENCIES: bd-sg2v.12
+- FEATURE_KEY: bd-sg2v.13.1
 
 ## Outcome Enforcement (Required)
-- UPDATE_EXISTING_PR: <true|false>
-- PR_STATE_TARGET: <draft|ready_for_review>
-- REQUIRE_MERGE_READY: <true|false>
-- SELF_REPAIR_ON_CHECK_FAILURE: <true|false>
-- FINAL_RESPONSE_MODE: <standard|tech_lead_review|qa_findings|ci_repair_report>
+- UPDATE_EXISTING_PR: false
+- PR_STATE_TARGET: draft
+- REQUIRE_MERGE_READY: false
+- SELF_REPAIR_ON_CHECK_FAILURE: true
+- FINAL_RESPONSE_MODE: standard
 
 ## Cross-VM Source of Truth (Required)
-- PR_URL: <required if exists>
-- PR_HEAD_SHA: <required if exists>
+- PR_URL: https://github.com/stars-end/prime-radiant-ai/pull/937
+- PR_HEAD_SHA: abc123def456789...
 - Repo paths to read first:
-  - <path1>
-  - <path2>
+   - frontend/src/components/RootLayout.tsx
+   - frontend/package.json
 
-If PR_URL/PR_HEAD_SHA is not available yet, you must create/refresh branch and open a draft PR before finishing.
+If PR_URL/PR_HEAD_SHA is not available yet, create/refresh branch and open draft PR before finishing.
 
 ## Objective
-<single-sentence success condition>
+Implement shadcn/ui foundation with design tokens for V2 routes.
 
 ## Scope
-- In scope: <explicit>
-- Out of scope: <explicit>
+- In scope: Tailwind v4 setup, shadcn/ui v4 install, token configuration
+- Out of scope: MUI removal, AG Grid migration
 
 ## Acceptance Criteria
-1) <criterion>
-2) <criterion>
-3) <criterion>
+1) `pnpm --filter frontend build` succeeds
+2) `pnpm --filter frontend type-check` passes
+3) No MUI imports in modified files
 
 ## Execution Plan (Mandatory)
 Before coding, reply with:
@@ -162,27 +176,27 @@ Before coding, reply with:
 
 ## Required Deliverables
 - Code changes committed and pushed
-- Draft/updated PR
+- Draft PR created/updated
 - Validation summary
 - Return block:
-  - PR_URL: https://github.com/<org>/<repo>/pull/<n>
-  - PR_HEAD_SHA: <40-char sha>
-  - BEADS_SUBTASK: <bd-...>
+   - PR_URL: https://github.com/stars-end/prime-radiant-ai/pull/937
+   - PR_HEAD_SHA: abc123def456789...
+   - BEADS_SUBTASK: bd-sg2v.13.1
 
 ## Blockers Protocol
 If blocked, return exactly:
 - BLOCKED: <reason_code>
 - NEEDS: <single dependency/info needed>
 - NEXT_COMMANDS:
-  1) <command>
-  2) <command>
+   1) cd ~/bd && bd show bd-sg2v.13
+   2) cd ~/bd && bd ready
 
 ## Done Gate (Mandatory)
 Do not claim complete until:
-- changes are committed/pushed
-- draft PR exists
+- Changes committed/pushed
+- Draft PR exists
 - `dx-verify-clean.sh` passes
-- final response includes PR_URL and PR_HEAD_SHA
+- Final response includes PR_URL and PR_HEAD_SHA
 ```
 
 ## Cross-VM Guardrail (Critical)
@@ -192,6 +206,11 @@ If there is no PR yet, instruct delegate to create one early and then continue u
 - PR URL
 - HEAD SHA
 - repo-relative paths
+
+## Hardened Rule
+
+Prompts with `<bd-...>` placeholders or local paths in required fields are INVALID.
+Resolve context BEFORE generating, not during delegate execution.
 
 ## Relationship to `tech-lead-handoff`
 

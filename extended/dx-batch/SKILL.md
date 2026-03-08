@@ -90,7 +90,7 @@ PENDING -> IMPLEMENTING -> REVIEWING -> APPROVED
 ## Testing
 
 ```bash
-pytest -q /Users/fengning/agent-skills/tests/dx_batch
+pytest -q ~/agent-skills/tests/dx_batch
 ```
 
 ## Runtime Safety Notes

@@ -200,10 +200,10 @@ dx-runner feature-key-gate --worktree <path> --feature-key <bd-id>
 **Example rejection:**
 ```
 reason_code=canonical_worktree_forbidden
-rejected_path=/Users/fengning/agent-skills
+rejected_path=$HOME/agent-skills
 policy=workspace_first_v86
 remedy=dx-worktree create bd-xxx agent-skills
-ERROR: Mutating execution forbidden in canonical repo: /Users/fengning/agent-skills
+ERROR: Mutating execution forbidden in canonical repo
 Canonical repos are clean mirrors. Use: dx-worktree create bd-xxx agent-skills
 ```
 
