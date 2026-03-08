@@ -11,15 +11,39 @@ Operate Fleet Sync with low founder load:
 
 ## Canonical Commands
 
-### Host convergence
+### Fleet-Wide Converge (V2.2)
+
+One-command converge across all canonical VMs:
 
 ```bash
-~/agent-skills/scripts/dx-fleet-install.sh --apply --json --state-dir ~/.dx-state/fleet
-~/agent-skills/scripts/dx-fleet-check.sh --mode daily --json --state-dir ~/.dx-state/fleet
-~/agent-skills/scripts/dx-fleet-check.sh --mode weekly --json --state-dir ~/.dx-state/fleet
+# Fleet-wide drift check
+~/agent-skills/scripts/dx-fleet.sh converge --check --json
+
+# Fleet-wide apply
+~/agent-skills/scripts/dx-fleet.sh converge --apply --json
+
+# Fleet-wide repair
+~/agent-skills/scripts/dx-fleet.sh converge --repair --json
 ```
 
-### Fleet views
+Returns non-zero if any host is red.
+
+### Host-level convergence
+
+```bash
+~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json --state-dir ~/.dx-state/fleet
+~/agent-skills/scripts/dx-mcp-tools-sync.sh --apply --json --state-dir ~/.dx-state/fleet
+~/agent-skills/scripts/dx-mcp-tools-sync.sh --repair --json --state-dir ~/.dx-state/fleet
+```
+
+### Fleet health checks
+
+```bash
+~/agent-skills/scripts/dx-fleet.sh check --mode daily --json
+~/agent-skills/scripts/dx-fleet.sh check --mode weekly --json
+```
+
+### Fleet audit
 
 ```bash
 ~/agent-skills/scripts/dx-fleet.sh audit --daily --json --state-dir ~/.dx-state/fleet
@@ -30,6 +54,60 @@ Operate Fleet Sync with low founder load:
 
 ```bash
 ~/agent-skills/scripts/dx-fleet.sh repair --json --state-dir ~/.dx-state/fleet
+```
+
+## Fail-Closed Semantics (V2.2)
+
+### MCP Overall Truth Model
+
+The `overall` status is computed from BOTH tool rows AND file rows:
+
+- If `tools_fail > 0` → `overall = "red"` (no exceptions)
+- If `files_fail > 0` → `overall = "red"`
+- If `warn > 0` → `overall = "yellow"`
+- Otherwise → `overall = "green"`
+
+### Runtime Error Fail-Closed
+
+On runtime errors, `dx-mcp-tools-sync.sh`:
+
+1. Removes stale cached JSON fallback
+2. Emits synthetic red JSON with `reason_code=mcp_tools_sync_runtime_error`
+3. Exits non-zero
+
+This ensures **no false-green** under runtime failures.
+
+### Strict Freshness Enforcement
+
+Snapshots older than threshold (default: 6 hours) are rejected:
+
+- `local_snapshot_stale`: Local snapshot too old
+- `remote_snapshot_stale`: Remote snapshot too old
+- `remote_snapshot_missing`: Cannot fetch remote snapshot
+
+### Operator One-Command Converge + Repair Loop
+
+```bash
+# 1. Check fleet-wide health
+~/agent-skills/scripts/dx-fleet.sh converge --check --json
+
+# 2. If red, apply repairs
+~/agent-skills/scripts/dx-fleet.sh converge --repair --json
+
+# 3. Verify full recovery
+~/agent-skills/scripts/dx-fleet.sh converge --check --json | jq '.overall == "green"'
+```
+
+For single-host issues:
+```bash
+# Diagnose
+~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json | jq '.tools[] | select(.status=="fail")'
+
+# Repair
+~/agent-skills/scripts/dx-mcp-tools-sync.sh --repair --json
+
+# Verify
+~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json | jq '.overall == "green"'
 ```
 
 ## Cross-VM Rollout
