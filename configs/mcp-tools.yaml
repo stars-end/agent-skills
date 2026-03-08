@@ -9,9 +9,9 @@ strategy:
 tools:
   context-plus:
     enabled: false
-    version: "0.4.2"
-    install_cmd: "npx -y @forloopcodes/contextplus@0.4.2"
-    health_cmd: "npx -y @forloopcodes/contextplus@0.4.2 --version"
+    version: "1.0.7"
+    install_cmd: "npm install -g contextplus@1.0.7"
+    health_cmd: "contextplus --version"
     target_ides:
       - codex-cli
       - claude-code
@@ -22,25 +22,25 @@ tools:
       command: "npx"
       args:
         - "-y"
-        - "@forloopcodes/contextplus@0.4.2"
+        - "contextplus"
         - "--transport"
         - "stdio"
     runtime: node
 
   cass-memory:
     enabled: false
-    version: "1.0.0"
-    install_cmd: "bun install --global cass-memory-system@1.0.0"
-    health_cmd: "cass-memory --version"
+    version: "0.2.3"
+    install_cmd: "npm install -g Dicklesworthstone/cass_memory_system"
+    health_cmd: "cm --version"
     target_ides:
       - codex-cli
       - claude-code
       - opencode
     mcp:
       type: stdio
-      command: "cass-memory"
-      args: []
-    runtime: bun
+      command: "cm"
+      args: ["serve"]
+    runtime: node
     sharing:
       default: local_only
       opt_in_env: CASS_SHARE_MEMORY
@@ -48,9 +48,9 @@ tools:
 
   serena:
     enabled: false
-    version: "0.9.1"
-    install_cmd: "uv tool install serena==0.9.1"
-    health_cmd: "serena --version"
+    version: "0.1.4"
+    install_cmd: "uv tool install git+https://github.com/oraios/serena.git"
+    health_cmd: "serena start-mcp-server --help"
     target_ides:
       - codex-cli
       - claude-code
@@ -59,13 +59,13 @@ tools:
     mcp:
       type: stdio
       command: "serena"
-      args: []
+      args: ["start-mcp-server"]
     runtime: python
 
   llm-tldr:
     enabled: true
     version: "1.5.2"
-    install_cmd: "uv tool install \"llm-tldr==1.5.2\""
+    install_cmd: "uv tool install "llm-tldr==1.5.2""
     health_cmd: "tldr-mcp --version || llm-tldr --version"
     target_ides:
       - codex-cli
