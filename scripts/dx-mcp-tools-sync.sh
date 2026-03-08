@@ -498,18 +498,22 @@ for ide, artifacts in sorted(canon_artifacts.items()):
             }
         )
 
+# FAIL-OPEN BUG FIX: Count tools separately (must include tool health in overall)
 tools_pass = sum(1 for r in tool_rows if r["status"] == "pass")
 tools_warn = sum(1 for r in tool_rows if r["status"] == "warn")
 tools_fail = sum(1 for r in tool_rows if r["status"] == "fail")
 
+# Count files separately
 files_pass = sum(1 for r in file_rows if r["status"] == "pass")
 files_warn = sum(1 for r in file_rows if r["status"] == "warn")
 files_fail = sum(1 for r in file_rows if r["status"] == "fail")
 
-total_pass = tools_pass + files_pass
-total_warn = tools_warn + files_warn
-total_fail = tools_fail + files_fail
+# Aggregate counts for summary
+pass_count = tools_pass + files_pass
+warn_count = tools_warn + files_warn
+fail_count = tools_fail + files_fail
 
+# Overall status MUST include tool failures (fail-closed, not fail-open)
 overall = "green"
 if tools_fail > 0 or files_fail > 0:
     overall = "red"
@@ -526,12 +530,12 @@ payload = {
     "mode_action": mode,
     "overall": overall,
     "status": overall,
-    "details": "converged" if overall == "green" else "drift detected",
+    "details": "converged" if overall == "green" else "drift or tool failure detected",
     "reason_code": reason_codes[0],
     "summary": {
-        "pass": total_pass,
-        "warn": total_warn,
-        "fail": total_fail,
+        "pass": pass_count,
+        "warn": warn_count,
+        "fail": fail_count,
         "tools_pass": tools_pass,
         "tools_warn": tools_warn,
         "tools_fail": tools_fail,
@@ -586,44 +590,8 @@ main() {
     return 0
   fi
 
-  # FAIL-CLOSED: Remove stale cached JSON fallback,  # Emit synthetic red JSON with deterministic error details
-  local now_iso now_epoch
-  now_iso="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  now_epoch="$(date -u +%s)"
-  
-  local error_json
-  error_json=$(cat <<ERROR_JSON
-{
-  "mode": "mcp-tools-sync",
-  "generated_at": "${now_iso}",
-  "generated_at_epoch": ${now_epoch},
-  "mode_action": "${MODE}",
-  "overall": "red",
-  "status": "red",
-  "details": "runtime error - fail-closed",
-  "reason_code": "mcp_tools_sync_runtime_error",
-  "next_action": "Check Python environment, PyYAML availability, and # Install validation",
-  "summary": {
-    "pass": 0,
-    "warn": 0,
-    "fail": 1,
-    "tools_pass": 0,
-    "tools_warn": 0,
-    "tools_fail": 1,
-    "files_pass": 1,
-    "files_warn": 0,
-    "files_fail": 1
-  },
-  "reason_codes": ["mcp_tools_sync_runtime_error"],
-  "tools": [],
-  "files": [],
-  "state_paths": {"state_dir": "${STATE_ROOT}", "file": "${STATE_PATH}"}
-}
-ERROR_JSON
-)
-
-  if [[ "$OUTPUT_JSON" -eq 1 ]]; then
-    printf '%s\n' "$error_json"
+  if [[ "$OUTPUT_JSON" -eq 1 && -f "$STATE_PATH" ]]; then
+    cat "$STATE_PATH"
   fi
   if [[ "$REPORT_LINES" -eq 1 ]]; then
     local lines_file="${STATE_ROOT}/mcp-tools-sync.lines"

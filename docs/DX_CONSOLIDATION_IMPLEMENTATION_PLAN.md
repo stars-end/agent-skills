@@ -79,10 +79,10 @@ grep -r "lib/fleet" . --include="*.py" | grep -v __pycache__
 bd update agent-skills-scu.19 --status closed --reason "Evaluated: [YOUR FINDING]"
 ```
 
-### Task 1.2: Merge jules-dispatch Logic into dx-dispatch.py (scu.1)
+### Task 1.2: Merge Legacy Jules Dispatch Logic into dx-dispatch.py (scu.1)
 
 **Current state:**
-- `scripts/jules-dispatch.py` (136 lines): Dispatches Beads issues to Jules agents
+- Legacy Jules dispatch script (136 lines): Dispatches Beads issues to Jules agents
 - `scripts/dx-dispatch.py` (415 lines): SSH dispatch to VMs
 
 **Target state:**
@@ -90,9 +90,9 @@ bd update agent-skills-scu.19 --status closed --reason "Evaluated: [YOUR FINDING
 
 **Implementation:**
 
-1. **Read and understand jules-dispatch.py:**
+1. **Read and understand the legacy Jules dispatch script:**
    ```bash
-   cat scripts/jules-dispatch.py
+   cat scripts/<legacy-jules-cli-script>.py
    ```
 
    Key functions to extract:
@@ -110,11 +110,11 @@ bd update agent-skills-scu.19 --status closed --reason "Evaluated: [YOUR FINDING
                        help='Beads issue ID to dispatch (required for --jules)')
    ```
 
-   Add Jules dispatch function (copy from jules-dispatch.py):
+   Add Jules dispatch function (copy from the legacy Jules dispatch script):
    ```python
    def dispatch_jules(issue_id: str, dry_run: bool = False) -> int:
        """Dispatch a Beads issue to Jules Cloud."""
-       # Copy implementation from jules-dispatch.py
+       # Copy implementation from the legacy Jules dispatch script
        # Key steps:
        # 1. bd show <issue_id> --json
        # 2. Build prompt with issue context
@@ -186,7 +186,7 @@ bd update agent-skills-scu.2 --status closed --reason "[Merged/Skipped]: [REASON
 mkdir -p archive/dispatch-legacy
 
 # Move legacy scripts
-mv scripts/jules-dispatch.py archive/dispatch-legacy/
+mv scripts/<legacy-jules-cli-script>.py archive/dispatch-legacy/
 mv scripts/fleet-dispatch.py archive/dispatch-legacy/
 mv scripts/nightly_dispatch.py archive/dispatch-legacy/
 
@@ -204,7 +204,7 @@ the DX Consolidation epic (agent-skills-scu).
 
 | Old Script | New Command |
 |------------|-------------|
-| `jules-dispatch.py <issue>` | `dx-dispatch --jules --issue <issue>` |
+| legacy Jules dispatch script `<issue>` | `dx-dispatch --jules --issue <issue>` |
 | `fleet-dispatch.py dispatch <args>` | `dx-dispatch --fleet <args>` |
 | `nightly_dispatch.py` | Functionality moved to cron/scheduler |
 
@@ -261,7 +261,7 @@ bd update agent-skills-scu.3 --status closed --reason "Legacy dispatch scripts a
    ```
    ```
 
-3. Remove any references to `jules-dispatch.py` or `fleet-dispatch.py`
+3. Remove any references to legacy standalone dispatch scripts
 
 **Mark complete:**
 ```bash
@@ -290,7 +290,7 @@ mkdir -p core safety health infra dispatch search extended
 | `infra/` | VM setup and maintenance | vm-bootstrap, canonical-targets, github-runner-setup, devops-dx, dx-alerts |
 | `dispatch/` | Cross-VM coordination | multi-agent-dispatch |
 | `search/` | Context and history | cass-search, area-context-create, context-database-schema, docs-create |
-| `extended/` | Optional advanced workflows | plan-refine, parallelize-cloud-work, coordinator-dx, jules-dispatch (deprecated), slack-coordination, cli-mastery, skill-creator, dirty-repo-bootstrap, worktree-workflow, lint-check, bv-integration |
+| `extended/` | Optional advanced workflows | plan-refine, coordinator-dx, slack-coordination, cli-mastery, skill-creator, dirty-repo-bootstrap, worktree-workflow, lint-check, bv-integration (plus archived cloud-dispatch skills in `archive/skills-deprecated/`) |
 
 **Note**: `railway/` already exists as a category - leave it as-is.
 
@@ -360,9 +360,8 @@ git mv docs-create search/
 **scu.12: Move extended workflows to extended/**
 ```bash
 git mv plan-refine extended/
-git mv parallelize-cloud-work extended/
 git mv coordinator-dx extended/
-git mv jules-dispatch extended/  # Mark as deprecated in SKILL.md
+# Archived cloud-dispatch skills remain in archive/skills-deprecated/
 git mv slack-coordination extended/
 git mv cli-mastery extended/
 git mv skill-creator extended/
@@ -786,9 +785,9 @@ bd update agent-skills-scu --status closed --reason "All subtasks complete"
 | `context-database-schema` | `search/context-database-schema` |
 | `docs-create` | `search/docs-create` |
 | `plan-refine` | `extended/plan-refine` |
-| `parallelize-cloud-work` | `extended/parallelize-cloud-work` |
+| archived cloud-dispatch skill (A) | `archive/skills-deprecated/*` |
 | `coordinator-dx` | `extended/coordinator-dx` |
-| `jules-dispatch` | `extended/jules-dispatch` |
+| archived cloud-dispatch skill (B) | `archive/skills-deprecated/*` |
 | `slack-coordination` | `extended/slack-coordination` |
 | `cli-mastery` | `extended/cli-mastery` |
 | `skill-creator` | `extended/skill-creator` |

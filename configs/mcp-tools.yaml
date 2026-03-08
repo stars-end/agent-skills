@@ -9,9 +9,10 @@ strategy:
 tools:
   context-plus:
     enabled: false
-    version: "1.0.7"
-    install_cmd: "npm install -g contextplus@1.0.7"
-    health_cmd: "contextplus --version"
+    disabled_reason: "Package @forloopcodes/contextplus not found in npm registry (404). Re-evaluate if package is republished or fork is available."
+    version: "0.4.2"
+    install_cmd: "npx -y @forloopcodes/contextplus@0.4.2"
+    health_cmd: "npx -y @forloopcodes/contextplus@0.4.2 --version"
     target_ides:
       - codex-cli
       - claude-code
@@ -22,25 +23,26 @@ tools:
       command: "npx"
       args:
         - "-y"
-        - "contextplus"
+        - "@forloopcodes/contextplus@0.4.2"
         - "--transport"
         - "stdio"
     runtime: node
 
   cass-memory:
     enabled: false
-    version: "git"  # No stable version - installed from GitHub
-    install_cmd: "npm install -g Dicklesworthstone/cass_memory_system"
-    health_cmd: "cm --version"
+    disabled_reason: "Requires bun runtime which is not available on canonical hosts. Install bun first or find npm-equivalent alternative."
+    version: "1.0.0"
+    install_cmd: "bun install --global cass-memory-system@1.0.0"
+    health_cmd: "cass-memory --version"
     target_ides:
       - codex-cli
       - claude-code
       - opencode
     mcp:
       type: stdio
-      command: "cm"
-      args: ["serve"]
-    runtime: node
+      command: "cass-memory"
+      args: []
+    runtime: bun
     sharing:
       default: local_only
       opt_in_env: CASS_SHARE_MEMORY
@@ -48,9 +50,10 @@ tools:
 
   serena:
     enabled: false
-    version: "git-main"
-    install_cmd: "uv tool install git+https://github.com/oraios/serena.git"
-    health_cmd: "serena start-mcp-server --help"
+    disabled_reason: "PyPI package serena==0.9.1 provides no executable entrypoint (uv tool install fails). Re-evaluate if package is fixed or find alternative."
+    version: "0.9.1"
+    install_cmd: "uv tool install serena==0.9.1"
+    health_cmd: "serena --version"
     target_ides:
       - codex-cli
       - claude-code
@@ -59,7 +62,7 @@ tools:
     mcp:
       type: stdio
       command: "serena"
-      args: ["start-mcp-server"]
+      args: []
     runtime: python
 
   llm-tldr:

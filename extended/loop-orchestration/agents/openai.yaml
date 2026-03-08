@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Loop Orchestration"
+  short_description: "Codex-first dx-runner sleep/check/re-dispatch loop builder"
+  default_prompt: "Use $loop-orchestration to draft a Codex-first loop prompt for dx-runner dispatch, bounded sleep polling, review, and deterministic re-dispatch until merge-ready or blocked."

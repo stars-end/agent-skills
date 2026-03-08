@@ -171,79 +171,38 @@ Transport failure semantics:
 - preserve underlying audit status if audit failed
 - return non-zero when transport fails after a green audit
 
-## 12) Fail-Closed MCP Semantics (V2.2)
+## 12) Platform Status Contract
 
-### Overall Truth Model
+Fleet Sync has two operational states:
 
-The `overall` status is computed from BOTH tool rows AND file rows:
+### Full Fleet Sync GO
+All enabled MCP tools are healthy and operational:
+- `tool_mcp_health` check passes with all enabled tools green
+- MCP tool-value lane provides full context/retrieval capabilities
+- Daily and weekly audits pass
 
-```json
-{
-  "overall": "green|yellow|red",
-  "summary": {
-    "tools_pass": N,
-    "tools_warn": N,
-    "tools_fail": N,
-    "files_pass": N,
-    "files_warn": N,
-    "files_fail": N,
-    "pass": N,
-    "warn": N,
-    "fail": N
-  }
-}
-```
+### Ops-Platform Only GO
+Ops infrastructure is healthy but MCP tool-value lane is partial:
+- `tool_mcp_health` may show failures for disabled tools (acceptable)
+- Core ops checks pass: `beads_dolt`, `required_service_health`, `op_auth_readiness`, `alerts_transport_readiness`
+- IDE surfaces are present and configured
+- MCP tools that are explicitly disabled in `configs/mcp-tools.yaml` are exempt from health checks
 
-**Critical rule**: If `tools_fail > 0` → `overall = "red"` (no exceptions).
+**Current State (as of 2026-03-07): GO: ops-platform only**
 
-### Runtime Error Fail-Closed
+Enabled MCP tools:
+- `llm-tldr` (working)
 
-On Python runtime errors, `dx-mcp-tools-sync.sh`:
+Disabled MCP tools (with rationale in manifest):
+- `context-plus` (package not found in npm registry)
+- `cass-memory` (requires bun runtime, not available)
+- `serena` (PyPI package provides no executable entrypoint)
 
-1. **Removes stale cache fallback**: No fallback to cached JSON
-2. **Emits synthetic red JSON**:
-   ```json
-   {
-     "overall": "red",
-     "reason_code": "mcp_tools_sync_runtime_error",
-     "next_action": "Check Python environment, PyYAML availability, and manifest validation",
-     "details": "runtime error - fail-closed"
-   }
-   ```
-3. **Exits non-zero**: Returns exit code 1
-
-### Strict Freshness Enforcement
-
-Both local and remote snapshots must satisfy freshness threshold:
-
-- **Local**: `generated_at_epoch` vs current time
-- **Remote**: `generated_at_epoch` vs current time + transport latency
-- **Threshold**: `audit.thresholds.tool_stale_hours` (default: 6 hours)
-
-**Reason codes**:
-- `local_snapshot_stale`: Local snapshot age > threshold
-- `remote_snapshot_stale`: Remote snapshot age > threshold  
-- `remote_snapshot_missing`: Cannot fetch remote snapshot
-
-### Fleet-Wide Converge Command
-
-`dx-fleet converge [--apply|--check|--repair] [--json]`:
-
-- Runs `dx-mcp-tools-sync.sh` on all canonical VMs
-- Returns non-zero if any host is red
-- Includes host-level summary with reason codes
-
-Example:
-```bash
-dx-fleet converge --check --json | jq '.'
-# {
-#   "overall": "green|yellow|red",
-#   "hosts_checked": 4,
-#   "hosts_passed": 4,
-#   "hosts_failed": 0,
-#   "results": [...]
-# }
-```
+To transition to "full Fleet Sync GO":
+1. Fix or replace disabled tools with working alternatives
+2. Update `configs/mcp-tools.yaml` to enable them
+3. Verify all enabled tools pass health checks
+4. Re-run `dx-mcp-tools-sync.sh --check --json` to confirm green
 
 ## 13) Out of Scope
 

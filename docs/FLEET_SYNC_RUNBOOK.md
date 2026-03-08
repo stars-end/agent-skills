@@ -144,6 +144,35 @@ Dry-run checks:
 - `red`: run repair on failing hosts and rerun checks
 - `unknown`: treat as incident if repeated and investigate host reachability/state freshness
 
+## Platform Status Contract
+
+Fleet Sync operates in one of two states:
+
+### Full Fleet Sync GO
+All enabled MCP tools are healthy. Expect green daily/weekly audits across all hosts.
+
+### Ops-Platform Only GO
+Ops infrastructure is healthy, but the MCP tool-value lane is partial.
+- This is acceptable when tools are explicitly disabled in `configs/mcp-tools.yaml`
+- `tool_mcp_health` will show green because only enabled tools are health-checked
+- Core ops remain operational: Beads, GitHub, Railway, 1Password, Slack alerts
+
+**Current Status: GO: ops-platform only**
+
+Disabled tools (see `configs/mcp-tools.yaml` for rationale):
+- `context-plus`: npm package not found
+- `cass-memory`: requires bun runtime
+- `serena`: PyPI package provides no executable
+
+Enabled tools:
+- `llm-tldr`: working
+
+**Operator expectations:**
+- Daily/weekly audits should pass (green) if ops checks pass
+- If `tool_mcp_health` fails, check if tool is enabled in manifest - disabled tools are not health-checked
+- To add a new tool: add to `configs/mcp-tools.yaml` with `enabled: true`, run `dx-mcp-tools-sync.sh --apply`
+- To disable a broken tool: set `enabled: false` with `disabled_reason`, the tool will be excluded from health checks
+
 ## Freshness / Remote Snapshot Rules
 
 Remote host payloads fail deterministically when:

@@ -44,7 +44,7 @@ Exit codes:
   0  Success (snapshot created and pushed)
   1  Repository is already clean (no snapshot needed)
   2  Git operation failed
-  3  Beads sync failed
+  3  Legacy repo-local Beads artifacts detected
 
 EOF
   exit 0
@@ -140,25 +140,12 @@ if ! git checkout -b "$BRANCH_NAME" 2>/dev/null; then
   fi
 fi
 
-# Check if .beads/issues.jsonl is modified
-BEADS_MODIFIED=0
-if git status --porcelain | grep -q ".beads/issues.jsonl"; then
-  BEADS_MODIFIED=1
-  log_warn "Detected .beads/issues.jsonl modifications. Running 'bd sync' first..."
-
-  if ! command -v bd >/dev/null 2>&1; then
-    log_error "Beads CLI (bd) not found, but .beads/issues.jsonl is modified."
-    log_error "Please install Beads CLI or manually sync before committing."
-    exit 3
-  fi
-
-  if ! bd sync; then
-    log_error "Beads sync failed. Cannot safely commit .beads/issues.jsonl."
-    log_error "Please resolve Beads sync issues manually."
-    exit 3
-  fi
-
-  log_info "Beads sync completed successfully"
+# Repo-local .beads state is compatibility-only in the Dolt fleet contract.
+if git status --porcelain | grep -qE '(^| )\.beads/'; then
+  log_error "Detected repo-local .beads changes in $REPO_NAME"
+  log_error "Canonical Beads state lives in ~/bd/.beads; do not snapshot repo-local .beads artifacts."
+  log_error "Remove or ignore the repo-local .beads changes, then rerun this snapshot."
+  exit 3
 fi
 
 # Add all changes
