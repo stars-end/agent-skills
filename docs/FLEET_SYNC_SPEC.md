@@ -188,21 +188,29 @@ Ops infrastructure is healthy but MCP tool-value lane is partial:
 - IDE surfaces are present and configured
 - MCP tools that are explicitly disabled in `configs/mcp-tools.yaml` are exempt from health checks
 
-**Current State (as of 2026-03-07): GO: ops-platform only**
+**Current State (as of 2026-03-08): GO: ops-platform only (partial MCP tool-value lane)**
 
 Enabled MCP tools:
-- `llm-tldr` (working)
+- `llm-tldr` (1.5.2) - Context slicing for codebases
+- `contextplus` (1.0.7) - Semantic intelligence for engineering
 
 Disabled MCP tools (with rationale in manifest):
-- `context-plus` (package not found in npm registry)
-- `cass-memory` (requires bun runtime, not available)
+- `cass-memory` (no npm package published, requires building from source)
 - `serena` (PyPI package provides no executable entrypoint)
 
+**Fleet Status:**
+- All 4 canonical hosts: green
+- Daily audit: 20/20 checks pass
+- Weekly audit: 36/36 checks pass
+- MCP tools: 2/2 enabled tools healthy
+- IDE surfaces: 5 IDEs x 4 hosts = 20 configs aligned
+
 To transition to "full Fleet Sync GO":
-1. Fix or replace disabled tools with working alternatives
-2. Update `configs/mcp-tools.yaml` to enable them
-3. Verify all enabled tools pass health checks
-4. Re-run `dx-mcp-tools-sync.sh --check --json` to confirm green
+1. Publish cass-memory to npm or build from GitHub
+2. Find alternative for serena or await package fix
+3. Update `configs/mcp-tools.yaml` to enable them
+4. Verify all enabled tools pass health checks
+5. Re-run `dx-mcp-tools-sync.sh --check --json` to confirm green
 
 ## 13) Out of Scope
 

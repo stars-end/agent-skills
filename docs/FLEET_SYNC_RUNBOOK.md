@@ -157,15 +157,22 @@ Ops infrastructure is healthy, but the MCP tool-value lane is partial.
 - `tool_mcp_health` will show green because only enabled tools are health-checked
 - Core ops remain operational: Beads, GitHub, Railway, 1Password, Slack alerts
 
-**Current Status: GO: ops-platform only**
+**Current Status: GO: ops-platform only (partial MCP tool-value lane)**
 
-Disabled tools (see `configs/mcp-tools.yaml` for rationale):
-- `context-plus`: npm package not found
-- `cass-memory`: requires bun runtime
-- `serena`: PyPI package provides no executable
+Enabled tools (2/4):
+- `llm-tldr` (1.5.2): context slicing, working
+- `contextplus` (1.0.7): semantic intelligence, working
 
-Enabled tools:
-- `llm-tldr`: working
+Disabled tools (2/4, see `configs/mcp-tools.yaml` for rationale):
+- `cass-memory`: no npm package published, requires building from source
+- `serena`: PyPI package provides no executable entrypoint
+
+**Fleet Status (2026-03-08):**
+- All 4 hosts: green
+- Daily audit: 20/20 checks pass
+- Weekly audit: 36/36 checks pass
+- MCP tools: 2/2 enabled tools healthy
+- IDE surfaces: 20/20 configs aligned
 
 **Operator expectations:**
 - Daily/weekly audits should pass (green) if ops checks pass

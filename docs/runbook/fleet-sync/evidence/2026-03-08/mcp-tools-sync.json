@@ -1,0 +1,123 @@
+{
+  "mode": "mcp-tools-sync",
+  "generated_at": "2026-03-08T21:21:56Z",
+  "generated_at_epoch": 1773004916,
+  "mode_action": "check",
+  "overall": "red",
+  "status": "red",
+  "details": "drift or tool failure detected",
+  "reason_code": "ide_config_drift",
+  "summary": {
+    "pass": 7,
+    "warn": 0,
+    "fail": 1,
+    "tools_pass": 2,
+    "tools_warn": 0,
+    "tools_fail": 0,
+    "files_pass": 5,
+    "files_warn": 0,
+    "files_fail": 1,
+    "tools_total": 2,
+    "files_total": 6
+  },
+  "reason_codes": [
+    "ide_config_drift"
+  ],
+  "tools": [
+    {
+      "tool": "context-plus",
+      "version": "1.0.7",
+      "status": "pass",
+      "severity": "low",
+      "details": "healthy",
+      "install_rc": 0,
+      "health_rc": 0,
+      "install_output": "",
+      "health_output": "1.0.7"
+    },
+    {
+      "tool": "llm-tldr",
+      "version": "1.5.2",
+      "status": "pass",
+      "severity": "low",
+      "details": "healthy",
+      "install_rc": 0,
+      "health_rc": 0,
+      "install_output": "",
+      "health_output": "usage: tldr-mcp [-h] [--project PROJECT]\ntldr-mcp: error: unrecognized arguments: --version\ntldr 1.5.2"
+    }
+  ],
+  "files": [
+    {
+      "ide": "antigravity",
+      "path": "/Users/fengning/.gemini/antigravity/mcp_config.json",
+      "status": "pass",
+      "severity": "low",
+      "details": "in sync",
+      "managed_tools": [
+        "context-plus"
+      ],
+      "hash": "fad3c7793b5abaec788324da4ff364ad0a15c98128ca11c5a06390968c494d10"
+    },
+    {
+      "ide": "claude-code",
+      "path": "/Users/fengning/.claude.json",
+      "status": "pass",
+      "severity": "low",
+      "details": "in sync",
+      "managed_tools": [
+        "context-plus",
+        "llm-tldr"
+      ],
+      "hash": "e7ea5a4cd6897806f22fdf5d68da0e0f7323f9a56454158ec3ae4c3e9ab64d39"
+    },
+    {
+      "ide": "codex-cli",
+      "path": "/Users/fengning/.codex/config.toml",
+      "status": "fail",
+      "severity": "high",
+      "details": "missing section for context-plus",
+      "managed_tools": [
+        "context-plus",
+        "llm-tldr"
+      ],
+      "hash": "02a2b2f274e385f61b0269650e40574f4c44f8acde2717b631108230f40c6f0b"
+    },
+    {
+      "ide": "gemini-cli",
+      "path": "/Users/fengning/.gemini/antigravity/mcp_config.json",
+      "status": "pass",
+      "severity": "low",
+      "details": "in sync",
+      "managed_tools": [
+        "llm-tldr"
+      ],
+      "hash": "fad3c7793b5abaec788324da4ff364ad0a15c98128ca11c5a06390968c494d10"
+    },
+    {
+      "ide": "opencode",
+      "path": "/Users/fengning/.opencode/config.json",
+      "status": "pass",
+      "severity": "low",
+      "details": "in sync",
+      "managed_tools": [
+        "context-plus",
+        "llm-tldr"
+      ],
+      "hash": "3d543317c2581b4fd098bd5608aa58b3cfa732b5d13a1a9b8944c6f303db5600"
+    },
+    {
+      "ide": "gemini-cli",
+      "path": "/Users/fengning/.gemini/GEMINI.md",
+      "status": "pass",
+      "severity": "low",
+      "details": "present",
+      "managed_tools": [],
+      "hash": "ad6f8c4121f2ea0162e2e3213cf488292086745ef28e82998bc52ae3842376a4"
+    }
+  ],
+  "state_paths": {
+    "state_dir": "/Users/fengning/.dx-state/fleet",
+    "file": "/Users/fengning/.dx-state/fleet/mcp-tools-sync.json"
+  }
+}
