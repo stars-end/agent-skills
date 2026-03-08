@@ -334,7 +334,7 @@ done
 ❌ Include backup files in active listings
 ❌ Exceed 500 lines in main SKILL.md (use resources/)
 ❌ Skip confidence filtering (respect thresholds)
-❌ Forget to update skill-rules.json (auto-activation)
+❌ Treat legacy `skill-rules.json` updates as required
 ❌ Create skills for areas with <5 files (too small)
 
 ## What This Skill Does
