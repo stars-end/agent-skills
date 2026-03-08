@@ -1225,30 +1225,32 @@ class WaveOrchestrator:
         return True
 
     def _dispatch_implement(self, item):
-        # bd-kuhj.3: Workspace-first gate - reject canonical paths
-        workspace_path = ARTIFACT_BASE / "worktrees" / item.beads_id
-        is_valid, reason_code, exit_code = validate_workspace_path(workspace_path)
+        # bd-kuhj.3: Workspace-first gate - validate actual execution environment
+        # dx-runner will infer worktree from prompt file location, so validate that
+        # Also validate that we're not dispatching from a canonical repo cwd
 
-        if not is_valid:
+        # Check 1: Current working directory must not be canonical
+        cwd_path = Path.cwd()
+        if is_canonical_repo_path(cwd_path):
             item.status, item.error = (
                 ItemStatus.FAILED,
-                f"Workspace validation failed: {reason_code}",
+                f"Cannot dispatch from canonical repo: {cwd_path}",
             )
-            item.reason_code = reason_code
+            item.reason_code = f"canonical_cwd_forbidden:{cwd_path}"
             self.artifacts.write_error_outcome(
                 item.beads_id,
                 Phase.IMPLEMENT,
                 item.attempt,
-                f"canonical_worktree_forbidden: {workspace_path}",
+                f"canonical_cwd_forbidden: dispatch attempted from {cwd_path}",
             )
             self._release_lease(item)
             self.save_state()
             print(
-                f"ERROR: {item.beads_id} blocked: {reason_code}",
+                f"ERROR: {item.beads_id} blocked: dispatch from canonical cwd {cwd_path}",
                 file=sys.stderr,
             )
             print(
-                f"Remedy: dx-worktree create {item.beads_id} <repo>",
+                f"Remedy: cd /tmp/agents && dx-batch start ...",
                 file=sys.stderr,
             )
             return
@@ -1257,7 +1259,7 @@ class WaveOrchestrator:
         prompt_file = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.implement.prompt"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
 
-        # bd-kuhj.3: Also validate prompt file location
+        # Check 2: Prompt file location (dx-runner infers worktree from this)
         is_valid_pf, reason_code_pf, _ = validate_workspace_path(prompt_file.parent)
         if not is_valid_pf:
             item.status, item.error = (
@@ -1273,6 +1275,14 @@ class WaveOrchestrator:
             )
             self._release_lease(item)
             self.save_state()
+            print(
+                f"ERROR: {item.beads_id} blocked: {reason_code_pf}",
+                file=sys.stderr,
+            )
+            print(
+                f"Remedy: dx-worktree create {item.beads_id} <repo>",
+                file=sys.stderr,
+            )
             return
 
         prompt_file.write_text(prompt)
