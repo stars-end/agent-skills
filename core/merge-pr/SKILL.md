@@ -576,13 +576,14 @@ AI:
 
 ---
 
-**Last Updated:** 2025-11-13
+**Last Updated:** 2026-03-08
 **Related Skills:** create-pull-request, fix-pr-feedback, sync-feature-branch
 **Helper Scripts:** bd-link-pr
 **References:**
 - PR workflow: AGENTS.md
-- Beads integration: .claude/skills/beads-workflow/SKILL.md
+- Beads integration: `~/agent-skills/core/beads-workflow/SKILL.md`
 
 **Changelog:**
+- 2026-03-08: Updated canonical skill routing, removed legacy path references
 - 2025-11-13: Initial creation with CI verification, approval checking, mandatory user confirmation
 - 2025-11-13: **BREAKING** - Changed to human-merge workflow (Option A). AI prepares (closes Beads on feature branch), human merges via web UI, AI cleans up after confirmation. Fixes gh pr merge local cleanup failures.

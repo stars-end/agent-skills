@@ -756,12 +756,13 @@ AI:
 
 ---
 
-**Last Updated:** 2025-01-13
+**Last Updated:** 2026-03-08
 **Related Skills:** create-pull-request, sync-feature-branch, beads-workflow
 **Helper Scripts:** bd-link-pr
 **References:**
 - PR workflow: AGENTS.md
-- Beads integration: .claude/skills/beads-workflow/SKILL.md
+- Beads integration: `~/agent-skills/core/beads-workflow/SKILL.md`
 
 **Changelog:**
+- 2026-03-08: Updated canonical skill routing, removed legacy path references
 - 2025-01-13: Added manual triage mode for user-reported bugs, mandatory discussion phase, auto-commit per bug, CLI-first pattern

@@ -1,12 +1,13 @@
 ---
 name: docs-create
 description: |
-  Create epic-specific documentation skill with external reference docs. MUST BE USED for caching external docs.
-  Fetches URLs, caches full content, uses documentation-engineer to generate cohesive summaries, and creates auto-activating skill.
+  Create repo-local documentation skill with external reference docs (compatibility/legacy pattern).
+  Use for repo-local doc caching only. Canonical skill work uses `agent-skills-creator`.
+  Fetches URLs, caches full content, generates summaries, and creates repo-local auto-activating skill.
   Use when starting work on epic that requires external documentation context (API docs, tool guides, reference materials),
   or when user mentions "cache docs", "external docs", "API documentation", URLs for docs,
   documentation needs, reference materials, knowledge caching, or epic context documentation.
-tags: [meta, documentation, skill-creation, caching]
+tags: [meta, documentation, skill-creation, caching, compatibility]
 allowed-tools:
   - Bash
   - Read
@@ -18,9 +19,12 @@ allowed-tools:
   - mcp__serena__list_dir
 ---
 
-# docs-create: External Docs Skill Generator
+# docs-create: External Docs Skill Generator (Repo-Local)
 
-Creates epic-specific skill for loading external documentation into session context.
+> ⚠️ **Compatibility/Legacy Pattern**: Creates repo-local `.claude/skills/docs-{epic}` skills.
+> For canonical skill work in `~/agent-skills`, use `agent-skills-creator`.
+
+Creates repo-local epic-specific skill for loading external documentation into session context.
 
 ## Problem Solved
 

@@ -114,7 +114,7 @@ Say "bd ready" to see full ready work queue
 - "Save and exit"
 - "That's all for now"
 
-**Skill auto-detects** these phrases via skill-rules.json patterns.
+> Note: Skill activation relies on semantic description matching, not legacy pattern files.
 
 ## What This DOESN'T Do
 
