@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# dx-loop v1 - CLI wrapper for PR-aware orchestration surface
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec python3 "${SCRIPT_DIR}/dx_loop.py" "$@"
