@@ -65,7 +65,7 @@ tools:
   llm-tldr:
     enabled: true
     version: "1.5.2"
-    install_cmd: "uv tool install "llm-tldr==1.5.2""
+    install_cmd: "uv tool install \"llm-tldr==1.5.2\""
     health_cmd: "tldr-mcp --version || llm-tldr --version"
     target_ides:
       - codex-cli
