@@ -883,6 +883,84 @@ def bd_command(args, check=False):
         return False, "", str(e)
 
 
+# ============================================================================
+# WORKSPACE-FIRST VALIDATION (V8.6 Parity with dx-runner)
+# ============================================================================
+
+DEFAULT_ALLOWED_PREFIXES = [
+    "/tmp/agents",
+    "/tmp/dx-runner",
+    "/tmp/dxbench",
+    "/tmp/dxbench_epyc6",
+]
+
+
+def validate_worktree_path(path: str) -> tuple[bool, str]:
+    """
+    Validate that a path is within allowed workspace prefixes.
+
+    Enforces workspace-first contract: mutations must happen in worktrees
+    under /tmp/agents (or other allowed prefixes), NOT in canonical clones.
+
+    Returns (is_valid, reason_code).
+    """
+    if not path:
+        return False, "worktree_path_empty"
+
+    resolved = Path(path).resolve()
+
+    allowed = list(DEFAULT_ALLOWED_PREFIXES)
+    extra = os.environ.get("DX_RUNNER_EXTRA_ALLOWED_PREFIXES", "")
+    if extra:
+        allowed.extend(extra.split(","))
+
+    # V8.6: Do NOT allowlist canonical repos - workspace-first contract
+    # dx-batch runs from canonical but must not dispatch mutations there
+
+    for prefix in allowed:
+        prefix_resolved = Path(prefix).resolve()
+        try:
+            resolved.relative_to(prefix_resolved)
+            return True, "workspace_valid"
+        except ValueError:
+            continue
+
+    return False, "non_workspace_path"
+
+
+def check_workspace_first_gate(beads_id: str, worktree: Optional[str] = None) -> tuple[bool, str, str]:
+    """
+    Check workspace-first gate before dispatch.
+
+    Ensures dx-batch respects the same workspace-first contract as dx-runner.
+
+    Args:
+        beads_id: The beads ID for the item being dispatched
+        worktree: Optional explicit worktree path
+
+    Returns:
+        (passed, reason_code, resolved_worktree)
+    """
+    if worktree:
+        is_valid, reason = validate_worktree_path(worktree)
+        if not is_valid:
+            return False, f"gate_failed:{reason}", worktree
+        return True, "workspace_gate_passed", worktree
+
+    # Infer worktree from beads_id: /tmp/agents/<beads-id>/<repo>
+    for repo in ["agent-skills", "prime-radiant-ai", "affordabot", "llm-common"]:
+        candidate = Path("/tmp/agents") / beads_id / repo
+        if candidate.exists() and candidate.is_dir():
+            if (candidate / ".git").exists():
+                is_valid, reason = validate_worktree_path(str(candidate))
+                if is_valid:
+                    return True, "workspace_gate_passed", str(candidate)
+                return False, f"gate_failed:{reason}", str(candidate)
+
+    # No worktree found - defer to dx-runner's permission gate
+    return True, "workspace_gate_deferred_to_runner", ""
+
+
 class WaveOrchestrator:
     def __init__(self, wave_id, config=None):
         self.wave_id = wave_id
@@ -1139,6 +1217,20 @@ class WaveOrchestrator:
         return True
 
     def _dispatch_implement(self, item):
+        # V8.6: Workspace-first gate check (parity with dx-runner)
+        passed, reason, resolved_worktree = check_workspace_first_gate(
+            item.beads_id, getattr(item, "worktree", None)
+        )
+        if not passed:
+            item.status, item.error = ItemStatus.FAILED, f"Workspace-first gate failed: {reason}"
+            item.reason_code = reason
+            self.artifacts.write_error_outcome(
+                item.beads_id, Phase.IMPLEMENT, item.attempt, item.error
+            )
+            self._release_lease(item)
+            self.save_state()
+            return
+
         prompt = self._generate_implement_prompt(item)
         prompt_file = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.implement.prompt"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1153,6 +1245,9 @@ class WaveOrchestrator:
             "--prompt-file",
             str(prompt_file),
         ]
+        if resolved_worktree:
+            cmd.extend(["--worktree", resolved_worktree])
+
         try:
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -1401,6 +1496,20 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
         }
 
     def _start_review(self, item):
+        # V8.6: Workspace-first gate check (parity with dx-runner)
+        passed, reason, resolved_worktree = check_workspace_first_gate(
+            item.beads_id, getattr(item, "worktree", None)
+        )
+        if not passed:
+            item.status, item.error = ItemStatus.FAILED, f"Workspace-first gate failed: {reason}"
+            item.reason_code = reason
+            self.artifacts.write_error_outcome(
+                item.beads_id, Phase.REVIEW, item.attempt, item.error
+            )
+            self._release_lease(item)
+            self.save_state()
+            return
+
         item.phase, item.status, item.started_at = (
             Phase.REVIEW,
             ItemStatus.REVIEWING,
@@ -1450,6 +1559,9 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
             "--prompt-file",
             str(prompt_file),
         ]
+        if resolved_worktree:
+            cmd.extend(["--worktree", resolved_worktree])
+
         try:
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
