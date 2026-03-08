@@ -1,12 +1,13 @@
 ---
 name: area-context-create
 description: |
-  Create codebase area context skills for rapid navigation. MUST BE USED for creating area context skills.
+  Create repo-local codebase area context skills for rapid navigation (compatibility/legacy pattern).
+  Use for repo-local area context skills only. Canonical skill work uses `agent-skills-creator`.
   Handles ONE-TIME auto-detection with Serena, template-based generation, and manual maintenance.
   Use when creating new area contexts or regenerating existing ones,
   or when user mentions "create context skill", "generate area context", "map codebase area",
   skill generation, codebase navigation, area mapping, or template-based skill creation.
-tags: [meta, skill-creation, context, automation]
+tags: [meta, skill-creation, context, automation, compatibility]
 allowed-tools:
   - Read
   - Write
@@ -15,9 +16,12 @@ allowed-tools:
   - mcp__serena__*
 ---
 
-# Area Context Create
+# Area Context Create (Repo-Local)
 
-Create context skills for codebase areas (<5 min per area, one-time setup).
+> ⚠️ **Compatibility/Legacy Pattern**: Creates repo-local `.claude/skills/context-*` skills.
+> For canonical skill work in `~/agent-skills`, use `agent-skills-creator`.
+
+Create repo-local context skills for codebase areas (<5 min per area, one-time setup).
 
 ## Purpose
 
@@ -234,23 +238,7 @@ echo "$skill_content" > "$skill_dir/SKILL.md"
 
 **Note:** The enhanced description field now includes "Use when...", "Invoke when...", and "Keywords:" sections to improve Claude Code's skill activation detection. The {{KEYWORDS}} and {{TAGS}} variables should be defined in area-config.yml for each area.
 
-### 5. Update Skill Registry
-
-Add auto-activation rules to skill system:
-
-```bash
-# Update .claude/skills/skill-rules.json (if exists)
-if [ -f .claude/skills/skill-rules.json ]; then
-  jq ".\"context-$area_name\" = {
-    \"triggers\": [\"$area_name\", \"navigate $area_name\", \"$area_name files\"],
-    \"intents\": [\"Navigate $area_name codebase\", \"Find $area_name files\"],
-    \"examples\": [\"User: 'where is $area_name code?'\"]
-  }" .claude/skills/skill-rules.json > tmp.json
-  mv tmp.json .claude/skills/skill-rules.json
-fi
-```
-
-### 6. Verify and Report
+### 5. Verify and Report
 
 Final validation:
 
@@ -269,11 +257,13 @@ echo "   Active files: $(echo $active_files | jq 'length')"
 echo "   Deprecated: $(echo $deprecated_files | jq 'length')"
 echo "   Tests: $(echo $test_files | jq 'length')"
 echo ""
-echo "📁 Created: .claude/skills/context-$area_name/SKILL.md"
+echo "📁 Created: .claude/skills/context-$area_name/SKILL.md (repo-local)"
 echo ""
 echo "🔄 To update later:"
 echo "   scripts/area-context-update $area_name"
 ```
+
+> ⚠️ **Note**: Auto-activation via `skill-rules.json` is a legacy pattern. Modern skill activation relies on semantic description matching.
 
 ## Integration Points
 
@@ -505,11 +495,10 @@ settings:
 
 ---
 
-**Last Updated:** 2025-11-17
-**Skill Type:** Meta-skill
-**Impact:** Skill system (creates context-* skills)
+**Last Updated:** 2026-03-08
+**Skill Type:** Meta-skill (compatibility/legacy)
+**Impact:** Repo-local context skills (`.claude/skills/context-*`)
 **Average Duration:** 5 minutes per area
 **Related Docs:**
-- CLAUDE.md (V3 DX Workflow)
-- .claude/skills/skill-creator/SKILL.md (meta-skill pattern)
-- docs/DX_PARITY_V3/SKILL_ACTIVATION_SYSTEM_SPEC.md
+- AGENTS.md (Issue-First core principle)
+- `~/agent-skills/extended/agent-skills-creator/SKILL.md` (canonical skill creation)

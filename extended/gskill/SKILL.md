@@ -59,8 +59,10 @@ Tests a skill against tasks to measure pass rate.
 1. **Generate tasks** for your repo (one-time or after major changes)
 2. **Evolve skills** using GEPA (takes 1-4 hours depending on max_metric_calls)
 3. **Review** learned skill in `.gskill/learned/SKILL.md`
-4. **Install** skill to `.claude/skills/learned/SKILL.md` in target repo
+4. **Install** skill to repo-local `.claude/skills/learned/SKILL.md` (for repo-specific use)
 5. **Measure** improvement with `gskill evaluate`
+
+> Note: For canonical shared skills in `~/agent-skills`, use `agent-skills-creator` instead.
 
 ## Output
 
@@ -98,8 +100,9 @@ Learned skills are stored in:
 
 ## Related Skills
 
-- `skill-creator` - For manual skill creation
-- `context-*` - Repo-specific context skills
+- `agent-skills-creator` - For canonical skill creation in `~/agent-skills`
+- `implementation-planner` - For planning/specs with Beads structure
+- Repo-local `context-*` - Area context skills
 
 ## References
 
