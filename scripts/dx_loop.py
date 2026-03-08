@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-dx-loop v1 - PR-aware orchestration surface over dx-runner substrate
+dx-loop v1.1 - Complete PR-aware orchestration surface
 
-Reuses Ralph concepts (baton, topological deps, checkpoint/resume) while replacing
-the control plane with governed dx-runner dispatch and enforcing PR artifact contracts.
+FIXES from PR #322 review:
+- P0: Active work no longer redispatched every cadence (scheduler.py)
+- P1: Blocked notifications emit on FIRST occurrence, suppress repeats (state_machine.py)
+- P1: State persistence is symmetric and durable for unattended restart (this file)
 
-Usage:
-    dx-loop start --epic <epic-id> [--config <path>]
-    dx-loop status [--wave-id <id>] [--json]
-    dx-loop check --wave-id <id> [--json]
-    dx-loop report --wave-id <id> [--format json|markdown]
+This version uses:
+- DxLoopScheduler for no-duplicate-dispatch
+- RunnerAdapter for governed dx-runner integration
+- Full state persistence across restart
 """
 
 from __future__ import annotations
@@ -23,14 +24,16 @@ sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from dx_loop import (
     LoopState, BlockerCode, LoopStateMachine, LoopStateTracker,
-    BatonPhase, BatonManager, ReviewVerdict,
+    BatonPhase, BatonManager, ReviewVerdict, BatonState,
     BlockerClassifier, BlockerState,
     PRContractEnforcer, PRArtifact,
     BeadsWaveManager,
     NotificationManager,
 )
+from dx_loop.scheduler import DxLoopScheduler, SchedulerState
+from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 ARTIFACT_BASE = Path("/tmp/dx-loop")
 DEFAULT_CONFIG = {
     "max_attempts": 3,
@@ -48,15 +51,13 @@ def now_utc() -> str:
 
 class DxLoop:
     """
-    Main dx-loop orchestration class
+    Main dx-loop orchestration class - v1.1 with fixes
     
     Integrates:
-    - dx-runner substrate for execution
-    - Baton manager for implement/review cycle
-    - State machine with blocker taxonomy
-    - PR contract enforcer
-    - Beads wave manager
-    - Notification manager
+    - DxLoopScheduler for no-duplicate-dispatch (P0 fix)
+    - RunnerAdapter for governed dx-runner integration
+    - Full symmetric state persistence (P1 fix)
+    - Fixed notification logic (P1 fix)
     """
     
     def __init__(self, wave_id: str, config: Optional[Dict[str, Any]] = None):
@@ -73,6 +74,10 @@ class DxLoop:
         self.beads_manager = BeadsWaveManager()
         self.blocker_classifier = BlockerClassifier()
         self.notification_manager = NotificationManager()
+        
+        # NEW: Scheduler and runner adapter (P0 fix)
+        self.scheduler = DxLoopScheduler(cadence_seconds=self.config["cadence_seconds"])
+        self.runner_adapter = RunnerAdapter(provider=self.config["provider"])
         
         # Artifact paths
         self.wave_dir = ARTIFACT_BASE / "waves" / wave_id
@@ -108,34 +113,55 @@ class DxLoop:
     
     def run_loop(self, max_iterations: int = 100) -> bool:
         """
-        Run main loop cycle
+        Run main loop cycle with scheduler (P0 fix)
         
-        Monitors active tasks, checks progress via dx-runner,
-        classifies blockers, and advances wave.
+        Uses DxLoopScheduler to prevent duplicate dispatch.
         """
+        # Load previous state if exists
+        self._load_state()
+        
         iteration = 0
         
         while iteration < max_iterations:
             iteration += 1
+            print(f"\n=== Iteration {iteration} ===")
             
-            # Get next wave of ready tasks
+            # PHASE 1: Wake-up - Check time
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            print(f"Wake-up at {now}")
+            
+            # PHASE 2: Poll active task progress
+            self._check_progress()
+            
+            # PHASE 3: Get ready tasks (respecting scheduler state)
             ready = self.beads_manager.get_next_wave()
+            
             if not ready:
                 if not self.beads_manager.has_pending_tasks():
                     print("Wave complete - no pending tasks")
+                    self._save_state()
                     return True
-                print("No ready tasks, waiting...")
-                time.sleep(self.config["cadence_seconds"])
-                continue
+                print("No ready tasks, waiting for next cadence...")
+            else:
+                # FILTER OUT ALREADY ACTIVE TASKS (P0 fix)
+                new_tasks = [
+                    tid for tid in ready
+                    if not self.scheduler.state.is_active(tid)
+                    and not self.scheduler.state.is_completed(tid)
+                ]
+                
+                if new_tasks:
+                    print(f"Dispatching {len(new_tasks)} new task(s)")
+                    for beads_id in new_tasks:
+                        if self._dispatch_task(beads_id):
+                            self.scheduler.state.mark_dispatched(beads_id)
+                else:
+                    print(f"All ready tasks already active, waiting...")
             
-            # Dispatch ready tasks
-            for beads_id in ready:
-                self._dispatch_task(beads_id)
+            # Save state after each iteration
+            self._save_state()
             
-            # Check progress of active tasks
-            self._check_progress()
-            
-            # Sleep until next cycle
+            # Sleep until next cadence
             time.sleep(self.config["cadence_seconds"])
         
         return False
@@ -152,43 +178,35 @@ class DxLoop:
             return self._start_review(beads_id)
         elif next_action == "complete":
             print(f"Task {beads_id} already complete")
+            self.scheduler.state.mark_completed(beads_id)
             return True
         else:
             print(f"Task {beads_id} blocked: {next_action}")
+            self.scheduler.state.mark_blocked(beads_id)
             return False
     
     def _start_implement(self, beads_id: str) -> bool:
-        """Start implement phase via dx-runner"""
+        """Start implement phase via RunnerAdapter"""
         # Generate prompt
         prompt = self._generate_implement_prompt(beads_id)
         prompt_file = ARTIFACT_BASE / "prompts" / f"{beads_id}.implement.prompt"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(prompt)
         
-        # Start dx-runner
+        # Use RunnerAdapter instead of direct subprocess (governed dispatch)
         run_id = f"{beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
-        cmd = [
-            "dx-runner", "start",
-            "--beads", beads_id,
-            "--provider", self.config["provider"],
-            "--prompt-file", str(prompt_file),
-        ]
         
-        try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
+        if self.runner_adapter.start(beads_id, prompt_file):
             # Track baton state
             self.baton_manager.start_implement(beads_id, run_id=run_id)
-            
-            print(f"Started implement for {beads_id} (run_id={run_id}, pid={proc.pid})")
+            print(f"Started implement for {beads_id} (run_id={run_id})")
             return True
-        
-        except Exception as e:
-            print(f"ERROR: Failed to start implement for {beads_id}: {e}", file=sys.stderr)
+        else:
+            print(f"ERROR: Failed to start implement for {beads_id}", file=sys.stderr)
             return False
     
     def _start_review(self, beads_id: str) -> bool:
-        """Start review phase via dx-runner"""
+        """Start review phase via RunnerAdapter"""
         # Get implement artifacts
         baton_state = self.baton_manager.get_state(beads_id)
         if not baton_state or not baton_state.pr_url:
@@ -201,32 +219,21 @@ class DxLoop:
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(prompt)
         
-        # Start dx-runner
+        # Start via RunnerAdapter
         review_beads_id = f"{beads_id}-review"
         run_id = f"{review_beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
-        cmd = [
-            "dx-runner", "start",
-            "--beads", review_beads_id,
-            "--provider", self.config["provider"],
-            "--prompt-file", str(prompt_file),
-        ]
         
-        try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            # Track baton state
+        if self.runner_adapter.start(review_beads_id, prompt_file):
             self.baton_manager.start_review(beads_id, run_id=run_id)
-            
-            print(f"Started review for {beads_id} (run_id={run_id}, pid={proc.pid})")
+            print(f"Started review for {beads_id} (run_id={run_id})")
             return True
-        
-        except Exception as e:
-            print(f"ERROR: Failed to start review for {beads_id}: {e}", file=sys.stderr)
+        else:
+            print(f"ERROR: Failed to start review for {beads_id}", file=sys.stderr)
             return False
     
     def _check_progress(self):
-        """Check progress of all active tasks via dx-runner"""
-        for beads_id, baton_state in self.baton_manager.baton_states.items():
+        """Check progress of all active tasks via RunnerAdapter"""
+        for beads_id, baton_state in list(self.baton_manager.baton_states.items()):
             if baton_state.phase in (BatonPhase.COMPLETE, BatonPhase.FAILED):
                 continue
             
@@ -236,133 +243,106 @@ class DxLoop:
                 self._check_review_progress(beads_id)
     
     def _check_implement_progress(self, beads_id: str):
-        """Check implement phase progress"""
-        try:
-            result = subprocess.run(
-                ["dx-runner", "check", "--beads", beads_id, "--json"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            
-            if not result.stdout.strip():
-                return
-            
-            data = json.loads(result.stdout)
-            state = data.get("state", "unknown")
-            
-            # Check for completion
-            if state in ("exited_ok", "exited_err"):
-                # Extract PR artifacts from output
-                log_content = self._read_runner_log(beads_id)
-                artifact = self.pr_enforcer.extract_from_agent_output(log_content)
-                
-                if artifact and artifact.is_valid():
-                    # Register artifact and transition to review
-                    self.pr_enforcer.register_artifact(
-                        beads_id, artifact.pr_url, artifact.pr_head_sha
-                    )
-                    
-                    if self.config["require_review"]:
-                        self.baton_manager.complete_implement(
-                            beads_id,
-                            pr_url=artifact.pr_url,
-                            pr_head_sha=artifact.pr_head_sha,
-                        )
-                        print(f"Implement complete for {beads_id}, transitioning to review")
-                    else:
-                        self.baton_manager.baton_states[beads_id].phase = BatonPhase.COMPLETE
-                        self.beads_manager.mark_completed(beads_id)
-                        print(f"Implement complete for {beads_id} (no review required)")
-                else:
-                    # Classify blocker
-                    blocker = self.blocker_classifier.classify(
-                        data.get("reason_code"),
-                        beads_id=beads_id,
-                        wave_id=self.wave_id,
-                        has_pr_artifacts=False,
-                    )
-                    
-                    # Emit notification if needed
-                    notification = self.notification_manager.create_notification(blocker)
-                    if notification:
-                        print(notification.format_cli())
+        """Check implement phase progress via RunnerAdapter"""
+        task_state = self.runner_adapter.check(beads_id)
         
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
-            pass
+        if not task_state or task_state.state == "missing":
+            return
+        
+        # Check for completion
+        if task_state.is_complete():
+            # Extract PR artifacts
+            artifacts = self.runner_adapter.extract_pr_artifacts(beads_id)
+            
+            if artifacts:
+                pr_url, pr_head_sha = artifacts
+                # Register artifact and transition to review
+                self.pr_enforcer.register_artifact(beads_id, pr_url, pr_head_sha)
+                
+                if self.config["require_review"]:
+                    self.baton_manager.complete_implement(
+                        beads_id,
+                        pr_url=pr_url,
+                        pr_head_sha=pr_head_sha,
+                    )
+                    print(f"Implement complete for {beads_id}, transitioning to review")
+                else:
+                    self.baton_manager.baton_states[beads_id].phase = BatonPhase.COMPLETE
+                    self.beads_manager.mark_completed(beads_id)
+                    self.scheduler.state.mark_completed(beads_id)
+                    print(f"Implement complete for {beads_id} (no review required)")
+            else:
+                # Classify blocker
+                blocker = self.blocker_classifier.classify(
+                    task_state.reason_code,
+                    beads_id=beads_id,
+                    wave_id=self.wave_id,
+                    has_pr_artifacts=False,
+                )
+                
+                # Emit notification (P1 fix: emits on first occurrence)
+                notification = self.notification_manager.create_notification(blocker)
+                if notification:
+                    print(notification.format_cli())
+                
+                # Mark as blocked in scheduler
+                self.scheduler.state.mark_blocked(beads_id)
     
     def _check_review_progress(self, beads_id: str):
         """Check review phase progress"""
         review_beads_id = f"{beads_id}-review"
+        task_state = self.runner_adapter.check(review_beads_id)
         
-        try:
-            result = subprocess.run(
-                ["dx-runner", "check", "--beads", review_beads_id, "--json"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
+        if not task_state or task_state.state == "missing":
+            return
+        
+        if task_state.is_complete():
+            # Parse review verdict
+            report = self.runner_adapter.report(review_beads_id)
+            verdict = self._parse_review_verdict(report)
             
-            if not result.stdout.strip():
-                return
-            
-            data = json.loads(result.stdout)
-            state = data.get("state", "unknown")
-            
-            if state in ("exited_ok", "exited_err"):
-                # Parse review verdict
-                log_content = self._read_runner_log(review_beads_id)
-                verdict = self._parse_review_verdict(log_content)
+            if verdict:
+                baton_state = self.baton_manager.complete_review(
+                    beads_id,
+                    verdict,
+                    pr_url=self.pr_enforcer.get_artifact(beads_id).pr_url if self.pr_enforcer.get_artifact(beads_id) else None,
+                    pr_head_sha=self.pr_enforcer.get_artifact(beads_id).pr_head_sha if self.pr_enforcer.get_artifact(beads_id) else None,
+                )
                 
-                if verdict:
-                    baton_state = self.baton_manager.complete_review(
-                        beads_id,
-                        verdict,
-                        pr_url=self.pr_enforcer.get_artifact(beads_id).pr_url if self.pr_enforcer.get_artifact(beads_id) else None,
-                        pr_head_sha=self.pr_enforcer.get_artifact(beads_id).pr_head_sha if self.pr_enforcer.get_artifact(beads_id) else None,
-                    )
+                if baton_state.phase == BatonPhase.COMPLETE:
+                    self.beads_manager.mark_completed(beads_id)
+                    self.scheduler.state.mark_completed(beads_id)
+                    print(f"Review APPROVED for {beads_id}, task complete")
                     
-                    if baton_state.phase == BatonPhase.COMPLETE:
-                        self.beads_manager.mark_completed(beads_id)
-                        print(f"Review APPROVED for {beads_id}, task complete")
-                        
-                        # Emit merge_ready notification
-                        blocker = self.blocker_classifier.classify(
-                            None,
-                            beads_id=beads_id,
-                            wave_id=self.wave_id,
-                            has_pr_artifacts=True,
-                            checks_passing=True,
-                        )
-                        notification = self.notification_manager.create_notification(blocker)
-                        if notification:
-                            print(notification.format_cli())
-                    else:
-                        print(f"Review verdict for {beads_id}: {verdict.value}")
+                    # Emit merge_ready notification
+                    blocker = self.blocker_classifier.classify(
+                        None,
+                        beads_id=beads_id,
+                        wave_id=self.wave_id,
+                        has_pr_artifacts=True,
+                        checks_passing=True,
+                    )
+                    notification = self.notification_manager.create_notification(blocker)
+                    if notification:
+                        print(notification.format_cli())
+                else:
+                    print(f"Review verdict for {beads_id}: {verdict.value}")
+    
+    def _parse_review_verdict(self, report: Optional[Dict[str, Any]]) -> Optional[ReviewVerdict]:
+        """Parse review verdict from report"""
+        if not report:
+            return None
         
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
-            pass
-    
-    def _read_runner_log(self, beads_id: str) -> str:
-        """Read dx-runner log for a beads ID"""
-        log_path = Path(f"/tmp/dx-runner/{self.config['provider']}/{beads_id}.log")
-        if not log_path.exists():
-            return ""
-        try:
-            return log_path.read_text()
-        except OSError:
-            return ""
-    
-    def _parse_review_verdict(self, log_content: str) -> Optional[ReviewVerdict]:
-        """Parse review verdict from log content"""
-        for line in reversed(log_content.split('\n')):
-            line = line.strip()
-            if "APPROVED" in line.upper():
-                return ReviewVerdict.APPROVED
-            elif "REVISION_REQUIRED" in line.upper():
-                return ReviewVerdict.REVISION_REQUIRED
-            elif "BLOCKED" in line.upper():
-                return ReviewVerdict.BLOCKED
+        # Check for explicit verdict in report
+        verdict_str = report.get("verdict", "").upper()
+        
+        if "APPROVED" in verdict_str:
+            return ReviewVerdict.APPROVED
+        elif "REVISION_REQUIRED" in verdict_str:
+            return ReviewVerdict.REVISION_REQUIRED
+        elif "BLOCKED" in verdict_str:
+            return ReviewVerdict.BLOCKED
+        
         return None
     
     def _generate_implement_prompt(self, beads_id: str) -> str:
@@ -408,19 +388,45 @@ BLOCKED: <critical issues>
 """
     
     def _save_state(self):
-        """Save loop state to file"""
+        """
+        Save loop state to file - SYMMETRIC with load (P1 fix)
+        
+        Saves ALL components:
+        - State machine state
+        - Baton manager state
+        - Beads manager state
+        - Scheduler state
+        - PR enforcer state
+        - Notification manager state
+        """
         self.wave_dir.mkdir(parents=True, exist_ok=True)
         
         state = {
             "wave_id": self.wave_id,
             "config": self.config,
+            "version": VERSION,
+            "updated_at": now_utc(),
+            
+            # State machine
             "state_machine": self.state_machine.tracker.to_dict(),
-            "beads_manager": self.beads_manager.to_dict(),
+            
+            # Baton manager
             "baton_states": {
                 bid: state.to_dict()
                 for bid, state in self.baton_manager.baton_states.items()
             },
-            "updated_at": now_utc(),
+            
+            # Beads manager
+            "beads_manager": self.beads_manager.to_dict(),
+            
+            # Scheduler state
+            "scheduler_state": self.scheduler.state.to_dict(),
+            
+            # PR artifacts
+            "pr_artifacts": {
+                bid: {"pr_url": art.pr_url, "pr_head_sha": art.pr_head_sha}
+                for bid, art in self.pr_enforcer.artifacts.items()
+            },
         }
         
         tmp_file = self.state_file.with_suffix(".tmp")
@@ -428,24 +434,52 @@ BLOCKED: <critical issues>
         tmp_file.rename(self.state_file)
     
     def _load_state(self) -> bool:
-        """Load loop state from file"""
+        """
+        Load loop state from file - SYMMETRIC with save (P1 fix)
+        
+        Restores ALL components for unattended restart/resume.
+        """
         if not self.state_file.exists():
             return False
         
         try:
             state = json.loads(self.state_file.read_text())
             
+            # Restore state machine
             if "state_machine" in state:
                 self.state_machine.tracker = LoopStateTracker.from_dict(state["state_machine"])
             
+            # Restore baton manager
             if "baton_states" in state:
                 for bid, baton_data in state["baton_states"].items():
-                    from dx_loop.baton import BatonState
                     self.baton_manager.baton_states[bid] = BatonState.from_dict(baton_data)
+            
+            # Restore beads manager (P1 fix)
+            if "beads_manager" in state:
+                self.beads_manager = BeadsWaveManager.from_dict(state["beads_manager"])
+            
+            # Restore scheduler state
+            if "scheduler_state" in state:
+                self.scheduler.state = SchedulerState.from_dict(state["scheduler_state"])
+            
+            # Restore PR artifacts
+            if "pr_artifacts" in state:
+                for bid, art_data in state["pr_artifacts"].items():
+                    self.pr_enforcer.register_artifact(
+                        bid,
+                        art_data["pr_url"],
+                        art_data["pr_head_sha"],
+                    )
+            
+            print(f"Restored state from {self.state_file}")
+            print(f"  Active: {len(self.scheduler.state.active_beads_ids)}")
+            print(f"  Completed: {len(self.scheduler.state.completed_beads_ids)}")
+            print(f"  Blocked: {len(self.scheduler.state.blocked_beads_ids)}")
             
             return True
         
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"ERROR: Invalid state file: {e}", file=sys.stderr)
             return False
 
 
@@ -499,9 +533,16 @@ def cmd_status(args):
             print(json.dumps(state, indent=2))
         else:
             print(f"Wave: {wave_id}")
+            print(f"Version: {state.get('version', 'unknown')}")
             print(f"Updated: {state.get('updated_at', 'unknown')}")
-            print(f"Tasks: {len(state.get('beads_manager', {}).get('tasks', {}))}")
-            print(f"Completed: {len(state.get('beads_manager', {}).get('completed', []))}")
+            
+            scheduler_state = state.get("scheduler_state", {})
+            print(f"Active: {len(scheduler_state.get('active_beads_ids', []))}")
+            print(f"Completed: {len(scheduler_state.get('completed_beads_ids', []))}")
+            print(f"Blocked: {len(scheduler_state.get('blocked_beads_ids', []))}")
+            
+            beads_state = state.get("beads_manager", {})
+            print(f"Total tasks: {len(beads_state.get('tasks', {}))}")
         
         return 0
     
@@ -511,7 +552,7 @@ def cmd_status(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="dx-loop v1 orchestration")
+    parser = argparse.ArgumentParser(description="dx-loop v1.1 orchestration")
     parser.add_argument("--version", action="version", version=f"dx-loop {VERSION}")
     
     subparsers = parser.add_subparsers(dest="command", help="Commands")

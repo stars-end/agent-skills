@@ -88,17 +88,20 @@ class LoopStateTracker:
         """
         Attempt state transition with unchanged suppression
         
+        FIX for P1: Emit on FIRST occurrence, suppress only on REPEATED unchanged.
+        
         Returns:
             StateTransition if emitted (not suppressed), None if suppressed
         """
         old_state = self.current_state
         old_blocker = self.current_blocker
 
-        # Check if this is an unchanged blocker
+        # Check if this is an unchanged blocker (AFTER first emission)
         if (
             new_state == old_state
             and blocker_code == old_blocker
             and blocker_code is not None
+            and self.last_emitted_blocker == blocker_code  # Only suppress if already emitted
         ):
             self.unchanged_count += 1
             # Only emit every N unchanged occurrences
@@ -121,7 +124,9 @@ class LoopStateTracker:
         self.current_blocker = blocker_code
         if blocker_code:
             self.last_blocker = blocker_code
-            self.last_emitted_blocker = blocker_code
+            # Mark as emitted AFTER first occurrence
+            if self.last_emitted_blocker != blocker_code:
+                self.last_emitted_blocker = blocker_code
 
         # Record transition
         self.transition_history.append(transition)

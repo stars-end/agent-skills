@@ -224,3 +224,35 @@ class BeadsWaveManager:
             "layers": self.layers,
             "completed": list(self.completed),
         }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any], beads_repo_path: Optional[Path] = None) -> "BeadsWaveManager":
+        """
+        Restore BeadsWaveManager from serialized state
+        
+        FIX for P1: Symmetric save/load for unattended restart/resume.
+        """
+        manager = cls(beads_repo_path=beads_repo_path)
+        
+        # Restore tasks
+        if "tasks" in data:
+            for tid, task_data in data["tasks"].items():
+                task = BeadsTask(
+                    beads_id=task_data.get("beads_id", tid),
+                    title=task_data.get("title", ""),
+                    status=task_data.get("status", "open"),
+                    dependencies=task_data.get("dependencies", []),
+                    dependents=task_data.get("dependents", []),
+                    priority=task_data.get("priority", 2),
+                )
+                manager.tasks[tid] = task
+        
+        # Restore layers
+        if "layers" in data:
+            manager.layers = data["layers"]
+        
+        # Restore completed set
+        if "completed" in data:
+            manager.completed = set(data["completed"])
+        
+        return manager
