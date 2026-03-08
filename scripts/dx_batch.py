@@ -35,6 +35,92 @@ BEADS_REPO_PATH = Path(
 BEADS_LOCK_FILE = BEADS_REPO_PATH / ".beads" / ".dx-bd-mutation.lock"
 MIN_BD_VERSION = os.environ.get("DX_MIN_BD_VERSION", "0.49.4")
 
+CANONICAL_REPOS = [
+    Path.home() / "agent-skills",
+    Path.home() / "prime-radiant-ai",
+    Path.home() / "affordabot",
+    Path.home() / "llm-common",
+]
+
+ALLOWED_WORKSPACE_PREFIXES = [
+    Path("/tmp/agents"),
+    Path("/tmp/dx-runner"),
+    Path("/tmp/dxbench"),
+    Path("/tmp/dxbench_epyc6"),
+]
+
+WORKSPACE_VIOLATION_EXIT_CODE = 22
+
+
+def is_canonical_repo_path(path: Path) -> bool:
+    """Check if path is a canonical repo or descendant (bd-kuhj.3)."""
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        return False
+    for canonical in CANONICAL_REPOS:
+        try:
+            canonical_resolved = canonical.resolve()
+        except (OSError, RuntimeError):
+            continue
+        if resolved == canonical_resolved:
+            return True
+        try:
+            resolved.relative_to(canonical_resolved)
+            return True
+        except ValueError:
+            pass
+    return False
+
+
+def validate_workspace_path(path: Optional[Path]) -> tuple[bool, str, int]:
+    """
+    Validate that a workspace path is allowed for mutating operations.
+
+    Returns (is_valid, reason_code, exit_code).
+    - is_valid: True if path is allowed, False otherwise
+    - reason_code: Human-readable reason
+    - exit_code: Exit code to use (0 for success, 22 for canonical rejection)
+    """
+    if path is None:
+        return True, "no_workspace_path", 0
+
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        return True, "path_resolution_failed", 0
+
+    # bd-kuhj.3: Reject canonical repo paths (workspace-first enforcement)
+    if is_canonical_repo_path(path):
+        return (
+            False,
+            f"canonical_worktree_forbidden:{resolved}",
+            WORKSPACE_VIOLATION_EXIT_CODE,
+        )
+
+    # Check if path starts with any allowed prefix
+    for prefix in ALLOWED_WORKSPACE_PREFIXES:
+        try:
+            prefix_resolved = prefix.resolve()
+            resolved.relative_to(prefix_resolved)
+            return True, "workspace_allowed", 0
+        except (ValueError, OSError, RuntimeError):
+            pass
+
+    # Additional prefixes from environment
+    extra_prefixes = os.environ.get("DX_RUNNER_EXTRA_ALLOWED_PREFIXES", "")
+    if extra_prefixes:
+        for extra in extra_prefixes.split(","):
+            extra_path = Path(extra.strip()).expanduser()
+            try:
+                extra_resolved = extra_path.resolve()
+                resolved.relative_to(extra_resolved)
+                return True, "workspace_allowed_extra", 0
+            except (ValueError, OSError, RuntimeError):
+                pass
+
+    return False, f"non_workspace_path:{resolved}", 1
+
 
 class ItemStatus(str, Enum):
     PENDING = "pending"
@@ -822,7 +908,9 @@ def _check_bd_version() -> tuple[bool, str]:
         msg = result.stderr.strip() or result.stdout.strip() or "unknown"
         return False, f"bd_version_command_failed:{msg}"
 
-    version = (result.stdout.strip().split()[-1] if result.stdout.strip() else "").strip()
+    version = (
+        result.stdout.strip().split()[-1] if result.stdout.strip() else ""
+    ).strip()
     if _parse_semver(version) < _parse_semver(MIN_BD_VERSION):
         return False, f"bd_version_too_old:{version}<min:{MIN_BD_VERSION}"
     return True, version
@@ -1052,9 +1140,7 @@ class WaveOrchestrator:
         if critical_issues:
             first = critical_issues[0]
             self.state.status = WaveStatus.FAILED
-            self.state.reason_code = (
-                f"doctor_critical_{first.get('type', 'unknown')}"
-            )
+            self.state.reason_code = f"doctor_critical_{first.get('type', 'unknown')}"
             self.state.error = (
                 f"doctor_critical:{first.get('type', 'unknown')} "
                 f"{first.get('message', '')}".strip()
@@ -1139,9 +1225,56 @@ class WaveOrchestrator:
         return True
 
     def _dispatch_implement(self, item):
+        # bd-kuhj.3: Workspace-first gate - reject canonical paths
+        workspace_path = ARTIFACT_BASE / "worktrees" / item.beads_id
+        is_valid, reason_code, exit_code = validate_workspace_path(workspace_path)
+
+        if not is_valid:
+            item.status, item.error = (
+                ItemStatus.FAILED,
+                f"Workspace validation failed: {reason_code}",
+            )
+            item.reason_code = reason_code
+            self.artifacts.write_error_outcome(
+                item.beads_id,
+                Phase.IMPLEMENT,
+                item.attempt,
+                f"canonical_worktree_forbidden: {workspace_path}",
+            )
+            self._release_lease(item)
+            self.save_state()
+            print(
+                f"ERROR: {item.beads_id} blocked: {reason_code}",
+                file=sys.stderr,
+            )
+            print(
+                f"Remedy: dx-worktree create {item.beads_id} <repo>",
+                file=sys.stderr,
+            )
+            return
+
         prompt = self._generate_implement_prompt(item)
         prompt_file = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.implement.prompt"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # bd-kuhj.3: Also validate prompt file location
+        is_valid_pf, reason_code_pf, _ = validate_workspace_path(prompt_file.parent)
+        if not is_valid_pf:
+            item.status, item.error = (
+                ItemStatus.FAILED,
+                f"Prompt file location invalid: {reason_code_pf}",
+            )
+            item.reason_code = reason_code_pf
+            self.artifacts.write_error_outcome(
+                item.beads_id,
+                Phase.IMPLEMENT,
+                item.attempt,
+                f"prompt_file_forbidden: {prompt_file}",
+            )
+            self._release_lease(item)
+            self.save_state()
+            return
+
         prompt_file.write_text(prompt)
         cmd = [
             "dx-runner",
@@ -1401,6 +1534,35 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
         }
 
     def _start_review(self, item):
+        # bd-kuhj.3: Workspace-first gate for review dispatch
+        prompt_file_path = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.review.prompt"
+        is_valid, reason_code, exit_code = validate_workspace_path(
+            prompt_file_path.parent
+        )
+
+        if not is_valid:
+            item.phase, item.status = Phase.REVIEW, ItemStatus.FAILED
+            item.error = f"Workspace validation failed for review: {reason_code}"
+            item.reason_code = reason_code
+            item.completed_at = now_utc()
+            self.artifacts.write_error_outcome(
+                item.beads_id,
+                Phase.REVIEW,
+                item.attempt,
+                f"canonical_worktree_forbidden: review prompt location",
+            )
+            self._release_lease(item)
+            self.save_state()
+            print(
+                f"ERROR: {item.beads_id} review blocked: {reason_code}",
+                file=sys.stderr,
+            )
+            print(
+                f"Remedy: dx-worktree create {item.beads_id} <repo>",
+                file=sys.stderr,
+            )
+            return
+
         item.phase, item.status, item.started_at = (
             Phase.REVIEW,
             ItemStatus.REVIEWING,

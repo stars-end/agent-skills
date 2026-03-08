@@ -39,6 +39,10 @@ DIRTY_WARN_MINUTES="${DIRTY_WARN_MINUTES:-15}"
 DIRTY_EVICT_MINUTES="${DIRTY_EVICT_MINUTES:-45}"
 DIVERGED_EVICT_MINUTES="${DIVERGED_EVICT_MINUTES:-0}"
 
+# bd-kuhj.8: Working hours protection for cleanup operations
+WORKTREE_CLEANUP_PROTECT_START="${WORKTREE_CLEANUP_PROTECT_START:-8}"
+WORKTREE_CLEANUP_PROTECT_END="${WORKTREE_CLEANUP_PROTECT_END:-18}"
+
 SLACK_CHANNEL_ID="${DX_ALERTS_CHANNEL_ID:-}"
 
 mkdir -p "$STATE_DIR" "$LOG_DIR"
@@ -292,6 +296,16 @@ is_tmux_attached_to_path() {
   return 1
 }
 
+# bd-kuhj.8: Working hours protection check
+is_working_hours() {
+  local start_hour="$WORKTREE_CLEANUP_PROTECT_START"
+  local end_hour="$WORKTREE_CLEANUP_PROTECT_END"
+  local current_hour
+  current_hour=$(date +%H)
+  
+  [[ "$current_hour" -ge "$start_hour" && "$current_hour" -lt "$end_hour" ]]
+}
+
 normalize_off_trunk_clean_repo() {
   local repo="$1"
   local repo_path="$2"
@@ -434,6 +448,34 @@ evacuate_diverged() {
 evacuate_dirty() {
   local repo="$1"
   local repo_path="$HOME/$repo"
+  
+  # bd-kuhj.8: Working hours protection
+  if is_working_hours; then
+    if [[ "${WORKTREE_CLEANUP_ALLOW_WORKING_HOURS:-0}" != "1" ]]; then
+      log "SKIP: $repo dirty evacuation (working hours protection)"
+      log_recovery "$repo" "skip" "working_hours_protection" "" "policy=dirty-timeout-evacuation"
+      return 0
+    fi
+  fi
+  
+  # bd-kuhj.8: Tmux protection - check if any worktrees under this canonical have active tmux
+  local found_active_tmux=false
+  local worktree_paths
+  worktree_paths="$(git -C "$repo_path" worktree list --porcelain 2>/dev/null | grep "^worktree" | cut -d' ' -f2 || true)"
+  while IFS= read -r wt_path; do
+    [[ -n "$wt_path" ]] || continue
+    if is_tmux_attached_to_path "$wt_path"; then
+      found_active_tmux=true
+      log "SKIP: $repo has active tmux session at worktree: $wt_path"
+      log_recovery "$repo" "skip" "tmux_attached_worktree" "" "worktree=$wt_path"
+      break
+    fi
+  done <<< "$worktree_paths"
+  
+  if [[ "$found_active_tmux" == "true" ]]; then
+    return 0
+  fi
+  
   local host timestamp rescue_branch rescue_dir
   host="$(short_host)"
   timestamp="$(iso_timestamp)"
