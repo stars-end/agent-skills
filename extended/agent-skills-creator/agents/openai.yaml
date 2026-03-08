@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Agent Skills Creator"
+  short_description: "Canonical creator for agent-skills skills and baseline updates"
+  default_prompt: "Use $agent-skills-creator to create, update, or deprecate a canonical skill in ~/agent-skills and regenerate the baseline."
