@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Implementation Planner"
+  short_description: "Spec + Beads epic/subtasks/dependencies for execution"
+  default_prompt: "Use $implementation-planner to create a self-contained implementation spec with canonical Beads epic, subtasks, dependencies, validation gates, and the first executable task."

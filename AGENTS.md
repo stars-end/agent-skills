@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 67e6ca258bd8d70ac287dc355d33af01721641f3 -->
-<!-- Last updated: 2026-03-06 13:08:35 UTC -->
+<!-- Source SHA: 9a61dabb86b23d6e7f1bcf493766cb886bbe5da3 -->
+<!-- Last updated: 2026-03-08 11:13:26 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -335,70 +335,6 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 
 ---
 
-### 7.5) Prime V2 Product Contract (EXCEPTION to Generic Frontend Evidence)
-
-> ⚠️ **CRITICAL EXCEPTION**: For Prime Radiant AI `/v2` and `/brokerage` routes, visual/route/runtime evidence is **evidence only**. It cannot certify product correctness.
-
-**The V2 workspace has hard product invariants that go beyond visual consistency:**
-
-| Evidence Type | Can Certify Generic Frontend? | Can Certify Prime V2 Correctness? |
-|---------------|-------------------------------|-----------------------------------|
-| Screenshot of UI | ✅ YES (visual only) | ❌ NO |
-| Style/Lint checks | ✅ YES (code quality) | ❌ NO |
-| Route health (200 OK) | ✅ YES | ❌ NO |
-| Visual regression pass | ✅ YES | ❌ NO |
-| `make verify-v2-contract` | N/A | ✅ YES |
-| Live founder validation | N/A | ✅ YES |
-
-**Prime V2 Shipping Requirements:**
-
-1. **Contract Gate MUST Pass:**
-   \`\`\`bash
-   make verify-v2-contract
-   \`\`\`
-   - Runs `v2-contract-gate.yml` story
-   - Enforces: no demo badge, real data only, left-pane artifacts, reload continuity
-
-2. **Live Founder Validation REQUIRED:**
-   - Follow: \`docs/v2/FOUNDER_SIGNOFF_FLOW.md\`
-   - One authenticated user validates with real holdings data
-   - Route matrix: \`/v2\`, \`/brokerage\`
-
-3. **`verify-release` is Pre-Release Only:**
-   - \`make verify-release\` = local checks + contract gate
-   - Output: "PRE-RELEASE CHECKS PASSED — RELEASE NOT APPROVED YET"
-   - Does NOT constitute final approval
-
-**When touching Prime V2 routes or stories:**
-
-If PR changes files in:
-- \`/v2\` or \`/brokerage\` routes
-- \`docs/TESTING/STORIES/production_v2/\`
-- \`docs/v2/\`
-
-Then PR body MUST include:
-\`\`\`markdown
-## V2 Product Signoff Status
-
-- [ ] \`make verify-v2-contract\` passed
-- [ ] Founder live validation completed (see \`docs/v2/FOUNDER_SIGNOFF_FLOW.md\`)
-
-**Contract Docs:**
-- \`docs/v2/PRODUCT_CONTRACT.md\` — Hard invariants
-- \`docs/v2/RELEASE_GATE.md\` — Binary YES/NO checks
-- \`docs/v2/FAKE_METRIC_GUARDRAILS.md\` — No demo/fake metrics
-
-⚠️ Screenshots/style review are evidence only and cannot certify V2 product correctness.
-\`\`\`
-
-**Key Documents:**
-- \`docs/v2/PRODUCT_CONTRACT.md\` — Non-negotiable product invariants
-- \`docs/v2/RELEASE_GATE.md\` — Binary validation checks
-- \`docs/v2/FOUNDER_SIGNOFF_FLOW.md\` — Authenticated signoff process
-- \`docs/v2/FAKE_METRIC_GUARDRAILS.md\` — Guardrails against fake/demo data
-
----
-
 ## Core Workflows
 
 | Skill | Description | Example | Tags |
@@ -421,6 +357,7 @@ Then PR body MUST include:
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
+| **agent-skills-creator** | Create, update, or deprecate canonical skills in `~/agent-skills` using the current agent-skills method. MUST BE USED when the user wants a new skill, a skill refactor, a deprecation shim, skill metadata updates, or AGENTS baseline regeneration for skill changes. Use for canonical `agent-skills` work, not legacy `.claude/skills` or one-off local skill experiments. | `dx-worktree create <beads-id> agent-skills` | meta, skills, workflow, baseline, agent-skills |
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban views, dependency graphs, and the robot-plan API for auto-selecting next tasks. Keywords: beads, viewer, kanban, dependency graph, robot-plan, task selection, bottleneck | `bd show "$NEXT_TASK"` | workflow, beads, visualization, task-selection |
 | **cass-memory** | Local-first procedural/episodic memory workflow with opt-in sanitized cross-agent digest sharing. | — |  |
 | **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode |
@@ -433,15 +370,17 @@ Then PR body MUST include:
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |
 | **gskill** | Auto-learn repository-specific skills for coding agents using SWE-smith  GEPA. Generates synthetic tasks and evolves skills through reflective optimization. Use when you want to improve agent performance on a specific repository. | — | skill-learning, gepa, swe-smith, optimization, auto-ml |
 | **impeccable** | Design skills for AI coding tools. Create distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Includes 7 reference guides and 17 design commands. Use when building web components, pages, artifacts, posters, or applications. Keywords: frontend, design, UI, UX, typography, color, motion, interaction, responsive, audit, polish | — | design, frontend, ui, ux, typography, color, motion, accessibility |
+| **implementation-planner** | Create self-contained implementation specs with canonical Beads epic/subtask/dependency structure. MUST BE USED when the user asks for an implementation plan, tech spec, rollout plan, migration plan, or explicitly asks for "a comprehensive implementation plan with Beads epic, dependencies, and subtasks". Use for new systems, multi-phase refactors, cross-repo work, infra changes, or any work that needs a reviewable plan before execution. | `bd create --title "<epic title>" --type epic --priority 1` | planning, beads, specification, workflow, architecture |
 | **lint-check** | Run quick linting checks on changed files. MUST BE USED when user wants to check code quality. Fast validation (<5s) following V3 trust-environments philosophy. Use when user says "lint my code", "check formatting", or "run linters", or when user mentions uncommitted changes, pre-commit state, formatting issues, code quality, style checks, validation, prettier, eslint, pylint, or ruff. | — | workflow, quality, linting, validation |
 | **llm-tldr** | Local-first static-analysis context slicing skill for precise, low-token task context extraction. | — |  |
+| **loop-orchestration** | Orchestrate Codex-first implementation loops built around `dx-runner` dispatch, bounded sleep intervals, status checks, review passes, and deterministic re-dispatch. Use when a live session should repeatedly dispatch work, wait, inspect `dx-runner` state, review outcomes, and continue until merge-ready or blocked. Invoke when users mention "poll every 5m", "check this runner repeatedly", "sleep loop", "babysit this PR", "re-dispatch round N", "keep checking until merge-ready", or "build a loop orchestrator". `/loop` is only a prototype model for the desired behavior, not the required runtime surface. | — |  |
 | **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | `dx-runner start --provider opencode --beads bd-xxx --prompt-` | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |
 | **plan-refine** | Iteratively refine implementation plans using the "Convexity" pattern. Simulates a multi-round architectural critique to converge on a secure, robust specification. Use when you have a draft plan that needs deep architectural review or "APR" style optimization. | — | architecture, planning, review, refinement, apr |
 | **prompt-writing** | Draft self-contained prompts for delegated agents with cross-VM-safe context. MUST BE USED when assigning work to another agent (implementation, QA, rollout, or audit). Enforces: worktree-first, no canonical writes, Beads traceability (epic/subtask/dependencies), and required PR artifacts (PR_URL  PR_HEAD_SHA). Trigger phrases include: "assign to another agent", "write a one-shot prompt", "dispatch this", "prepare autonomous prompt", "QA agent prompt", "parallelize work to cloud", and "assign to jules". | — | workflow, prompts, orchestration, dx, safety |
-| **skill-creator** | Create new Claude Code skills following V3 DX patterns with Beads/Serena integration. MUST BE USED when creating skills. Follows tech lead proven patterns from 300k LOC case study. Use when user wants to create a new skill, implement workflow automation, or enhance the skill system, or when user mentions "need a skill for X", "automate this workflow", "create new capability", repetitive manual processes, skill creation, meta-skill, or V3 patterns. | — | meta, skill-creation, automation, v3 |
+| **skill-creator** | Deprecated compatibility shim for legacy skill creation requests. Use when the user still says "skill-creator" or asks to create a skill, then route canonical `~/agent-skills` work to `agent-skills-creator`. Route implementation-plan/spec requests with Beads epic+dependencies+subtasks to `implementation-planner`. | — | meta, skill-creation, compatibility, deprecation |
 | **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lightweight locking). Uses direct Slack Web API calls and/or the slack-coordinator systemd service. Does not require MCP. | — | slack, coordination, workflow, optional |
 | **wooyun-legacy** | WooYun漏洞分析专家系统。提供基于88,636个真实漏洞案例提炼的元思考方法论、测试流程和绕过技巧。适用于漏洞挖掘、渗透测试、安全审计及代码审计。支持SQL注入、XSS、命令执行、逻辑漏洞、文件上传、未授权访问等多种漏洞类型。 | — |  |
-| **worktree-workflow** | Create and manage task workspaces using git worktrees (without exposing worktree complexity). Use this when starting work on a Beads ID, when an agent needs a clean workspace, or when a repo is dirty and blocks sync. Provides a single command (`dx-worktree`) for create/cleanup/prune and a recovery path via dirty-repo-bootstrap. | `dx-worktree create <beads-id> <repo>` | dx, git, worktree, workspace, workflow |
+| **worktree-workflow** | Workspace-first git worktree management (DX V8.6). Create, open, resume, and recover workspaces while keeping canonical repos clean. All mutating work happens in /tmp/agents/<beads-id>/<repo>. Commands: create <beads-id> <repo>              - Create workspace (prints path) open <beads-id> <repo> [-- <cmd>]     - Show status or exec command resume <beads-id> <repo> [-- <cmd>]   - Resume workspace evacuate-canonical <repo>             - Recover dirty canonical repo cleanup <beads-id>                    - Remove workspace prune <repo>                          - Prune worktree metadata explain                               - Show workspace-first policy Use when starting work on a Beads ID, when an agent needs a clean workspace, or when recovering from dirty canonical repos. | `dx-worktree create <beads-id> <repo>` | dx, git, worktree, workspace, workflow, v86 |
 
 
 ## Health & Monitoring
