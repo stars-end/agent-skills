@@ -10,11 +10,13 @@ import sys
 from pathlib import Path
 
 # Add lib to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "scripts" / "lib"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts" / "lib"))
 
 from dx_loop.scheduler import DxLoopScheduler, SchedulerState
 from dx_loop.state_machine import LoopState, BlockerCode, LoopStateTracker
 from dx_loop.beads_integration import BeadsWaveManager
+from dx_loop.blocker import BlockerClassifier
+from dx_loop.notifications import NotificationManager
 
 
 def test_no_duplicate_dispatch():
@@ -72,19 +74,8 @@ def test_state_persistence_round_trip():
     """P1 fix: Save/load is symmetric"""
     # Create manager with data
     manager1 = BeadsWaveManager()
-    manager1.tasks = {
-        "bd-1": BeadsWaveManager._load_task_details.__self__.BeadsTask(
-            beads_id="bd-1",
-            title="Test",
-            status="open",
-            dependencies=[],
-            dependents=[],
-            priority=2,
-        ) if hasattr(BeadsWaveManager, '_load_task_details') else None
-    }
-    
-    # Manually create a simple task for testing
     from dx_loop.beads_integration import BeadsTask
+
     manager1.tasks = {
         "bd-1": BeadsTask(
             beads_id="bd-1",
@@ -134,9 +125,40 @@ def test_scheduler_state_persistence():
     print("✓ Scheduler state persistence works")
 
 
+def test_restart_suppresses_unchanged_blocker_notifications():
+    """P1 fix: blocker suppression survives classifier/notification restore"""
+    classifier1 = BlockerClassifier()
+    notifications1 = NotificationManager()
+
+    blocker1 = classifier1.classify(
+        "worktree_missing",
+        beads_id="bd-test-1",
+        wave_id="wave-test",
+    )
+    note1 = notifications1.create_notification(blocker1)
+
+    assert note1 is not None, "First blocker occurrence should notify"
+
+    classifier2 = BlockerClassifier.from_dict(classifier1.to_dict())
+    notifications2 = NotificationManager.from_dict(notifications1.to_dict())
+
+    blocker2 = classifier2.classify(
+        "worktree_missing",
+        beads_id="bd-test-1",
+        wave_id="wave-test",
+    )
+    note2 = notifications2.create_notification(blocker2)
+
+    assert blocker2.is_unchanged, "Same blocker after restore should be unchanged"
+    assert note2 is None, "Unchanged blocker after restore should be suppressed"
+
+    print("✓ Restart preserves unchanged-blocker suppression")
+
+
 if __name__ == "__main__":
     test_no_duplicate_dispatch()
     test_notification_first_occurrence()
     test_state_persistence_round_trip()
     test_scheduler_state_persistence()
+    test_restart_suppresses_unchanged_blocker_notifications()
     print("\nAll v1.1 fix tests passed!")

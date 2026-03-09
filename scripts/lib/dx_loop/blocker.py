@@ -122,10 +122,7 @@ class BlockerClassifier:
         """
         return {
             "previous_blockers": {
-                bid: {
-                    "code": blocker.code.value,
-                    "hash": blocker.compute_hash(),
-                }
+                bid: blocker.to_dict()
                 for bid, blocker in self.previous_blockers.items()
             }
         }
@@ -140,13 +137,18 @@ class BlockerClassifier:
         classifier = cls()
         if "previous_blockers" in data:
             for bid, blocker_data in data["previous_blockers"].items():
-                # Create minimal BlockerState with just code and precomputed hash
+                # Restore full blocker shape so unchanged detection compares against
+                # the original hash, not a placeholder reconstruction.
                 blocker = BlockerState(
                     code=BlockerCode(blocker_data["code"]),
-                    severity=BlockerSeverity.INFO,
-                    message="",
+                    severity=BlockerSeverity(blocker_data["severity"]),
+                    message=blocker_data["message"],
+                    beads_id=blocker_data.get("beads_id"),
+                    wave_id=blocker_data.get("wave_id"),
+                    metadata=blocker_data.get("metadata", {}),
+                    timestamp=blocker_data.get("timestamp", ""),
                 )
-                blocker.previous_hash = blocker_data.get("hash")
+                blocker.is_unchanged = blocker_data.get("is_unchanged", False)
                 classifier.previous_blockers[bid] = blocker
         return classifier
 
