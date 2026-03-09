@@ -345,7 +345,6 @@ done
 ✅ Index symbols (classes, functions, exports)
 ✅ Identify file status (active, deprecated, test)
 ✅ Generate SKILL.md from template
-✅ Update skill registry (auto-activation)
 ✅ Report results (files, LOC, status breakdown)
 
 ## What This Skill DOESN'T Do

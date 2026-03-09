@@ -171,7 +171,7 @@ Run `/docs-{epic} <command>` where command is:
 ```
 ✅ Created .claude/skills/docs-{epic}/
 ✅ Cached {N} docs to .serena/memories/external_{epic}/
-✅ Generated summaries via documentation-engineer
+✅ Generated summaries
 ✅ Skill auto-activates on: {topics}
 
 Next:
