@@ -1,4 +1,4 @@
-# Fleet Sync Runbook (v2.3)
+# Fleet Sync Runbook (v2.4)
 
 ## Purpose
 
@@ -205,6 +205,75 @@ Remote host payloads fail deterministically when:
 - snapshot missing (`remote_snapshot_missing`)
 - snapshot stale beyond `audit.thresholds.tool_stale_hours` (`remote_snapshot_stale`)
 - payload invalid (`remote_snapshot_unparseable`)
+
+## Skills-Plane Health (Weekly)
+
+Weekly fleet checks include two skills-related governance checks:
+
+### Local Diagnosis (skills-doctor)
+
+For diagnosing skills-plane issues on a single VM:
+
+```bash
+~/.agent/skills/health/skills-doctor/check.sh
+~/.agent/skills/health/skills-doctor/check.sh --json
+```
+
+The skills-doctor verifies:
+- Skills plane exists at `~/.agent/skills`
+- Symlink points at canonical agent-skills (or is git checkout)
+- `AGENTS.md` and baseline artifacts present
+- Required skill directories for repo profile
+
+### Fleet Governance (dx-fleet weekly)
+
+Two weekly checks provide fleet-wide skills alignment:
+
+**`skills_plane_alignment`**
+
+Verifies the shared skills plane on each canonical host:
+- Skills plane exists
+- Symlink target is canonical (or git checkout)
+- `AGENTS.md` present
+- Baseline artifact (`dist/universal-baseline.md`) exists
+- Core skill directories present
+
+**`ide_bootstrap_alignment`**
+
+Verifies IDE bootstrap rails point at skills plane:
+- `~/.claude/CLAUDE.md` references AGENTS.md
+- `~/.gemini/GEMINI.md` references AGENTS.md
+- `~/.opencode/config.json` references AGENTS.md
+
+### Why Weekly, Not Daily?
+
+These checks are weekly because:
+- Skills plane installation changes infrequently
+- IDE bootstrap is typically a one-time setup
+- Misalignment indicates systemic issues requiring manual intervention
+- Daily checks would be noisy for what is fundamentally an install-time concern
+
+### Repairing Skills-Plane Issues
+
+If `skills_plane_alignment` fails:
+```bash
+# Re-link the skills plane
+ln -sf ~/agent-skills ~/.agent/skills
+
+# Or if not a checkout, clone it
+git clone https://github.com/stars-end/agent-skills.git ~/.agent/skills
+```
+
+If `ide_bootstrap_alignment` fails:
+```bash
+# Claude Code
+mkdir -p ~/.claude
+ln -sf ~/.agent/skills/AGENTS.md ~/.claude/CLAUDE.md
+
+# Gemini CLI
+mkdir -p ~/.gemini
+ln -sf ~/.agent/skills/AGENTS.md ~/.gemini/GEMINI.md
+```
 
 ## Artifact Paths
 
