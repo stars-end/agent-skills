@@ -23,6 +23,7 @@ from .state_machine import BlockerCode, LoopState
 
 class BlockerSeverity(str, Enum):
     """Blocker severity levels"""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -33,27 +34,35 @@ class BlockerSeverity(str, Enum):
 class BlockerState:
     """
     Represents a classified blocker with metadata
-    
+
     Includes unchanged detection to enable suppression.
     """
+
     code: BlockerCode
     severity: BlockerSeverity
     message: str
     beads_id: Optional[str] = None
     wave_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+    )
+
     # Unchanged detection
     previous_hash: Optional[str] = None
     is_unchanged: bool = False
-    
+
     def compute_hash(self) -> str:
         """Compute hash for unchanged detection"""
         import hashlib
-        content = f"{self.code.value}:{self.severity.value}:{self.message}:{self.beads_id}"
+
+        content = (
+            f"{self.code.value}:{self.severity.value}:{self.message}:{self.beads_id}"
+        )
         return hashlib.sha256(content.encode()).hexdigest()[:16]
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "code": self.code.value,
@@ -70,9 +79,11 @@ class BlockerState:
 class BlockerClassifier:
     """
     Classifies blocker states from dx-runner outcomes
-    
+
     Maps dx-runner reason_codes to dx-loop blocker taxonomy with
     unchanged detection for noise suppression.
+
+    FIX for P1: Added serialization for previous_blockers state to survive restart.
     """
 
     # Mapping from dx-runner reason_codes to blocker taxonomy
@@ -84,19 +95,16 @@ class BlockerClassifier:
         "auth_resolution_failed": BlockerCode.KICKOFF_ENV_BLOCKED,
         "railway_auth_missing": BlockerCode.KICKOFF_ENV_BLOCKED,
         "railway_cli_missing": BlockerCode.KICKOFF_ENV_BLOCKED,
-        
         # Run blocked (not stalled)
         "provider_concurrency_cap_exceeded": BlockerCode.RUN_BLOCKED,
         "opencode_rate_limited": BlockerCode.RUN_BLOCKED,
         "gemini_capacity_exhausted": BlockerCode.RUN_BLOCKED,
         "execution_mode_unsupported": BlockerCode.RUN_BLOCKED,
-        
         # Deterministic redispatch (stalled/timeout)
         "stalled_no_progress": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
         "no_op": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
         "monitor_no_rc_file": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
         "process_timeout": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
-        
         # Needs decision
         "max_attempts_exceeded": BlockerCode.NEEDS_DECISION,
         "retry_chain_exhausted": BlockerCode.NEEDS_DECISION,
@@ -105,6 +113,42 @@ class BlockerClassifier:
 
     def __init__(self):
         self.previous_blockers: Dict[str, BlockerState] = {}  # keyed by beads_id
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serialize blocker state for persistence (P1 fix)
+
+        Saves previous_blockers hashes to maintain suppression semantics.
+        """
+        return {
+            "previous_blockers": {
+                bid: {
+                    "code": blocker.code.value,
+                    "hash": blocker.compute_hash(),
+                }
+                for bid, blocker in self.previous_blockers.items()
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BlockerClassifier":
+        """
+        Restore blocker state from persistence (P1 fix)
+
+        Reconstructs previous_blockers for unchanged detection.
+        """
+        classifier = cls()
+        if "previous_blockers" in data:
+            for bid, blocker_data in data["previous_blockers"].items():
+                # Create minimal BlockerState with just code and precomputed hash
+                blocker = BlockerState(
+                    code=BlockerCode(blocker_data["code"]),
+                    severity=BlockerSeverity.INFO,
+                    message="",
+                )
+                blocker.previous_hash = blocker_data.get("hash")
+                classifier.previous_blockers[bid] = blocker
+        return classifier
 
     def classify(
         self,
@@ -117,7 +161,7 @@ class BlockerClassifier:
     ) -> BlockerState:
         """
         Classify blocker from dx-runner outcome
-        
+
         Args:
             runner_reason_code: Reason code from dx-runner check/report
             beads_id: Beads issue ID
@@ -125,7 +169,7 @@ class BlockerClassifier:
             metadata: Additional metadata
             has_pr_artifacts: Whether PR_URL and PR_HEAD_SHA are present
             checks_passing: Whether CI checks are passing
-        
+
         Returns:
             BlockerState with unchanged detection
         """
@@ -162,18 +206,18 @@ class BlockerClassifier:
                 wave_id=wave_id,
                 metadata=metadata or {},
             )
-        
+
         # Unchanged detection
         if beads_id and beads_id in self.previous_blockers:
             prev = self.previous_blockers[beads_id]
             blocker.previous_hash = prev.compute_hash()
             if blocker.compute_hash() == blocker.previous_hash:
                 blocker.is_unchanged = True
-        
+
         # Cache for next comparison
         if beads_id:
             self.previous_blockers[beads_id] = blocker
-        
+
         return blocker
 
     def classify_review_blocked(
@@ -191,17 +235,17 @@ class BlockerClassifier:
             wave_id=wave_id,
             metadata={"findings": review_findings or []},
         )
-        
+
         # Unchanged detection
         if beads_id and beads_id in self.previous_blockers:
             prev = self.previous_blockers[beads_id]
             blocker.previous_hash = prev.compute_hash()
             if blocker.compute_hash() == blocker.previous_hash:
                 blocker.is_unchanged = True
-        
+
         if beads_id:
             self.previous_blockers[beads_id] = blocker
-        
+
         return blocker
 
     def _get_severity(self, blocker_code: BlockerCode) -> BlockerSeverity:
@@ -219,16 +263,16 @@ class BlockerClassifier:
     def should_notify(self, blocker: BlockerState) -> bool:
         """
         Determine if operator notification should be sent
-        
+
         Notify for: merge_ready, blocked states, needs_decision
         Suppress: unchanged blockers
         """
         if blocker.is_unchanged:
             return False
-        
+
         if blocker.code == BlockerCode.MERGE_READY:
             return True
-        
+
         if blocker.code in (
             BlockerCode.KICKOFF_ENV_BLOCKED,
             BlockerCode.RUN_BLOCKED,
@@ -236,14 +280,16 @@ class BlockerClassifier:
             BlockerCode.NEEDS_DECISION,
         ):
             return True
-        
+
         return False
 
-    def get_notification_payload(self, blocker: BlockerState) -> Optional[Dict[str, Any]]:
+    def get_notification_payload(
+        self, blocker: BlockerState
+    ) -> Optional[Dict[str, Any]]:
         """Get notification payload if should_notify() is True"""
         if not self.should_notify(blocker):
             return None
-        
+
         return {
             "blocker_code": blocker.code.value,
             "severity": blocker.severity.value,
