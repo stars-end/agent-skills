@@ -190,10 +190,10 @@ Each tool in `configs/mcp-tools.yaml` has an `integration_mode` field:
 
 | Tool | Mode | Status | Notes |
 |------|------|--------|-------|
-| `llm-tldr` | mcp | Enabled | Working |
+| `llm-tldr` | mcp | Enabled | Static analysis context slicing |
 | `cass-memory` | cli | Enabled | CLI-native, no IDE rendering |
-| `context-plus` | mcp | Enabled | Package: `contextplus@1.0.7` |
-| `serena` | mcp | Enabled | Install from GitHub |
+| `context-plus` | mcp | Enabled | Package: `contextplus@latest` |
+| `serena` | mcp | Enabled | Install from GitHub (PyPI collision) |
 
 ## 13) Platform Status Contract
 
@@ -213,11 +213,11 @@ Ops infrastructure is healthy but tool-value lane is partial:
 
 **Current State (as of 2026-03-09): Full Fleet Sync GO**
 
-Enabled tools:
-- `llm-tldr` (mcp, working)
-- `cass-memory` (cli, working)
-- `context-plus` (mcp, working)
-- `serena` (mcp, working)
+All four tools are enabled and operational:
+- `llm-tldr` (mcp): Static analysis context slicing
+- `cass-memory` (cli): CLI-native episodic memory
+- `context-plus` (mcp): Structural context analysis
+- `serena` (mcp): AI assistant memory
 
 ## 14) Out of Scope
 

@@ -44,11 +44,14 @@ Keep Fleet Sync honest and executable:
 - `cli`: host-level tool, verified by runtime health, not required in IDE MCP configs
 - `mcp`: rendered into supported client config surfaces and verified by both file-level convergence and client-visible CLI checks
 
-### Current Intent
-- `cass-memory`: `cli`
-- `llm-tldr`: `mcp`
-- `context-plus`: `mcp`
-- `serena`: intended `mcp`, but still blocked until proven
+### Current Tool Roster (V2.2)
+
+| Tool | Class | Status | Notes |
+|------|-------|--------|-------|
+| `cass-memory` | `cli` | Enabled | CLI-native, not rendered to IDE configs |
+| `llm-tldr` | `mcp` | Enabled | Static analysis context slicing |
+| `context-plus` | `mcp` | Enabled | Structural context analysis |
+| `serena` | `mcp` | Enabled | AI assistant memory |
 
 ## When To Use
 

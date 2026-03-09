@@ -112,14 +112,24 @@ For single-host issues:
 
 ## Cross-VM Rollout
 
+Use `dx-fleet converge` for fleet-wide operations:
+
+```bash
+# Fleet-wide drift check
+~/agent-skills/scripts/dx-fleet.sh converge --check --json
+
+# Fleet-wide apply
+~/agent-skills/scripts/dx-fleet.sh converge --apply --json
+
+# Fleet-wide repair
+~/agent-skills/scripts/dx-fleet.sh converge --repair --json
+```
+
+For per-host operations:
+
 ```bash
 for vm in macmini homedesktop-wsl epyc6 epyc12; do
-  ssh "$vm" "~/agent-skills/scripts/dx-fleet-install.sh --apply --json --state-dir ~/.dx-state/fleet"
-done
-
-for vm in macmini homedesktop-wsl epyc6 epyc12; do
-  ssh "$vm" "~/agent-skills/scripts/dx-fleet-check.sh --mode daily --json --state-dir ~/.dx-state/fleet"
-  ssh "$vm" "~/agent-skills/scripts/dx-fleet-check.sh --mode weekly --json --state-dir ~/.dx-state/fleet"
+  ssh "$vm" "~/agent-skills/scripts/dx-fleet.sh check --mode daily --json --state-dir ~/.dx-state/fleet"
 done
 ```
 
@@ -152,7 +162,7 @@ Fleet Sync operates with two tool classes:
 
 | Class | Rendering | Layer 4 Check | Example |
 |-------|-----------|---------------|---------|
-| `mcp` | IDE config | `codex mcp list` | llm-tldr, context-plus |
+| `mcp` | IDE config | `claude mcp list` | llm-tldr, context-plus, serena |
 | `cli` | None | N/A | cass-memory |
 
 ### Current Tool Roster
@@ -161,18 +171,17 @@ Fleet Sync operates with two tool classes:
 |------|------|--------|----------------|
 | `llm-tldr` | mcp | Enabled | `tldr-mcp --version` |
 | `cass-memory` | cli | Enabled | `cm --version` |
-| `context-plus` | mcp | Enabled | `which contextplus` |
+| `context-plus` | mcp | Enabled | `npx -y contextplus --help` |
 | `serena` | mcp | Enabled | `serena --help` |
 
-**Current Status: Full Fleet Sync GO (conditional)**
+**Current Status: Full Fleet Sync GO**
 
-CLI tools (`cass-memory`) are green when host runtime health passes.
-MCP tools (`llm-tldr`, `context-plus`) are green when:
-1. Host runtime health passes
-2. IDE configs are rendered
-3. Client visibility confirmed
-
-Disabled tool (`serena`) is exempt from health checks.
+All four tools are enabled and operational:
+- CLI tools (`cass-memory`) are green when host runtime health passes
+- MCP tools (`llm-tldr`, `context-plus`, `serena`) are green when:
+  1. Host runtime health passes
+  2. IDE configs are rendered
+  3. Client visibility confirmed
 
 **Operator expectations:**
 - Daily/weekly audits should pass (green) if all enabled tools pass

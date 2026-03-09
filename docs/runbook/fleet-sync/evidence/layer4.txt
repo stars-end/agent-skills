@@ -1,32 +1,30 @@
 === Layer 4: Client Visibility ===
-Date: 2026-03-09T18:00:06Z
+Date: 2026-03-09T19:17:24Z
 
-~/.claude.json MCP servers:
-[
-  "cass-memory",
-  "chrome-devtools",
-  "context-plus",
-  "llm-tldr",
-  "serena",
-  "universal-skills",
-  "web-search-prime"
-]
+claude mcp list:
+Checking MCP server health...
 
-~/.opencode/config.json MCP servers:
-[
-  "cass-memory",
-  "context-plus",
-  "llm-tldr",
-  "serena",
-  "slack"
-]
+plugin:playwright:playwright: npx @playwright/mcp@latest - ✓ Connected
+cass-memory: cass-memory  - ✗ Failed to connect
+chrome-devtools: /opt/homebrew/bin/chrome-devtools-mcp --headless --viewport 1440x900 - ✓ Connected
+context-plus: npx -y contextplus - ✓ Connected
+llm-tldr: tldr-mcp  - ✓ Connected
+serena: serena start-mcp-server - ✓ Connected
+universal-skills: npx -y universal-skills mcp - ✓ Connected
+web-search-prime: https://api.z.ai/api/mcp/web_search_prime/mcp (HTTP) - ✓ Connected
 
-~/.gemini/antigravity/mcp_config.json MCP servers:
-[
-  "StitchMCP",
-  "context-plus",
-  "llm-tldr",
-  "serena",
-  "slack",
-  "stitch"
-]
+codex mcp list:
+Name        Command  Args                    Env  Cwd  Status   Auth       
+playwright  npx      @playwright/mcp@latest  -    -    enabled  Unsupported
+
+opencode mcp list:
+[0m
+┌  MCP Servers
+│
+▲  No MCP servers configured
+│
+└  Add servers with: opencode mcp add
+
+gemini mcp list:
+Loaded cached credentials.
+No MCP servers configured.

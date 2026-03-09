@@ -6,10 +6,10 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 
 | Tool | Class | Canonical Install | Canonical Health | Expected Client Surface |
 |------|-------|-------------------|------------------|-------------------------|
-| `cass-memory` | `cli` | `brew install dicklesworthstone/tap/cm` | `cm --version`, `cm quickstart --json`, `cm doctor --json` | Host runtime only; not required in MCP configs |
+| `cass-memory` | `cli` | `npm install -g Dicklesworthstone/cass_memory_system` | `cm --version`, `cm quickstart --json` | Host runtime only; not rendered to IDE configs |
 | `llm-tldr` | `mcp` | `uv tool install "llm-tldr==1.5.2"` | `tldr-mcp --version \|\| llm-tldr --version` | `codex`, `claude`, `gemini`, `opencode` where configured |
-| `context-plus` | `mcp` | Validate real package `contextplus` on the current host | `contextplus --version` | `codex`, `claude`, `gemini`, `opencode` where configured |
-| `serena` | `mcp` | Unresolved until a proven executable path exists | must prove executable entrypoint | same as above, only after proof |
+| `context-plus` | `mcp` | `npx -y contextplus` | `npx -y contextplus --help \| head -1` | `codex`, `claude`, `gemini`, `opencode` where configured |
+| `serena` | `mcp` | `uv tool install git+https://github.com/oraios/serena.git` | `serena --help \| head -1` | `codex`, `claude`, `gemini`, `opencode` where configured |
 
 ## Canonical Rules
 
@@ -22,8 +22,16 @@ This file is the compact operator reference for the intended Fleet Sync stack.
   - `gemini-cli`
   share one MCP config root.
 
-## Current Known Risks
+## Current Status (V2.2)
 
-- `cass-memory` can be installed but still degraded/unhealthy at runtime.
-- `context-plus` package naming has historically been wrong in the manifest.
-- `serena` remains the highest-risk unresolved tool due to package collision and executable uncertainty.
+All four tools are enabled and operational:
+- `cass-memory`: CLI-native episodic memory
+- `llm-tldr`: MCP static analysis context slicing
+- `context-plus`: MCP structural context analysis
+- `serena`: MCP AI assistant memory
+
+## Known Caveats
+
+- `cass-memory` is CLI-native and should NOT appear in IDE MCP configs. If manually added, it will show as "Failed to connect" in `claude mcp list`.
+- `serena` PyPI has package collision with an unrelated AMQP client - must install from GitHub.
+- `context-plus` package name is `contextplus` (not `@forloopcodes/contextplus`).
