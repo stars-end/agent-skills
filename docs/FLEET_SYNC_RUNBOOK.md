@@ -146,32 +146,40 @@ Dry-run checks:
 
 ## Platform Status Contract
 
-Fleet Sync operates in one of two states:
+Fleet Sync operates with two tool classes:
 
-### Full Fleet Sync GO
-All enabled MCP tools are healthy. Expect green daily/weekly audits across all hosts.
+### Tool Classes (V2.2)
 
-### Ops-Platform Only GO
-Ops infrastructure is healthy, but the MCP tool-value lane is partial.
-- This is acceptable when tools are explicitly disabled in `configs/mcp-tools.yaml`
-- `tool_mcp_health` will show green because only enabled tools are health-checked
-- Core ops remain operational: Beads, GitHub, Railway, 1Password, Slack alerts
+| Class | Rendering | Layer 4 Check | Example |
+|-------|-----------|---------------|---------|
+| `mcp` | IDE config | `codex mcp list` | llm-tldr, context-plus |
+| `cli` | None | N/A | cass-memory |
 
-**Current Status: GO: ops-platform only**
+### Current Tool Roster
 
-Disabled tools (see `configs/mcp-tools.yaml` for rationale):
-- `context-plus`: npm package not found
-- `cass-memory`: requires bun runtime
-- `serena`: PyPI package provides no executable
+| Tool | Mode | Status | Health Command |
+|------|------|--------|----------------|
+| `llm-tldr` | mcp | Enabled | `tldr-mcp --version` |
+| `cass-memory` | cli | Enabled | `cm --version` |
+| `context-plus` | mcp | Enabled | `contextplus --version` |
+| `serena` | mcp | Disabled | `serena start-mcp-server --help` |
 
-Enabled tools:
-- `llm-tldr`: working
+**Current Status: Full Fleet Sync GO (conditional)**
+
+CLI tools (`cass-memory`) are green when host runtime health passes.
+MCP tools (`llm-tldr`, `context-plus`) are green when:
+1. Host runtime health passes
+2. IDE configs are rendered
+3. Client visibility confirmed
+
+Disabled tool (`serena`) is exempt from health checks.
 
 **Operator expectations:**
-- Daily/weekly audits should pass (green) if ops checks pass
-- If `tool_mcp_health` fails, check if tool is enabled in manifest - disabled tools are not health-checked
-- To add a new tool: add to `configs/mcp-tools.yaml` with `enabled: true`, run `dx-mcp-tools-sync.sh --apply`
-- To disable a broken tool: set `enabled: false` with `disabled_reason`, the tool will be excluded from health checks
+- Daily/weekly audits should pass (green) if all enabled tools pass
+- CLI tools only need Layer 1 (host runtime) - NOT Layer 4 (client visibility)
+- MCP tools need both Layer 1 and Layer 4
+- To add a new tool: add to `configs/mcp-tools.yaml` with `integration_mode: mcp|cli`
+- To disable a broken tool: set `enabled: false` with `disabled_reason`
 
 ## Freshness / Remote Snapshot Rules
 
