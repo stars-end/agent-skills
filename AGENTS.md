@@ -13,6 +13,13 @@ Support a startup founder balancing high-leverage technical work and family resp
 - Do not optimize for cleverness or novelty
 - Do not assume time availability
 
+### Coding Principles
+- **Fail-fast over silent fallbacks every time** — crash loudly, log clearly, surface errors immediately
+- Prefer explicit error handling over try-catch with empty blocks
+- Validate inputs at boundaries, not deep in call stacks
+- Return errors, don't swallow them
+- Assertions are for invariants, not control flow
+
 ## 1) Canonical Repository Rules
 **Canonical repositories** (read-mostly clones):
 - \`~/agent-skills\`
