@@ -43,7 +43,7 @@ Ensures **Issue-First** pattern: All implementation work tracked in Beads BEFORE
 
 ```typescript
 mcp__plugin_beads_beads__set_context(
-  workspace_root="/Users/fengning/prime-radiant-ai"
+  workspace_root="$HOME/prime-radiant-ai"
 )
 ```
 
@@ -325,29 +325,20 @@ The `git-create-feature-branch` script ensures:
 
 **Next Step: Check for Matching Skill**
 
-Before implementing directly, check if a specialized subagent or skill exists:
+Before implementing directly, check if a specialized skill exists:
 
-1. **For complex work, use specialized subagents** (`.claude/agents/`):
-   - "backend/api/service/endpoint" → Task(subagent_type="backend-engineer")
-   - "frontend/component/ui/page" → Task(subagent_type="frontend-engineer")
-   - "security/auth/encryption" → Task(subagent_type="security-engineer")
-   - "devops/ci/deployment" → Task(subagent_type="devops-engineer")
-   - "testing/e2e/integration" → Task(subagent_type="quality-assurance-tester")
+1. **For canonical skill work in `~/agent-skills`:**
+   - "create skill", "update skill", "deprecate skill" → `agent-skills-creator`
+   - Use worktree: `dx-worktree create <beads-id> agent-skills`
 
-2. **For workflow automation, use skills** (`.claude/skills/`):
-   - "create skill" → skill-creator
+2. **For implementation plans/specs with Beads epic+dependencies+subtasks:**
+   - "write implementation plan", "create spec", "rollout plan" → `implementation-planner`
+
+3. **For workflow automation, use core skills:**
    - "commit work" → sync-feature-branch
    - "open PR" → create-pull-request
 
-3. **If using subagent:**
-   ```
-   Task(
-     subagent_type="subagent-name",
-     prompt="Implement ${issue.title} for ${issue.id}"
-   )
-   ```
-
-4. **If no specialized tool:**
+4. **If no specialized skill matches:**
    Implement directly using Feature-Key: ${issue.id}
 
 **Implementation continues with:**
@@ -500,7 +491,7 @@ if (parentIssue exists) {
 ### Example 1: Create Skill (Task)
 
 ```
-Hook detects: "create the skill-creator skill"
+Hook detects: "create the analytics-context skill for my repo"
 
 issue-first activates:
 
@@ -515,7 +506,7 @@ issue-first activates:
    User: "Yes, P2"
 
 5. Parent:
-   AI detects: bd-xpi (DX_V3_BEADS_INTEGRATION) in progress
+   AI detects: bd-xpi (DX_SKILL_SYSTEM) in progress
    AI: "This work is under bd-xpi?"
    User: "Yes"
 
@@ -524,7 +515,7 @@ issue-first activates:
 
 6. Create:
    mcp__plugin_beads_beads__create({
-     title: "Implementation: skill-creator meta-skill",
+     title: "Task: Create analytics-area context skill",
      issue_type: "task",
      priority: 2,
      id: "bd-xpi.7",
@@ -540,7 +531,7 @@ issue-first activates:
 
    Feature-Key: bd-xpi.7
 
-User proceeds with skill-creator implementation.
+User proceeds with skill creation using agent-skills-creator.
 ```
 
 ### Example 2: Fix Bug (Bug)
@@ -643,12 +634,12 @@ mcp__plugin_beads_beads__list(status="in_progress")
 
 ---
 
-**Last Updated:** 2025-01-17
+**Last Updated:** 2026-03-08
 **Skill Type:** Workflow
 **Average Duration:** <30 seconds (+ branch creation if opted)
 **Related Docs:**
 - https://github.com/steveyegge/beads/blob/main/AGENTS.md
-- .claude/skills/beads-workflow/SKILL.md
+- `~/agent-skills/core/beads-workflow/SKILL.md`
 - AGENTS.md (Issue-First core principle)
 **Related Scripts:**
 - scripts/git-create-feature-branch

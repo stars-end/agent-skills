@@ -146,24 +146,27 @@ Optional:
 
 #### Output Template: `MODE=investigation`
 
+**NOTE**: Template shows structure. Actual handoffs must have concrete values.
+
 ```markdown
 ## Tech Lead Review (Investigation)
 
 - MODE: investigation
-- PR_URL: <url>
-- PR_HEAD_SHA: <sha>
-- BEADS_EPIC: <bd-...>
-- BEADS_SUBTASK: <bd-...>
-- BEADS_DEPENDENCIES: <ids|none>
-- Investigation Doc: docs/investigations/<file>.md
-- Review Summary Doc: docs/investigations/TECHLEAD-REVIEW-<topic>.md
+- PR_URL: https://github.com/stars-end/agent-skills/pull/123  # ← actual URL
+- PR_HEAD_SHA: abc123def456789...  # ← 40-char SHA
+- BEADS_EPIC: bd-sg2v.13  # ← actual ID, never <bd-...>
+- BEADS_SUBTASK: bd-sg2v.13.1
+- BEADS_DEPENDENCIES: bd-sg2v.12
+- Investigation Doc: docs/investigations/2026-03-08-frontend-analysis.md
+- Review Summary Doc: docs/investigations/TECHLEAD-REVIEW-frontend.md
 
 ### Validation
-- <cmd>: PASS|FAIL
+- pnpm --filter frontend build: PASS
+- pnpm --filter frontend type-check: PASS
 
 ### Decisions Needed
-1. <decision>
-2. <decision>
+1. Approve shadcn/ui adoption for V2 routes
+2. Confirm AG Grid migration timeline
 
 ### How To Review
 1. Open PR
@@ -173,28 +176,33 @@ Optional:
 
 #### Output Template: `MODE=implementation_return`
 
+**NOTE**: Template shows structure. Actual handoffs must have concrete values.
+
 ```markdown
 ## Tech Lead Review (Implementation Return)
 
 - MODE: implementation_return
-- PR_URL: <url>
-- PR_HEAD_SHA: <sha>
-- BEADS_EPIC: <bd-...|none>
-- BEADS_SUBTASK: <bd-...>
-- BEADS_DEPENDENCIES: <ids|none>
+- PR_URL: https://github.com/stars-end/prime-radiant-ai/pull/937
+- PR_HEAD_SHA: def456abc123789...
+- BEADS_EPIC: bd-sg2v.13
+- BEADS_SUBTASK: bd-sg2v.13.1
+- BEADS_DEPENDENCIES: none
 
 ### Validation
-- <cmd>: PASS|FAIL
+- pnpm --filter frontend build: PASS
+- pnpm --filter frontend test: PASS
+- dx-verify-clean.sh: PASS
 
 ### Changed Files Summary
-- <path>: <what changed>
+- frontend/package.json: Added shadcn/ui dependencies
+- frontend/tailwind.config.ts: Configured Tailwind v4 tokens
+- frontend/src/components/RootLayout.tsx: Replaced MUI with shadcn
 
 ### Risks / Blockers
-- <risk or blocker>
+- None - ready for review
 
 ### Decisions Needed
-1. <decision>
-2. <decision>
+1. Merge timing (before or after bd-sg2v.13.2)
 
 ### How To Review
 1. Open PR and inspect files changed
@@ -221,8 +229,25 @@ NEXT_COMMANDS:
 
 Keep these roles separate.
 
+## Before Emitting (Mandatory)
+
+STOP if ANY check fails:
+
+- [ ] `BEADS_EPIC` is concrete ID or `"none"`, not `<bd-...>`
+- [ ] `BEADS_SUBTASK` is concrete ID, not placeholder
+- [ ] `PR_URL` is actual GitHub URL, not `<url>`
+- [ ] `PR_HEAD_SHA` is 40-char SHA, not `<sha>`
+- [ ] No `/Users/...`, `/tmp/...`, or local paths in handoff content
+
+If you can't resolve: return blocker, don't emit handoff.
+
+## Hardened Rule
+
+Handoffs with `<bd-...>` placeholders or `<url>`/`<sha>` placeholders in required fields are INVALID.
+Resolve context BEFORE generating handoff, not during review.
+
 ---
 
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-03-08
 **Skill Type:** Workflow
 **Average Duration:** 2-4 minutes

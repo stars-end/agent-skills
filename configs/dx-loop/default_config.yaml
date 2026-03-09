@@ -1,0 +1,30 @@
+# dx-loop v1 default configuration
+
+# Execution settings
+max_attempts: 3
+max_revisions: 3
+max_parallel: 2
+cadence_seconds: 600  # 10 minutes
+
+# Provider configuration
+provider: opencode
+require_review: true
+
+# Notification settings
+notifications:
+  slack_webhook_url: null  # Set via environment variable
+  suppress_unchanged: true
+  max_unchanged_before_log: 10
+
+# Bootstrap gates
+bootstrap:
+  require_beads_health: true
+  require_worktree: true
+  require_host_reachable: true
+
+# PR artifact contract
+pr_contract:
+  require_pr_url: true
+  require_pr_head_sha: true
+  validate_sha_format: true
+  validate_url_format: true

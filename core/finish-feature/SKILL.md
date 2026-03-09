@@ -47,7 +47,7 @@ Ensures **clean completion** of epics/features: Verify work done, archive docs, 
 
 ```bash
 mcp__plugin_beads_beads__set_context(
-  workspace_root="/Users/fengning/prime-radiant-ai"
+  workspace_root="$HOME/prime-radiant-ai"
 )
 ```
 
@@ -240,12 +240,14 @@ fi
 
 ### 7. Archive External Docs Skill (if exists)
 
-**Check for epic-specific external docs skill:**
+> ⚠️ **Compatibility/Legacy Pattern**: This section handles repo-local `.claude/skills/docs-*` skills created by the legacy `docs-create` pattern.
+
+**Check for repo-local epic-specific external docs skill:**
 
 ```bash
 DOCS_SKILL=".claude/skills/docs-$issueId"
 if [ -d "$DOCS_SKILL" ]; then
-  echo "📚 Archive external docs skill?"
+  echo "📚 Archive repo-local external docs skill?"
   echo "   [y] Yes - Move to .claude/skills/archive/docs-$issueId/"
   echo "   [n] No - Keep active (for ongoing reference)"
   echo "   (Recommended: Yes for completed work, No for ongoing reference)"
@@ -616,12 +618,12 @@ Next: bd ready
 
 ---
 
-**Last Updated:** 2026-01-22 (V4.2.1 - Serena removed, Supermemory de-scoped)
+**Last Updated:** 2026-03-08 (V4.3 - Canonical skill routing)
 **Skill Type:** Workflow
 **Average Duration:** <2 minutes
-**Related Docs:**
-- https://github.com/steveyegge/beads/blob/main/AGENTS.md
-- .claude/skills/issue-first/SKILL.md
-- .claude/skills/sync-feature-branch/SKILL.md
-- .claude/skills/create-pull-request/SKILL.md
-- .claude/skills/merge-pr/SKILL.md
+**Related Skills:**
+- `issue-first`: Creates tracking issue (start of lifecycle)
+- `sync-feature-branch`: Commits work with Feature-Key (during work)
+- `create-pull-request`: Opens PR for review (before merge)
+- `merge-pr`: Merges to master (before finish)
+- `finish-feature`: Closes and cleans up (THIS SKILL, end of lifecycle)
