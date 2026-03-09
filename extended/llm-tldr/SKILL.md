@@ -69,6 +69,17 @@ Rendered to IDE configs via Fleet Sync:
 - `dead`: Find unreachable code
 - `semantic`: Semantic code search using embeddings
 
+## Status
+- Fleet contract: MCP-rendered tool
+- Canonical install: `uv tool install "llm-tldr==1.5.2"`
+- Canonical health checks:
+  - `tldr-mcp --version || llm-tldr --version`
+  - client MCP visibility checks such as `claude mcp list`, `codex mcp list`, `gemini mcp list`, `opencode mcp list`
+
+## Upstream Docs
+- PyPI: `https://pypi.org/project/llm-tldr/`
+- Package docs: `https://pypi.org/project/llm-tldr/`
+
 ## Contract
 
 1. **Local-first**: Run on local machine via stdio

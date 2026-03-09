@@ -64,6 +64,18 @@ Rendered to IDE configs via Fleet Sync:
 - Ranked target files/modules
 - Dependency or cluster hints for safer edits
 
+## Status
+- Fleet contract: MCP-rendered tool
+- Expected package: `contextplus`
+- Expected runtime: Node.js
+- Canonical health checks:
+  - `contextplus --version`
+  - client MCP visibility checks such as `claude mcp list`, `codex mcp list`, `gemini mcp list`, `opencode mcp list`
+
+## Upstream Docs
+- GitHub: `https://github.com/ForLoopCodes/contextplus`
+- npm package: `https://www.npmjs.com/package/contextplus`
+
 ## Contract
 
 1. **Local-first**: Execute locally via stdio MCP

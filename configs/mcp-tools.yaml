@@ -24,6 +24,7 @@ tools:
     target_ides:
       - codex-cli
       - claude-code
+      - antigravity
       - opencode
       - gemini-cli
     mcp:
@@ -56,51 +57,51 @@ tools:
 
   # ============================================================
   # context-plus: Structural context analysis (MCP mode)
+  # DISABLED: npm package contextplus@1.0.7 not found in registry
   # ============================================================
   context-plus:
-    enabled: true
+    enabled: false
     integration_mode: mcp
     version: "1.0.7"
+    disabled_reason: "Package contextplus@1.0.7 not found in npm registry. Historical manifest entries using @forloopcodes/contextplus also return 404. Re-evaluate if package is republished or fork is available."
     install_cmd: "npm install -g contextplus@1.0.7"
-    health_cmd: "which contextplus"
+    health_cmd: "contextplus --version"
     target_ides:
       - codex-cli
       - claude-code
       - antigravity
       - opencode
+      - gemini-cli
     mcp:
       type: stdio
       command: "contextplus"
-      args:
-        - "--transport"
-        - "stdio"
+      args: []
     runtime: node
-    env:
-      optional:
-        - OLLAMA_EMBED_MODEL
-        - OLLAMA_CHAT_MODEL
     upstream: "https://github.com/ForLoopCodes/contextplus"
     docs: "https://github.com/ForLoopCodes/contextplus#readme"
 
   # ============================================================
   # serena: AI assistant memory (MCP mode)
-  # Install from GitHub (PyPI has unrelated AMQP package)
+  # DISABLED: PyPI collision with AMQP client, git install not verified
   # ============================================================
   serena:
-    enabled: true
+    enabled: false
     integration_mode: mcp
     version: "git"
-    install_cmd: "serena --version 2>/dev/null || uv tool install git+https://github.com/oraios/serena.git"
-    health_cmd: "serena --help"
+    disabled_reason: "PyPI package serena==0.9.1 provides no executable entrypoint (uv tool install fails). Git-based install from oraios/serena required but not verified. Blocked until executable proof and client visibility are real."
+    install_cmd: "uv tool install git+https://github.com/oraios/serena.git"
+    health_cmd: "serena start-mcp-server --help"
     target_ides:
       - codex-cli
       - claude-code
       - antigravity
       - opencode
+      - gemini-cli
     mcp:
       type: stdio
-      command: "serena-mcp-server"
-      args: []
+      command: "serena"
+      args:
+        - "start-mcp-server"
     runtime: python
     upstream: "https://github.com/oraios/serena"
     docs: "https://github.com/oraios/serena#readme"

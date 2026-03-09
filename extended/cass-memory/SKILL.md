@@ -105,12 +105,12 @@ CASS Memory is managed by Fleet Sync as a CLI tool:
 
 ## Validation
 
-Layer 1 (Host Runtime):
+### Layer 1 (Host Runtime)
 ```bash
 cm --version && cm quickstart --json && cm doctor --json
 ```
 
-Layer 4 (Client Visibility):
+### Layer 4 (Client Visibility)
 - NOT REQUIRED - CLI tools don't appear in `codex mcp list` or similar
 
 ## Related
