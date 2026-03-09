@@ -7,78 +7,74 @@ strategy:
   fallback: last_known_good_local
 
 tools:
-  context-plus:
-    enabled: false
-    disabled_reason: "Package @forloopcodes/contextplus not found in npm registry (404). Re-evaluate if package is republished or fork is available."
-    version: "0.4.2"
-    install_cmd: "npx -y @forloopcodes/contextplus@0.4.2"
-    health_cmd: "npx -y @forloopcodes/contextplus@0.4.2 --version"
-    target_ides:
-      - codex-cli
-      - claude-code
-      - antigravity
-      - opencode
-    mcp:
-      type: stdio
-      command: "npx"
-      args:
-        - "-y"
-        - "@forloopcodes/contextplus@0.4.2"
-        - "--transport"
-        - "stdio"
-    runtime: node
-
   cass-memory:
-    enabled: false
-    disabled_reason: "Requires bun runtime which is not available on canonical hosts. Install bun first or find npm-equivalent alternative."
-    version: "1.0.0"
-    install_cmd: "bun install --global cass-memory-system@1.0.0"
-    health_cmd: "cass-memory --version"
-    target_ides:
-      - codex-cli
-      - claude-code
-      - opencode
-    mcp:
-      type: stdio
-      command: "cass-memory"
-      args: []
-    runtime: bun
+    enabled: true
+    version: "git"
+    integration_mode: cli
+    install_cmd: "brew install dicklesworthstone/tap/cm"
+    health_cmd: "cm --version"
+    target_ides: []
+    runtime: node
     sharing:
       default: local_only
       opt_in_env: CASS_SHARE_MEMORY
       disable_env: CASS_NO_SHARE
 
-  serena:
-    enabled: false
-    disabled_reason: "PyPI package serena==0.9.1 provides no executable entrypoint (uv tool install fails). Re-evaluate if package is fixed or find alternative."
-    version: "0.9.1"
-    install_cmd: "uv tool install serena==0.9.1"
-    health_cmd: "serena --version"
-    target_ides:
-      - codex-cli
-      - claude-code
-      - antigravity
-      - opencode
-    mcp:
-      type: stdio
-      command: "serena"
-      args: []
-    runtime: python
-
   llm-tldr:
     enabled: true
     version: "1.5.2"
+    integration_mode: mcp
     install_cmd: "uv tool install \"llm-tldr==1.5.2\""
     health_cmd: "tldr-mcp --version || llm-tldr --version"
     target_ides:
       - codex-cli
       - claude-code
+      - antigravity
       - opencode
       - gemini-cli
     mcp:
       type: stdio
       command: "tldr-mcp"
       args: []
+    runtime: python
+
+  context-plus:
+    enabled: false
+    version: "1.0.7"
+    integration_mode: mcp
+    disabled_reason: "Package @forloopcodes/contextplus not found in npm registry (404). The correct package name is 'contextplus' (without scope). Re-evaluate if package is republished or fork is available."
+    install_cmd: "npm install -g contextplus@1.0.7"
+    health_cmd: "contextplus --version"
+    target_ides:
+      - codex-cli
+      - claude-code
+      - antigravity
+      - opencode
+      - gemini-cli
+    mcp:
+      type: stdio
+      command: "contextplus"
+      args: []
+    runtime: node
+
+  serena:
+    enabled: false
+    version: "git"
+    integration_mode: mcp
+    disabled_reason: "PyPI package serena==0.9.1 provides no executable entrypoint (uv tool install fails). Git-based install from oraios/serena required but not verified. Blocked until executable proof and client visibility are real."
+    install_cmd: "uv tool install git+https://github.com/oraios/serena.git"
+    health_cmd: "serena start-mcp-server --help"
+    target_ides:
+      - codex-cli
+      - claude-code
+      - antigravity
+      - opencode
+      - gemini-cli
+    mcp:
+      type: stdio
+      command: "serena"
+      args:
+        - "start-mcp-server"
     runtime: python
 
 render:
@@ -96,6 +92,6 @@ verification:
     - configs/fleet-sync.manifest.yaml
     - configs/mcp-tools.yaml
   require_skill_stubs:
-    - extended/context-plus/SKILL.md
     - extended/cass-memory/SKILL.md
+    - extended/context-plus/SKILL.md
     - extended/llm-tldr/SKILL.md
