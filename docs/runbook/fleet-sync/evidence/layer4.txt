@@ -1,0 +1,32 @@
+=== Layer 4: Client Visibility ===
+Date: 2026-03-09T18:00:06Z
+
+~/.claude.json MCP servers:
+[
+  "cass-memory",
+  "chrome-devtools",
+  "context-plus",
+  "llm-tldr",
+  "serena",
+  "universal-skills",
+  "web-search-prime"
+]
+
+~/.opencode/config.json MCP servers:
+[
+  "cass-memory",
+  "context-plus",
+  "llm-tldr",
+  "serena",
+  "slack"
+]
+
+~/.gemini/antigravity/mcp_config.json MCP servers:
+[
+  "StitchMCP",
+  "context-plus",
+  "llm-tldr",
+  "serena",
+  "slack",
+  "stitch"
+]

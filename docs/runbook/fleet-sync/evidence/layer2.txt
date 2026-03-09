@@ -1,0 +1,139 @@
+=== Layer 2: Config Convergence ===
+Date: 2026-03-09T17:59:32Z
+{
+  "mode": "mcp-tools-sync",
+  "generated_at": "2026-03-09T17:59:33Z",
+  "generated_at_epoch": 1773079173,
+  "mode_action": "check",
+  "overall": "green",
+  "status": "green",
+  "details": "converged",
+  "reason_code": "ok",
+  "summary": {
+    "pass": 9,
+    "warn": 0,
+    "fail": 0,
+    "tools_pass": 3,
+    "tools_warn": 0,
+    "tools_fail": 0,
+    "files_pass": 6,
+    "files_warn": 0,
+    "files_fail": 0,
+    "tools_total": 3,
+    "files_total": 6
+  },
+  "reason_codes": [
+    "ok"
+  ],
+  "tools": [
+    {
+      "tool": "llm-tldr",
+      "version": "1.5.2",
+      "integration_mode": "mcp",
+      "status": "pass",
+      "severity": "low",
+      "details": "healthy",
+      "install_rc": 0,
+      "health_rc": 0,
+      "install_output": "",
+      "health_output": "usage: tldr-mcp [-h] [--project PROJECT]\ntldr-mcp: error: unrecognized arguments: --version\ntldr 1.5.2"
+    },
+    {
+      "tool": "cass-memory",
+      "version": "git",
+      "integration_mode": "cli",
+      "status": "pass",
+      "severity": "low",
+      "details": "healthy",
+      "install_rc": 0,
+      "health_rc": 0,
+      "install_output": "",
+      "health_output": "0.2.3"
+    },
+    {
+      "tool": "context-plus",
+      "version": "1.0.7",
+      "integration_mode": "mcp",
+      "status": "pass",
+      "severity": "low",
+      "details": "healthy",
+      "install_rc": 0,
+      "health_rc": 0,
+      "install_output": "",
+      "health_output": "/home/fengning/.local/share/mise/installs/node/22.21.1/bin/contextplus"
+    }
+  ],
+  "files": [
+    {
+      "ide": "antigravity",
+      "path": "/home/fengning/.gemini/antigravity/mcp_config.json",
+      "status": "pass",
+      "severity": "low",
+      "details": "in sync",
+      "managed_tools": [
+        "context-plus"
+      ],
+      "hash": "59546a3f84255059a34b64522c26640f0c886f42d7e2062b2ca224b355821269"
+    },
+    {
+      "ide": "claude-code",
+      "path": "/home/fengning/.claude.json",
+      "status": "pass",
+      "severity": "low",
+      "details": "in sync",
+      "managed_tools": [
+        "context-plus",
+        "llm-tldr"
+      ],
+      "hash": "db6729d4e16e39f57d01b0b3a6b5f55133187f56327c4a1d614d2824b857933b"
+    },
+    {
+      "ide": "codex-cli",
+      "path": "/home/fengning/.codex/config.toml",
+      "status": "pass",
+      "severity": "low",
+      "details": "in sync",
+      "managed_tools": [
+        "context-plus",
+        "llm-tldr"
+      ],
+      "hash": "a3f7911681e15cd7acfd951870340694fcacc01cacd203f66bc1d6b7717ac1fe"
+    },
+    {
+      "ide": "gemini-cli",
+      "path": "/home/fengning/.gemini/antigravity/mcp_config.json",
+      "status": "pass",
+      "severity": "low",
+      "details": "in sync",
+      "managed_tools": [
+        "llm-tldr"
+      ],
+      "hash": "59546a3f84255059a34b64522c26640f0c886f42d7e2062b2ca224b355821269"
+    },
+    {
+      "ide": "opencode",
+      "path": "/home/fengning/.opencode/config.json",
+      "status": "pass",
+      "severity": "low",
+      "details": "in sync",
+      "managed_tools": [
+        "context-plus",
+        "llm-tldr"
+      ],
+      "hash": "725a6eae41aa218f05e76f837729f5d28e7887e777d6db32f4da6f2ab043d4fc"
+    },
+    {
+      "ide": "gemini-cli",
+      "path": "/home/fengning/.gemini/GEMINI.md",
+      "status": "pass",
+      "severity": "low",
+      "details": "present",
+      "managed_tools": [],
+      "hash": "ad6f8c4121f2ea0162e2e3213cf488292086745ef28e82998bc52ae3842376a4"
+    }
+  ],
+  "state_paths": {
+    "state_dir": "/home/fengning/.dx-state/fleet",
+    "file": "/home/fengning/.dx-state/fleet/mcp-tools-sync.json"
+  }
+}
