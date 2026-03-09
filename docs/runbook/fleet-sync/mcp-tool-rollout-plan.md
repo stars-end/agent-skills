@@ -6,10 +6,9 @@ This plan outlines the recommended order of restoration and validation for the F
 ## Phase 1: Correct Manifest
 - **Target:** `configs/mcp-tools.yaml`
 - **Changes:**
-  1.  Update `context-plus` package name to `contextplus` and version to `1.0.7`.
-  2.  Update `cass-memory` package to `git+https://github.com/Dicklesworthstone/cass_memory_system.git` and binary name to `cm`.
-  3.  Update `serena` package to `git+https://github.com/oraios/serena.git`.
-  4.  Change `cass-memory` runtime to `node` (using `npm install -g`) to bypass missing `bun` on `epyc6`.
+  1.  Update `context-plus` package name to `contextplus` and version to `1.0.7`. Maintain `mcp` contract.
+  2.  Update `cass-memory` installation method to use the canonical Homebrew package (`brew install dicklesworthstone/tap/cm`) to maintain consistency across the fleet.
+  3.  Update `serena` package to `git+https://github.com/oraios/serena.git` and set to `mcp`.
 
 ## Phase 2: Host Restoration
 - **Primary Command:** `~/agent-skills/scripts/dx-mcp-tools-sync.sh --apply --json`
@@ -22,7 +21,8 @@ This plan outlines the recommended order of restoration and validation for the F
 
 ## Phase 3: Validation
 - Run `~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json` on each host.
-- Confirm `cm --version`, `contextplus --version`, `serena start-mcp-server --help`, and `llm-tldr --version` all pass.
+- Confirm `cm --version`, `contextplus --version`, `serena start-mcp-server --help`, and `tldr-mcp --version` all pass.
+- Verify Layer 4 client visibility for each canonical IDE using the appropriate commands (`codex mcp list`, `claude mcp list`, `gemini mcp list`, `opencode mcp list`).
 
 ## Rollback/Disable Strategy
 - **Emergency Disable:** Set `enabled: false` in `configs/mcp-tools.yaml` and run `dx-fleet converge --apply`.
