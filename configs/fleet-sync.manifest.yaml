@@ -36,6 +36,8 @@ audit:
   weekly_checks:
     - canonical_repo_hygiene
     - skills_symlink_integrity
+    - skills_plane_alignment
+    - ide_bootstrap_alignment
     - global_constraints_rails
     - ide_config_presence_and_drift
     - cron_health

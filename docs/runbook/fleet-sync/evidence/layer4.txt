@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 === Layer 4: Client Visibility (Fleet-Wide) ===
 Date: 2026-03-09T20:45:00Z
 
@@ -34,6 +35,14 @@ playwright    npx       @playwright/mcp@latest  -    -    enabled  Unsupported
 serena        serena    start-mcp-server        -    -    enabled  Unsupported
 
 claude mcp list:
+=======
+=== Layer 4: Client Visibility ===
+Date: 2026-03-09T19:17:24Z
+
+claude mcp list:
+Checking MCP server health...
+
+>>>>>>> origin/master
 plugin:playwright:playwright: npx @playwright/mcp@latest - ✓ Connected
 cass-memory: cass-memory  - ✗ Failed to connect
 chrome-devtools: /opt/homebrew/bin/chrome-devtools-mcp --headless --viewport 1440x900 - ✓ Connected
@@ -43,6 +52,7 @@ serena: serena start-mcp-server - ✓ Connected
 universal-skills: npx -y universal-skills mcp - ✓ Connected
 web-search-prime: https://api.z.ai/api/mcp/web_search_prime/mcp (HTTP) - ✓ Connected
 
+<<<<<<< HEAD
 opencode mcp list:
 ┌  MCP Servers
 │
@@ -62,6 +72,11 @@ llm-tldr: tldr-mcp  - ✓ Connected
 serena: serena start-mcp-server - ✓ Connected
 universal-skills: npx -y universal-skills mcp - ✓ Connected
 web-search-prime: https://api.z.ai/api/mcp/web_search_prime/mcp (HTTP) - ✗ Failed to connect
+=======
+codex mcp list:
+Name        Command  Args                    Env  Cwd  Status   Auth       
+playwright  npx      @playwright/mcp@latest  -    -    enabled  Unsupported
+>>>>>>> origin/master
 
 opencode mcp list:
 [0m
@@ -71,6 +86,7 @@ opencode mcp list:
 │
 └  Add servers with: opencode mcp add
 
+<<<<<<< HEAD
 
 gemini mcp list:
 Loaded cached credentials.
@@ -121,6 +137,8 @@ opencode mcp list:
 └  Add servers with: opencode mcp add
 
 
+=======
+>>>>>>> origin/master
 gemini mcp list:
 Loaded cached credentials.
 No MCP servers configured.
