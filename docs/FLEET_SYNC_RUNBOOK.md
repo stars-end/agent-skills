@@ -112,14 +112,24 @@ For single-host issues:
 
 ## Cross-VM Rollout
 
+Use `dx-fleet converge` for fleet-wide operations:
+
+```bash
+# Fleet-wide drift check
+~/agent-skills/scripts/dx-fleet.sh converge --check --json
+
+# Fleet-wide apply
+~/agent-skills/scripts/dx-fleet.sh converge --apply --json
+
+# Fleet-wide repair
+~/agent-skills/scripts/dx-fleet.sh converge --repair --json
+```
+
+For per-host operations:
+
 ```bash
 for vm in macmini homedesktop-wsl epyc6 epyc12; do
-  ssh "$vm" "~/agent-skills/scripts/dx-fleet-install.sh --apply --json --state-dir ~/.dx-state/fleet"
-done
-
-for vm in macmini homedesktop-wsl epyc6 epyc12; do
-  ssh "$vm" "~/agent-skills/scripts/dx-fleet-check.sh --mode daily --json --state-dir ~/.dx-state/fleet"
-  ssh "$vm" "~/agent-skills/scripts/dx-fleet-check.sh --mode weekly --json --state-dir ~/.dx-state/fleet"
+  ssh "$vm" "~/agent-skills/scripts/dx-fleet.sh check --mode daily --json --state-dir ~/.dx-state/fleet"
 done
 ```
 
@@ -146,32 +156,47 @@ Dry-run checks:
 
 ## Platform Status Contract
 
-Fleet Sync operates in one of two states:
+Fleet Sync operates with two tool classes:
 
-### Full Fleet Sync GO
-All enabled MCP tools are healthy. Expect green daily/weekly audits across all hosts.
+### Tool Classes (V2.2)
 
-### Ops-Platform Only GO
-Ops infrastructure is healthy, but the MCP tool-value lane is partial.
-- This is acceptable when tools are explicitly disabled in `configs/mcp-tools.yaml`
-- `tool_mcp_health` will show green because only enabled tools are health-checked
-- Core ops remain operational: Beads, GitHub, Railway, 1Password, Slack alerts
+| Class | Rendering | Layer 4 Check | Example |
+|-------|-----------|---------------|---------|
+| `mcp` | IDE config | `claude mcp list` | llm-tldr, context-plus, serena |
+| `cli` | None | N/A | cass-memory |
 
-**Current Status: GO: ops-platform only**
+### Current Tool Roster
 
-Disabled tools (see `configs/mcp-tools.yaml` for rationale):
-- `context-plus`: npm package not found
-- `cass-memory`: requires bun runtime
-- `serena`: PyPI package provides no executable
+| Tool | Mode | Status | Health Command |
+|------|------|--------|----------------|
+| `llm-tldr` | mcp | Enabled | `tldr-mcp --version` |
+| `cass-memory` | cli | Enabled | `cm --version` |
+| `context-plus` | mcp | Enabled | `npx -y contextplus --help` |
+| `serena` | mcp | Enabled | `serena --help` |
 
-Enabled tools:
-- `llm-tldr`: working
+**Current Status: CONDITIONAL_GO**
+
+All four tools are enabled and pass Layer 1-3 checks:
+- CLI tools (`cass-memory`): Green when host runtime health passes
+- MCP tools (`llm-tldr`, `context-plus`, `serena`): Green when:
+  1. Host runtime health passes
+  2. IDE configs are rendered
+  3. Client visibility confirmed
+
+**Known Limitations (from evidence/layer4.txt):**
+- Claude Code: All MCP tools visible ✓
+- Codex CLI: Does not show Fleet Sync MCP tools (config format mismatch)
+- OpenCode: "No MCP servers configured" (client not reading config)
+- Gemini CLI: "No MCP servers configured" (client not reading config)
+
+Full GO requires all four clients to show MCP tool visibility.
 
 **Operator expectations:**
-- Daily/weekly audits should pass (green) if ops checks pass
-- If `tool_mcp_health` fails, check if tool is enabled in manifest - disabled tools are not health-checked
-- To add a new tool: add to `configs/mcp-tools.yaml` with `enabled: true`, run `dx-mcp-tools-sync.sh --apply`
-- To disable a broken tool: set `enabled: false` with `disabled_reason`, the tool will be excluded from health checks
+- Daily/weekly audits should pass (green) if all enabled tools pass
+- CLI tools only need Layer 1 (host runtime) - NOT Layer 4 (client visibility)
+- MCP tools need both Layer 1 and Layer 4
+- To add a new tool: add to `configs/mcp-tools.yaml` with `integration_mode: mcp|cli`
+- To disable a broken tool: set `enabled: false` with `disabled_reason`
 
 ## Freshness / Remote Snapshot Rules
 
@@ -206,8 +231,11 @@ Temporary disable:
 
 - stop cron entries for `dx-audit-cron.sh`
 
-Fail-open rollback:
+Rollback (remove Fleet Sync MCP configs from IDE files):
 
 ```bash
-~/agent-skills/scripts/dx-fleet-install.sh --uninstall --json --state-dir ~/.dx-state/fleet
+# Remove Fleet Sync managed blocks from IDE configs
+# Manual edit required - remove sections between:
+#   # BEGIN FLEET_SYNC_MCP_MANAGED
+#   # END FLEET_SYNC_MCP_MANAGED
 ```

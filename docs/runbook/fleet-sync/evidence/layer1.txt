@@ -1,0 +1,15 @@
+=== Layer 1: Host Runtime Health ===
+Date: 2026-03-09T19:22:57Z
+
+llm-tldr:
+usage: tldr-mcp [-h] [--project PROJECT]
+tldr 1.5.2
+
+cass-memory:
+0.2.3
+
+context-plus:
+Context+ MCP server running on stdio
+
+serena:
+Usage: serena [OPTIONS] COMMAND [ARGS]...

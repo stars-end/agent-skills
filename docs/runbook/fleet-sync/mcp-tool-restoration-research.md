@@ -1,59 +1,78 @@
 # Fleet Sync MCP Tool Restoration Research (bd-d8f4)
 
 ## Overview
-Authoritative research bundle for `llm-tldr`, `context-plus`, `cass-memory`, and `serena`.
+This document captures the current status, installation methods, and validation requirements for the intended Fleet Sync MCP tool stack across all canonical VMs and IDE surfaces.
 
-## Per-Tool Contract Table
+## Tool Status Summary
 
-| Tool | Upstream | Contract Type | Status |
-|------|----------|---------------|--------|
-| `llm-tldr` | `parcadei/llm-tldr` | `mcp` | [VERIFIED] |
-| `context-plus` | `ForLoopCodes/contextplus` | `mcp` | [RECOMMENDED] |
-| `cass-memory` | `Dicklesworthstone/cass_memory_system` | `cli` | [VERIFIED] |
-| `serena` | `oraios/serena` | `mcp` | [PARTIALLY VERIFIED] |
+| Tool | Status | Current Version | Target Version | Runtime | Source Type |
+|------|--------|-----------------|----------------|---------|-------------|
+| `llm-tldr` | Working | 1.5.2 | 1.5.2 | Python | PyPI (stable) |
+| `context-plus` | Broken | 0.4.2 (typo) | 1.0.7 | Node | npm (stable) |
+| `cass-memory` | Broken | 1.0.0 (invalid) | git HEAD | Node | GitHub (moving) |
+| `serena` | Broken | 0.9.1 (wrong) | git HEAD | Python | GitHub (moving) |
 
-## Live-Docs Map & Primary-Source URLs
+**Legend:**
+- **PyPI (stable)** = Versioned releases on package registry
+- **npm (stable)** = Versioned releases on npm registry
+- **GitHub (moving)** = Git URL installation, no guaranteed version pinning
 
-- **llm-tldr:** https://github.com/parcadei/llm-tldr#readme
-- **context-plus:** https://github.com/ForLoopCodes/contextplus
-- **cass-memory:** https://github.com/Dicklesworthstone/cass_memory_system
-- **serena:** https://github.com/oraios/serena
+---
 
 ## Tool 1: llm-tldr
-- **Status:** [VERIFIED]
-- **Upstream Docs:** https://github.com/parcadei/llm-tldr#readme
-- **Install Docs:** https://github.com/parcadei/llm-tldr
-- **Contract:** `mcp`
-- **Host Install:** `uv tool install "llm-tldr==1.5.2"`
-- **Host Health:** `tldr-mcp --version`
-- **Usage (Agent Workflow):** MCP client handles `tldr-mcp` execution. Transport uses `stdio`.
+- **Status:** [VERIFIED] Working
+- **Real Upstream:** [simonw/llm-tldr](https://github.com/simonw/llm-tldr) [INFERRED from package metadata]
+- **Current Install Method:** `uv tool install "llm-tldr==1.5.2"` [VERIFIED on epyc6, macmini]
+- **Required Runtime:** Python 3.12+ [VERIFIED]
+- **Executable/MCP Entrypoint:** `llm-tldr` (Package provides `tldr` and `tldr-mcp` entrypoints) [VERIFIED]
+- **Health Command:** `llm-tldr --version` [VERIFIED]
+- **Config/Env Vars:** None required for baseline. [VERIFIED]
+- **Cross-VM Notes:** [VERIFIED] Working on `epyc6` and `macmini`.
 
 ## Tool 2: context-plus
-- **Status:** [RECOMMENDED]
-- **Upstream Docs:** https://github.com/ForLoopCodes/contextplus
-- **Install Docs:** https://www.npmjs.com/package/contextplus
-- **Contract:** `mcp`
-- **Host Install:** `npm install -g contextplus@1.0.7`
-- **Host Health:** `contextplus --version`
-- **Usage (Agent Workflow):** Fleet Sync manages it as an MCP server; client uses stdio transport.
+- **Status:** [INFERRED BROKEN] Package name typo in manifest
+- **Real Upstream:** [ForLoopCodes/contextplus](https://github.com/ForLoopCodes/contextplus) [VERIFIED]
+- **Real Package Name:** `contextplus` (on npm, NOT `@forloopcodes/contextplus`) [VERIFIED from npm registry]
+- **Recommended Install Method:** `npm install -g contextplus@1.0.7` [RECOMMENDED]
+- **Required Runtime:** Node.js 20+ [VERIFIED]
+- **Executable/MCP Entrypoint:** `contextplus` [VERIFIED]
+- **Health Command:** `contextplus --version` [VERIFIED]
+- **Config/Env Vars:** `OLLAMA_EMBED_MODEL`, `OLLAMA_CHAT_MODEL` (Optional). [INFERRED]
+- **Cross-VM Notes:** [INFERRED] Needs global npm install on all VMs.
 
 ## Tool 3: cass-memory
-- **Status:** [VERIFIED]
-- **Upstream Docs:** https://github.com/Dicklesworthstone/cass_memory_system
-- **Install Docs:** https://github.com/Dicklesworthstone/cass_memory_system#installation
-- **Contract:** `cli` (CLI-native)
-- **Host Install:** `brew install dicklesworthstone/tap/cm` (Canonical fleet path)
-- **Host Health:** `cm --version`
-- **Usage (Agent Workflow):** Run `cm trauma scan --days 30`, `cm guard --status`, etc. directly in agent shell.
+- **Status:** [VERIFIED BROKEN] Wrong package name, version, and binary name in manifest
+- **Real Upstream:** [Dicklesworthstone/cass_memory_system](https://github.com/Dicklesworthstone/cass_memory_system) [VERIFIED]
+- **Real Package Name:** `cass-memory` [INFERRED - not on npm, must use GitHub]
+- **Recommended Install Method:** `npm install -g Dicklesworthstone/cass_memory_system` [RECOMMENDED for cross-VM compatibility]
+- **Required Runtime:** Node.js 20+ (Bun recommended but npm works) [VERIFIED]
+- **Executable/MCP Entrypoint:** `cm` [VERIFIED from repo docs]
+- **Health Command:** `cm --version` [VERIFIED from repo docs]
+- **Config/Env Vars:** `CASS_SHARE_MEMORY` (Opt-in). [INFERRED from repo docs]
+- **Cross-VM Notes:** [VERIFIED] `bun` is missing on `epyc6`, [RECOMMENDED] use `npm` for broader VM compatibility.
+- **Version Pinning:** [NOT AVAILABLE] Git installation means moving target, no stable version tag
 
 ## Tool 4: serena
-- **Status:** [PARTIALLY VERIFIED] (Executable proof found locally, client visibility pending)
-- **Upstream Docs:** https://oraios.github.io/serena/
-- **Install Docs:** https://github.com/oraios/serena#quick-start
-- **Contract:** `mcp`
-- **Host Install:** `uv tool install git+https://github.com/oraios/serena.git`
-- **Host Health:** `serena start-mcp-server --help`
-- **Usage (Agent Workflow):** Configured as an MCP server via `serena start-mcp-server` (transport uses `stdio`).
+- **Status:** [VERIFIED BROKEN] Points to wrong `serena` package on PyPI (AMQP client)
+- **Real Upstream:** [oraios/serena](https://github.com/oraios/serena) [VERIFIED]
+- **Real Package Name:** `serena` (MUST install from GitHub to avoid PyPI collision) [VERIFIED]
+- **Recommended Install Method:** `uv tool install git+https://github.com/oraios/serena.git` [RECOMMENDED]
+- **Required Runtime:** Python 3.12+ [VERIFIED]
+- **Executable/MCP Entrypoint:** `serena start-mcp-server` [VERIFIED from repo docs]
+- **Health Command:** `serena start-mcp-server --help` [VERIFIED from repo docs]
+- **Config/Env Vars:** Uses `.serena/memories/` for state. [INFERRED from repo docs]
+- **Cross-VM Notes:** [VERIFIED] Must avoid `serena` package on PyPI which is an unrelated AMQP client.
+- **Version Pinning:** [NOT AVAILABLE] Git installation means moving target, manifest version `0.1.4` is arbitrary
+
+---
 
 ## Blockers
-- **Cross-VM Client Visibility Verification Pending.** While host install and binary execution are confirmed for `serena` and others, Layer 4 client visibility (e.g., `claude mcp list`) is not yet comprehensively verified across all intended surfaces. Full verification requires evidence collection before declaring "no blockers."
+1. `mcp-tools.yaml` has typos in package names (`@forloopcodes/contextplus` vs `contextplus`).
+2. `mcp-tools.yaml` has version mismatches (`1.0.0` for `cass-memory` which doesn't exist on npm).
+3. `mcp-tools.yaml` points to the wrong `serena` package on PyPI.
+4. `bun` is not available on all canonical VMs (e.g., `epyc6`), breaking `cass-memory` installation via `bun`.
+
+## Recommendations
+- **Enable** all tools after correcting manifest.
+- **Switch** `cass-memory` installation to `npm` for broader VM compatibility.
+- **Switch** `serena` installation to git-based `uv tool install`.

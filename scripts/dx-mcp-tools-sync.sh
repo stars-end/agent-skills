@@ -359,8 +359,13 @@ reason_codes = []
 for name, spec in enabled_tools:
     install_cmd = str(spec.get("install_cmd", "")).strip()
     health_cmd = str(spec.get("health_cmd", "")).strip()
-    target_ides = [str(i) for i in spec.get("target_ides", [])]
-    mcp = spec.get("mcp", {}) if isinstance(spec.get("mcp", {}), dict) else {}
+
+    # Determine integration mode: 'mcp' (IDE-rendered) or 'cli' (standalone)
+    integration_mode = str(spec.get("integration_mode", "mcp")).lower()
+
+    # Only MCP tools need target_ides and mcp config blocks
+    target_ides = [str(i) for i in spec.get("target_ides", [])] if integration_mode == "mcp" else []
+    mcp = spec.get("mcp", {}) if isinstance(spec.get("mcp", {}), dict) and integration_mode == "mcp" else {}
     entry = {
         "type": str(mcp.get("type", "stdio")),
         "command": str(mcp.get("command", "")),
@@ -395,6 +400,7 @@ for name, spec in enabled_tools:
         {
             "tool": name,
             "version": str(spec.get("version", "")),
+            "integration_mode": integration_mode,
             "status": status,
             "severity": severity,
             "details": details,
@@ -405,9 +411,11 @@ for name, spec in enabled_tools:
         }
     )
 
-    for ide in target_ides:
-        servers_by_ide.setdefault(ide, {})
-        servers_by_ide[ide][name] = entry
+    # Only render MCP tools to IDE configs
+    if integration_mode == "mcp":
+        for ide in target_ides:
+            servers_by_ide.setdefault(ide, {})
+            servers_by_ide[ide][name] = entry
 
 file_rows = []
 for ide, path_raw in sorted(write_paths.items()):

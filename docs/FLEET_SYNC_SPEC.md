@@ -171,39 +171,62 @@ Transport failure semantics:
 - preserve underlying audit status if audit failed
 - return non-zero when transport fails after a green audit
 
-## 12) Platform Status Contract
+## 12) Tool Classes
+
+Each tool in `configs/mcp-tools.yaml` has an `integration_mode` field:
+
+### MCP Tools (`integration_mode: mcp`)
+- Rendered into IDE MCP configs
+- Require `target_ides` and `mcp` config blocks
+- Must pass Layer 4 client visibility checks
+
+### CLI Tools (`integration_mode: cli`)
+- Standalone CLI binaries
+- NOT rendered to IDE configs
+- Only require Layer 1 host runtime health
+- Do NOT need to appear in `codex mcp list` or similar
+
+### Current Tool Roster (V2.2)
+
+| Tool | Mode | Status | Notes |
+|------|------|--------|-------|
+| `llm-tldr` | mcp | Enabled | Static analysis context slicing |
+| `cass-memory` | cli | Enabled | CLI-native, no IDE rendering |
+| `context-plus` | mcp | Enabled | Package: `contextplus@latest` |
+| `serena` | mcp | Enabled | Install from GitHub (PyPI collision) |
+
+## 13) Platform Status Contract
 
 Fleet Sync has two operational states:
 
 ### Full Fleet Sync GO
-All enabled MCP tools are healthy and operational:
+All enabled tools are healthy and operational:
 - `tool_mcp_health` check passes with all enabled tools green
-- MCP tool-value lane provides full context/retrieval capabilities
+- MCP tools visible in IDE clients
+- CLI tools passing health checks
 - Daily and weekly audits pass
 
 ### Ops-Platform Only GO
-Ops infrastructure is healthy but MCP tool-value lane is partial:
-- `tool_mcp_health` may show failures for disabled tools (acceptable)
+Ops infrastructure is healthy but tool-value lane is partial:
 - Core ops checks pass: `beads_dolt`, `required_service_health`, `op_auth_readiness`, `alerts_transport_readiness`
-- IDE surfaces are present and configured
-- MCP tools that are explicitly disabled in `configs/mcp-tools.yaml` are exempt from health checks
+- Tools that are explicitly disabled in `configs/mcp-tools.yaml` are exempt from health checks
 
-**Current State (as of 2026-03-07): GO: ops-platform only**
+**Current State (as of 2026-03-09): CONDITIONAL_GO**
 
-Enabled MCP tools:
-- `llm-tldr` (working)
+All four tools are enabled and pass Layer 1-3 checks:
+- `llm-tldr` (mcp): Static analysis context slicing
+- `cass-memory` (cli): CLI-native episodic memory
+- `context-plus` (mcp): Structural context analysis
+- `serena` (mcp): AI assistant memory
 
-Disabled MCP tools (with rationale in manifest):
-- `context-plus` (package not found in npm registry)
-- `cass-memory` (requires bun runtime, not available)
-- `serena` (PyPI package provides no executable entrypoint)
+**Known Limitations (documented in evidence/layer4.txt):**
+- Claude Code: All MCP tools visible and connected ✓
+- Codex CLI: Does not show Fleet Sync MCP tools (config path or format mismatch)
+- OpenCode: Reports "No MCP servers configured" (client not reading config)
+- Gemini CLI: Reports "No MCP servers configured" (client not reading config)
 
-To transition to "full Fleet Sync GO":
-1. Fix or replace disabled tools with working alternatives
-2. Update `configs/mcp-tools.yaml` to enable them
-3. Verify all enabled tools pass health checks
-4. Re-run `dx-mcp-tools-sync.sh --check --json` to confirm green
+Full GO requires all four clients to show MCP tool visibility. Current state is Claude-only for Layer 4.
 
-## 13) Out of Scope
+## 14) Out of Scope
 
 Fleet Sync does not introduce centralized execution, SSE gateways, or runtime multiplexers.

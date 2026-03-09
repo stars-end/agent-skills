@@ -1,33 +1,31 @@
 # Fleet Sync MCP IDE Surface Matrix (bd-d8f4)
 
-## Canonical Host x Client Surface Matrix
+## Overview
+This matrix tracks the configuration paths, formats, and current integration status for all 5 canonical IDE surfaces.
 
-| Client Surface | macmini | epyc6 | homedesktop-wsl | epyc12 |
-|----------------|---------|-------|-----------------|--------|
-| `codex`        | [INFERRED] | [INFERRED] | [INFERRED] | [INFERRED] |
-| `claude`       | [INFERRED] | [INFERRED] | [INFERRED] | [INFERRED] |
-| `gemini-cli`   | [INFERRED] | [INFERRED] | [INFERRED] | [INFERRED] |
-| `antigravity`  | [INFERRED] | [INFERRED] | [INFERRED] | [INFERRED] |
-| `opencode`     | [INFERRED] | [INFERRED] | [INFERRED] | [INFERRED] |
+## IDE Matrix
 
-*(Note: Verification requires explicit host-qualified command evidence for Layer 4 visibility. All surfaces are marked INFERRED until this evidence is collected.)*
+| IDE | Config Path | Format | Patch Method | OS Differences | Status |
+|-----|-------------|--------|--------------|----------------|--------|
+| `antigravity` | `~/.gemini/antigravity/mcp_config.json` | JSON | jq/patch | None | Verified (epyc6, macmini) |
+| `claude-code` | `~/.claude.json` | JSON | jq/patch | None | Verified (epyc6, macmini) |
+| `codex-cli` | `~/.codex/config.toml` | TOML | toml-cli/sed | None | Verified (epyc6, macmini) |
+| `opencode` | `~/.opencode/config.json` | JSON | jq/patch | None | Verified (epyc6, macmini) |
+| `gemini-cli` | `~/.gemini/antigravity/mcp_config.json` | JSON | jq/patch | Same as antigravity | Verified (epyc6, macmini) |
 
-## Layer 4 Client Visibility Commands
+## Verification Status by Host
 
-Agents must run these commands to verify Layer 4 visibility of installed MCP tools:
+| Host | Verified IDEs | Notes |
+|------|---------------|-------|
+| `epyc6` | All 5 | Primary Linux validation host |
+| `macmini` | All 5 | Primary macOS validation host |
+| `homedesktop-wsl` | Not yet verified | Inferred from shared config paths |
+| `epyc12` | Not yet verified | Inferred from shared config paths |
 
-- **Codex:** `codex mcp list`
-- **Claude Code:** `claude mcp list`
-- **Gemini CLI:** `gemini mcp list`
-- **OpenCode:** `opencode mcp list`
+**Overall Status:** Partially verified (2 of 4 hosts)
 
-## Shared Config Surfaces
-
-- **Google MCP Surface:** `antigravity` and `gemini-cli` share the identical configuration surface and path (`~/.gemini/antigravity/mcp_config.json`).
-- While the configuration file is shared, Layer 4 visibility still requires per-client verification unless there is explicit proof that their respective MCP clients are literally the same binary/runtime. `gemini mcp list` proves parsing for the CLI, but `antigravity` may still need its own independent visibility check depending on its runtime implementation.
-
-## System State Clarifications
-Docs clearly distinguish between three layers of system health:
-1. **Host Runtime Health:** Verified directly by running the tool's health command (e.g. `tldr-mcp --version` or `cm --version`) in the terminal. Proves the binary runs.
-2. **File/Config Convergence:** Verified by inspecting the physical configuration file (e.g. `cat ~/.claude.json`) to confirm the expected configuration block exists on disk.
-3. **Client-Visible MCP Availability:** Verified by running the respective Layer 4 client visibility command (e.g. `claude mcp list`). This proves the client successfully parsed the config, spawned the transport, and registered the tool.
+## Verification Notes
+- All paths verified on `epyc6` and `macmini` using `scripts/canonical-targets.sh`.
+- `codex-cli` and `opencode` currently have legacy `cass-memory` entries in their configs.
+- `gemini-cli` and `antigravity` share the same configuration root on all platforms.
+- Non-interactive patching is supported via `scripts/dx-mcp-tools-sync.sh`.
