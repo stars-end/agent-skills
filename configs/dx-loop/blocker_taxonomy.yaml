@@ -1,0 +1,73 @@
+# dx-loop v1 blocker taxonomy configuration
+
+# Blocker codes and their classifications
+blockers:
+  kickoff_env_blocked:
+    severity: error
+    description: "Bootstrap/worktree/host gates failed"
+    next_action: "fix_bootstrap_environment"
+    notify: true
+    
+  run_blocked:
+    severity: error
+    description: "dx-runner execution blocked (not stalled)"
+    next_action: "wait_or_switch_provider"
+    notify: true
+    
+  review_blocked:
+    severity: error
+    description: "Reviewer verdict blocked"
+    next_action: "address_review_findings"
+    notify: true
+    
+  deterministic_redispatch_needed:
+    severity: warning
+    description: "Stalled/timeout, safe to retry"
+    next_action: "automatic_redispatch"
+    notify: false
+    
+  needs_decision:
+    severity: critical
+    description: "Requires human decision"
+    next_action: "human_intervention_required"
+    notify: true
+    
+  merge_ready:
+    severity: info
+    description: "PR artifacts present, checks passing, ready for merge"
+    next_action: "human_merge_approval"
+    notify: true
+
+# Mapping from dx-runner reason codes to blocker taxonomy
+runner_reason_map:
+  # Bootstrap gates
+  worktree_missing: kickoff_env_blocked
+  beads_cwd_gate_failed: kickoff_env_blocked
+  preflight_failed: kickoff_env_blocked
+  auth_resolution_failed: kickoff_env_blocked
+  railway_auth_missing: kickoff_env_blocked
+  railway_cli_missing: kickoff_env_blocked
+  
+  # Run blocked
+  provider_concurrency_cap_exceeded: run_blocked
+  opencode_rate_limited: run_blocked
+  gemini_capacity_exhausted: run_blocked
+  execution_mode_unsupported: run_blocked
+  
+  # Deterministic redispatch
+  stalled_no_progress: deterministic_redispatch_needed
+  no_op: deterministic_redispatch_needed
+  monitor_no_rc_file: deterministic_redispatch_needed
+  process_timeout: deterministic_redispatch_needed
+  
+  # Needs decision
+  max_attempts_exceeded: needs_decision
+  retry_chain_exhausted: needs_decision
+  manual_stop: needs_decision
+
+# Unchanged suppression policy
+suppression:
+  enabled: true
+  hash_algorithm: sha256
+  hash_length: 16
+  max_unchanged_before_log: 10
