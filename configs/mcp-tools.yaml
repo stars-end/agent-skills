@@ -8,11 +8,11 @@ strategy:
 
 tools:
   context-plus:
-    enabled: false
-    disabled_reason: "Package @forloopcodes/contextplus not found in npm registry (404). Re-evaluate if package is republished or fork is available."
-    version: "0.4.2"
-    install_cmd: "npx -y @forloopcodes/contextplus@0.4.2"
-    health_cmd: "npx -y @forloopcodes/contextplus@0.4.2 --version"
+    enabled: true
+    integration_mode: mcp
+    version: "1.0.7"
+    install_cmd: "npm view contextplus@1.0.7"
+    health_cmd: "timeout 2 npx -y contextplus@1.0.7 2>&1 | grep -q 'Context+ MCP server running'"
     target_ides:
       - codex-cli
       - claude-code
@@ -23,26 +23,23 @@ tools:
       command: "npx"
       args:
         - "-y"
-        - "@forloopcodes/contextplus@0.4.2"
-        - "--transport"
-        - "stdio"
+        - "contextplus@1.0.7"
     runtime: node
 
   cass-memory:
-    enabled: false
-    disabled_reason: "Requires bun runtime which is not available on canonical hosts. Install bun first or find npm-equivalent alternative."
-    version: "1.0.0"
-    install_cmd: "bun install --global cass-memory-system@1.0.0"
-    health_cmd: "cass-memory --version"
-    target_ides:
-      - codex-cli
-      - claude-code
-      - opencode
-    mcp:
-      type: stdio
-      command: "cass-memory"
-      args: []
-    runtime: bun
+    enabled: true
+    integration_mode: cli
+    version: "0.2.3"
+    install_cmd: "which cm || echo 'cm should be installed via Homebrew'"
+    health_cmd: "cm --version && cm doctor --json | jq -r '.data.overallStatus' | grep -q 'pass\\|degraded'"
+    target_ides: []
+    cli:
+      primary_commands:
+        - "cm context"
+        - "cm quickstart"
+        - "cm doctor"
+      optional_mcp_serve: "cm serve --port 8765"
+    runtime: homebrew
     sharing:
       default: local_only
       opt_in_env: CASS_SHARE_MEMORY
@@ -50,7 +47,8 @@ tools:
 
   serena:
     enabled: false
-    disabled_reason: "PyPI package serena==0.9.1 provides no executable entrypoint (uv tool install fails). Re-evaluate if package is fixed or find alternative."
+    integration_mode: mcp
+    disabled_reason: "PyPI package serena==0.9.1 provides no executable entrypoint (uv tool install fails). Owner: platform-team. Next: Contact maintainer or find alternative tool."
     version: "0.9.1"
     install_cmd: "uv tool install serena==0.9.1"
     health_cmd: "serena --version"
@@ -67,9 +65,10 @@ tools:
 
   llm-tldr:
     enabled: true
+    integration_mode: mcp
     version: "1.5.2"
     install_cmd: "uv tool install \"llm-tldr==1.5.2\""
-    health_cmd: "tldr-mcp --version || llm-tldr --version"
+    health_cmd: "tldr --version"
     target_ides:
       - codex-cli
       - claude-code
