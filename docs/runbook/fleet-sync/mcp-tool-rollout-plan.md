@@ -7,7 +7,7 @@ This plan outlines the recommended order of restoration and validation for the F
 - **Target:** `configs/mcp-tools.yaml`
 - **Changes:**
   1.  Update `context-plus` package name to `contextplus` and version to `1.0.7`. Maintain `mcp` contract.
-  2.  Update `cass-memory` installation method to use its official bash script (bypassing the missing `bun` runtime on `epyc6`).
+  2.  Update `cass-memory` installation method to use the canonical Homebrew package (`brew install dicklesworthstone/tap/cm`) to maintain consistency across the fleet.
   3.  Update `serena` package to `git+https://github.com/oraios/serena.git` and set to `mcp`.
 
 ## Phase 2: Host Restoration

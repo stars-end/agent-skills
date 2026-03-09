@@ -42,7 +42,7 @@ Authoritative research bundle for `llm-tldr`, `context-plus`, `cass-memory`, and
 - **Upstream Docs:** https://github.com/Dicklesworthstone/cass_memory_system
 - **Install Docs:** https://github.com/Dicklesworthstone/cass_memory_system#installation
 - **Contract:** `cli` (CLI-native)
-- **Host Install:** `curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/cass_memory_system/main/install.sh" | bash -s -- --easy-mode --verify`
+- **Host Install:** `brew install dicklesworthstone/tap/cm` (Canonical fleet path)
 - **Host Health:** `cm --version`
 - **Usage (Agent Workflow):** Run `cm trauma scan --days 30`, `cm guard --status`, etc. directly in agent shell.
 

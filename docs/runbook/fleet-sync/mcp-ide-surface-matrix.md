@@ -24,7 +24,7 @@ Agents must run these commands to verify Layer 4 visibility of installed MCP too
 ## Shared Config Surfaces
 
 - **Google MCP Surface:** `antigravity` and `gemini-cli` share the identical configuration surface and path (`~/.gemini/antigravity/mcp_config.json`).
-- Changes to this path affect both surfaces synchronously, meaning `gemini mcp list` serves as the visibility command for both tools.
+- While the configuration file is shared, Layer 4 visibility still requires per-client verification unless there is explicit proof that their respective MCP clients are literally the same binary/runtime. `gemini mcp list` proves parsing for the CLI, but `antigravity` may still need its own independent visibility check depending on its runtime implementation.
 
 ## System State Clarifications
 Docs clearly distinguish between three layers of system health:
