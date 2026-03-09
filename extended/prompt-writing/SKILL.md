@@ -56,6 +56,12 @@ Do not wait for the user to say "prompt-writing" explicitly if delegation intent
 
 Every generated delegation prompt MUST enforce:
 
+0) **Orchestrator push-first workflow**
+- Orchestrator MUST push context (docs/specs/plans) to GitHub BEFORE generating prompt
+- Use resulting `PR_HEAD_SHA` or `PR_URL` in prompt
+- Delegate fetches from that SHA, not from local paths
+- Never embed file contents in prompt text
+
 1) **Cross-VM accessibility**
 - Do not reference `/Users/...`, `/tmp/...`, or other local-only paths as source of truth.
 - Primary context must be reachable by URL and commit, ideally:
@@ -201,11 +207,12 @@ Do not claim complete until:
 
 ## Cross-VM Guardrail (Critical)
 
+Two-PR pattern:
+1. **Orchestrator's context PR** — docs/specs/plan pushed to GitHub first
+2. **Delegate's implementation PR** — code changes pushed by delegate
+
 Prompts that reference local absolute paths as required inputs are invalid for cross-VM delegation.
-If there is no PR yet, instruct delegate to create one early and then continue using:
-- PR URL
-- HEAD SHA
-- repo-relative paths
+Orchestrator must push context to GitHub BEFORE generating the prompt. Delegate fetches from that SHA.
 
 ## Hardened Rule
 
