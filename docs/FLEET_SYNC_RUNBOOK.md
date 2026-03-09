@@ -174,14 +174,22 @@ Fleet Sync operates with two tool classes:
 | `context-plus` | mcp | Enabled | `npx -y contextplus --help` |
 | `serena` | mcp | Enabled | `serena --help` |
 
-**Current Status: Full Fleet Sync GO**
+**Current Status: CONDITIONAL_GO**
 
-All four tools are enabled and operational:
-- CLI tools (`cass-memory`) are green when host runtime health passes
-- MCP tools (`llm-tldr`, `context-plus`, `serena`) are green when:
+All four tools are enabled and pass Layer 1-3 checks:
+- CLI tools (`cass-memory`): Green when host runtime health passes
+- MCP tools (`llm-tldr`, `context-plus`, `serena`): Green when:
   1. Host runtime health passes
   2. IDE configs are rendered
   3. Client visibility confirmed
+
+**Known Limitations (from evidence/layer4.txt):**
+- Claude Code: All MCP tools visible ✓
+- Codex CLI: Does not show Fleet Sync MCP tools (config format mismatch)
+- OpenCode: "No MCP servers configured" (client not reading config)
+- Gemini CLI: "No MCP servers configured" (client not reading config)
+
+Full GO requires all four clients to show MCP tool visibility.
 
 **Operator expectations:**
 - Daily/weekly audits should pass (green) if all enabled tools pass
@@ -223,8 +231,11 @@ Temporary disable:
 
 - stop cron entries for `dx-audit-cron.sh`
 
-Fail-open rollback:
+Rollback (remove Fleet Sync MCP configs from IDE files):
 
 ```bash
-~/agent-skills/scripts/dx-fleet-install.sh --uninstall --json --state-dir ~/.dx-state/fleet
+# Remove Fleet Sync managed blocks from IDE configs
+# Manual edit required - remove sections between:
+#   # BEGIN FLEET_SYNC_MCP_MANAGED
+#   # END FLEET_SYNC_MCP_MANAGED
 ```

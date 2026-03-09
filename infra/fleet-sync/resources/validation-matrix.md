@@ -39,7 +39,16 @@ Expected: `"fleet_status": "green"`
 
 ## Layer 4: Client Visibility
 
-Verify MCP tools are visible to IDE clients:
+Verify MCP tools are visible to IDE clients.
+
+**Current Observed Reality (2026-03-09):**
+
+| Client | Fleet Sync MCP Tools Visible | Status |
+|--------|------------------------------|--------|
+| Claude Code | ✓ All tools connected | Working |
+| Codex CLI | ✗ Only shows playwright | Config not read |
+| OpenCode | ✗ "No MCP servers configured" | Config not read |
+| Gemini CLI | ✗ "No MCP servers configured" | Config not read |
 
 ### Claude Code
 
@@ -47,10 +56,10 @@ Verify MCP tools are visible to IDE clients:
 claude mcp list
 ```
 
-Expected: All MCP tools show "Connected":
-- `llm-tldr: tldr-mcp - Connected`
-- `context-plus: npx -y contextplus - Connected`
-- `serena: serena start-mcp-server - Connected`
+**Observed:** All MCP tools show "Connected":
+- `llm-tldr: tldr-mcp - Connected` ✓
+- `context-plus: npx -y contextplus - Connected` ✓
+- `serena: serena start-mcp-server - Connected` ✓
 
 Note: `cass-memory` is CLI-native and should NOT appear here (or will show "Failed to connect" if manually added).
 
@@ -60,7 +69,9 @@ Note: `cass-memory` is CLI-native and should NOT appear here (or will show "Fail
 codex mcp list
 ```
 
-Expected: MCP tools listed with correct commands and args.
+**Observed:** Only shows `playwright` (not managed by Fleet Sync). Fleet Sync MCP tools not visible.
+
+**Root Cause:** Config format mismatch. Fleet Sync writes `[mcpServers.*]` but Codex may expect `[mcp_servers.*]`.
 
 ### OpenCode
 
@@ -68,7 +79,9 @@ Expected: MCP tools listed with correct commands and args.
 opencode mcp list
 ```
 
-Expected: MCP tools listed.
+**Observed:** "No MCP servers configured" even though `~/.opencode/config.json` contains Fleet Sync entries.
+
+**Root Cause:** Client not reading config file or using different path.
 
 ### Gemini CLI
 
@@ -76,7 +89,13 @@ Expected: MCP tools listed.
 gemini mcp list
 ```
 
-Expected: MCP tools listed (shares config with `antigravity`).
+**Observed:** "No MCP servers configured" even though `~/.gemini/antigravity/mcp_config.json` contains Fleet Sync entries.
+
+**Root Cause:** Client not reading config file or using different path.
+
+### Full GO Requirements
+
+For full Fleet Sync GO, all four clients must show MCP tool visibility. Currently only Claude Code passes Layer 4.
 
 ## Quick Repair
 

@@ -24,11 +24,19 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 
 ## Current Status (V2.2)
 
-All four tools are enabled and operational:
+All four tools are enabled and pass Layer 1-3 checks:
 - `cass-memory`: CLI-native episodic memory
 - `llm-tldr`: MCP static analysis context slicing
 - `context-plus`: MCP structural context analysis
 - `serena`: MCP AI assistant memory
+
+**Layer 4 Client Visibility (observed 2026-03-09):**
+- Claude Code: All MCP tools connected ✓
+- Codex CLI: Does not show Fleet Sync MCP tools
+- OpenCode: Reports "No MCP servers configured"
+- Gemini CLI: Reports "No MCP servers configured"
+
+Full platform GO requires all clients to show MCP tool visibility. Current state is Claude-only for Layer 4.
 
 ## Known Caveats
 

@@ -211,13 +211,21 @@ Ops infrastructure is healthy but tool-value lane is partial:
 - Core ops checks pass: `beads_dolt`, `required_service_health`, `op_auth_readiness`, `alerts_transport_readiness`
 - Tools that are explicitly disabled in `configs/mcp-tools.yaml` are exempt from health checks
 
-**Current State (as of 2026-03-09): Full Fleet Sync GO**
+**Current State (as of 2026-03-09): CONDITIONAL_GO**
 
-All four tools are enabled and operational:
+All four tools are enabled and pass Layer 1-3 checks:
 - `llm-tldr` (mcp): Static analysis context slicing
 - `cass-memory` (cli): CLI-native episodic memory
 - `context-plus` (mcp): Structural context analysis
 - `serena` (mcp): AI assistant memory
+
+**Known Limitations (documented in evidence/layer4.txt):**
+- Claude Code: All MCP tools visible and connected ✓
+- Codex CLI: Does not show Fleet Sync MCP tools (config path or format mismatch)
+- OpenCode: Reports "No MCP servers configured" (client not reading config)
+- Gemini CLI: Reports "No MCP servers configured" (client not reading config)
+
+Full GO requires all four clients to show MCP tool visibility. Current state is Claude-only for Layer 4.
 
 ## 14) Out of Scope
 
