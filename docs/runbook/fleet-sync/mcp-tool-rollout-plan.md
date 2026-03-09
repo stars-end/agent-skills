@@ -6,10 +6,9 @@ This plan outlines the recommended order of restoration and validation for the F
 ## Phase 1: Correct Manifest
 - **Target:** `configs/mcp-tools.yaml`
 - **Changes:**
-  1.  Update `context-plus` package name to `contextplus` and version to `1.0.7`.
-  2.  Update `cass-memory` to use CLI installer since it is CLI-native and unlisted on npm. Wait, no need, it's CLI-native.
+  1.  Update `context-plus` package name to `contextplus` and version to `1.0.7`. Maintain `mcp` contract.
+  2.  Update `cass-memory` installation method to use its official bash script (bypassing the missing `bun` runtime on `epyc6`).
   3.  Update `serena` package to `git+https://github.com/oraios/serena.git` and set to `mcp`.
-  4.  Change `cass-memory` runtime to script installation because bun is missing on `epyc6`.
 
 ## Phase 2: Host Restoration
 - **Primary Command:** `~/agent-skills/scripts/dx-mcp-tools-sync.sh --apply --json`

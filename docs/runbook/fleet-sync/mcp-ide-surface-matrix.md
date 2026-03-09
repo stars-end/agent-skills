@@ -4,11 +4,13 @@
 
 | Client Surface | macmini | epyc6 | homedesktop-wsl | epyc12 |
 |----------------|---------|-------|-----------------|--------|
-| `codex`        | [VERIFIED] | [VERIFIED] | [INFERRED] | [INFERRED] |
-| `claude`       | [VERIFIED] | [VERIFIED] | [INFERRED] | [INFERRED] |
-| `gemini-cli`   | [VERIFIED] | [VERIFIED] | [INFERRED] | [INFERRED] |
-| `antigravity`  | [VERIFIED] | [VERIFIED] | [INFERRED] | [INFERRED] |
-| `opencode`     | [VERIFIED] | [VERIFIED] | [INFERRED] | [INFERRED] |
+| `codex`        | [INFERRED] | [INFERRED] | [INFERRED] | [INFERRED] |
+| `claude`       | [INFERRED] | [INFERRED] | [INFERRED] | [INFERRED] |
+| `gemini-cli`   | [INFERRED] | [INFERRED] | [INFERRED] | [INFERRED] |
+| `antigravity`  | [INFERRED] | [INFERRED] | [INFERRED] | [INFERRED] |
+| `opencode`     | [INFERRED] | [INFERRED] | [INFERRED] | [INFERRED] |
+
+*(Note: Verification requires explicit host-qualified command evidence for Layer 4 visibility. All surfaces are marked INFERRED until this evidence is collected.)*
 
 ## Layer 4 Client Visibility Commands
 

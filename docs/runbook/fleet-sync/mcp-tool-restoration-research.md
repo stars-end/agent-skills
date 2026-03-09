@@ -8,9 +8,9 @@ Authoritative research bundle for `llm-tldr`, `context-plus`, `cass-memory`, and
 | Tool | Upstream | Contract Type | Status |
 |------|----------|---------------|--------|
 | `llm-tldr` | `parcadei/llm-tldr` | `mcp` | [VERIFIED] |
-| `context-plus` | `ForLoopCodes/contextplus` | `cli` | [RECOMMENDED] |
+| `context-plus` | `ForLoopCodes/contextplus` | `mcp` | [RECOMMENDED] |
 | `cass-memory` | `Dicklesworthstone/cass_memory_system` | `cli` | [VERIFIED] |
-| `serena` | `oraios/serena` | `mcp` | [VERIFIED] |
+| `serena` | `oraios/serena` | `mcp` | [PARTIALLY VERIFIED] |
 
 ## Live-Docs Map & Primary-Source URLs
 
@@ -32,10 +32,10 @@ Authoritative research bundle for `llm-tldr`, `context-plus`, `cass-memory`, and
 - **Status:** [RECOMMENDED]
 - **Upstream Docs:** https://github.com/ForLoopCodes/contextplus
 - **Install Docs:** https://www.npmjs.com/package/contextplus
-- **Contract:** `cli`
+- **Contract:** `mcp`
 - **Host Install:** `npm install -g contextplus@1.0.7`
 - **Host Health:** `contextplus --version`
-- **Usage (Agent Workflow):** Run `contextplus` directly in agent shell.
+- **Usage (Agent Workflow):** Fleet Sync manages it as an MCP server; client uses stdio transport.
 
 ## Tool 3: cass-memory
 - **Status:** [VERIFIED]
@@ -47,7 +47,7 @@ Authoritative research bundle for `llm-tldr`, `context-plus`, `cass-memory`, and
 - **Usage (Agent Workflow):** Run `cm trauma scan --days 30`, `cm guard --status`, etc. directly in agent shell.
 
 ## Tool 4: serena
-- **Status:** [VERIFIED] (Not blocked, executable proof found)
+- **Status:** [PARTIALLY VERIFIED] (Executable proof found locally, client visibility pending)
 - **Upstream Docs:** https://oraios.github.io/serena/
 - **Install Docs:** https://github.com/oraios/serena#quick-start
 - **Contract:** `mcp`
@@ -56,4 +56,4 @@ Authoritative research bundle for `llm-tldr`, `context-plus`, `cass-memory`, and
 - **Usage (Agent Workflow):** Configured as an MCP server via `serena start-mcp-server` (transport uses `stdio`).
 
 ## Blockers
-- **None.** All tools have verified upstreams, installation mechanisms, and executable proofs. `serena` is no longer blocked as we have confirmed it functions as an MCP server when installed directly from the GitHub repository (`oraios/serena`).
+- **Cross-VM Client Visibility Verification Pending.** While host install and binary execution are confirmed for `serena` and others, Layer 4 client visibility (e.g., `claude mcp list`) is not yet comprehensively verified across all intended surfaces. Full verification requires evidence collection before declaring "no blockers."
