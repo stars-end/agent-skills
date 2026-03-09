@@ -19,20 +19,32 @@ MCP-native structural context analysis for higher-fidelity codebase mapping befo
 
 Context+ is rendered to IDE MCP configs and provides MCP server functionality.
 
+## Current Fleet Status
+
+- Fleet contract: MCP-rendered tool
+- Current state: ✅ ENABLED
+- Install: `npx -y contextplus` or `bunx contextplus`
+
 ## Installation
 
 ```bash
-# Install via npm (correct package name)
-npm install -g contextplus@1.0.7
+# Option 1: Run directly with npx (recommended)
+npx -y contextplus
+
+# Option 2: Install globally with bun
+bunx contextplus
 ```
 
-**IMPORTANT**: The correct package name is `contextplus`, NOT `@forloopcodes/contextplus`.
+**NOTE**: The correct package name is `contextplus` (NOT `@forloopcodes/contextplus` which returns 404).
 
 ## Health Commands
 
 ```bash
 # Version check
-contextplus --version
+npx -y contextplus --version
+
+# Help
+npx -y contextplus --help
 ```
 
 ## MCP Configuration
@@ -44,8 +56,8 @@ Rendered to IDE configs via Fleet Sync:
   "mcpServers": {
     "context-plus": {
       "type": "stdio",
-      "command": "contextplus",
-      "args": ["--transport", "stdio"]
+      "command": "npx",
+      "args": ["-y", "contextplus"]
     }
   }
 }
@@ -54,22 +66,22 @@ Rendered to IDE configs via Fleet Sync:
 ## Usage Patterns
 
 ### Via MCP Client
-```bash
-# Use via MCP-capable IDE
-# The tool provides structural analysis capabilities
-```
+- Use via MCP-capable IDE (Claude Code, Cursor, VS Code, Windsurf, OpenCode)
+- The tool provides structural analysis capabilities
 
 ### Key Functions
-- Repository-local indexes and embeddings
-- Ranked target files/modules
-- Dependency or cluster hints for safer edits
+- **Semantic Code Search**: Find code by meaning, not just keywords
+- **AST-based Analysis**: Tree-sitter powered structural understanding
+- **Spectral Clustering**: Group semantically related files
+- **RAG Integration**: Combine with Ollama for enhanced retrieval
+- **Wikilink Hubs**: Obsidian-style feature navigation
 
 ## Status
 - Fleet contract: MCP-rendered tool
 - Expected package: `contextplus`
 - Expected runtime: Node.js
 - Canonical health checks:
-  - `contextplus --version`
+  - `npx -y contextplus --version`
   - client MCP visibility checks such as `claude mcp list`, `codex mcp list`, `gemini mcp list`, `opencode mcp list`
 
 ## Upstream Docs
@@ -83,26 +95,24 @@ Rendered to IDE configs via Fleet Sync:
 3. **Repository-local**: Prefer repository-local indexes and embeddings
 4. **Fail open**: Fail open to normal local navigation if unavailable
 
-## Inputs
-
-- Local worktree path
-- Active branch/repo scope
-
 ## Expected Output
 
 - Ranked target files/modules
 - Dependency or cluster hints for safer edits
+- Semantic code clusters
 
 ## Runtime Requirements
 
-- Node.js 20+
+- Node.js 20+ (or Bun)
+- Ollama (optional, for embeddings)
 
 ## Optional Environment Variables
 
 | Env Var | Purpose |
 |---------|---------|
-| `OLLAMA_EMBED_MODEL` | Ollama embedding model |
-| `OLLAMA_CHAT_MODEL` | Ollama chat model |
+| `OLLAMA_EMBED_MODEL` | Ollama embedding model (default: nomic-embed-text) |
+| `OLLAMA_CHAT_MODEL` | Ollama chat model (default: gemma2:27b) |
+| `OLLAMA_API_KEY` | Ollama API key (for cloud) |
 
 ## Fleet Sync Integration
 
@@ -131,7 +141,7 @@ Rendered to these IDE configs:
 
 ### Layer 1 (Host Runtime)
 ```bash
-contextplus --version
+npx -y contextplus --version
 ```
 
 ### Layer 2 (Config Convergence)
@@ -151,11 +161,11 @@ opencode mcp list # Should show context-plus
 ### Package Not Found (404)
 If you see `@forloopcodes/contextplus not found`, use the correct package name:
 ```bash
-npm install -g contextplus@1.0.7
+npx -y contextplus
 ```
 
-### Version Mismatch
-The manifest version `0.4.2` was a typo. Use version `1.0.7`.
+### Version Issues
+The historical manifest version `0.0.7` may not be available. Use `latest` or run without version specifier.
 
 ## Related
 

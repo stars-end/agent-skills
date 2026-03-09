@@ -57,15 +57,14 @@ tools:
 
   # ============================================================
   # context-plus: Structural context analysis (MCP mode)
-  # DISABLED: npm package contextplus@1.0.7 not found in registry
+  # Install: npx -y contextplus OR bunx contextplus
   # ============================================================
   context-plus:
-    enabled: false
+    enabled: true
     integration_mode: mcp
-    version: "1.0.7"
-    disabled_reason: "Package contextplus@1.0.7 not found in npm registry. Historical manifest entries using @forloopcodes/contextplus also return 404. Re-evaluate if package is republished or fork is available."
-    install_cmd: "npm install -g contextplus@1.0.7"
-    health_cmd: "contextplus --version"
+    version: "latest"
+    install_cmd: "npx -y contextplus --version 2>/dev/null || echo 'contextplus available via npx'"
+    health_cmd: "npx -y contextplus --help 2>&1 | head -1"
     target_ides:
       - codex-cli
       - claude-code
@@ -74,23 +73,29 @@ tools:
       - gemini-cli
     mcp:
       type: stdio
-      command: "contextplus"
-      args: []
+      command: "npx"
+      args:
+        - "-y"
+        - "contextplus"
     runtime: node
+    env:
+      optional:
+        - OLLAMA_EMBED_MODEL
+        - OLLAMA_CHAT_MODEL
+        - OLLAMA_API_KEY
     upstream: "https://github.com/ForLoopCodes/contextplus"
     docs: "https://github.com/ForLoopCodes/contextplus#readme"
 
   # ============================================================
   # serena: AI assistant memory (MCP mode)
-  # DISABLED: PyPI collision with AMQP client, git install not verified
+  # Install from GitHub (PyPI has unrelated AMQP package)
   # ============================================================
   serena:
-    enabled: false
+    enabled: true
     integration_mode: mcp
     version: "git"
-    disabled_reason: "PyPI package serena==0.9.1 provides no executable entrypoint (uv tool install fails). Git-based install from oraios/serena required but not verified. Blocked until executable proof and client visibility are real."
-    install_cmd: "uv tool install git+https://github.com/oraios/serena.git"
-    health_cmd: "serena start-mcp-server --help"
+    install_cmd: "serena --version 2>/dev/null || uv tool install git+https://github.com/oraios/serena.git"
+    health_cmd: "serena --help 2>&1 | head -1"
     target_ides:
       - codex-cli
       - claude-code
@@ -125,3 +130,4 @@ verification:
     - extended/llm-tldr/SKILL.md
     - extended/cass-memory/SKILL.md
     - extended/context-plus/SKILL.md
+    - extended/serena/SKILL.md
