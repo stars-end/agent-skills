@@ -258,12 +258,22 @@ All four tools are enabled and pass Layer 1-3 checks:
 - `serena` (mcp): AI assistant memory
 
 **Known Limitations (documented in evidence/layer4.txt):**
+<<<<<<< HEAD
+- Claude Code: All MCP tools visible on all 4 hosts ✓
+- Codex CLI: Fleet Sync tools visible (only installed on macmini)
+- OpenCode: "No MCP servers configured" (uses SQLite DB, not JSON config)
+- Gemini CLI: "No MCP servers configured" (unknown config path)
+
+Full GO requires all 4 clients on all 4 hosts to show MCP tool visibility.
+Current state: Claude on all hosts + Codex on macmini.
+=======
 - Claude Code: All MCP tools visible and connected ✓
 - Codex CLI: Does not show Fleet Sync MCP tools (config path or format mismatch)
 - OpenCode: Reports "No MCP servers configured" (client not reading config)
 - Gemini CLI: Reports "No MCP servers configured" (client not reading config)
 
 Full GO requires all four clients to show MCP tool visibility. Current state is Claude-only for Layer 4.
+>>>>>>> origin/master
 
 ## 14) Out of Scope
 

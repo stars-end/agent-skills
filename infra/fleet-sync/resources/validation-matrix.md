@@ -79,9 +79,17 @@ codex mcp list
 opencode mcp list
 ```
 
+<<<<<<< HEAD
+**Observed:** "No MCP servers configured"
+
+**Root Cause:** OpenCode uses SQLite database (`~/.local/share/opencode/opencode.db`) for config, not JSON files. The `~/.opencode/config.json` is for bun/package management only.
+
+**Resolution:** Requires OpenCode-specific MCP registration via `opencode mcp add` or direct database manipulation. This is a known limitation.
+=======
 **Observed:** "No MCP servers configured" even though `~/.opencode/config.json` contains Fleet Sync entries.
 
 **Root Cause:** Client not reading config file or using different path.
+>>>>>>> origin/master
 
 ### Gemini CLI
 
@@ -89,6 +97,25 @@ opencode mcp list
 gemini mcp list
 ```
 
+<<<<<<< HEAD
+**Observed:** "No MCP servers configured"
+
+**Root Cause:** Gemini CLI uses a different config path or format than what Fleet Sync writes.
+
+**Resolution:** Needs investigation of Gemini CLI config path. This is a known limitation.
+
+### Full GO Requirements
+
+For full Fleet Sync GO, all four clients must show MCP tool visibility.
+
+**Current Layer 4 Status:**
+| Client | Config Written | Client Reads Config | Status |
+|--------|---------------|---------------------|--------|
+| Claude Code | ✓ JSON | ✓ | Working |
+| Codex CLI | ✓ TOML (mcp_servers) | ✓ | Working |
+| OpenCode | ✓ JSON | ✗ SQLite DB | Blocked |
+| Gemini CLI | ✓ JSON | ✗ Unknown path | Blocked |
+=======
 **Observed:** "No MCP servers configured" even though `~/.gemini/antigravity/mcp_config.json` contains Fleet Sync entries.
 
 **Root Cause:** Client not reading config file or using different path.
@@ -96,6 +123,7 @@ gemini mcp list
 ### Full GO Requirements
 
 For full Fleet Sync GO, all four clients must show MCP tool visibility. Currently only Claude Code passes Layer 4.
+>>>>>>> origin/master
 
 ## Quick Repair
 

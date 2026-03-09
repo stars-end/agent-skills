@@ -107,6 +107,9 @@ tools:
       command: "serena"
       args:
         - "start-mcp-server"
+        - "--context"
+        - "claude-code"
+        - "--project-from-cwd"
     runtime: python
     upstream: "https://github.com/oraios/serena"
     docs: "https://github.com/oraios/serena#readme"
