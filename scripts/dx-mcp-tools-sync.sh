@@ -359,13 +359,14 @@ reason_codes = []
 for name, spec in enabled_tools:
     install_cmd = str(spec.get("install_cmd", "")).strip()
     health_cmd = str(spec.get("health_cmd", "")).strip()
-    target_ides = [str(i) for i in spec.get("target_ides", [])]
-    mcp = spec.get("mcp", {}) if isinstance(spec.get("mcp", {}), dict) else {}
+    integration_mode = str(spec.get("integration_mode", "mcp")).strip()
+    target_ides = [str(i) for i in spec.get("target_ides", [])] if integration_mode == "mcp" else []
+    mcp = spec.get("mcp", {}) if isinstance(spec.get("mcp", {}), dict) and integration_mode == "mcp" else {}
     entry = {
         "type": str(mcp.get("type", "stdio")),
         "command": str(mcp.get("command", "")),
         "args": [str(a) for a in mcp.get("args", [])],
-    }
+    } if integration_mode == "mcp" else {}
 
     install_rc = 0
     install_out = ""
@@ -394,6 +395,7 @@ for name, spec in enabled_tools:
     tool_rows.append(
         {
             "tool": name,
+            "integration_mode": integration_mode,
             "version": str(spec.get("version", "")),
             "status": status,
             "severity": severity,
@@ -405,9 +407,10 @@ for name, spec in enabled_tools:
         }
     )
 
-    for ide in target_ides:
-        servers_by_ide.setdefault(ide, {})
-        servers_by_ide[ide][name] = entry
+    if integration_mode == "mcp":
+        for ide in target_ides:
+            servers_by_ide.setdefault(ide, {})
+            servers_by_ide[ide][name] = entry
 
 file_rows = []
 for ide, path_raw in sorted(write_paths.items()):
