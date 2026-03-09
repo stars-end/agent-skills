@@ -37,6 +37,8 @@ DAILY_CHECK_IDS=(
 WEEKLY_CHECK_IDS=(
   canonical_repo_hygiene
   skills_symlink_integrity
+  skills_plane_alignment
+  ide_bootstrap_alignment
   global_constraints_rails
   ide_config_presence_and_drift
   cron_health
@@ -449,6 +451,123 @@ weekly_check_skills_symlink() {
   fi
 }
 
+weekly_check_skills_plane_alignment() {
+  local target="${AGENT_SKILLS_DIR:-${HOME}/.agent/skills}"
+  local failures=()
+
+  # Check 1: Skills plane exists
+  if [[ ! -e "$target" ]]; then
+    failures+=("skills_plane_missing:$target")
+  fi
+
+  # Check 2: Symlink or git checkout
+  if [[ -L "$target" ]]; then
+    local link_target
+    link_target="$(readlink -f "$target" 2>/dev/null || readlink "$target" 2>/dev/null || true)"
+    if [[ "$link_target" != *"agent-skills"* ]]; then
+      failures+=("symlink_non_canonical:$link_target")
+    fi
+  elif [[ -d "$target/.git" ]]; then
+    : # Git checkout is acceptable
+  elif [[ -d "$target" ]]; then
+    failures+=("not_symlink_not_git")
+  fi
+
+  # Check 3: AGENTS.md exists
+  if [[ ! -f "$target/AGENTS.md" ]]; then
+    failures+=("AGENTS.md_missing")
+  fi
+
+  # Check 4: Baseline artifact exists
+  if [[ ! -f "$target/dist/universal-baseline.md" ]]; then
+    failures+=("baseline_missing")
+  fi
+
+  # Check 5: Core skill directories exist
+  local core_dirs=("core" "extended" "health" "infra" "railway")
+  for dir in "${core_dirs[@]}"; do
+    if [[ ! -d "$target/$dir" ]]; then
+      failures+=("core_dir_missing:$dir")
+    fi
+  done
+
+  if [[ ${#failures[@]} -eq 0 ]]; then
+    local sha=""
+    if [[ -d "$target/.git" ]]; then
+      sha="$(git -C "$target" rev-parse --short HEAD 2>/dev/null || true)"
+    fi
+    if [[ -n "$sha" ]]; then
+      echo "pass|low|skills plane aligned (SHA: $sha)"
+    else
+      echo "pass|low|skills plane aligned"
+    fi
+  else
+    echo "fail|high|skills plane misaligned: ${failures[*]}"
+  fi
+}
+
+weekly_check_ide_bootstrap_alignment() {
+  local skills_target="${AGENT_SKILLS_DIR:-${HOME}/.agent/skills}"
+  local failures=()
+  local warnings=()
+
+  # Check IDE config files that should point at skills plane
+  # These are determined by canonical-targets.sh
+
+  # Claude Code: CLAUDE.md should exist in home and point at AGENTS.md
+  if [[ -f "${HOME}/.claude/CLAUDE.md" ]]; then
+    if [[ -L "${HOME}/.claude/CLAUDE.md" ]]; then
+      local claude_link
+      claude_link="$(readlink "${HOME}/.claude/CLAUDE.md" 2>/dev/null || true)"
+      if [[ "$claude_link" != *".agent/skills/AGENTS.md"* ]] && [[ "$claude_link" != *"agent-skills/AGENTS.md"* ]]; then
+        warnings+=("claude_md_non_canonical_link")
+      fi
+    else
+      # Could be a file with content pointing at AGENTS.md
+      if ! grep -q "AGENTS.md" "${HOME}/.claude/CLAUDE.md" 2>/dev/null; then
+        warnings+=("claude_md_no_agents_ref")
+      fi
+    fi
+  else
+    # Claude Code may not be installed on all hosts
+    warnings+=("claude_md_missing")
+  fi
+
+  # Gemini CLI: GEMINI.md should point at AGENTS.md
+  if [[ -f "${HOME}/.gemini/GEMINI.md" ]]; then
+    if [[ -L "${HOME}/.gemini/GEMINI.md" ]]; then
+      local gemini_link
+      gemini_link="$(readlink "${HOME}/.gemini/GEMINI.md" 2>/dev/null || true)"
+      if [[ "$gemini_link" != *".agent/skills/AGENTS.md"* ]] && [[ "$gemini_link" != *"agent-skills/AGENTS.md"* ]]; then
+        warnings+=("gemini_md_non_canonical_link")
+      fi
+    fi
+  else
+    warnings+=("gemini_md_missing")
+  fi
+
+  # OpenCode: config.json should reference AGENTS.md
+  if [[ -f "${HOME}/.opencode/config.json" ]]; then
+    if ! grep -q "AGENTS.md" "${HOME}/.opencode/config.json" 2>/dev/null; then
+      warnings+=("opencode_no_agents_ref")
+    fi
+  else
+    warnings+=("opencode_config_missing")
+  fi
+
+  # Failures indicate broken bootstrap, warnings indicate missing/non-canonical
+  if [[ ${#failures[@]} -gt 0 ]]; then
+    echo "fail|high|IDE bootstrap failures: ${failures[*]}"
+  elif [[ ${#warnings[@]} -gt 3 ]]; then
+    # Many warnings likely means IDEs not installed on this host
+    echo "pass|low|IDE bootstrap: ${#warnings[@]} warnings (IDEs may not be installed)"
+  elif [[ ${#warnings[@]} -gt 0 ]]; then
+    echo "warn|medium|IDE bootstrap warnings: ${warnings[*]}"
+  else
+    echo "pass|low|IDE bootstrap rails aligned"
+  fi
+}
+
 weekly_check_global_constraints() {
   if [[ -x "$SCRIPT_DIR/dx-ide-global-constraints-install.sh" ]] && "$SCRIPT_DIR/dx-ide-global-constraints-install.sh" --check >/dev/null 2>&1; then
     echo "pass|low|global constraints rails present"
@@ -584,6 +703,12 @@ build_local_rows() {
 
     IFS='|' read -r status severity details <<<"$(weekly_check_skills_symlink)"
     add_row "skills_symlink_integrity" "$status" "$severity" "$details"
+
+    IFS='|' read -r status severity details <<<"$(weekly_check_skills_plane_alignment)"
+    add_row "skills_plane_alignment" "$status" "$severity" "$details"
+
+    IFS='|' read -r status severity details <<<"$(weekly_check_ide_bootstrap_alignment)"
+    add_row "ide_bootstrap_alignment" "$status" "$severity" "$details"
 
     IFS='|' read -r status severity details <<<"$(weekly_check_global_constraints)"
     add_row "global_constraints_rails" "$status" "$severity" "$details"

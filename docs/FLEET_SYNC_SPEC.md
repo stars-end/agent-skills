@@ -1,4 +1,4 @@
-# Fleet Sync Specification (v2.3)
+# Fleet Sync Specification (v2.4)
 
 ## 1) Architecture Contract
 
@@ -80,6 +80,8 @@ Convergence outputs:
 
 - `canonical_repo_hygiene`
 - `skills_symlink_integrity`
+- `skills_plane_alignment`
+- `ide_bootstrap_alignment`
 - `global_constraints_rails`
 - `ide_config_presence_and_drift`
 - `cron_health`
@@ -87,6 +89,42 @@ Convergence outputs:
 - `deployment_stack_readiness`
 - `railway_auth_context`
 - `gh_deploy_readiness`
+
+#### Skills-Plane Health Checks (Weekly)
+
+The weekly audit includes two skills-related checks for fleet governance:
+
+**`skills_plane_alignment`**
+
+Verifies the shared skills plane (`~/.agent/skills`) is properly installed on each canonical host:
+- Skills plane exists
+- Symlink points at canonical `agent-skills` (or is a git checkout)
+- `AGENTS.md` present in skills plane
+- Baseline artifact (`dist/universal-baseline.md`) exists
+- Core skill directories present (`core/`, `extended/`, `health/`, `infra/`, `railway/`)
+
+This check is weekly because:
+- Skills plane installation changes infrequently
+- Misalignment indicates systemic issues requiring manual intervention
+- Daily checks would be noisy for what is fundamentally an install-time concern
+
+**`ide_bootstrap_alignment`**
+
+Verifies IDE bootstrap/config rails point at the shared skills plane:
+- `~/.claude/CLAUDE.md` exists and references AGENTS.md
+- `~/.gemini/GEMINI.md` exists and references AGENTS.md
+- `~/.opencode/config.json` references AGENTS.md
+
+This check is weekly because:
+- IDE configuration is typically set up once per host
+- Missing files may indicate IDE not installed (acceptable)
+- Bootstrap drift requires manual intervention
+
+For local skills-plane diagnosis (on a single VM), use `skills-doctor`:
+```bash
+~/.agent/skills/health/skills-doctor/check.sh
+~/.agent/skills/health/skills-doctor/check.sh --json
+```
 
 Both daily and weekly run cross-VM fanout against all canonical hosts.
 
