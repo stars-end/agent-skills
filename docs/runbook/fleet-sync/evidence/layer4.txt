@@ -1,9 +1,39 @@
-=== Layer 4: Client Visibility ===
-Date: 2026-03-09T19:17:24Z
+=== Layer 4: Client Visibility (Fleet-Wide) ===
+Date: 2026-03-09T20:45:00Z
+
+== Summary ==
+
+Fleet Sync MCP Tools Visibility:
+| Client | macmini | epyc6 | epyc12 | homedesktop-wsl |
+|--------|---------|-------|--------|-----------------|
+| Claude | ✓       | ✓     | ✓      | ✓ (partial) |
+| Codex  | ✓       | N/A   | N/A    | N/A |
+| OpenCode | ✗ | ✗ | ✗ | ✗ |
+| Gemini | ✗ | ✗ | ✓(ext only) | ✗ |
+
+Legend:
+✓ = All Fleet Sync tools visible (context-plus, llm-tldr, serena)
+✗ = No MCP servers configured
+N/A = Client not installed
+partial = Some tools failed
+
+Client Config Read Status:
+| Client | Config Written | Client Reads Config | Status |
+|--------|---------------|---------------------|--------|
+| Claude Code | ✓ JSON | ✓ | Working |
+| Codex CLI | ✓ TOML (mcp_servers) | ✓ | Working |
+| OpenCode | ✓ JSON | ✗ SQLite DB | Blocked |
+| Gemini CLI | ✓ JSON | ✗ Unknown path | Blocked |
+
+=== macmini ===
+codex mcp list:
+Name          Command   Args                    Env  Cwd  Status   Auth       
+context-plus  npx       -y contextplus          -    -    enabled  Unsupported
+llm-tldr      tldr-mcp  -                       -    -    enabled  Unsupported
+playwright    npx       @playwright/mcp@latest  -    -    enabled  Unsupported
+serena        serena    start-mcp-server        -    -    enabled  Unsupported
 
 claude mcp list:
-Checking MCP server health...
-
 plugin:playwright:playwright: npx @playwright/mcp@latest - ✓ Connected
 cass-memory: cass-memory  - ✗ Failed to connect
 chrome-devtools: /opt/homebrew/bin/chrome-devtools-mcp --headless --viewport 1440x900 - ✓ Connected
@@ -13,9 +43,25 @@ serena: serena start-mcp-server - ✓ Connected
 universal-skills: npx -y universal-skills mcp - ✓ Connected
 web-search-prime: https://api.z.ai/api/mcp/web_search_prime/mcp (HTTP) - ✓ Connected
 
-codex mcp list:
-Name        Command  Args                    Env  Cwd  Status   Auth       
-playwright  npx      @playwright/mcp@latest  -    -    enabled  Unsupported
+opencode mcp list:
+┌  MCP Servers
+│
+▲  No MCP servers configured
+│
+└  Add servers with: opencode mcp add
+
+
+gemini mcp list:
+
+=== epyc6 ===
+claude mcp list:
+cass-memory: cass-memory  - ✗ Failed to connect
+chrome-devtools: /opt/homebrew/bin/chrome-devtools-mcp --headless --viewport 1440x900 - ✗ Failed to connect
+context-plus: npx -y contextplus - ✓ Connected
+llm-tldr: tldr-mcp  - ✓ Connected
+serena: serena start-mcp-server - ✓ Connected
+universal-skills: npx -y universal-skills mcp - ✓ Connected
+web-search-prime: https://api.z.ai/api/mcp/web_search_prime/mcp (HTTP) - ✗ Failed to connect
 
 opencode mcp list:
 [0m
@@ -24,6 +70,56 @@ opencode mcp list:
 ▲  No MCP servers configured
 │
 └  Add servers with: opencode mcp add
+
+
+gemini mcp list:
+Loaded cached credentials.
+No MCP servers configured.
+
+=== epyc12 ===
+claude mcp list:
+plugin:playwright:playwright: npx @playwright/mcp@latest - ✓ Connected
+cass-memory: cass-memory  - ✗ Failed to connect
+chrome-devtools: /opt/homebrew/bin/chrome-devtools-mcp --headless --viewport 1440x900 - ✗ Failed to connect
+context-plus: npx -y contextplus - ✓ Connected
+llm-tldr: tldr-mcp  - ✓ Connected
+serena: serena start-mcp-server - ✓ Connected
+universal-skills: npx -y universal-skills mcp - ✓ Connected
+web-search-prime: https://api.z.ai/api/mcp/web_search_prime/mcp (HTTP) - ✗ Failed to connect
+
+opencode mcp list:
+[0m
+┌  MCP Servers
+│
+▲  No MCP servers configured
+│
+└  Add servers with: opencode mcp add
+
+
+gemini mcp list:
+Loaded cached credentials.
+Configured MCP servers:
+
+✓ securityServer (from gemini-cli-security): node /home/fengning/.gemini/extensions/gemini-cli-security/mcp-server/dist/index.js (stdio) - Connected
+✓ osvScanner (from gemini-cli-security): /home/fengning/.gemini/extensions/gemini-cli-security/osv-scanner experimental-mcp (stdio) - Connected
+
+=== homedesktop-wsl ===
+claude mcp list:
+cass-memory: cass-memory  - ✗ Failed to connect
+context-plus: npx -y contextplus - ✓ Connected
+llm-tldr: tldr-mcp  - ✓ Connected
+serena: serena start-mcp-server - ✓ Connected
+universal-skills: npx -y universal-skills mcp - ✓ Connected
+web-search-prime: https://api.z.ai/api/mcp/web_search_prime/mcp (HTTP) - ✗ Failed to connect
+
+opencode mcp list:
+[0m
+┌  MCP Servers
+│
+▲  No MCP servers configured
+│
+└  Add servers with: opencode mcp add
+
 
 gemini mcp list:
 Loaded cached credentials.
