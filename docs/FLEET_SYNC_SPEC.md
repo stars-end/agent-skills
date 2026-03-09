@@ -193,7 +193,7 @@ Each tool in `configs/mcp-tools.yaml` has an `integration_mode` field:
 | `llm-tldr` | mcp | Enabled | Working |
 | `cass-memory` | cli | Enabled | CLI-native, no IDE rendering |
 | `context-plus` | mcp | Enabled | Package: `contextplus@1.0.7` |
-| `serena` | mcp | Disabled | Pending validation |
+| `serena` | mcp | Enabled | Install from GitHub |
 
 ## 13) Platform Status Contract
 
@@ -211,15 +211,13 @@ Ops infrastructure is healthy but tool-value lane is partial:
 - Core ops checks pass: `beads_dolt`, `required_service_health`, `op_auth_readiness`, `alerts_transport_readiness`
 - Tools that are explicitly disabled in `configs/mcp-tools.yaml` are exempt from health checks
 
-**Current State (as of 2026-03-09): Full Fleet Sync GO (conditional)**
+**Current State (as of 2026-03-09): Full Fleet Sync GO**
 
 Enabled tools:
 - `llm-tldr` (mcp, working)
 - `cass-memory` (cli, working)
-- `context-plus` (mcp, requires validation)
-
-Disabled tools:
-- `serena` (pending end-to-end validation)
+- `context-plus` (mcp, working)
+- `serena` (mcp, working)
 
 ## 14) Out of Scope
 

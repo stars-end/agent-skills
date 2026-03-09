@@ -161,8 +161,8 @@ Fleet Sync operates with two tool classes:
 |------|------|--------|----------------|
 | `llm-tldr` | mcp | Enabled | `tldr-mcp --version` |
 | `cass-memory` | cli | Enabled | `cm --version` |
-| `context-plus` | mcp | Enabled | `contextplus --version` |
-| `serena` | mcp | Disabled | `serena start-mcp-server --help` |
+| `context-plus` | mcp | Enabled | `which contextplus` |
+| `serena` | mcp | Enabled | `serena --help` |
 
 **Current Status: Full Fleet Sync GO (conditional)**
 

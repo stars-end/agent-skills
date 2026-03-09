@@ -84,16 +84,14 @@ tools:
 
   # ============================================================
   # serena: AI assistant memory (MCP mode)
-  # DISABLED: Requires end-to-end validation before enabling.
-  # PyPI package collision - must install from GitHub.
+  # Install from GitHub (PyPI has unrelated AMQP package)
   # ============================================================
   serena:
-    enabled: false
+    enabled: true
     integration_mode: mcp
-    disabled_reason: "Requires end-to-end validation. Install from GitHub: uv tool install git+https://github.com/oraios/serena.git"
     version: "git"
-    install_cmd: "uv tool install git+https://github.com/oraios/serena.git"
-    health_cmd: "serena start-mcp-server --help"
+    install_cmd: "serena --version 2>/dev/null || uv tool install git+https://github.com/oraios/serena.git"
+    health_cmd: "serena --help"
     target_ides:
       - codex-cli
       - claude-code
@@ -101,9 +99,8 @@ tools:
       - opencode
     mcp:
       type: stdio
-      command: "serena"
-      args:
-        - "start-mcp-server"
+      command: "serena-mcp-server"
+      args: []
     runtime: python
     upstream: "https://github.com/oraios/serena"
     docs: "https://github.com/oraios/serena#readme"
