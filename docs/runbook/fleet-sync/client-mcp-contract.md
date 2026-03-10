@@ -52,9 +52,9 @@ This document defines the authoritative configuration and registration contract 
 | Host | Role | Required Clients |
 |------|------|------------------|
 | `macmini` | macOS Dev | All 5 |
-| `epyc6` | Linux Dev | All 5 |
-| `epyc12` | Linux Dev | All 5 |
-| `homedesktop-wsl` | Linux/WSL | All 5 |
+| `epyc6` | Linux Dev | 4 (Codex optional/unverified) |
+| `epyc12` | Linux Dev | 4 (Codex optional/unverified) |
+| `homedesktop-wsl` | Linux/WSL | 4 (Codex optional/unverified) |
 
 ## Tool Support Matrix
 | Tool | claude-code | gemini-cli | codex-cli | opencode |

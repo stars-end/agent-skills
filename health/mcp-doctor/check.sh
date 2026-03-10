@@ -61,8 +61,15 @@ check_mcp_client() {
 
   local out
   out=$(eval "$list_cmd" 2>&1 || true)
-  if ! echo "$out" | grep -q "$list_grep"; then
-    echo "⚠️  Configured but tool '$list_grep' not visible in list output"
+  local missing_tools=""
+  for tool in "llm-tldr" "context-plus" "serena"; do
+    if ! echo "$out" | grep -q "$tool"; then
+      missing_tools="$missing_tools $tool"
+    fi
+  done
+
+  if [[ -n "$missing_tools" ]]; then
+    echo "⚠️  Configured but tools not visible in list output:$missing_tools"
     client_warnings=$((client_warnings+1))
     return
   fi
@@ -72,11 +79,11 @@ check_mcp_client() {
 
 echo ""
 echo "Client Configuration & Visibility:"
-# check_mcp_client name path key "list cmd" "grep string" "STATUS"
-check_mcp_client "claude-code" "$HOME/.claude.json" "mcpServers" "claude mcp list" "llm-tldr" "VERIFIED"
-check_mcp_client "gemini-cli" "$HOME/.gemini/settings.json" "mcpServers" "gemini mcp list" "llm-tldr" "VERIFIED"
-check_mcp_client "codex-cli" "$HOME/.codex/config.toml" "mcp_servers" "codex mcp list" "llm-tldr" "VERIFIED"
-check_mcp_client "opencode" "$HOME/.config/opencode/opencode.jsonc" "\"mcp\"" "opencode mcp list" "llm-tldr" "VERIFIED"
+# check_mcp_client name path key "list cmd" "unused_grep" "STATUS"
+check_mcp_client "claude-code" "$HOME/.claude.json" "mcpServers" "claude mcp list" "" "VERIFIED"
+check_mcp_client "gemini-cli" "$HOME/.gemini/settings.json" "mcpServers" "gemini mcp list" "" "VERIFIED"
+check_mcp_client "codex-cli" "$HOME/.codex/config.toml" "mcp_servers" "codex mcp list" "" "VERIFIED"
+check_mcp_client "opencode" "$HOME/.config/opencode/opencode.jsonc" "\"mcp\"" "opencode mcp list" "" "VERIFIED"
 check_mcp_client "antigravity" "$HOME/.gemini/settings.json" "mcpServers" "none" "" "INFERRED"
 
 echo ""
