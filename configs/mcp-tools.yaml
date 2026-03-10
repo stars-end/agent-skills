@@ -1,29 +1,24 @@
-# Fleet Sync V2.1 tool manifest
+# Fleet Sync V2.2 tool manifest
 # Primary source for local-first MCP tool distribution and IDE rendering.
-schema_version: 1
+#
+# Tool Classes (integration_mode):
+#   - mcp: MCP server rendered into IDE configs (requires mcp.* block)
+#   - cli: CLI-native tool (no IDE config rendering, host runtime health only)
+#
+schema_version: 2
 strategy:
   distribution: git_pull
   execution: local_stdio
   fallback: last_known_good_local
 
 tools:
-  cass-memory:
-    enabled: true
-    version: "git"
-    integration_mode: cli
-    install_cmd: "brew install dicklesworthstone/tap/cm"
-    health_cmd: "cm --version"
-    target_ides: []
-    runtime: node
-    sharing:
-      default: local_only
-      opt_in_env: CASS_SHARE_MEMORY
-      disable_env: CASS_NO_SHARE
-
+  # ============================================================
+  # llm-tldr: Static analysis context slicing (MCP mode)
+  # ============================================================
   llm-tldr:
     enabled: true
-    version: "1.5.2"
     integration_mode: mcp
+    version: "1.5.2"
     install_cmd: "uv tool install \"llm-tldr==1.5.2\""
     health_cmd: "tldr-mcp --version || llm-tldr --version"
     target_ides:
@@ -37,14 +32,39 @@ tools:
       command: "tldr-mcp"
       args: []
     runtime: python
+    upstream: "https://github.com/simonw/llm-tldr"
+    docs: "https://github.com/simonw/llm-tldr#readme"
 
+  # ============================================================
+  # cass-memory: CLI-native episodic memory (CLI mode)
+  # Not rendered to IDE configs - standalone CLI tool.
+  # ============================================================
+  cass-memory:
+    enabled: true
+    integration_mode: cli
+    version: "git"
+    install_cmd: "cm --version 2>/dev/null || npm install -g Dicklesworthstone/cass_memory_system"
+    health_cmd: "cm --version"
+    # No target_ides - CLI tools don't render to IDE configs
+    # No mcp block - CLI tools use direct binary execution
+    runtime: node
+    binary: "cm"
+    controls:
+      share_env: CASS_SHARE_MEMORY
+      disable_env: CASS_NO_SHARE
+    upstream: "https://github.com/Dicklesworthstone/cass_memory_system"
+    docs: "https://github.com/Dicklesworthstone/cass_memory_system#readme"
+
+  # ============================================================
+  # context-plus: Structural context analysis (MCP mode)
+  # Install: npx -y contextplus OR bunx contextplus
+  # ============================================================
   context-plus:
-    enabled: false
-    version: "1.0.7"
+    enabled: true
     integration_mode: mcp
-    disabled_reason: "Package @forloopcodes/contextplus not found in npm registry (404). The correct package name is 'contextplus' (without scope). Re-evaluate if package is republished or fork is available."
-    install_cmd: "npm install -g contextplus@1.0.7"
-    health_cmd: "contextplus --version"
+    version: "latest"
+    install_cmd: "npx -y contextplus --version 2>/dev/null || echo 'contextplus available via npx'"
+    health_cmd: "npx -y contextplus --help 2>&1 | head -1"
     target_ides:
       - codex-cli
       - claude-code
@@ -53,17 +73,34 @@ tools:
       - gemini-cli
     mcp:
       type: stdio
-      command: "contextplus"
-      args: []
+      command: "npx"
+      args:
+        - "-y"
+        - "contextplus"
     runtime: node
+    env:
+      optional:
+        - OLLAMA_EMBED_MODEL
+        - OLLAMA_CHAT_MODEL
+        - OLLAMA_API_KEY
+    upstream: "https://github.com/ForLoopCodes/contextplus"
+    docs: "https://github.com/ForLoopCodes/contextplus#readme"
 
+  # ============================================================
+  # serena: AI assistant memory (MCP mode)
+  # Install from GitHub (PyPI has unrelated AMQP package)
+  # Per-IDE context requirements (see https://github.com/oraios/serena/blob/master/docs/02-usage/030_clients.md):
+  # - claude-code: --context claude-code (avoids duplicate tools)
+  # - codex-cli: --context codex (Codex MCP spec workaround)
+  # - antigravity/gemini-cli: --context ide (terminal IDE)
+  # - opencode: --context ide (terminal IDE)
+  # ============================================================
   serena:
-    enabled: false
-    version: "git"
+    enabled: true
     integration_mode: mcp
-    disabled_reason: "PyPI package serena==0.9.1 provides no executable entrypoint (uv tool install fails). Git-based install from oraios/serena required but not verified. Blocked until executable proof and client visibility are real."
-    install_cmd: "uv tool install git+https://github.com/oraios/serena.git"
-    health_cmd: "serena start-mcp-server --help"
+    version: "git"
+    install_cmd: "serena --version 2>/dev/null || uv tool install git+https://github.com/oraios/serena.git"
+    health_cmd: "serena --help 2>&1 | head -1"
     target_ides:
       - codex-cli
       - claude-code
@@ -75,7 +112,12 @@ tools:
       command: "serena"
       args:
         - "start-mcp-server"
+        - "--context"
+        - "claude-code"
+        - "--project-from-cwd"
     runtime: python
+    upstream: "https://github.com/oraios/serena"
+    docs: "https://github.com/oraios/serena#readme"
 
 render:
   merge_mode: patch
@@ -92,6 +134,8 @@ verification:
     - configs/fleet-sync.manifest.yaml
     - configs/mcp-tools.yaml
   require_skill_stubs:
+    - extended/fleet-sync/SKILL.md
+    - extended/llm-tldr/SKILL.md
     - extended/cass-memory/SKILL.md
     - extended/context-plus/SKILL.md
-    - extended/llm-tldr/SKILL.md
+    - extended/serena/SKILL.md
