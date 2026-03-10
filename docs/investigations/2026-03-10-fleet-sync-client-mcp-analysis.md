@@ -27,9 +27,9 @@ Establish an authoritative integration contract for MCP clients across the canon
 
 ### 4. OpenCode (`opencode`)
 - **Config Path**: `~/.config/opencode/opencode.jsonc`
-- **Blocker**: The client (v1.2.20) does not recognize the `mcpServers` key in `opencode.jsonc`. Manual registration via `opencode mcp add` also fails to persist.
-- **SQLite DB**: `~/.local/share/opencode/opencode.db` was inspected but does not contain an obvious flat MCP table; configuration seems to be in flux or internal.
-- **Status**: `BLOCKED`
+- **Durable Registration**: Uses the `mcp` key (not `mcpServers`).
+- **Format**: Requires array-style command definition.
+- **Status**: `VERIFIED`
 
 ## Conclusion
-We have verified durable registration paths for 3 of 4 primary clients. OpenCode remains the sole blocker for full Layer 4 convergence.
+We have verified durable registration paths for all 4 primary clients. Full Layer 4 convergence is now achievable across the entire canonical fleet.

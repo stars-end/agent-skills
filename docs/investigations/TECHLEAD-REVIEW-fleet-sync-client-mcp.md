@@ -9,17 +9,17 @@
 - Investigation Doc: docs/investigations/2026-03-10-fleet-sync-client-mcp-analysis.md
 
 ### Validation
-- dx-fleet check --mode weekly: PASS (for config presence)
-- claude mcp list: PASS (verified connected)
-- gemini mcp list: PASS (verified connected via settings.json)
-- codex mcp list: PASS (verified connected via config.toml)
-- opencode mcp list: FAIL (BLOCKED: unrecognized config key)
+- dx-fleet check --mode weekly: PASS (verified config presence across all hosts)
+- claude mcp list: PASS (verified connected via `~/.claude.json`)
+- gemini mcp list: PASS (verified connected via `~/.gemini/settings.json`)
+- codex mcp list: PASS (verified connected via `~/.codex/config.toml`)
+- opencode mcp list: PASS (verified connected via `~/.config/opencode/opencode.jsonc` using `mcp` key)
 
 ### Decisions Needed
-1. Confirm if OpenCode should remain BLOCKED or if we need a DB-level registration tool.
-2. Approve the use of `~/.gemini/settings.json` as the definitive path for Gemini CLI.
+1. **Gemini Configuration Path**: Approve `~/.gemini/settings.json` as the canonical path for Gemini CLI.
+2. **OpenCode Configuration Key**: Approve `mcp` as the canonical key for OpenCode (fixing the previous assumption of `mcpServers`).
 
 ### How To Review
 1. Open PR #338.
 2. Inspect `docs/runbook/fleet-sync/client-mcp-contract.md` for accuracy.
-3. Verify that `scripts/dx-mcp-tools-sync.sh` needs a follow-on PR to target the verified paths.
+3. Verify that `scripts/dx-mcp-tools-sync.sh` needs a follow-on PR to target the verified paths and keys.
