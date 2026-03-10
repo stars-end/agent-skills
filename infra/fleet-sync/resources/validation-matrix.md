@@ -41,14 +41,15 @@ Expected: `"fleet_status": "green"`
 
 Verify MCP tools are visible to IDE clients.
 
-**Current Observed Reality (2026-03-09):**
+**Current Observed Reality (2026-03-10):**
 
-| Client | Fleet Sync MCP Tools Visible | Status |
-|--------|------------------------------|--------|
-| Claude Code | ✓ All tools connected | Working |
-| Codex CLI | ✗ Only shows playwright | Config not read |
-| OpenCode | ✗ "No MCP servers configured" | Config not read |
-| Gemini CLI | ✗ "No MCP servers configured" | Config not read |
+| Client | Fleet Sync MCP Tools Visible | Status | Config Path |
+|--------|------------------------------|--------|-------------|
+| Claude Code | ✓ All tools connected | `VERIFIED` | `~/.claude.json` |
+| Gemini CLI | ✓ All tools connected | `VERIFIED` | `~/.gemini/settings.json` |
+| Codex CLI | ✓ All tools connected | `VERIFIED` | `~/.codex/config.toml` |
+| Antigravity | ✓ Inherits from Gemini | `VERIFIED` | `~/.gemini/settings.json` |
+| OpenCode | ✗ "No MCP servers configured" | `BLOCKED` | `~/.config/opencode/opencode.jsonc` |
 
 ### Claude Code
 
@@ -61,7 +62,13 @@ claude mcp list
 - `context-plus: npx -y contextplus - Connected` ✓
 - `serena: serena start-mcp-server - Connected` ✓
 
-Note: `cass-memory` is CLI-native and should NOT appear here (or will show "Failed to connect" if manually added).
+### Gemini CLI
+
+```bash
+gemini mcp list
+```
+
+**Observed:** `gemini-cli` uses `~/.gemini/settings.json`. MCP servers added via `gemini mcp add --scope user` appear here and are visible to the client.
 
 ### Codex CLI
 
@@ -69,9 +76,7 @@ Note: `cass-memory` is CLI-native and should NOT appear here (or will show "Fail
 codex mcp list
 ```
 
-**Observed:** Only shows `playwright` (not managed by Fleet Sync). Fleet Sync MCP tools not visible.
-
-**Root Cause:** Config format mismatch. Fleet Sync writes `[mcpServers.*]` but Codex may expect `[mcp_servers.*]`.
+**Observed:** `codex-cli` uses `~/.codex/config.toml` with the `[mcp_servers]` table. 
 
 ### OpenCode
 
@@ -79,23 +84,13 @@ codex mcp list
 opencode mcp list
 ```
 
-**Observed:** "No MCP servers configured" even though `~/.opencode/config.json` contains Fleet Sync entries.
+**Observed:** "No MCP servers configured" even though `~/.config/opencode/opencode.jsonc` is present.
 
-**Root Cause:** Client not reading config file or using different path.
-
-### Gemini CLI
-
-```bash
-gemini mcp list
-```
-
-**Observed:** "No MCP servers configured" even though `~/.gemini/antigravity/mcp_config.json` contains Fleet Sync entries.
-
-**Root Cause:** Client not reading config file or using different path.
+**Root Cause:** The client (v1.2.20) does not recognize the `mcpServers` key in `opencode.jsonc`. `opencode mcp add` also fails to persist.
 
 ### Full GO Requirements
 
-For full Fleet Sync GO, all four clients must show MCP tool visibility. Currently only Claude Code passes Layer 4.
+For full Fleet Sync GO, all four clients must show MCP tool visibility. Current state: `claude-code`, `gemini-cli`, and `codex-cli` are verified; `opencode` is blocked.
 
 ## Quick Repair
 

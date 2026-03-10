@@ -30,13 +30,13 @@ All four tools are enabled and pass Layer 1-3 checks:
 - `context-plus`: MCP structural context analysis
 - `serena`: MCP AI assistant memory
 
-**Layer 4 Client Visibility (observed 2026-03-09):**
+**Layer 4 Client Visibility (observed 2026-03-10):**
 - Claude Code: All MCP tools connected ✓
-- Codex CLI: Does not show Fleet Sync MCP tools
-- OpenCode: Reports "No MCP servers configured"
-- Gemini CLI: Reports "No MCP servers configured"
+- Gemini CLI: All MCP tools connected ✓ (via `~/.gemini/settings.json`)
+- Codex CLI: All MCP tools connected ✓ (via `~/.codex/config.toml` `mcp_servers`)
+- OpenCode: Reports "No MCP servers configured" (BLOCKED: `opencode.jsonc` not reading `mcpServers`)
 
-Full platform GO requires all clients to show MCP tool visibility. Current state is Claude-only for Layer 4.
+Full platform GO requires all clients to show MCP tool visibility. Current state: 3 of 4 clients verified.
 
 ## Known Caveats
 

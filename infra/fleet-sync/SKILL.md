@@ -25,6 +25,7 @@ Canonical orchestrator for Fleet Sync work across:
 - `resources/tool-contracts.md`
 - `resources/validation-matrix.md`
 - `resources/live-docs.md`
+- `../../docs/runbook/fleet-sync/client-mcp-contract.md`
 
 ## Goal
 

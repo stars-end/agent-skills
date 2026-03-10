@@ -7,11 +7,11 @@ This matrix tracks the configuration paths, formats, and current integration sta
 
 | IDE | Config Path | Format | Patch Method | OS Differences | Status |
 |-----|-------------|--------|--------------|----------------|--------|
-| `antigravity` | `~/.gemini/antigravity/mcp_config.json` | JSON | jq/patch | None | Verified (epyc6, macmini) |
-| `claude-code` | `~/.claude.json` | JSON | jq/patch | None | Verified (epyc6, macmini) |
-| `codex-cli` | `~/.codex/config.toml` | TOML | toml-cli/sed | None | Verified (epyc6, macmini) |
-| `opencode` | `~/.opencode/config.json` | JSON | jq/patch | None | Verified (epyc6, macmini) |
-| `gemini-cli` | `~/.gemini/antigravity/mcp_config.json` | JSON | jq/patch | Same as antigravity | Verified (epyc6, macmini) |
+| `antigravity` | `~/.gemini/settings.json` | JSON | jq/patch | Same as gemini-cli | `VERIFIED` |
+| `claude-code` | `~/.claude.json` | JSON | jq/patch | None | `VERIFIED` |
+| `codex-cli` | `~/.codex/config.toml` | TOML | toml-cli/sed | None | `VERIFIED` |
+| `opencode` | `~/.config/opencode/opencode.jsonc` | JSONC | File Patch | None | `BLOCKED` |
+| `gemini-cli` | `~/.gemini/settings.json` | JSON | jq/patch | None | `VERIFIED` |
 
 ## Verification Status by Host
 
