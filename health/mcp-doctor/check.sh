@@ -10,6 +10,80 @@ SKILLS_DIR="${SKILLS_DIR:-"$(cd "${SCRIPT_DIR}/../.." && pwd)"}"
 MANIFEST_PATH="${SKILLS_DIR}/configs/fleet-sync.manifest.yaml"
 CANONICAL_TARGETS="${SKILLS_DIR}/scripts/canonical-targets.sh"
 
+echo ""
+echo "=========================================================="
+echo " MCP Client Contract Diagnosis"
+echo " Reference: docs/runbook/fleet-sync/client-mcp-contract.md"
+echo "=========================================================="
+
+missing_required=0
+missing_optional=0
+client_warnings=0
+
+check_mcp_client() {
+  local client_name="$1"
+  local config_path="$2"
+  local check_key="$3"
+  local list_cmd="$4"
+  local list_grep="$5"
+  local expected_status="$6" # VERIFIED or INFERRED or BLOCKED
+
+  echo -n "- $client_name: "
+  
+  if [[ ! -f "$config_path" ]]; then
+    echo "⚠️  Config missing ($config_path)"
+    client_warnings=$((client_warnings+1))
+    return
+  fi
+
+  if ! grep -q "$check_key" "$config_path" 2>/dev/null; then
+    echo "⚠️  Config exists but missing key '$check_key' ($config_path)"
+    client_warnings=$((client_warnings+1))
+    return
+  fi
+
+  if [[ "$expected_status" == "BLOCKED" ]]; then
+    echo "❌ Configured but BLOCKED"
+    client_warnings=$((client_warnings+1))
+    return
+  fi
+
+  if [[ "$list_cmd" == "none" ]]; then
+    echo "✅ Configured ($config_path) [Status: $expected_status]"
+    return
+  fi
+
+  if ! command -v $(echo "$list_cmd" | awk '{print $1}') >/dev/null 2>&1; then
+    echo "⚠️  CLI not found ($(echo "$list_cmd" | awk '{print $1}'))"
+    client_warnings=$((client_warnings+1))
+    return
+  fi
+
+  local out
+  out=$(eval "$list_cmd" 2>&1 || true)
+  if ! echo "$out" | grep -q "$list_grep"; then
+    echo "⚠️  Configured but tool '$list_grep' not visible in list output"
+    client_warnings=$((client_warnings+1))
+    return
+  fi
+
+  echo "✅ Configured and Visible ($config_path) [Status: $expected_status]"
+}
+
+echo ""
+echo "Client Configuration & Visibility:"
+# check_mcp_client name path key "list cmd" "grep string" "STATUS"
+check_mcp_client "claude-code" "$HOME/.claude.json" "mcpServers" "claude mcp list" "llm-tldr" "VERIFIED"
+check_mcp_client "gemini-cli" "$HOME/.gemini/settings.json" "mcpServers" "gemini mcp list" "llm-tldr" "VERIFIED"
+check_mcp_client "codex-cli" "$HOME/.codex/config.toml" "mcp_servers" "codex mcp list" "llm-tldr" "VERIFIED"
+check_mcp_client "opencode" "$HOME/.config/opencode/opencode.jsonc" "\"mcp\"" "opencode mcp list" "llm-tldr" "VERIFIED"
+check_mcp_client "antigravity" "$HOME/.gemini/settings.json" "mcpServers" "none" "" "INFERRED"
+
+echo ""
+echo "=========================================================="
+echo " Legacy / Optional Tool Checks"
+echo "=========================================================="
+
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 FILES_BASE=(
@@ -92,7 +166,7 @@ gemini_enforcement_state() {
   local missing=0
   local artifact_paths=(
     "${HOME}/.gemini/GEMINI.md"
-    "${HOME}/.gemini/antigravity/mcp_config.json"
+    "${HOME}/.gemini/settings.json"
   )
   local artifact
   local has_binary=0
@@ -140,17 +214,6 @@ gemini_enforcement_state() {
 }
 
 load_gemini_enforcement
-
-missing_required=0
-missing_optional=0
-
-echo ""
-echo "REQUIRED MCP servers:"
-
-# 1) universal-skills (DEPRECATED)
-# No longer checked
-
-
 
 echo ""
 echo "OPTIONAL MCP servers:"
@@ -306,22 +369,14 @@ fi
 echo ""
 echo "OPTIONAL CLI tools:"
 
-# Railway (per env-sources contract: optional in local dev, required in CI/CD)
-# NOTE: Railway hard-fail enforcement is handled by railway-requirements-check.sh
-# which is integrated into dx-status.sh. This check is informational only.
 if command -v railway >/dev/null 2>&1; then
   echo "✅ railway ($(railway --version 2>/dev/null | head -1 || echo installed))"
-
-  # Check Login Status (optional - may not be logged in during local dev)
   if ! railway whoami >/dev/null 2>&1; then
     echo "⚠️  railway: NOT LOGGED IN (optional for local dev, run 'railway login' when needed)"
     missing_optional=$((missing_optional+1))
   else
     echo "✅ railway: authenticated (interactive session)"
   fi
-
-  # Check Railway Shell Context (RAILWAY_API_TOKEN - per ENV_SOURCES_CONTRACT.md)
-  # This is the explicit token export for CI/CD and automated workflows
   if [[ -n "${RAILWAY_API_TOKEN:-}" ]]; then
     echo "✅ railway: RAILWAY_API_TOKEN set (shell context for automated workflows)"
   elif [[ -n "${RAILWAY_TOKEN:-}" ]]; then
@@ -352,32 +407,27 @@ if [[ "$gemini_state" == "pass" ]]; then
   echo "✅ gemini-cli lane present and compliant"
 elif [[ "$gemini_state" == "warn" ]]; then
   echo "⚠️  gemini-cli lane missing artifacts; allowed in grace window (${GEMINI_GRACE_DAYS} day(s), enforce after ${GEMINI_ENFORCE_AFTER} day(s))"
-  echo "   Ensure: ~/.gemini/GEMINI.md, ~/.gemini/gemini or ~/.gemini/gemini-cli, ~/.gemini/antigravity/mcp_config.json"
+  echo "   Ensure: ~/.gemini/GEMINI.md, ~/.gemini/gemini or ~/.gemini/gemini-cli, ~/.gemini/settings.json"
   missing_optional=$((missing_optional+1))
 else
   echo "❌ gemini-cli lane missing beyond grace window"
-  echo "   Ensure: ~/.gemini/GEMINI.md, ~/.gemini/gemini or ~/.gemini/gemini-cli, ~/.gemini/antigravity/mcp_config.json"
+  echo "   Ensure: ~/.gemini/GEMINI.md, ~/.gemini/gemini or ~/.gemini/gemini-cli, ~/.gemini/settings.json"
   missing_optional=$((missing_optional+1))
 fi
 
 echo ""
 echo "SLACK MCP configuration (canonical IDEs):"
 
-# Check for Slack MCP in canonical IDE configs.
-# Canonical IDEs: antigravity, claude-code, codex-cli, opencode, gemini-cli.
-# gemini-cli shares canonical MCP profile with antigravity.
 SLACK_MCP_CONFIGURED=false
 
-# Check antigravity config
-if [[ -f "$HOME/.gemini/antigravity/mcp_config.json" ]]; then
-  if grep -q '"slack"' "$HOME/.gemini/antigravity/mcp_config.json" 2>/dev/null || \
-     grep -q 'slack-mcp-server' "$HOME/.gemini/antigravity/mcp_config.json" 2>/dev/null; then
-    echo "✅ antigravity: Slack MCP configured"
+if [[ -f "$HOME/.gemini/settings.json" ]]; then
+  if grep -q '"slack"' "$HOME/.gemini/settings.json" 2>/dev/null || \
+     grep -q 'slack-mcp-server' "$HOME/.gemini/settings.json" 2>/dev/null; then
+    echo "✅ gemini-cli/antigravity: Slack MCP configured"
     SLACK_MCP_CONFIGURED=true
   fi
 fi
 
-# Check claude-code config
 if [[ -f "$HOME/.claude.json" ]]; then
   if grep -q '"slack"' "$HOME/.claude.json" 2>/dev/null || \
      grep -q 'slack-mcp-server' "$HOME/.claude.json" 2>/dev/null; then
@@ -386,7 +436,6 @@ if [[ -f "$HOME/.claude.json" ]]; then
   fi
 fi
 
-# Check codex-cli config
 if [[ -f "$HOME/.codex/config.toml" ]]; then
   if grep -q "slack" "$HOME/.codex/config.toml" 2>/dev/null || \
      grep -q "slack-mcp-server" "$HOME/.codex/config.toml" 2>/dev/null; then
@@ -395,10 +444,9 @@ if [[ -f "$HOME/.codex/config.toml" ]]; then
   fi
 fi
 
-# Check opencode config
-if [[ -f "$HOME/.opencode/config.json" ]]; then
-  if grep -q '"slack"' "$HOME/.opencode/config.json" 2>/dev/null || \
-     grep -q 'slack-mcp-server' "$HOME/.opencode/config.json" 2>/dev/null; then
+if [[ -f "$HOME/.config/opencode/opencode.jsonc" ]]; then
+  if grep -q '"slack"' "$HOME/.config/opencode/opencode.jsonc" 2>/dev/null || \
+     grep -q 'slack-mcp-server' "$HOME/.config/opencode/opencode.jsonc" 2>/dev/null; then
     echo "✅ opencode: Slack MCP configured"
     SLACK_MCP_CONFIGURED=true
   fi
@@ -421,7 +469,7 @@ else
 fi
 
 echo ""
-if [[ "$missing_required" -eq 0 ]]; then
+if [[ "$missing_required" -eq 0 ]] && [[ "$client_warnings" -eq 0 ]]; then
   if [[ "$missing_optional" -eq 0 ]]; then
     echo "✅ mcp-doctor: healthy (all required + optional items present)"
   else
@@ -430,7 +478,12 @@ if [[ "$missing_required" -eq 0 ]]; then
   exit 0
 fi
 
-echo "❌ mcp-doctor: $missing_required REQUIRED items missing"
+if [[ "$missing_required" -gt 0 ]]; then
+  echo "❌ mcp-doctor: $missing_required REQUIRED items missing"
+fi
+if [[ "$client_warnings" -gt 0 ]]; then
+  echo "⚠️  mcp-doctor: $client_warnings MCP Client Contract warnings"
+fi
 if [[ "$missing_optional" -gt 0 ]]; then
   echo "⚠️  Also missing $missing_optional optional items"
 fi
