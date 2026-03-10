@@ -218,14 +218,6 @@ load_gemini_enforcement
 echo ""
 echo "OPTIONAL MCP servers:"
 
-# 3) serena (DEPRECATED - V4.2.1)
-if f="$(have_in_files \"serena\")"; then
-  echo "⚠️  serena (config seen in: $f) — DEPRECATED, consider removing"
-  missing_optional=$((missing_optional+1))
-else
-  echo "✅ serena (not configured — correctly removed)"
-fi
-
 # 4) slack MCP (OPTIONAL)
 if f="$(have_in_files '\"slack\"')" || f="$(have_in_files \"slack-mcp\")" || f="$(have_in_files \"slack-mcp-server\")"; then
   echo "✅ slack (config seen in: $f)"

@@ -5,7 +5,7 @@ description: |
   Strict mode is opt-in via MCP_DOCTOR_STRICT=1.
 tags: [dx, mcp, health, verification]
 allowed-tools:
-  - Bash(mcp-doctor/check.sh:*)
+  - Bash(health/mcp-doctor/check.sh:*)
 ---
 
 # mcp-doctor
@@ -15,8 +15,8 @@ Runs a fast, safe verification of canonical MCP + DX expectations.
 ## Usage
 
 ```bash
-~/agent-skills/mcp-doctor/check.sh
-MCP_DOCTOR_STRICT=1 ~/agent-skills/mcp-doctor/check.sh
+~/agent-skills/health/mcp-doctor/check.sh
+MCP_DOCTOR_STRICT=1 ~/agent-skills/health/mcp-doctor/check.sh
 ```
 
 ## Design

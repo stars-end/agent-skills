@@ -174,7 +174,7 @@ Fleet Sync operates with two tool classes:
 | `context-plus` | mcp | Enabled | `npx -y contextplus --help` |
 | `serena` | mcp | Enabled | `serena --help` |
 
-**Current Status: CONDITIONAL_GO**
+**Current Status: FULL_GO**
 
 All four tools are enabled and pass Layer 1-3 checks:
 - CLI tools (`cass-memory`): Green when host runtime health passes
