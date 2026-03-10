@@ -201,6 +201,8 @@ Right:
   '
 ```
 
+For Prime Radiant dev investigations, the active orchestrator is Railway-hosted Windmill. Check the Windmill workspace assets under `f/eodhd/*` before assuming the deprecated `eodhd-cron` service is the primary runtime surface.
+
 ### Railway Service URL Variables
 
 Railway automatically injects these URL variables into services:

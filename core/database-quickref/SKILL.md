@@ -44,7 +44,7 @@ Before any DB action:
 ```bash
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
   ~/agent-skills/scripts/dx-railway-run.sh -- \
-  bash -lc 'cd backend && python scripts/db_inspect.py tables'
+  bash -lc 'cd backend && poetry run python scripts/db_inspect.py tables'
 ```
 3. Check whether host `psql` exists:
 ```bash
@@ -69,25 +69,27 @@ NEXT_COMMANDS:
 # List public tables on the transactional DB
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
   ~/agent-skills/scripts/dx-railway-run.sh -- \
-  bash -lc 'cd backend && python scripts/db_inspect.py tables'
+  bash -lc 'cd backend && poetry run python scripts/db_inspect.py tables'
 
 # Describe a table
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
   ~/agent-skills/scripts/dx-railway-run.sh -- \
-  bash -lc 'cd backend && python scripts/db_inspect.py describe eodhd_refresh_runs'
+  bash -lc 'cd backend && poetry run python scripts/db_inspect.py describe eodhd_refresh_runs'
 
 # Inspect refresh runs for a market date
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
   ~/agent-skills/scripts/dx-railway-run.sh -- \
-  bash -lc "cd backend && python scripts/db_inspect.py refresh-runs --trade-date 2026-03-09"
+  bash -lc "cd backend && poetry run python scripts/db_inspect.py refresh-runs --trade-date 2026-03-09"
 
 # Read-only ad hoc SQL on the vector DB
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
   ~/agent-skills/scripts/dx-railway-run.sh -- \
-  bash -lc "cd backend && python scripts/db_inspect.py --db vector query --sql 'SELECT 1'"
+  bash -lc "cd backend && poetry run python scripts/db_inspect.py --db vector query --sql 'SELECT 1'"
 ```
 
 The inspector is read-only by design and should be the primary manual inspection path for this repo.
+
+For Prime Radiant dev EODHD operations, start from the Railway-hosted Windmill assets `f/eodhd/eodhd_trigger_and_process`, `f/eodhd/eod_realtime`, and `f/eodhd/eod_nightly`. The legacy `eodhd-cron` service is rollback-only in dev and should not be the first debugging target.
 
 ## Direct SQL Path
 
