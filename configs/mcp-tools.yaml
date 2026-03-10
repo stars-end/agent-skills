@@ -107,9 +107,6 @@ tools:
       command: "serena"
       args:
         - "start-mcp-server"
-        - "--context"
-        - "claude-code"
-        - "--project-from-cwd"
     runtime: python
     upstream: "https://github.com/oraios/serena"
     docs: "https://github.com/oraios/serena#readme"
@@ -120,9 +117,9 @@ render:
   write_paths:
     codex-cli: ~/.codex/config.toml
     claude-code: ~/.claude.json
-    antigravity: ~/.gemini/antigravity/mcp_config.json
-    opencode: ~/.opencode/config.json
-    gemini-cli: ~/.gemini/antigravity/mcp_config.json
+    antigravity: ~/.gemini/settings.json
+    opencode: ~/.config/opencode/opencode.jsonc
+    gemini-cli: ~/.gemini/settings.json
 
 verification:
   require_manifests:

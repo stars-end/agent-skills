@@ -41,14 +41,15 @@ Expected: `"fleet_status": "green"`
 
 Verify MCP tools are visible to IDE clients.
 
-**Current Observed Reality (2026-03-09):**
+**Current Observed Reality (2026-03-10):**
 
-| Client | Fleet Sync MCP Tools Visible | Status |
-|--------|------------------------------|--------|
-| Claude Code | ✓ All tools connected | Working |
-| Codex CLI | ✗ Only shows playwright | Config not read |
-| OpenCode | ✗ "No MCP servers configured" | Config not read |
-| Gemini CLI | ✗ "No MCP servers configured" | Config not read |
+| Client | Fleet Sync MCP Tools Visible | Status | Config Path |
+|--------|------------------------------|--------|-------------|
+| Claude Code | ✓ All tools connected | `VERIFIED` | `~/.claude.json` |
+| Gemini CLI | ✓ All tools connected | `VERIFIED` | `~/.gemini/settings.json` |
+| Codex CLI | ✓ All tools listed and enabled | `VERIFIED` | `~/.codex/config.toml` |
+| Antigravity | ✓ Inherits from Gemini | `INFERRED` | `~/.gemini/settings.json` |
+| OpenCode | ✓ All tools connected | `VERIFIED` | `~/.config/opencode/opencode.jsonc` |
 
 ### Claude Code
 
@@ -56,12 +57,11 @@ Verify MCP tools are visible to IDE clients.
 claude mcp list
 ```
 
-**Observed:** All MCP tools show "Connected":
-- `llm-tldr: tldr-mcp - Connected` ✓
-- `context-plus: npx -y contextplus - Connected` ✓
-- `serena: serena start-mcp-server - Connected` ✓
+### Gemini CLI
 
-Note: `cass-memory` is CLI-native and should NOT appear here (or will show "Failed to connect" if manually added).
+```bash
+gemini mcp list
+```
 
 ### Codex CLI
 
@@ -69,78 +69,12 @@ Note: `cass-memory` is CLI-native and should NOT appear here (or will show "Fail
 codex mcp list
 ```
 
-**Observed:** Only shows `playwright` (not managed by Fleet Sync). Fleet Sync MCP tools not visible.
-
-**Root Cause:** Config format mismatch. Fleet Sync writes `[mcpServers.*]` but Codex may expect `[mcp_servers.*]`.
-
 ### OpenCode
 
 ```bash
 opencode mcp list
 ```
 
-<<<<<<< HEAD
-**Observed:** "No MCP servers configured"
-
-**Root Cause:** OpenCode uses SQLite database (`~/.local/share/opencode/opencode.db`) for config, not JSON files. The `~/.opencode/config.json` is for bun/package management only.
-
-**Resolution:** Requires OpenCode-specific MCP registration via `opencode mcp add` or direct database manipulation. This is a known limitation.
-=======
-**Observed:** "No MCP servers configured" even though `~/.opencode/config.json` contains Fleet Sync entries.
-
-**Root Cause:** Client not reading config file or using different path.
->>>>>>> origin/master
-
-### Gemini CLI
-
-```bash
-gemini mcp list
-```
-
-<<<<<<< HEAD
-**Observed:** "No MCP servers configured"
-
-**Root Cause:** Gemini CLI uses a different config path or format than what Fleet Sync writes.
-
-**Resolution:** Needs investigation of Gemini CLI config path. This is a known limitation.
-
 ### Full GO Requirements
 
-For full Fleet Sync GO, all four clients must show MCP tool visibility.
-
-**Current Layer 4 Status:**
-| Client | Config Written | Client Reads Config | Status |
-|--------|---------------|---------------------|--------|
-| Claude Code | ✓ JSON | ✓ | Working |
-| Codex CLI | ✓ TOML (mcp_servers) | ✓ | Working |
-| OpenCode | ✓ JSON | ✗ SQLite DB | Blocked |
-| Gemini CLI | ✓ JSON | ✗ Unknown path | Blocked |
-=======
-**Observed:** "No MCP servers configured" even though `~/.gemini/antigravity/mcp_config.json` contains Fleet Sync entries.
-
-**Root Cause:** Client not reading config file or using different path.
-
-### Full GO Requirements
-
-For full Fleet Sync GO, all four clients must show MCP tool visibility. Currently only Claude Code passes Layer 4.
->>>>>>> origin/master
-
-## Quick Repair
-
-If checks fail, run repair:
-
-```bash
-# Single host repair
-~/agent-skills/scripts/dx-mcp-tools-sync.sh --repair --json --state-dir ~/.dx-state/fleet
-
-# Fleet-wide converge
-~/agent-skills/scripts/dx-fleet.sh converge --repair --json
-```
-
-## Status Semantics
-
-| Status | Meaning | Action |
-|--------|---------|--------|
-| `green` | All checks pass | None |
-| `yellow` | Warnings only | Review, optional repair |
-| `red` | Failures detected | Run repair immediately |
+For full Fleet Sync GO, all four clients must show MCP tool visibility. Current state: **Full GO** achieved for Layer 4 visibility across all canonical clients.

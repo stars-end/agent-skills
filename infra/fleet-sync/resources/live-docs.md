@@ -28,6 +28,7 @@ Use primary sources whenever possible. Internal runbooks are supporting context,
 - `docs/runbook/fleet-sync/mcp-tool-restoration-research.md`
 - `docs/runbook/fleet-sync/mcp-tool-rollout-plan.md`
 - `docs/runbook/fleet-sync/mcp-ide-surface-matrix.md`
+- `docs/runbook/fleet-sync/client-mcp-contract.md`
 
 ## Usage Rule
 

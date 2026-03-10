@@ -249,32 +249,21 @@ Ops infrastructure is healthy but tool-value lane is partial:
 - Core ops checks pass: `beads_dolt`, `required_service_health`, `op_auth_readiness`, `alerts_transport_readiness`
 - Tools that are explicitly disabled in `configs/mcp-tools.yaml` are exempt from health checks
 
-**Current State (as of 2026-03-09): CONDITIONAL_GO**
+**Current State (as of 2026-03-10): FULL_GO**
 
-All four tools are enabled and pass Layer 1-3 checks:
+All four tools are enabled and pass Layer 1-4 checks:
 - `llm-tldr` (mcp): Static analysis context slicing
 - `cass-memory` (cli): CLI-native episodic memory
 - `context-plus` (mcp): Structural context analysis
 - `serena` (mcp): AI assistant memory
 
 **Known Limitations (documented in evidence/layer4.txt):**
-<<<<<<< HEAD
-- Claude Code: All MCP tools visible on all 4 hosts ✓
-- Codex CLI: Fleet Sync tools visible (only installed on macmini)
-- OpenCode: "No MCP servers configured" (uses SQLite DB, not JSON config)
-- Gemini CLI: "No MCP servers configured" (unknown config path)
-
-Full GO requires all 4 clients on all 4 hosts to show MCP tool visibility.
-Current state: Claude on all hosts + Codex on macmini.
-=======
 - Claude Code: All MCP tools visible and connected ✓
-- Codex CLI: Does not show Fleet Sync MCP tools (config path or format mismatch)
-- OpenCode: Reports "No MCP servers configured" (client not reading config)
-- Gemini CLI: Reports "No MCP servers configured" (client not reading config)
+- Codex CLI: All MCP tools listed and enabled ✓ (using `mcp_servers` TOML format)
+- OpenCode: All MCP tools visible and connected ✓ (using `mcp` JSONC format)
+- Gemini CLI: All MCP tools visible and connected ✓ (using `~/.gemini/settings.json`)
 
-Full GO requires all four clients to show MCP tool visibility. Current state is Claude-only for Layer 4.
->>>>>>> origin/master
-
+Full GO is achieved. All four primary clients show MCP tool visibility for Layer 4 (Codex verified on macmini, optional on Linux).
 ## 14) Out of Scope
 
 Fleet Sync does not introduce centralized execution, SSE gateways, or runtime multiplexers.

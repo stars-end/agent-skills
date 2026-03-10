@@ -197,7 +197,8 @@ def load_manifest() -> dict:
         raise RuntimeError("manifest is not a mapping")
     return data
 
-def render_json(path: Path, servers: dict):
+def render_json(path: Path, servers: dict, ide: str):
+    key = "mcp" if ide == "opencode" else "mcpServers"
     payload = {}
     if path.exists():
         try:
@@ -206,12 +207,16 @@ def render_json(path: Path, servers: dict):
                 payload = {}
         except Exception:
             payload = {}
-    mcp = payload.get("mcpServers", {})
+    mcp = payload.get(key, {})
     if not isinstance(mcp, dict):
         mcp = {}
     for name, entry in servers.items():
+        if ide == "opencode":
+            cmd = entry.get("command", "")
+            args = entry.get("args", [])
+            entry = {"type": "local", "command": ([cmd] if isinstance(cmd, str) else cmd) + args}
         mcp[name] = entry
-    payload["mcpServers"] = mcp
+    payload[key] = mcp
     atomic_write(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 def render_toml(path: Path, servers: dict):
@@ -281,14 +286,15 @@ def template_for_ide(ide: str, target_path: Path):
         return None
     return path
 
-def check_json_has_servers(path: Path, names: list):
+def check_json_has_servers(path: Path, names: list, ide: str):
     if not path.exists():
         return False, "missing file"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        servers = payload.get("mcpServers", {})
+        key = "mcp" if ide == "opencode" else "mcpServers"
+        servers = payload.get(key, {})
         if not isinstance(servers, dict):
-            return False, "mcpServers missing"
+            return False, f"{key} missing"
         missing = [n for n in names if n not in servers]
         if missing:
             return False, f"missing server entries: {', '.join(missing)}"
@@ -436,8 +442,8 @@ for ide, path_raw in sorted(write_paths.items()):
                 tpl = template_for_ide(ide, path)
                 if tpl is not None:
                     atomic_write(path, tpl.read_text(encoding="utf-8"))
-            if path.suffix.lower() == ".json":
-                render_json(path, expected)
+            if path.suffix.lower() in (".json", ".jsonc"):
+                render_json(path, expected, ide)
             elif path.suffix.lower() == ".toml":
                 render_toml(path, expected)
             elif path.suffix.lower() == ".md":
@@ -456,8 +462,8 @@ for ide, path_raw in sorted(write_paths.items()):
     try:
         ok = False
         msg = ""
-        if path.suffix.lower() == ".json":
-            ok, msg = check_json_has_servers(path, expected_names)
+        if path.suffix.lower() in (".json", ".jsonc"):
+            ok, msg = check_json_has_servers(path, expected_names, ide)
         elif path.suffix.lower() == ".toml":
             ok, msg = check_toml_has_servers(path, expected_names)
         elif path.suffix.lower() == ".md":

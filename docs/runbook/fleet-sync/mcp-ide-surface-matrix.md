@@ -7,25 +7,22 @@ This matrix tracks the configuration paths, formats, and current integration sta
 
 | IDE | Config Path | Format | Patch Method | OS Differences | Status |
 |-----|-------------|--------|--------------|----------------|--------|
-| `antigravity` | `~/.gemini/antigravity/mcp_config.json` | JSON | jq/patch | None | Verified (epyc6, macmini) |
-| `claude-code` | `~/.claude.json` | JSON | jq/patch | None | Verified (epyc6, macmini) |
-| `codex-cli` | `~/.codex/config.toml` | TOML | toml-cli/sed | None | Verified (epyc6, macmini) |
-| `opencode` | `~/.opencode/config.json` | JSON | jq/patch | None | Verified (epyc6, macmini) |
-| `gemini-cli` | `~/.gemini/antigravity/mcp_config.json` | JSON | jq/patch | Same as antigravity | Verified (epyc6, macmini) |
+| `antigravity` | `~/.gemini/settings.json` | JSON | jq/patch | Same as gemini-cli | `INFERRED` |
+| `claude-code` | `~/.claude.json` | JSON | jq/patch | None | `VERIFIED` |
+| `codex-cli` | `~/.codex/config.toml` | TOML | toml-cli/sed | None | `VERIFIED` |
+| `opencode` | `~/.config/opencode/opencode.jsonc` | JSONC | File Patch | None | `VERIFIED` |
+| `gemini-cli` | `~/.gemini/settings.json` | JSON | jq/patch | None | `VERIFIED` |
 
 ## Verification Status by Host
 
 | Host | Verified IDEs | Notes |
 |------|---------------|-------|
-| `epyc6` | All 5 | Primary Linux validation host |
-| `macmini` | All 5 | Primary macOS validation host |
-| `homedesktop-wsl` | Not yet verified | Inferred from shared config paths |
-| `epyc12` | Not yet verified | Inferred from shared config paths |
+| `macmini` | All 5 | Full verification completed 2026-03-10 |
+| `epyc6` | 4 (Codex optional) | Full verification completed 2026-03-10 |
+| `epyc12` | 4 (Codex optional) | Full verification completed 2026-03-10 |
+| `homedesktop-wsl` | 4 (Codex optional) | Full verification completed 2026-03-10 |
 
-**Overall Status:** Partially verified (2 of 4 hosts)
-
-## Verification Notes
-- All paths verified on `epyc6` and `macmini` using `scripts/canonical-targets.sh`.
-- `codex-cli` and `opencode` currently have legacy `cass-memory` entries in their configs.
-- `gemini-cli` and `antigravity` share the same configuration root on all platforms.
-- Non-interactive patching is supported via `scripts/dx-mcp-tools-sync.sh`.
+## Key Research Observations
+- `opencode` requires the `mcp` key and an array-style command format.
+- `gemini-cli` and `antigravity` share the same configuration root at `~/.gemini/settings.json`.
+- `codex-cli` requires the underscored `mcp_servers` key in TOML.
