@@ -65,11 +65,14 @@ New agents MUST complete these steps before any other work:
 
 **Step 1: Load 1Password Service Account**
 \`\`\`bash
-# macOS
-export OP_SERVICE_ACCOUNT_TOKEN="\$(cat ~/.config/systemd/user/op-\$(hostname)-token)"
+# Recommended helper
+~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami
 
-# Linux (systemd-creds encrypted)
-export OP_SERVICE_ACCOUNT_TOKEN="\$(systemd-creds decrypt ~/.config/systemd/user/op-\$(hostname)-token.cred)"
+# Fallback search order if manual recovery is needed:
+#   1. ~/.config/systemd/user/op-\$(hostname)-token
+#   2. ~/.config/systemd/user/op-\$(hostname)-token.cred
+#   3. ~/.config/systemd/user/op_token
+#   4. ~/.config/systemd/user/op_token.cred
 
 # Verify
 op whoami  # Must show: User Type: SERVICE_ACCOUNT
@@ -77,8 +80,7 @@ op whoami  # Must show: User Type: SERVICE_ACCOUNT
 
 **Step 2: Authenticate Railway CLI**
 \`\`\`bash
-export RAILWAY_API_TOKEN=\$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
-railway whoami  # Must show: Logged in as <email>
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 \`\`\`
 
 **Step 3: Verify Full Stack**
@@ -89,7 +91,8 @@ railway status            # Should show project context
 
 **Common Issues:**
 - \`op whoami\` shows "account is not signed in" → Load OP_SERVICE_ACCOUNT_TOKEN
-- \`railway whoami\` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
+- \`railway whoami\` shows "Unauthorized" → Load OP + Railway auth in the same invocation (not separate tool calls)
+- repeated auth failures across shell/tool calls → Use \`~/agent-skills/scripts/dx-load-railway-auth.sh -- <command>\`
 - Token file not found → Run \`~/agent-skills/scripts/create-op-credential.sh\`
 
 ### 5.2) Railway Link Non-Interactive Usage (CRITICAL)
