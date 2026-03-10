@@ -11,6 +11,9 @@ set -euo pipefail
 ENV_NAME="${DX_RAILWAY_ENV:-dev}"
 SERVICE_NAME="${DX_RAILWAY_SERVICE:-backend}"
 PROJECT_ID="${DX_RAILWAY_PROJECT_ID:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/dx-auth.sh"
 
 resolve_context_file() {
   local explicit local_file worktree_base context_base cwd rel beads_id repo_name candidate
@@ -101,6 +104,10 @@ command -v railway >/dev/null 2>&1 || die "railway CLI not found in PATH"
 # If already inside Railway shell context, just run directly.
 if [[ -n "${RAILWAY_ENVIRONMENT:-}" ]]; then
   exec "$@"
+fi
+
+if [[ -z "${RAILWAY_API_TOKEN:-}" ]]; then
+  dx_auth_load_railway_api_token >/dev/null 2>&1 || true
 fi
 
 # Use active local link if present.

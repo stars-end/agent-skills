@@ -20,7 +20,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting heartbeat check..."
 # Use openclaw agent CLI to read and summarize HEARTBEAT.md
 # We use the full path to mise and openclaw
 OPENCLAW="${HOME}/.local/bin/mise x node@22.21.1 -- openclaw"
-HEARTBEAT_SLACK_CHANNEL="C0ADSSZV9M2"
+HEARTBEAT_SLACK_CHANNEL="${HEARTBEAT_SLACK_CHANNEL:-#dx-alerts}"
 
 # Deterministic: only the final Slack post path is a transport call
 # and must use agent_coordination_send_message.
@@ -46,10 +46,11 @@ fi
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Detect issues: $RESPONSE"
 
 # Send alert via deterministic Agent Coordination transport.
-if agent_coordination_send_message "$RESPONSE" "$HEARTBEAT_SLACK_CHANNEL"; then
+RESOLVED_HEARTBEAT_CHANNEL="$(agent_coordination_resolve_channel "$HEARTBEAT_SLACK_CHANNEL")"
+if agent_coordination_send_message "$RESPONSE" "$RESOLVED_HEARTBEAT_CHANNEL"; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Alert sent successfully"
 else
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Slack transport unavailable"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Slack transport unavailable (channel=$RESOLVED_HEARTBEAT_CHANNEL)"
   exit 1
 fi
 

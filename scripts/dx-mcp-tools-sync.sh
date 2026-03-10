@@ -228,6 +228,7 @@ def render_toml(path: Path, servers: dict):
         base = re.sub(pattern, "", base).rstrip() + "\n"
     lines = [managed_begin]
     for name, entry in sorted(servers.items()):
+        # Codex uses mcp_servers (underscore) format, not mcpServers (camelCase)
         lines.append(f"[mcp_servers.{json.dumps(name)}]")
         lines.append(f"type = {json.dumps(entry.get('type', 'stdio'))}")
         lines.append(f"command = {json.dumps(entry.get('command', ''))}")
@@ -305,6 +306,7 @@ def check_toml_has_servers(path: Path, names: list):
         return False, "missing file"
     text = path.read_text(encoding="utf-8", errors="ignore")
     for n in names:
+        # Codex uses mcp_servers (underscore) format
         if f"[mcp_servers.{json.dumps(n)}]" not in text:
             return False, f"missing section for {n}"
     return True, "ok"

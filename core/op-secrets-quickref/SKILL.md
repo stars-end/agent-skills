@@ -15,10 +15,20 @@ allowed-tools:
 
 Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and runtime resolution (`op read`, `op run --`) with **service account auth** (default, not interactive biometric).
 
+## Critical Rule
+
+- Tool calls do **not** share shell exports reliably. If you need `op read` and `railway` in automation, load `OP_SERVICE_ACCOUNT_TOKEN` and `RAILWAY_API_TOKEN` in the **same command invocation**.
+- Prefer the canonical helper:
+
+```bash
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
+```
+
 ## What Lives Where
 
 - **DX/dev workflow secrets** (agent keys, GitHub tokens, Slack tokens): 1Password (`op://...`), resolved at runtime.
 - **Deploy/runtime config**: Railway **environment variables** in the Railway project.
+- **App runtime secrets** (for example `EODHD_CRON_SHARED_SECRET`, `DATABASE_URL`, service URLs): Railway service env, not guessed 1Password items.
 - **Railway CLI automation token**: `RAILWAY_API_TOKEN` exported from 1Password (`Agent-Secrets-Production`).
 
 ### Slack token policy for deterministic transport
@@ -58,6 +68,19 @@ Create protected service-account token file (requires human to paste token):
 ```
 
 ### Step 2: Export Token for Current Shell
+
+Fallback order for service-account credentials:
+
+1. `OP_SERVICE_ACCOUNT_TOKEN_FILE` if explicitly set
+2. `~/.config/systemd/user/op-$(hostname)-token`
+3. `~/.config/systemd/user/op-$(hostname)-token.cred`
+4. legacy fallback: `~/.config/systemd/user/op_token`
+5. legacy fallback: `~/.config/systemd/user/op_token.cred`
+
+**Linux/macOS same-invocation helper (recommended):**
+```bash
+~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami
+```
 
 **Linux (systemd-creds encrypted):**
 ```bash
@@ -125,9 +148,8 @@ op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN"
 export GH_TOKEN=$(op read "op://dev/Agent-Secrets-Production/GITHUB_TOKEN")
 gh auth status  # Should show: ✓ Logged in to github.com (GH_TOKEN)
 
-# Railway CLI auth
-export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
-railway status
+# Railway CLI auth (same invocation recommended)
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway status
 ```
 
 ### Read Multiple Fields at Once
@@ -141,9 +163,45 @@ op item get --vault dev Agent-Secrets-Production --fields ZAI_API_KEY,RAILWAY_AP
 ### Railway CLI Token (Non-Interactive)
 
 ```bash
-export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
+```
+
+If you must do it manually, keep both steps in the same shell invocation:
+
+```bash
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-$(hostname)-token)" && \
+export RAILWAY_API_TOKEN="$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')" && \
 railway whoami
 ```
+
+### App Runtime Secrets: Use Railway Context, Not `op read`
+
+If a secret belongs to the deployed app or service runtime, do **not** invent a 1Password path for it.
+
+Wrong:
+
+```bash
+op read "op://dev/prime-radiant-dev/EODHD_CRON_SHARED_SECRET"
+```
+
+Right:
+
+```bash
+# Verify the secret exists in the service runtime without printing it
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-run.sh -- sh -lc 'test -n "$EODHD_CRON_SHARED_SECRET" && echo configured'
+
+# Use the secret inside Railway context so it never needs to be echoed locally
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-run.sh -- sh -lc '
+    curl -sS -X POST \
+      -H "Content-Type: application/json" \
+      -H "X-PR-CRON-SECRET: $EODHD_CRON_SHARED_SECRET" \
+      "$BACKEND_INTERNAL_URL/api/v2/internal/eodhd/cron/eod"
+  '
+```
+
+For Prime Radiant dev investigations, the active orchestrator is Railway-hosted Windmill. Check the Windmill workspace assets under `f/eodhd/*` before assuming the deprecated `eodhd-cron` service is the primary runtime surface.
 
 ### Railway Service URL Variables
 
@@ -174,6 +232,8 @@ BACKEND_URL="${RAILWAY_SERVICE_BACKEND_URL:-http://localhost:3000}"
 - Prefer `op://...` references in env templates and resolve at runtime via `op run --env-file=... -- <command>`.
 - Avoid printing secrets in logs. If you must verify, do it once and then stop output.
 - Use grep/cut instead of jq for field extraction (more portable).
+- Do not put `OP_SERVICE_ACCOUNT_TOKEN` or `RAILWAY_API_TOKEN` in `~/.zshrc` or `~/.zshenv`.
+- Do not guess 1Password item names for app runtime secrets. If the value belongs to a deployed service, fetch it from Railway context.
 
 ## References
 

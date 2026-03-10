@@ -16,6 +16,7 @@
 | GitHub token | 1Password | `op://dev/Agent-Secrets-Production/GITHUB_TOKEN` |
 | Anthropic token | 1Password | `op://dev/Agent-Secrets-Production/ZAI_API_KEY` |
 | Slack bot tokens | 1Password | `op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN` |
+| App runtime secrets | Railway service env | `railway run -p <project-id> -e <env> -s <service> -- <cmd>` |
 
 Cross-reference:
 - [Slack Transport Strategy (V8)](/private/tmp/agents/bd-3o07/agent-skills/docs/SLACK_TRANSPORT_STRATEGY_V8.md)
@@ -84,12 +85,27 @@ echo $DATABASE_URL
 For CI/CD or automated scripts, export the Railway token:
 
 ```bash
-# Load token from 1Password
-export RAILWAY_API_TOKEN="$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')"
+# Load auth in the same invocation
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway status
+```
 
-# Now railway commands use the token
-railway status
-railway logs
+### App Runtime Secrets Stay in Railway
+
+Examples like `EODHD_CRON_SHARED_SECRET`, `DATABASE_URL`, and service-internal URLs are Railway runtime variables, not canonical 1Password fields.
+
+Use them inside Railway context:
+
+```bash
+# Verify a runtime secret exists without printing its value
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  railway run -p <project-id> -e dev -s eodhd-cron -- \
+  sh -lc 'test -n "$EODHD_CRON_SHARED_SECRET" && echo configured'
+```
+
+Do not do this:
+
+```bash
+op read "op://dev/prime-radiant-dev/EODHD_CRON_SHARED_SECRET"
 ```
 
 ---
@@ -115,12 +131,8 @@ This creates:
 ### Every Session (Before Using op CLI)
 
 ```bash
-# Export token for current shell
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-$(hostname)-token)"
-
-# Verify authentication
-op whoami
-# Expected output: User Type: SERVICE_ACCOUNT
+# Recommended helper
+~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami
 ```
 
 ### Verification
@@ -174,8 +186,7 @@ All services use `Agent-Secrets-Production` as their secrets source:
 # Verify service account is active
 op whoami
 
-# If not authenticated, export token
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-$(hostname)-token)"
+~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami
 ```
 
 ### "Field Not Found" Error
@@ -189,9 +200,5 @@ op item get --vault dev Agent-Secrets-Production
 ### Railway Token Not Working
 
 ```bash
-# Verify token is loaded
-echo "${RAILWAY_API_TOKEN:0:10}..."  # Shows first 10 chars only
-
-# Re-load from 1Password
-export RAILWAY_API_TOKEN="$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')"
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 ```

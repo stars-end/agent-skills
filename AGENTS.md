@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 65c3f030ecbaf44310750eed9db3741b05c00f47 -->
-<!-- Last updated: 2026-03-09 21:27:50 UTC -->
+<!-- Source SHA: 2e3ce229c63cc8de0efebc6bcf880acd674a21ff -->
+<!-- Last updated: 2026-03-10 21:46:05 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -77,11 +77,14 @@ New agents MUST complete these steps before any other work:
 
 **Step 1: Load 1Password Service Account**
 \`\`\`bash
-# macOS
-export OP_SERVICE_ACCOUNT_TOKEN="\$(cat ~/.config/systemd/user/op-\$(hostname)-token)"
+# Recommended helper
+~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami
 
-# Linux (systemd-creds encrypted)
-export OP_SERVICE_ACCOUNT_TOKEN="\$(systemd-creds decrypt ~/.config/systemd/user/op-\$(hostname)-token.cred)"
+# Fallback search order if manual recovery is needed:
+#   1. ~/.config/systemd/user/op-\$(hostname)-token
+#   2. ~/.config/systemd/user/op-\$(hostname)-token.cred
+#   3. ~/.config/systemd/user/op_token
+#   4. ~/.config/systemd/user/op_token.cred
 
 # Verify
 op whoami  # Must show: User Type: SERVICE_ACCOUNT
@@ -89,8 +92,7 @@ op whoami  # Must show: User Type: SERVICE_ACCOUNT
 
 **Step 2: Authenticate Railway CLI**
 \`\`\`bash
-export RAILWAY_API_TOKEN=\$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
-railway whoami  # Must show: Logged in as <email>
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 \`\`\`
 
 **Step 3: Verify Full Stack**
@@ -101,7 +103,8 @@ railway status            # Should show project context
 
 **Common Issues:**
 - \`op whoami\` shows "account is not signed in" → Load OP_SERVICE_ACCOUNT_TOKEN
-- \`railway whoami\` shows "Unauthorized" → Use RAILWAY_API_TOKEN (not RAILWAY_TOKEN)
+- \`railway whoami\` shows "Unauthorized" → Load OP + Railway auth in the same invocation (not separate tool calls)
+- repeated auth failures across shell/tool calls → Use \`~/agent-skills/scripts/dx-load-railway-auth.sh -- <command>\`
 - Token file not found → Run \`~/agent-skills/scripts/create-op-credential.sh\`
 
 ### 5.2) Railway Link Non-Interactive Usage (CRITICAL)
@@ -341,7 +344,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 |-------|-------------|---------|------|
 | **beads-workflow** | Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations. Handles full epic→branch→work lifecycle, dependencies, and ready task queries. Uses centralized Beads at ~/bd with Dolt server mode for canonical multi-VM reliability. Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies, or when user mentions "create issue", "track work", "bd create", "find ready tasks", issue management, dependencies, work tracking, or Beads workflow operations. | `bd create --title "Impl: OAuth" --type feature --dep "bd-res` | workflow, beads, issue-tracking, git |
 | **create-pull-request** | Create GitHub pull request with atomic Beads issue closure. MUST BE USED for opening PRs. Asks if work is complete - if YES, closes Beads issue BEFORE creating PR. If NO, creates draft PR with issue still open. Automatically links Beads tracking and includes Feature-Key. Use when user wants to open a PR, submit work for review, merge into master, or prepare for deployment, or when user mentions "ready for review", "create PR", "open PR", "merge conflicts", "CI checks needed", "branch ahead of master", PR creation, opening pull requests, deployment preparation, or submitting for team review. | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` | workflow, github, pr, beads, review |
-| **database-quickref** | Quick reference for Railway Postgres operations. Use when user asks to check database, run queries, verify data, inspect tables, or mentions psql, postgres, database, "check the db", "validate data". | — | database, postgres, railway, psql |
+| **database-quickref** | Fail-fast quick reference for Railway Postgres operations. Use when user asks to check database, run queries, verify data, inspect tables, or mentions psql, postgres, database, "check the db", "validate data". | — | database, postgres, railway, psql |
 | **feature-lifecycle** | A suite of skills to manage the full development lifecycle from start to finish. - `start-feature`: Initializes a new feature branch, docs, and story. - `sync-feature`: Saves work with CI checks. - `finish-feature`: Verifies and creates a pull request. | — | workflow, git, feature, beads, dx |
 | **finish-feature** | Complete epic with cleanup and archiving, or verify feature already closed. MUST BE USED when finishing epics/features. For epics: Verifies children closed, archives docs, closes epic. For features/tasks/bugs: Verifies already closed (from PR creation), archives docs. Non-epic issues must be closed at PR creation time (atomic merge pattern). Use when user says "I'm done with this epic", "finish the feature", "finish this epic", "archive this epic", or when user mentions epic completion, cleanup, archiving, feature finalization, or closing work. | `bd close bd-abc.2 --reason 'Completed'` | workflow, beads, cleanup, archiving |
 | **fix-pr-feedback** | Address PR feedback with iterative refinement. MUST BE USED when fixing PR issues. Supports auto-detection (CI failures, code review) and manual triage (user reports bugs). Creates Beads issues for all problems, fixes systematically. Use when user says "fix the PR", "i noticed bugs", "ci failures", or "codex review found issues", or when user mentions CI failures, review comments, failing tests, PR iterations, bug fixes, feedback loops, or systematic issue resolution. | `bd show <FEATURE_KEY>` | workflow, pr, beads, debugging, iteration |
