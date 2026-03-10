@@ -216,6 +216,7 @@ def render_json(path: Path, servers: dict, ide: str):
             args = entry.get("args", [])
             entry = {"type": "local", "command": ([cmd] if isinstance(cmd, str) else cmd) + args}
         mcp[name] = entry
+    payload[key] = mcp
     atomic_write(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 def render_toml(path: Path, servers: dict):
