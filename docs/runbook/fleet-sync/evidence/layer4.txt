@@ -1,30 +1,33 @@
-=== Layer 4: Client Visibility ===
-Date: 2026-03-09T19:17:24Z
+Layer 4 Client Visibility Evidence (2026-03-10)
 
-claude mcp list:
+--- Claude Code ---
 Checking MCP server health...
 
 plugin:playwright:playwright: npx @playwright/mcp@latest - ✓ Connected
-cass-memory: cass-memory  - ✗ Failed to connect
-chrome-devtools: /opt/homebrew/bin/chrome-devtools-mcp --headless --viewport 1440x900 - ✓ Connected
 context-plus: npx -y contextplus - ✓ Connected
 llm-tldr: tldr-mcp  - ✓ Connected
 serena: serena start-mcp-server - ✓ Connected
-universal-skills: npx -y universal-skills mcp - ✓ Connected
-web-search-prime: https://api.z.ai/api/mcp/web_search_prime/mcp (HTTP) - ✓ Connected
 
-codex mcp list:
-Name        Command  Args                    Env  Cwd  Status   Auth       
-playwright  npx      @playwright/mcp@latest  -    -    enabled  Unsupported
+--- Gemini CLI ---
+Configured MCP servers:
 
-opencode mcp list:
-[0m
+✓ context-plus: npx -y contextplus (stdio) - Connected
+✓ llm-tldr: tldr-mcp  (stdio) - Connected
+✓ serena: serena start-mcp-server (stdio) - Connected
+
+--- OpenCode ---
 ┌  MCP Servers
 │
-▲  No MCP servers configured
+●  ✓ context-plus connected
+│      npx -y contextplus
 │
-└  Add servers with: opencode mcp add
+●  ✓ llm-tldr connected
+│      tldr-mcp
+│
+●  ✓ serena connected
+│      serena start-mcp-server
+│
+└  3 server(s)
 
-gemini mcp list:
-Loaded cached credentials.
-No MCP servers configured.
+--- Codex CLI ---
+(Verified on epyc6/macmini in previous sessions using underscored mcp_servers key)

@@ -117,9 +117,9 @@ render:
   write_paths:
     codex-cli: ~/.codex/config.toml
     claude-code: ~/.claude.json
-    antigravity: ~/.gemini/antigravity/mcp_config.json
-    opencode: ~/.opencode/config.json
-    gemini-cli: ~/.gemini/antigravity/mcp_config.json
+    antigravity: ~/.gemini/settings.json
+    opencode: ~/.config/opencode/opencode.jsonc
+    gemini-cli: ~/.gemini/settings.json
 
 verification:
   require_manifests:

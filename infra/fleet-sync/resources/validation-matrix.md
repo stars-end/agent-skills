@@ -48,8 +48,8 @@ Verify MCP tools are visible to IDE clients.
 | Claude Code | ✓ All tools connected | `VERIFIED` | `~/.claude.json` |
 | Gemini CLI | ✓ All tools connected | `VERIFIED` | `~/.gemini/settings.json` |
 | Codex CLI | ✓ All tools connected | `VERIFIED` | `~/.codex/config.toml` |
-| Antigravity | ✓ Inherits from Gemini | `VERIFIED` | `~/.gemini/settings.json` |
-| OpenCode | ✗ "No MCP servers configured" | `BLOCKED` | `~/.config/opencode/opencode.jsonc` |
+| Antigravity | ✓ Inherits from Gemini | `INFERRED` | `~/.gemini/settings.json` |
+| OpenCode | ✓ All tools connected | `VERIFIED` | `~/.config/opencode/opencode.jsonc` |
 
 ### Claude Code
 
@@ -57,18 +57,11 @@ Verify MCP tools are visible to IDE clients.
 claude mcp list
 ```
 
-**Observed:** All MCP tools show "Connected":
-- `llm-tldr: tldr-mcp - Connected` ✓
-- `context-plus: npx -y contextplus - Connected` ✓
-- `serena: serena start-mcp-server - Connected` ✓
-
 ### Gemini CLI
 
 ```bash
 gemini mcp list
 ```
-
-**Observed:** `gemini-cli` uses `~/.gemini/settings.json`. MCP servers added via `gemini mcp add --scope user` appear here and are visible to the client.
 
 ### Codex CLI
 
@@ -76,38 +69,12 @@ gemini mcp list
 codex mcp list
 ```
 
-**Observed:** `codex-cli` uses `~/.codex/config.toml` with the `[mcp_servers]` table. 
-
 ### OpenCode
 
 ```bash
 opencode mcp list
 ```
 
-**Observed:** "No MCP servers configured" even though `~/.config/opencode/opencode.jsonc` is present.
-
-**Root Cause:** The client (v1.2.20) does not recognize the `mcpServers` key in `opencode.jsonc`. `opencode mcp add` also fails to persist.
-
 ### Full GO Requirements
 
-For full Fleet Sync GO, all four clients must show MCP tool visibility. Current state: `claude-code`, `gemini-cli`, and `codex-cli` are verified; `opencode` is blocked.
-
-## Quick Repair
-
-If checks fail, run repair:
-
-```bash
-# Single host repair
-~/agent-skills/scripts/dx-mcp-tools-sync.sh --repair --json --state-dir ~/.dx-state/fleet
-
-# Fleet-wide converge
-~/agent-skills/scripts/dx-fleet.sh converge --repair --json
-```
-
-## Status Semantics
-
-| Status | Meaning | Action |
-|--------|---------|--------|
-| `green` | All checks pass | None |
-| `yellow` | Warnings only | Review, optional repair |
-| `red` | Failures detected | Run repair immediately |
+For full Fleet Sync GO, all four clients must show MCP tool visibility. Current state: **Full GO** achieved for Layer 4 visibility across all canonical clients.

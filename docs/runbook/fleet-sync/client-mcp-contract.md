@@ -9,9 +9,9 @@ This document defines the authoritative configuration and registration contract 
 |--------|-------------|--------|---------------------|----------------------|--------|
 | `claude-code` | `~/.claude.json` | JSON | File Patch | `claude mcp list` | `VERIFIED` |
 | `gemini-cli` | `~/.gemini/settings.json` | JSON | File Patch | `gemini mcp list` | `VERIFIED` |
-| `antigravity` | `~/.gemini/settings.json` | JSON | Same as gemini-cli | `antigravity chat --help` | `VERIFIED` |
+| `antigravity` | `~/.gemini/settings.json` | JSON | Same as gemini-cli | (via gemini-cli) | `INFERRED` |
 | `codex-cli` | `~/.codex/config.toml` | TOML | File Patch | `codex mcp list` | `VERIFIED` |
-| `opencode` | `~/.config/opencode/opencode.jsonc` | JSONC | File Patch | `opencode mcp list` | `BLOCKED` |
+| `opencode` | `~/.config/opencode/opencode.jsonc` | JSONC | File Patch | `opencode mcp list` | `VERIFIED` |
 
 ## Client-Specific Contracts
 
@@ -25,7 +25,7 @@ This document defines the authoritative configuration and registration contract 
 - **Upstream Docs**: [Gemini CLI MCP Documentation](https://geminicli.com/docs/core/mcp)
 - **Source of Truth**: `~/.gemini/settings.json` (JSON)
 - **Durable Registration**: Add entries to the `mcpServers` object in `~/.gemini/settings.json`.
-- **Note**: `antigravity` (the desktop IDE) may show separate configuration for its internal Claude instance, but for Fleet Sync tool registration, the CLI settings file is the target.
+- **Note**: `antigravity` (the desktop IDE) shares these settings at runtime for its integrated agent. Verification is indirect via `gemini mcp list`.
 
 ### Codex CLI (`codex-cli`)
 - **Upstream Docs**: [Codex CLI MCP Support](https://codex.ai/docs/mcp)
@@ -34,10 +34,19 @@ This document defines the authoritative configuration and registration contract 
 - **Verification**: `codex mcp list`
 
 ### OpenCode (`opencode`)
-- **Upstream Docs**: [OpenCode MCP Guide](https://opencode.ai/docs/mcp)
+- **Upstream Docs**: [OpenCode MCP Guide](https://opencode.ai/docs/mcp-servers/)
 - **Source of Truth**: `~/.config/opencode/opencode.jsonc` (JSONC)
-- **Blocker**: The current client (v1.2.20) does not recognize the `mcpServers` key in `opencode.jsonc`, and `opencode mcp add` fails to persist servers.
-- **Status**: `BLOCKED`. Fleet Sync tools are rendered but invisible to the client.
+- **Durable Registration**: Add entries to the `mcp` object.
+- **Format**:
+  ```json
+  "mcp": {
+    "server-name": {
+      "type": "local",
+      "command": ["command", "arg1", "arg2"]
+    }
+  }
+  ```
+- **Verification**: `opencode mcp list`
 
 ## Host Coverage Requirements
 | Host | Role | Required Clients |
@@ -50,12 +59,12 @@ This document defines the authoritative configuration and registration contract 
 ## Tool Support Matrix
 | Tool | claude-code | gemini-cli | codex-cli | opencode |
 |------|-------------|------------|-----------|----------|
-| `llm-tldr` | ✅ | ✅ | ✅ | ❌ |
-| `context-plus` | ✅ | ✅ | ✅ | ❌ |
-| `serena` | ✅ | ✅ | ✅ | ❌ |
+| `llm-tldr` | ✅ | ✅ | ✅ | ✅ |
+| `context-plus` | ✅ | ✅ | ✅ | ✅ |
+| `serena` | ✅ | ✅ | ✅ | ✅ |
 | `cass-memory` | CLI Only | CLI Only | CLI Only | CLI Only |
 
 ## Verification Protocol
 1. **Host Health**: Ensure tool binary is in PATH.
-2. **Config Health**: Ensure `mcpServers` entry exists in the correct config file.
-3. **Client Visibility**: Run `[client] mcp list` and ensure the tool is reported as "Connected".
+2. **Config Health**: Ensure server entry exists in the correct config file with correct key and structure.
+3. **Client Visibility**: Run `[client] mcp list` and ensure the tool is reported as "Connected" (or "✓").

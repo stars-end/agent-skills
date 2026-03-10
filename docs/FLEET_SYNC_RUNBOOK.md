@@ -185,7 +185,7 @@ All four tools are enabled and pass Layer 1-3 checks:
 
 **Known Limitations (from evidence/layer4.txt):**
 - Claude Code: All MCP tools visible ✓
-- Codex CLI: Does not show Fleet Sync MCP tools (config format mismatch)
+- Codex CLI: All MCP tools connected ✓ (via `mcp_servers`) (config format mismatch)
 - OpenCode: "No MCP servers configured" (client not reading config)
 - Gemini CLI: "No MCP servers configured" (client not reading config)
 

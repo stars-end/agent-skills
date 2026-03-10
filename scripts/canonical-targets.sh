@@ -207,11 +207,11 @@ get_ide_config() {
   esac
 
   case "$ide" in
-    antigravity) echo "$HOME/.gemini/antigravity/mcp_config.json" ;;
+    antigravity) echo "$HOME/.gemini/settings.json" ;;
     claude-code) echo "$HOME/.claude.json" ;;
     codex-cli) echo "$HOME/.codex/config.toml" ;;
-    opencode) echo "$HOME/.opencode/config.json" ;;
-    gemini-cli) echo "$HOME/.gemini/antigravity/mcp_config.json" ;;
+    opencode) echo "$HOME/.config/opencode/opencode.jsonc" ;;
+    gemini-cli) echo "$HOME/.gemini/settings.json" ;;
     *)
       echo "Error: Unknown IDE '$ide'" >&2
       return 1
