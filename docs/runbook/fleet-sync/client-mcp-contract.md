@@ -28,7 +28,7 @@ This document defines the authoritative configuration and registration contract 
 - **Note**: `antigravity` (the desktop IDE) shares these settings at runtime for its integrated agent. Verification is indirect via `gemini mcp list`.
 
 ### Codex CLI (`codex-cli`)
-- **Upstream Docs**: [Codex CLI MCP Support](https://codex.ai/docs/mcp)
+- **Upstream Docs**: [Codex CLI MCP Support](https://developers.openai.com/codex/mcp/)
 - **Source of Truth**: `~/.codex/config.toml` (TOML)
 - **Durable Registration**: Add entries under the `[mcp_servers]` table.
 - **Verification**: `codex mcp list`
