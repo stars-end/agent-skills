@@ -18,9 +18,9 @@ This matrix tracks the configuration paths, formats, and current integration sta
 | Host | Verified IDEs | Notes |
 |------|---------------|-------|
 | `macmini` | All 5 | Full verification completed 2026-03-10 |
-| `epyc6` | All 5 | Full verification completed 2026-03-10 |
-| `epyc12` | All 5 | Full verification completed 2026-03-10 |
-| `homedesktop-wsl` | All 5 | Full verification completed 2026-03-10 |
+| `epyc6` | 4 (Codex optional) | Full verification completed 2026-03-10 |
+| `epyc12` | 4 (Codex optional) | Full verification completed 2026-03-10 |
+| `homedesktop-wsl` | 4 (Codex optional) | Full verification completed 2026-03-10 |
 
 ## Key Research Observations
 - `opencode` requires the `mcp` key and an array-style command format.

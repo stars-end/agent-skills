@@ -189,7 +189,7 @@ All four tools are enabled and pass Layer 1-3 checks:
 - OpenCode: All MCP tools connected ✓ (via `mcp` array)
 - Gemini CLI: All MCP tools connected ✓ (via `~/.gemini/settings.json`)
 
-Full GO achieved for all four primary clients showing MCP tool visibility.
+Full GO achieved for all four primary clients showing MCP tool visibility (Codex verified on macmini, optional on Linux).
 
 **Operator expectations:**
 - Daily/weekly audits should pass (green) if all enabled tools pass

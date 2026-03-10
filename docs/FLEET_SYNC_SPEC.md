@@ -263,7 +263,7 @@ All four tools are enabled and pass Layer 1-4 checks:
 - OpenCode: All MCP tools visible and connected ✓ (using `mcp` JSONC format)
 - Gemini CLI: All MCP tools visible and connected ✓ (using `~/.gemini/settings.json`)
 
-Full GO is achieved. All four primary clients show MCP tool visibility for Layer 4.
+Full GO is achieved. All four primary clients show MCP tool visibility for Layer 4 (Codex verified on macmini, optional on Linux).
 
 ## 14) Out of Scope
 
