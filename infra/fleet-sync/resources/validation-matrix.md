@@ -47,7 +47,7 @@ Verify MCP tools are visible to IDE clients.
 |--------|------------------------------|--------|-------------|
 | Claude Code | ✓ All tools connected | `VERIFIED` | `~/.claude.json` |
 | Gemini CLI | ✓ All tools connected | `VERIFIED` | `~/.gemini/settings.json` |
-| Codex CLI | ✓ All tools connected | `VERIFIED` | `~/.codex/config.toml` |
+| Codex CLI | ✓ All tools listed and enabled | `VERIFIED` | `~/.codex/config.toml` |
 | Antigravity | ✓ Inherits from Gemini | `INFERRED` | `~/.gemini/settings.json` |
 | OpenCode | ✓ All tools connected | `VERIFIED` | `~/.config/opencode/opencode.jsonc` |
 

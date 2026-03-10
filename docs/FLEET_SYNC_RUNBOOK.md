@@ -185,7 +185,7 @@ All four tools are enabled and pass Layer 1-3 checks:
 
 **Known Limitations (from evidence/layer4.txt):**
 - Claude Code: All MCP tools visible ✓
-- Codex CLI: All MCP tools connected ✓ (via `mcp_servers`)
+- Codex CLI: All MCP tools listed and enabled ✓ (via `mcp_servers`)
 - OpenCode: All MCP tools connected ✓ (via `mcp` array)
 - Gemini CLI: All MCP tools connected ✓ (via `~/.gemini/settings.json`)
 
