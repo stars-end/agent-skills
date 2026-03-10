@@ -87,7 +87,7 @@ NEXT_COMMANDS:
   bash -lc "cd backend && poetry run python scripts/db_inspect.py --db vector query --sql 'SELECT 1'"
 ```
 
-The inspector is read-only by design and should be the primary manual inspection path for this repo.
+The inspector is read-only by design and should be the primary manual inspection path for this repo. It can bootstrap missing backend DB dependencies with `poetry install --only main --no-root` on the first real query.
 
 For Prime Radiant dev EODHD operations, start from the Railway-hosted Windmill assets `f/eodhd/eodhd_trigger_and_process`, `f/eodhd/eod_realtime`, and `f/eodhd/eod_nightly`. The legacy `eodhd-cron` service is rollback-only in dev and should not be the first debugging target.
 
