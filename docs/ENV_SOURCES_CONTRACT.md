@@ -18,7 +18,7 @@ This contract defines the sources of environment configuration and explicitly ma
 
 ### 1. op-only (1Password Secrets)
 **Definition**: Secrets sourced via `op://` references or `op run --` injection
-**Scope**: Local development, systemd services, any environment where 1Password CLI is available
+**Scope**: DX automation secrets, local development, systemd services, any environment where 1Password CLI is available
 **Access Pattern**:
 ```bash
 # Direct op:// reference in config files
@@ -33,6 +33,7 @@ op run --env-file=.env -- command-that-needs-secrets
 - ✅ Allowed: `op://` references in checked-in files
 - ❌ Forbidden: Hardcoded secret values (triggers secret-scan.sh)
 - ❌ Forbidden: `op run -- --no-masking` (triggers op-guardrail.sh)
+- ❌ Forbidden: guessing app runtime secrets as ad hoc `op://dev/<random-item>/<FIELD>` paths
 
 ### 2. Railway CLI Login (Authenticated Session)
 **Definition**: Railway access via interactive CLI authentication session
@@ -54,12 +55,11 @@ railway status
 
 ### 3. Railway Shell Context (Explicit RAILWAY_API_TOKEN)
 **Definition**: Railway access via exported `RAILWAY_API_TOKEN` environment variable
-**Scope**: CI/CD pipelines, automated deployment workflows, scripts requiring non-interactive access
+**Scope**: CI/CD pipelines, automated deployment workflows, scripts requiring non-interactive access, and any command that must use app runtime secrets already present in a Railway service
 **Access Pattern**:
 ```bash
-# Export token for script session
-export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
-railway up  # Uses exported token, not interactive session
+# Canonical helper
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway up
 ```
 
 **Guardrails**:
@@ -73,7 +73,7 @@ Different projects use different runtime platforms. This contract defines the ge
 | Project | Primary Platform | Secrets Source | Runtime Context Source |
 |---------|-----------------|----------------|----------------------|
 | `agent-skills` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_API_TOKEN` |
-| `prime-radiant-ai` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_API_TOKEN` |
+| `prime-radiant-ai` | Railway | DX secrets in 1Password, app runtime secrets in Railway env | Railway CLI / `RAILWAY_API_TOKEN` |
 | `affordabot` | Railway | 1Password (`op://`) | Railway CLI / `RAILWAY_API_TOKEN` |
 | `llm-common` | (library, no deploy) | 1Password (`op://`) | N/A |
 
@@ -110,6 +110,7 @@ See project-specific docs for detailed configuration.
 
 - **op-only**: Task only needs secrets from 1Password (e.g., local unit tests that mock external services)
 - **op-only + Platform context**: Task needs both secrets AND platform access (e.g., verify-pipeline checks deployed service health)
+- **Railway runtime secret**: Secret lives in the deployed service env and should be consumed inside Railway context, not copied into local shell exports
 - **"op-only" does NOT mean "platform is irrelevant"** - it means 1Password is the secrets source, but the task may still need platform-specific context
 
 ## Implementation Rules
