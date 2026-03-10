@@ -8,7 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AGENTS_ROOT="${AGENTS_ROOT:-$HOME/agent-skills}"
+AGENTS_ROOT="${AGENTS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 TEST_DIR="/tmp/dx-test-$$"
 TEST_BEADS_ID="test-protection-$$"
 
@@ -72,6 +72,32 @@ assert_file_exists() {
     fi
 }
 
+assert_path_exists() {
+    local path="$1"
+    local message="$2"
+
+    if [[ -e "$path" ]]; then
+        echo -e "${GREEN}✓ PASS${NC}: $message"
+        ((PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}: $message (path not found: $path)"
+        ((FAILED++))
+    fi
+}
+
+assert_path_missing() {
+    local path="$1"
+    local message="$2"
+
+    if [[ ! -e "$path" ]]; then
+        echo -e "${GREEN}✓ PASS${NC}: $message"
+        ((PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}: $message (still exists: $path)"
+        ((FAILED++))
+    fi
+}
+
 assert_exit_code() {
     local expected="$1"
     local actual="$2"
@@ -97,7 +123,8 @@ setup
 
 # In a linked worktree, .git is a file, not a directory
 if [[ -f "$TEST_DIR/worktrees/test-wt/.git" ]]; then
-    assert_equals "file" "$(stat -c %F "$TEST_DIR/worktrees/test-wt/.git" 2>/dev/null || echo "file")" "Linked worktree .git is a file"
+    echo -e "${GREEN}✓ PASS${NC}: Linked worktree .git is a file"
+    ((PASSED++))
 else
     echo -e "${RED}✗ FAIL${NC}: Linked worktree .git not found"
     ((FAILED++))
@@ -107,7 +134,7 @@ fi
 GITDIR=$(cd "$TEST_DIR/worktrees/test-wt" && cat .git)
 if [[ "$GITDIR" =~ ^gitdir:\ (.+)$ ]]; then
     GITDIR_PATH="${BASH_REMATCH[1]}"
-    assert_file_exists "$GITDIR_PATH" "Gitdir from .git file exists"
+    assert_path_exists "$GITDIR_PATH" "Gitdir from .git file exists"
 else
     echo -e "${RED}✗ FAIL${NC}: .git file doesn't contain gitdir"
     ((FAILED++))
@@ -164,18 +191,18 @@ fi
 
 teardown
 
-# Test 4: Worktree cleanup protection exit code
+# Test 4: Manual cleanup protection exit code
 echo ""
-echo "Test 4: Worktree cleanup protection exit codes"
+echo "Test 4: Manual cleanup protection exit code"
 setup
 
 # Create the test beads directory
-mkdir -p "/tmp/agents/$TEST_BEADS_ID/test-repo"
+mkdir -p "/tmp/agents/$TEST_BEADS_ID"
 cd "$TEST_DIR/test-repo"
-git worktree add "/tmp/agents/$TEST_BEADS_ID/test-repo/wt" -b test-wt-2
+git worktree add "/tmp/agents/$TEST_BEADS_ID/test-repo" -b test-wt-2
 
 # Copy the lock to the new worktree's gitdir
-WT_GITDIR="/tmp/agents/$TEST_BEADS_ID/test-repo/wt/.git"
+WT_GITDIR="/tmp/agents/$TEST_BEADS_ID/test-repo/.git"
 WT_REAL_GITDIR=$(cat "$WT_GITDIR" | sed 's/gitdir: //')
 touch "$WT_REAL_GITDIR/index.lock"
 
@@ -191,9 +218,42 @@ assert_exit_code 2 $EXIT_CODE "Worktree cleanup exits with code 2 when protected
 rm -rf "/tmp/agents/$TEST_BEADS_ID"
 teardown
 
-# Test 5: Python workspace validation
+# Test 5: Automation cleanup respects working-hours protection
 echo ""
-echo "Test 5: Python workspace path validation"
+echo "Test 5: Automation cleanup working-hours protection"
+AUTOMATION_BEADS_ID="${TEST_BEADS_ID}-automation"
+AUTOMATION_ROOT="/tmp/agents/$AUTOMATION_BEADS_ID"
+mkdir -p "$AUTOMATION_ROOT/sample-repo"
+
+set +e
+WORKTREE_CLEANUP_PROTECT_START=0 WORKTREE_CLEANUP_PROTECT_END=24 \
+    bash "$AGENTS_ROOT/scripts/worktree-cleanup-automation.sh" "$AUTOMATION_BEADS_ID" >/dev/null 2>&1
+EXIT_CODE=$?
+set -e
+
+assert_exit_code 2 $EXIT_CODE "Automation cleanup exits with code 2 during protected hours"
+assert_path_exists "$AUTOMATION_ROOT/sample-repo" "Automation cleanup preserves protected worktree root"
+rm -rf "$AUTOMATION_ROOT"
+
+# Test 6: Manual cleanup is not blocked by working-hours policy
+echo ""
+echo "Test 6: Manual cleanup ignores working-hours protection"
+MANUAL_BEADS_ID="${TEST_BEADS_ID}-manual"
+MANUAL_ROOT="/tmp/agents/$MANUAL_BEADS_ID"
+mkdir -p "$MANUAL_ROOT/sample-repo"
+
+set +e
+WORKTREE_CLEANUP_PROTECT_START=0 WORKTREE_CLEANUP_PROTECT_END=24 \
+    bash "$AGENTS_ROOT/scripts/worktree-cleanup.sh" "$MANUAL_BEADS_ID" >/dev/null 2>&1
+EXIT_CODE=$?
+set -e
+
+assert_exit_code 0 $EXIT_CODE "Manual cleanup is allowed during protected hours"
+assert_path_missing "$MANUAL_ROOT" "Manual cleanup removes worktree root"
+
+# Test 7: Python workspace validation
+echo ""
+echo "Test 7: Python workspace path validation"
 python3 -c "
 import sys
 sys.path.insert(0, '$AGENTS_ROOT/scripts')
@@ -224,10 +284,10 @@ else
     ((FAILED++))
 fi
 
-# Test 6: Working hours function
+# Test 8: Working hours function
 echo ""
-echo "Test 6: Working hours protection logic"
-CURRENT_HOUR=$(date +%H)
+echo "Test 8: Working hours protection logic"
+CURRENT_HOUR=$((10#$(date +%H)))
 export WORKTREE_CLEANUP_PROTECT_START=8
 export WORKTREE_CLEANUP_PROTECT_END=18
 

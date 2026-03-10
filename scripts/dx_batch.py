@@ -42,8 +42,10 @@ CANONICAL_REPOS = [
     Path.home() / "llm-common",
 ]
 
+WORKSPACE_BASE = Path("/tmp/agents")
+
 ALLOWED_WORKSPACE_PREFIXES = [
-    Path("/tmp/agents"),
+    WORKSPACE_BASE,
     Path("/tmp/dx-runner"),
     Path("/tmp/dxbench"),
     Path("/tmp/dxbench_epyc6"),
@@ -120,6 +122,57 @@ def validate_workspace_path(path: Optional[Path]) -> tuple[bool, str, int]:
                 pass
 
     return False, f"non_workspace_path:{resolved}", 1
+
+
+def is_git_worktree_path(path: Path) -> bool:
+    """Return True when path is a git repo/worktree root."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+    return result.returncode == 0
+
+
+def find_item_worktrees(beads_id: str) -> list[Path]:
+    """Find direct git worktree children under /tmp/agents/<beads-id>/."""
+    workspace_root = WORKSPACE_BASE / beads_id
+    if not workspace_root.is_dir():
+        return []
+
+    candidates: list[Path] = []
+    for child in sorted(workspace_root.iterdir()):
+        if child.name.startswith(".") or not child.is_dir():
+            continue
+        if is_git_worktree_path(child):
+            try:
+                candidates.append(child.resolve())
+            except (OSError, RuntimeError):
+                candidates.append(child)
+    return candidates
+
+
+def resolve_item_worktree(beads_id: str) -> tuple[Optional[Path], str, int]:
+    """Resolve the single real workspace for a dx-batch item."""
+    candidates = find_item_worktrees(beads_id)
+    workspace_root = WORKSPACE_BASE / beads_id
+
+    if not candidates:
+        return None, f"worktree_missing:{workspace_root}", 1
+
+    if len(candidates) != 1:
+        joined = ",".join(str(path) for path in candidates)
+        return None, f"worktree_ambiguous:{joined}", 1
+
+    worktree = candidates[0]
+    is_valid, reason_code, exit_code = validate_workspace_path(worktree)
+    if not is_valid:
+        return None, reason_code, exit_code
+    return worktree, "workspace_resolved", 0
 
 
 class ItemStatus(str, Enum):
@@ -1225,11 +1278,9 @@ class WaveOrchestrator:
         return True
 
     def _dispatch_implement(self, item):
-        # bd-kuhj.3: Workspace-first gate - validate actual execution environment
-        # dx-runner will infer worktree from prompt file location, so validate that
-        # Also validate that we're not dispatching from a canonical repo cwd
+        # bd-kuhj.3: Workspace-first gate - resolve the actual mutating worktree
+        # and pass it explicitly to dx-runner instead of relying on cwd/prompt ancestry.
 
-        # Check 1: Current working directory must not be canonical
         cwd_path = Path.cwd()
         if is_canonical_repo_path(cwd_path):
             item.status, item.error = (
@@ -1255,35 +1306,45 @@ class WaveOrchestrator:
             )
             return
 
-        prompt = self._generate_implement_prompt(item)
-        prompt_file = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.implement.prompt"
-        prompt_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Check 2: Prompt file location (dx-runner infers worktree from this)
-        is_valid_pf, reason_code_pf, _ = validate_workspace_path(prompt_file.parent)
-        if not is_valid_pf:
+        worktree_path, reason_code, _ = resolve_item_worktree(item.beads_id)
+        if worktree_path is None:
             item.status, item.error = (
                 ItemStatus.FAILED,
-                f"Prompt file location invalid: {reason_code_pf}",
+                f"Workspace resolution failed: {reason_code}",
             )
-            item.reason_code = reason_code_pf
+            item.reason_code = reason_code
             self.artifacts.write_error_outcome(
                 item.beads_id,
                 Phase.IMPLEMENT,
                 item.attempt,
-                f"prompt_file_forbidden: {prompt_file}",
+                f"workspace_resolution_failed: {reason_code}",
             )
             self._release_lease(item)
             self.save_state()
             print(
-                f"ERROR: {item.beads_id} blocked: {reason_code_pf}",
+                f"ERROR: {item.beads_id} blocked: {reason_code}",
                 file=sys.stderr,
             )
-            print(
-                f"Remedy: dx-worktree create {item.beads_id} <repo>",
-                file=sys.stderr,
-            )
+            if reason_code.startswith("worktree_missing:"):
+                print(
+                    f"Remedy: dx-worktree create {item.beads_id} <repo>",
+                    file=sys.stderr,
+                )
+            elif reason_code.startswith("worktree_ambiguous:"):
+                print(
+                    f"Remedy: keep exactly one git worktree under {WORKSPACE_BASE / item.beads_id}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"Remedy: move the item workspace under /tmp/agents/{item.beads_id}/<repo>",
+                    file=sys.stderr,
+                )
             return
+
+        prompt = self._generate_implement_prompt(item)
+        prompt_file = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.implement.prompt"
+        prompt_file.parent.mkdir(parents=True, exist_ok=True)
 
         prompt_file.write_text(prompt)
         cmd = [
@@ -1293,6 +1354,8 @@ class WaveOrchestrator:
             item.dx_runner_beads_id,
             "--provider",
             item.provider,
+            "--worktree",
+            str(worktree_path),
             "--prompt-file",
             str(prompt_file),
         ]
@@ -1544,13 +1607,9 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
         }
 
     def _start_review(self, item):
-        # bd-kuhj.3: Workspace-first gate for review dispatch
-        prompt_file_path = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.review.prompt"
-        is_valid, reason_code, exit_code = validate_workspace_path(
-            prompt_file_path.parent
-        )
-
-        if not is_valid:
+        # bd-kuhj.3: Resolve the same real worktree for review dispatch.
+        worktree_path, reason_code, _ = resolve_item_worktree(item.beads_id)
+        if worktree_path is None:
             item.phase, item.status = Phase.REVIEW, ItemStatus.FAILED
             item.error = f"Workspace validation failed for review: {reason_code}"
             item.reason_code = reason_code
@@ -1559,7 +1618,7 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
                 item.beads_id,
                 Phase.REVIEW,
                 item.attempt,
-                f"canonical_worktree_forbidden: review prompt location",
+                f"review_workspace_resolution_failed: {reason_code}",
             )
             self._release_lease(item)
             self.save_state()
@@ -1567,10 +1626,16 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
                 f"ERROR: {item.beads_id} review blocked: {reason_code}",
                 file=sys.stderr,
             )
-            print(
-                f"Remedy: dx-worktree create {item.beads_id} <repo>",
-                file=sys.stderr,
-            )
+            if reason_code.startswith("worktree_missing:"):
+                print(
+                    f"Remedy: dx-worktree create {item.beads_id} <repo>",
+                    file=sys.stderr,
+                )
+            elif reason_code.startswith("worktree_ambiguous:"):
+                print(
+                    f"Remedy: keep exactly one git worktree under {WORKSPACE_BASE / item.beads_id}",
+                    file=sys.stderr,
+                )
             return
 
         item.phase, item.status, item.started_at = (
@@ -1619,6 +1684,8 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
             item.dx_runner_beads_id,
             "--provider",
             provider,
+            "--worktree",
+            str(worktree_path),
             "--prompt-file",
             str(prompt_file),
         ]

@@ -8,10 +8,19 @@ and rejects canonical repo paths for mutating operations.
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
 
-from dx_batch import is_canonical_repo_path, validate_workspace_path
+from dx_batch import (
+    ItemState,
+    Phase,
+    WaveOrchestrator,
+    is_canonical_repo_path,
+    resolve_item_worktree,
+    validate_workspace_path,
+)
 
 
 class TestCanonicalRepoDetection:
@@ -181,3 +190,105 @@ class TestWorkspaceValidationExitCodes:
         _, _, exit_code = validate_workspace_path(non_workspace)
 
         assert exit_code == 1
+
+
+class TestItemWorktreeResolution:
+    """Test dx-batch resolution of the actual mutating worktree path."""
+
+    def test_resolve_item_worktree_rejects_missing_workspace(self):
+        worktree, reason, exit_code = resolve_item_worktree("bd-missing-worktree")
+
+        assert worktree is None
+        assert reason.startswith("worktree_missing:")
+        assert exit_code == 1
+
+    def test_resolve_item_worktree_rejects_multiple_worktrees(self, tmp_path):
+        beads_id = "bd-ambiguous-worktree"
+        workspace_root = Path("/tmp/agents") / beads_id
+        repo_one = workspace_root / "agent-skills"
+        repo_two = workspace_root / "llm-common"
+
+        for repo in (repo_one, repo_two):
+            repo.mkdir(parents=True, exist_ok=True)
+            (repo / ".git").write_text("gitdir: /tmp/fake\n")
+
+        with patch("dx_batch.is_git_worktree_path", return_value=True):
+            worktree, reason, exit_code = resolve_item_worktree(beads_id)
+
+        assert worktree is None
+        assert reason.startswith("worktree_ambiguous:")
+        assert str(repo_one) in reason
+        assert str(repo_two) in reason
+        assert exit_code == 1
+
+    def test_resolve_item_worktree_accepts_single_workspace(self, tmp_path):
+        beads_id = "bd-single-worktree"
+        workspace = Path("/tmp/agents") / beads_id / "agent-skills"
+        workspace.mkdir(parents=True, exist_ok=True)
+        (workspace / ".git").write_text("gitdir: /tmp/fake\n")
+
+        with patch("dx_batch.is_git_worktree_path", return_value=True):
+            worktree, reason, exit_code = resolve_item_worktree(beads_id)
+
+        assert worktree == workspace.resolve()
+        assert reason == "workspace_resolved"
+        assert exit_code == 0
+
+
+class TestDispatchUsesExplicitWorktree:
+    """Test that dx-batch passes an explicit worktree to dx-runner."""
+
+    def test_dispatch_implement_passes_resolved_worktree(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        orchestrator = WaveOrchestrator("dispatch-implement-test")
+        orchestrator.state = SimpleNamespace()
+        item = ItemState(
+            beads_id="bd-implement-worktree",
+            attempt=1,
+            provider="opencode",
+            dx_runner_beads_id="bd-implement-worktree",
+        )
+        worktree = tmp_path / "workspace"
+        worktree.mkdir()
+
+        with patch("dx_batch.ARTIFACT_BASE", tmp_path / "artifacts"), patch(
+            "dx_batch.resolve_item_worktree",
+            return_value=(worktree, "workspace_resolved", 0),
+        ), patch("dx_batch.subprocess.Popen") as mock_popen, patch.object(
+            orchestrator.hygiene, "register_pid"
+        ) as mock_register, patch.object(orchestrator, "save_state"), patch.object(
+            orchestrator, "_release_lease"
+        ), patch.object(orchestrator.artifacts, "write_error_outcome"):
+            mock_popen.return_value.pid = 4242
+            orchestrator._dispatch_implement(item)
+
+        cmd = mock_popen.call_args.args[0]
+        assert "--worktree" in cmd
+        assert str(worktree) == cmd[cmd.index("--worktree") + 1]
+        assert "--prompt-file" in cmd
+        mock_register.assert_called_once_with(4242)
+
+    def test_start_review_passes_resolved_worktree(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        orchestrator = WaveOrchestrator("dispatch-review-test")
+        orchestrator.state = SimpleNamespace()
+        item = ItemState(beads_id="bd-review-worktree", attempt=1)
+        worktree = tmp_path / "workspace"
+        worktree.mkdir()
+
+        with patch("dx_batch.ARTIFACT_BASE", tmp_path / "artifacts"), patch(
+            "dx_batch.resolve_item_worktree",
+            return_value=(worktree, "workspace_resolved", 0),
+        ), patch("dx_batch.subprocess.Popen") as mock_popen, patch.object(
+            orchestrator.hygiene, "register_pid"
+        ) as mock_register, patch.object(orchestrator, "save_state"), patch.object(
+            orchestrator, "_release_lease"
+        ), patch.object(orchestrator.artifacts, "write_error_outcome"):
+            mock_popen.return_value.pid = 5252
+            orchestrator._start_review(item)
+
+        cmd = mock_popen.call_args.args[0]
+        assert "--worktree" in cmd
+        assert str(worktree) == cmd[cmd.index("--worktree") + 1]
+        assert cmd[cmd.index("--beads") + 1] == "bd-review-worktree-review"
+        mock_register.assert_called_once_with(5252)

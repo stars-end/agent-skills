@@ -301,7 +301,9 @@ is_working_hours() {
   local start_hour="$WORKTREE_CLEANUP_PROTECT_START"
   local end_hour="$WORKTREE_CLEANUP_PROTECT_END"
   local current_hour
-  current_hour=$(date +%H)
+  current_hour=$((10#$(date +%H)))
+  start_hour=$((10#$start_hour))
+  end_hour=$((10#$end_hour))
   
   [[ "$current_hour" -ge "$start_hour" && "$current_hour" -lt "$end_hour" ]]
 }
@@ -448,34 +450,7 @@ evacuate_diverged() {
 evacuate_dirty() {
   local repo="$1"
   local repo_path="$HOME/$repo"
-  
-  # bd-kuhj.8: Working hours protection
-  if is_working_hours; then
-    if [[ "${WORKTREE_CLEANUP_ALLOW_WORKING_HOURS:-0}" != "1" ]]; then
-      log "SKIP: $repo dirty evacuation (working hours protection)"
-      log_recovery "$repo" "skip" "working_hours_protection" "" "policy=dirty-timeout-evacuation"
-      return 0
-    fi
-  fi
-  
-  # bd-kuhj.8: Tmux protection - check if any worktrees under this canonical have active tmux
-  local found_active_tmux=false
-  local worktree_paths
-  worktree_paths="$(git -C "$repo_path" worktree list --porcelain 2>/dev/null | grep "^worktree" | cut -d' ' -f2 || true)"
-  while IFS= read -r wt_path; do
-    [[ -n "$wt_path" ]] || continue
-    if is_tmux_attached_to_path "$wt_path"; then
-      found_active_tmux=true
-      log "SKIP: $repo has active tmux session at worktree: $wt_path"
-      log_recovery "$repo" "skip" "tmux_attached_worktree" "" "worktree=$wt_path"
-      break
-    fi
-  done <<< "$worktree_paths"
-  
-  if [[ "$found_active_tmux" == "true" ]]; then
-    return 0
-  fi
-  
+
   local host timestamp rescue_branch rescue_dir
   host="$(short_host)"
   timestamp="$(iso_timestamp)"
@@ -523,6 +498,34 @@ Agent: canonical-evacuate-active" --quiet >/dev/null 2>&1 || true
   if git push -u origin "$rescue_branch" --quiet >/dev/null 2>&1; then
     log_recovery "$repo" "evacuated" "dirty_timeout" "$rescue_branch" "branch=${current_branch}" "canonical-evacuate-active"
     state_upsert "$repo" "rescue_branch=$rescue_branch" "evacuated_at_epoch=$(now_epoch)" "evac_reason=dirty-timeout"
+
+    # bd-kuhj.5/bd-kuhj.8: Rescue first, then decide whether canonical reset is safe.
+    if is_working_hours && [[ "${WORKTREE_CLEANUP_ALLOW_WORKING_HOURS:-0}" != "1" ]]; then
+      log "SKIP: $repo dirty reset blocked after rescue push (working hours protection)"
+      log_recovery "$repo" "skip" "working_hours_protection" "$rescue_branch" "policy=dirty-timeout-evacuation rescue_pushed=true" "canonical-evacuate-active"
+      git worktree remove "$rescue_dir" --force >/dev/null 2>&1 || true
+      rm -rf "$rescue_dir" >/dev/null 2>&1 || true
+      return 0
+    fi
+
+    local found_active_tmux=false
+    local worktree_paths
+    worktree_paths="$(git -C "$repo_path" worktree list --porcelain 2>/dev/null | grep "^worktree" | cut -d' ' -f2 || true)"
+    while IFS= read -r wt_path; do
+      [[ -n "$wt_path" ]] || continue
+      if is_tmux_attached_to_path "$wt_path"; then
+        found_active_tmux=true
+        log "SKIP: $repo dirty reset blocked after rescue push (tmux worktree: $wt_path)"
+        log_recovery "$repo" "skip" "tmux_attached_worktree" "$rescue_branch" "worktree=$wt_path rescue_pushed=true" "canonical-evacuate-active"
+        break
+      fi
+    done <<< "$worktree_paths"
+
+    if [[ "$found_active_tmux" == "true" ]]; then
+      git worktree remove "$rescue_dir" --force >/dev/null 2>&1 || true
+      rm -rf "$rescue_dir" >/dev/null 2>&1 || true
+      return 0
+    fi
 
     cd "$repo_path"
     git checkout master -q >/dev/null 2>&1 || true

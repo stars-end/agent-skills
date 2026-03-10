@@ -50,7 +50,9 @@ is_working_hours() {
     local start_hour="${WORKTREE_CLEANUP_PROTECT_START:-8}"
     local end_hour="${WORKTREE_CLEANUP_PROTECT_END:-18}"
     local current_hour
-    current_hour=$(date +%H)
+    current_hour=$((10#$(date +%H)))
+    start_hour=$((10#$start_hour))
+    end_hour=$((10#$end_hour))
     
     [[ "$current_hour" -ge "$start_hour" && "$current_hour" -lt "$end_hour" ]]
 }
