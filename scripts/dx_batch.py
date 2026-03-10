@@ -35,6 +35,145 @@ BEADS_REPO_PATH = Path(
 BEADS_LOCK_FILE = BEADS_REPO_PATH / ".beads" / ".dx-bd-mutation.lock"
 MIN_BD_VERSION = os.environ.get("DX_MIN_BD_VERSION", "0.49.4")
 
+CANONICAL_REPOS = [
+    Path.home() / "agent-skills",
+    Path.home() / "prime-radiant-ai",
+    Path.home() / "affordabot",
+    Path.home() / "llm-common",
+]
+
+WORKSPACE_BASE = Path("/tmp/agents")
+
+ALLOWED_WORKSPACE_PREFIXES = [
+    WORKSPACE_BASE,
+    Path("/tmp/dx-runner"),
+    Path("/tmp/dxbench"),
+    Path("/tmp/dxbench_epyc6"),
+]
+
+WORKSPACE_VIOLATION_EXIT_CODE = 22
+
+
+def is_canonical_repo_path(path: Path) -> bool:
+    """Check if path is a canonical repo or descendant (bd-kuhj.3)."""
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        return False
+    for canonical in CANONICAL_REPOS:
+        try:
+            canonical_resolved = canonical.resolve()
+        except (OSError, RuntimeError):
+            continue
+        if resolved == canonical_resolved:
+            return True
+        try:
+            resolved.relative_to(canonical_resolved)
+            return True
+        except ValueError:
+            pass
+    return False
+
+
+def validate_workspace_path(path: Optional[Path]) -> tuple[bool, str, int]:
+    """
+    Validate that a workspace path is allowed for mutating operations.
+
+    Returns (is_valid, reason_code, exit_code).
+    - is_valid: True if path is allowed, False otherwise
+    - reason_code: Human-readable reason
+    - exit_code: Exit code to use (0 for success, 22 for canonical rejection)
+    """
+    if path is None:
+        return True, "no_workspace_path", 0
+
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        return True, "path_resolution_failed", 0
+
+    # bd-kuhj.3: Reject canonical repo paths (workspace-first enforcement)
+    if is_canonical_repo_path(path):
+        return (
+            False,
+            f"canonical_worktree_forbidden:{resolved}",
+            WORKSPACE_VIOLATION_EXIT_CODE,
+        )
+
+    # Check if path starts with any allowed prefix
+    for prefix in ALLOWED_WORKSPACE_PREFIXES:
+        try:
+            prefix_resolved = prefix.resolve()
+            resolved.relative_to(prefix_resolved)
+            return True, "workspace_allowed", 0
+        except (ValueError, OSError, RuntimeError):
+            pass
+
+    # Additional prefixes from environment
+    extra_prefixes = os.environ.get("DX_RUNNER_EXTRA_ALLOWED_PREFIXES", "")
+    if extra_prefixes:
+        for extra in extra_prefixes.split(","):
+            extra_path = Path(extra.strip()).expanduser()
+            try:
+                extra_resolved = extra_path.resolve()
+                resolved.relative_to(extra_resolved)
+                return True, "workspace_allowed_extra", 0
+            except (ValueError, OSError, RuntimeError):
+                pass
+
+    return False, f"non_workspace_path:{resolved}", 1
+
+
+def is_git_worktree_path(path: Path) -> bool:
+    """Return True when path is a git repo/worktree root."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+    return result.returncode == 0
+
+
+def find_item_worktrees(beads_id: str) -> list[Path]:
+    """Find direct git worktree children under /tmp/agents/<beads-id>/."""
+    workspace_root = WORKSPACE_BASE / beads_id
+    if not workspace_root.is_dir():
+        return []
+
+    candidates: list[Path] = []
+    for child in sorted(workspace_root.iterdir()):
+        if child.name.startswith(".") or not child.is_dir():
+            continue
+        if is_git_worktree_path(child):
+            try:
+                candidates.append(child.resolve())
+            except (OSError, RuntimeError):
+                candidates.append(child)
+    return candidates
+
+
+def resolve_item_worktree(beads_id: str) -> tuple[Optional[Path], str, int]:
+    """Resolve the single real workspace for a dx-batch item."""
+    candidates = find_item_worktrees(beads_id)
+    workspace_root = WORKSPACE_BASE / beads_id
+
+    if not candidates:
+        return None, f"worktree_missing:{workspace_root}", 1
+
+    if len(candidates) != 1:
+        joined = ",".join(str(path) for path in candidates)
+        return None, f"worktree_ambiguous:{joined}", 1
+
+    worktree = candidates[0]
+    is_valid, reason_code, exit_code = validate_workspace_path(worktree)
+    if not is_valid:
+        return None, reason_code, exit_code
+    return worktree, "workspace_resolved", 0
+
 
 class ItemStatus(str, Enum):
     PENDING = "pending"
@@ -822,7 +961,9 @@ def _check_bd_version() -> tuple[bool, str]:
         msg = result.stderr.strip() or result.stdout.strip() or "unknown"
         return False, f"bd_version_command_failed:{msg}"
 
-    version = (result.stdout.strip().split()[-1] if result.stdout.strip() else "").strip()
+    version = (
+        result.stdout.strip().split()[-1] if result.stdout.strip() else ""
+    ).strip()
     if _parse_semver(version) < _parse_semver(MIN_BD_VERSION):
         return False, f"bd_version_too_old:{version}<min:{MIN_BD_VERSION}"
     return True, version
@@ -1052,9 +1193,7 @@ class WaveOrchestrator:
         if critical_issues:
             first = critical_issues[0]
             self.state.status = WaveStatus.FAILED
-            self.state.reason_code = (
-                f"doctor_critical_{first.get('type', 'unknown')}"
-            )
+            self.state.reason_code = f"doctor_critical_{first.get('type', 'unknown')}"
             self.state.error = (
                 f"doctor_critical:{first.get('type', 'unknown')} "
                 f"{first.get('message', '')}".strip()
@@ -1139,9 +1278,74 @@ class WaveOrchestrator:
         return True
 
     def _dispatch_implement(self, item):
+        # bd-kuhj.3: Workspace-first gate - resolve the actual mutating worktree
+        # and pass it explicitly to dx-runner instead of relying on cwd/prompt ancestry.
+
+        cwd_path = Path.cwd()
+        if is_canonical_repo_path(cwd_path):
+            item.status, item.error = (
+                ItemStatus.FAILED,
+                f"Cannot dispatch from canonical repo: {cwd_path}",
+            )
+            item.reason_code = f"canonical_cwd_forbidden:{cwd_path}"
+            self.artifacts.write_error_outcome(
+                item.beads_id,
+                Phase.IMPLEMENT,
+                item.attempt,
+                f"canonical_cwd_forbidden: dispatch attempted from {cwd_path}",
+            )
+            self._release_lease(item)
+            self.save_state()
+            print(
+                f"ERROR: {item.beads_id} blocked: dispatch from canonical cwd {cwd_path}",
+                file=sys.stderr,
+            )
+            print(
+                f"Remedy: cd /tmp/agents && dx-batch start ...",
+                file=sys.stderr,
+            )
+            return
+
+        worktree_path, reason_code, _ = resolve_item_worktree(item.beads_id)
+        if worktree_path is None:
+            item.status, item.error = (
+                ItemStatus.FAILED,
+                f"Workspace resolution failed: {reason_code}",
+            )
+            item.reason_code = reason_code
+            self.artifacts.write_error_outcome(
+                item.beads_id,
+                Phase.IMPLEMENT,
+                item.attempt,
+                f"workspace_resolution_failed: {reason_code}",
+            )
+            self._release_lease(item)
+            self.save_state()
+            print(
+                f"ERROR: {item.beads_id} blocked: {reason_code}",
+                file=sys.stderr,
+            )
+            if reason_code.startswith("worktree_missing:"):
+                print(
+                    f"Remedy: dx-worktree create {item.beads_id} <repo>",
+                    file=sys.stderr,
+                )
+            elif reason_code.startswith("worktree_ambiguous:"):
+                print(
+                    f"Remedy: keep exactly one git worktree under {WORKSPACE_BASE / item.beads_id}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"Remedy: move the item workspace under /tmp/agents/{item.beads_id}/<repo>",
+                    file=sys.stderr,
+                )
+            return
+
         prompt = self._generate_implement_prompt(item)
         prompt_file = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.implement.prompt"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
+
         prompt_file.write_text(prompt)
         cmd = [
             "dx-runner",
@@ -1150,6 +1354,8 @@ class WaveOrchestrator:
             item.dx_runner_beads_id,
             "--provider",
             item.provider,
+            "--worktree",
+            str(worktree_path),
             "--prompt-file",
             str(prompt_file),
         ]
@@ -1401,6 +1607,37 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
         }
 
     def _start_review(self, item):
+        # bd-kuhj.3: Resolve the same real worktree for review dispatch.
+        worktree_path, reason_code, _ = resolve_item_worktree(item.beads_id)
+        if worktree_path is None:
+            item.phase, item.status = Phase.REVIEW, ItemStatus.FAILED
+            item.error = f"Workspace validation failed for review: {reason_code}"
+            item.reason_code = reason_code
+            item.completed_at = now_utc()
+            self.artifacts.write_error_outcome(
+                item.beads_id,
+                Phase.REVIEW,
+                item.attempt,
+                f"review_workspace_resolution_failed: {reason_code}",
+            )
+            self._release_lease(item)
+            self.save_state()
+            print(
+                f"ERROR: {item.beads_id} review blocked: {reason_code}",
+                file=sys.stderr,
+            )
+            if reason_code.startswith("worktree_missing:"):
+                print(
+                    f"Remedy: dx-worktree create {item.beads_id} <repo>",
+                    file=sys.stderr,
+                )
+            elif reason_code.startswith("worktree_ambiguous:"):
+                print(
+                    f"Remedy: keep exactly one git worktree under {WORKSPACE_BASE / item.beads_id}",
+                    file=sys.stderr,
+                )
+            return
+
         item.phase, item.status, item.started_at = (
             Phase.REVIEW,
             ItemStatus.REVIEWING,
@@ -1447,6 +1684,8 @@ Write this contract as the LAST line of your output, prefixed with CONTRACT:JSON
             item.dx_runner_beads_id,
             "--provider",
             provider,
+            "--worktree",
+            str(worktree_path),
             "--prompt-file",
             str(prompt_file),
         ]

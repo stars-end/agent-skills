@@ -142,6 +142,70 @@ controller_can_write() {
     return 1
 }
 
+# bd-kuhj.5: Protection functions for automated cleanup
+is_tmux_attached_to_path() {
+    local target_path="$1"
+    command -v tmux >/dev/null 2>&1 || return 1
+
+    while IFS=$'\t' read -r attached pane_path; do
+        [[ "$attached" == "1" ]] || continue
+        [[ "$pane_path" == "$target_path"* ]] && return 0
+    done < <(tmux list-panes -a -F '#{session_attached}	#{pane_current_path}' 2>/dev/null || true)
+
+    return 1
+}
+
+is_working_hours() {
+    local start_hour="${WORKTREE_CLEANUP_PROTECT_START:-8}"
+    local end_hour="${WORKTREE_CLEANUP_PROTECT_END:-18}"
+    local current_hour
+    current_hour=$((10#$(date +%H)))
+    start_hour=$((10#$start_hour))
+    end_hour=$((10#$end_hour))
+    
+    [[ "$current_hour" -ge "$start_hour" && "$current_hour" -lt "$end_hour" ]]
+}
+
+has_active_worktrees() {
+    local repo_path="$1"
+    local worktree_count
+    worktree_count=$(git -C "$repo_path" worktree list 2>/dev/null | wc -l)
+    [[ "$worktree_count" -gt 1 ]]
+}
+
+check_destructive_protection() {
+    local repo_path="$1"
+    local repo="$2"
+    
+    # Skip protection if explicitly disabled
+    if [[ "${CANONICAL_SYNC_SKIP_PROTECTION:-0}" == "1" ]]; then
+        return 0
+    fi
+    
+    # Working hours protection
+    if is_working_hours; then
+        if [[ "${WORKTREE_CLEANUP_ALLOW_WORKING_HOURS:-0}" != "1" ]]; then
+            warn "$repo: Working hours protection active, skipping destructive reset"
+            log_recovery "$repo" "skip" "working_hours_protection" "" "policy=destructive-reset-blocked"
+            return 1
+        fi
+    fi
+    
+    # Check for tmux-attached worktrees
+    local worktree_paths
+    worktree_paths="$(git -C "$repo_path" worktree list --porcelain 2>/dev/null | grep "^worktree" | cut -d' ' -f2 || true)"
+    while IFS= read -r wt_path; do
+        [[ -n "$wt_path" ]] || continue
+        if is_tmux_attached_to_path "$wt_path"; then
+            warn "$repo: Active tmux session at worktree: $wt_path"
+            log_recovery "$repo" "skip" "tmux_attached_worktree" "" "worktree=$wt_path"
+            return 1
+        fi
+    done <<< "$worktree_paths"
+    
+    return 0
+}
+
 process_repo() {
     local repo="$1"
     local repo_path="$HOME/$repo"
@@ -329,6 +393,15 @@ Agent: canonical-sync-v8" --quiet; then
 
             # Log recovery command for digest/alerting
             log_recovery "$repo" "evacuated" "dirty_timeout" "$rescue_branch" "source=$current_branch"
+
+            # bd-kuhj.5: Check protection before destructive reset
+            if ! check_destructive_protection "$repo_path" "$repo"; then
+                warn "$repo: Protection triggered, rescue branch pushed but canonical NOT reset"
+                log_recovery "$repo" "skip" "protection_after_rescue" "$rescue_branch" "source=$current_branch rescue_pushed=true"
+                git worktree remove "$rescue_dir" --force >/dev/null 2>&1 || true
+                rm -rf "$rescue_dir" 2>/dev/null || true
+                return 0
+            fi
 
             # NOW safe to reset canonical
             cd "$repo_path"
