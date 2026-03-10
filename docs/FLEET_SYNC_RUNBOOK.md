@@ -185,11 +185,11 @@ All four tools are enabled and pass Layer 1-3 checks:
 
 **Known Limitations (from evidence/layer4.txt):**
 - Claude Code: All MCP tools visible ✓
-- Codex CLI: All MCP tools connected ✓ (via `mcp_servers`) (config format mismatch)
-- OpenCode: "No MCP servers configured" (client not reading config)
-- Gemini CLI: "No MCP servers configured" (client not reading config)
+- Codex CLI: All MCP tools connected ✓ (via `mcp_servers`)
+- OpenCode: All MCP tools connected ✓ (via `mcp` array)
+- Gemini CLI: All MCP tools connected ✓ (via `~/.gemini/settings.json`)
 
-Full GO requires all four clients to show MCP tool visibility.
+Full GO achieved for all four primary clients showing MCP tool visibility.
 
 **Operator expectations:**
 - Daily/weekly audits should pass (green) if all enabled tools pass

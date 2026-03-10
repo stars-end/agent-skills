@@ -30,4 +30,8 @@ Configured MCP servers:
 └  3 server(s)
 
 --- Codex CLI ---
-(Verified on epyc6/macmini in previous sessions using underscored mcp_servers key)
+Name          Command   Args                                                 Env  Cwd  Status   Auth       
+context-plus  npx       -y contextplus                                       -    -    enabled  Unsupported
+llm-tldr      tldr-mcp  -                                                    -    -    enabled  Unsupported
+playwright    npx       @playwright/mcp@latest                               -    -    enabled  Unsupported
+serena        serena    start-mcp-server --context codex --project-from-cwd  -    -    enabled  Unsupported
