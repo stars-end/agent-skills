@@ -39,6 +39,11 @@ success() { echo -e "\033[0;32m[success]\033[0m $*"; }
 # Track the stash ref we create (for precise restoration)
 STASH_REF=""
 CLEANUP_DONE=false
+INITIAL_CANONICAL_STATUS=""
+
+capture_canonical_status() {
+  git status --porcelain=v1 --untracked-files=all 2>/dev/null || true
+}
 
 # Idempotent cleanup function - only pops the stash WE created
 cleanup_canonical() {
@@ -71,14 +76,21 @@ cleanup_canonical() {
     fi
   fi
 
-  # Verify clean state
-  if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
-    error "WARNING: Canonical still has dirty files after cleanup"
-    git status --porcelain
+  # Verify we restored the canonical repo to its pre-run state.
+  local current_status
+  current_status="$(capture_canonical_status)"
+
+  if [[ "$current_status" != "$INITIAL_CANONICAL_STATUS" ]]; then
+    error "WARNING: Canonical state differs from pre-run snapshot after cleanup"
+    git status --porcelain=v1 --untracked-files=all
     return 1
   fi
 
-  log "Canonical is clean"
+  if [[ -n "$current_status" ]]; then
+    log "Canonical restored to its pre-run dirty state"
+  else
+    log "Canonical is clean"
+  fi
   return 0
 }
 
@@ -113,12 +125,14 @@ regenerate_baseline() {
   log "Regenerating baseline in canonical agent-skills..."
   cd "$CANONICAL_REPO"
 
+  INITIAL_CANONICAL_STATUS="$(capture_canonical_status)"
+
   # Stash any existing changes to avoid conflicts
   # Capture the exact stash ref for precise restoration
-  if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+  if [[ -n "$INITIAL_CANONICAL_STATUS" ]]; then
     log "Stashing existing changes in canonical..."
     local stash_msg="baseline-sync-pre-regen-$(date +%Y%m%d-%H%M%S)"
-    git stash push -m "$stash_msg" >/dev/null 2>&1 || true
+    git stash push --include-untracked -m "$stash_msg" >/dev/null 2>&1 || true
 
     # Get the exact stash ref we just created (top of stack)
     STASH_REF="$(git stash list | head -n1 | cut -d: -f1)"
