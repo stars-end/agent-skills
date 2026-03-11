@@ -162,6 +162,7 @@ class WaveConfig:
     lease_ttl_minutes: int = DEFAULT_LEASE_TTL_MINUTES
     exec_process_cap: int = DEFAULT_EXEC_PROCESS_CAP
     require_review: bool = True
+    worktree: Optional[str] = None  # bd-kuhj.3: Explicit worktree for dx-runner
 
 
 @dataclass
@@ -1225,58 +1226,52 @@ class WaveOrchestrator:
         return True
 
     def _dispatch_implement(self, item):
-        # bd-kuhj.3: Workspace-first gate - validate actual execution environment
-        # dx-runner will infer worktree from prompt file location, so validate that
-        # Also validate that we're not dispatching from a canonical repo cwd
+        # bd-kuhj.3: Workspace-first gate - require explicit worktree
+        # The worktree is the actual execution environment for dx-runner
+        worktree = self.config.worktree
 
-        # Check 1: Current working directory must not be canonical
-        cwd_path = Path.cwd()
-        if is_canonical_repo_path(cwd_path):
+        if not worktree:
             item.status, item.error = (
                 ItemStatus.FAILED,
-                f"Cannot dispatch from canonical repo: {cwd_path}",
+                "No worktree specified - dx-batch requires explicit --worktree",
             )
-            item.reason_code = f"canonical_cwd_forbidden:{cwd_path}"
+            item.reason_code = "worktree_required"
             self.artifacts.write_error_outcome(
                 item.beads_id,
                 Phase.IMPLEMENT,
                 item.attempt,
-                f"canonical_cwd_forbidden: dispatch attempted from {cwd_path}",
+                "worktree_required: dx-batch requires explicit --worktree flag",
             )
             self._release_lease(item)
             self.save_state()
             print(
-                f"ERROR: {item.beads_id} blocked: dispatch from canonical cwd {cwd_path}",
+                f"ERROR: {item.beads_id} blocked: --worktree required",
                 file=sys.stderr,
             )
             print(
-                f"Remedy: cd /tmp/agents && dx-batch start ...",
+                f"Remedy: dx-batch start --items {item.beads_id} --worktree /tmp/agents/{item.beads_id}/<repo>",
                 file=sys.stderr,
             )
             return
 
-        prompt = self._generate_implement_prompt(item)
-        prompt_file = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.implement.prompt"
-        prompt_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Check 2: Prompt file location (dx-runner infers worktree from this)
-        is_valid_pf, reason_code_pf, _ = validate_workspace_path(prompt_file.parent)
-        if not is_valid_pf:
+        # Validate worktree is not canonical
+        worktree_path = Path(worktree)
+        if is_canonical_repo_path(worktree_path):
             item.status, item.error = (
                 ItemStatus.FAILED,
-                f"Prompt file location invalid: {reason_code_pf}",
+                f"Worktree cannot be canonical repo: {worktree}",
             )
-            item.reason_code = reason_code_pf
+            item.reason_code = f"canonical_worktree_forbidden:{worktree}"
             self.artifacts.write_error_outcome(
                 item.beads_id,
                 Phase.IMPLEMENT,
                 item.attempt,
-                f"prompt_file_forbidden: {prompt_file}",
+                f"canonical_worktree_forbidden: {worktree}",
             )
             self._release_lease(item)
             self.save_state()
             print(
-                f"ERROR: {item.beads_id} blocked: {reason_code_pf}",
+                f"ERROR: {item.beads_id} blocked: canonical worktree {worktree}",
                 file=sys.stderr,
             )
             print(
@@ -1285,7 +1280,12 @@ class WaveOrchestrator:
             )
             return
 
+        prompt = self._generate_implement_prompt(item)
+        prompt_file = ARTIFACT_BASE / "prompts" / f"{item.beads_id}.implement.prompt"
+        prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(prompt)
+
+        # bd-kuhj.3: Pass explicit --worktree to dx-runner
         cmd = [
             "dx-runner",
             "start",
@@ -1295,6 +1295,8 @@ class WaveOrchestrator:
             item.provider,
             "--prompt-file",
             str(prompt_file),
+            "--worktree",
+            str(worktree_path),
         ]
         try:
             proc = subprocess.Popen(
