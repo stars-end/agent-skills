@@ -98,7 +98,7 @@ Use them inside Railway context:
 ```bash
 # Verify a runtime secret exists without printing its value
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
-  railway run -p <project-id> -e dev -s eodhd-cron -- \
+  railway run -p <project-id> -e dev -s backend -- \
   sh -lc 'test -n "$EODHD_CRON_SHARED_SECRET" && echo configured'
 ```
 
