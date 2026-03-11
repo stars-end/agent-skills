@@ -25,6 +25,11 @@ set -euo pipefail
 #
 # Optional override:
 #   - DX_ALERTS_CHANNEL_ID can point to a fixed Slack channel ID.
+#
+# Local cache contract:
+# - Slack transport secrets are cached in a local file to avoid repeated OP API calls
+#   from hot-path checks and alerting loops.
+# - Default TTL is 24h and can be tuned via DX_ALERTS_CACHE_TTL_SECONDS.
 
 agent_coordination_slack_token() {
   local token="${SLACK_MCP_XOXB_TOKEN:-}"
@@ -32,6 +37,191 @@ agent_coordination_slack_token() {
   if [[ -z "${token}" ]]; then token="${SLACK_BOT_TOKEN:-}"; fi
   if [[ -z "${token}" ]]; then token="${SLACK_APP_TOKEN:-}"; fi
   printf '%s' "${token}"
+}
+
+agent_coordination_cache_file() {
+  printf '%s' "${DX_ALERTS_CACHE_FILE:-$HOME/.cache/dx/alerts-transport.env}"
+}
+
+agent_coordination_cache_ttl_seconds() {
+  printf '%s' "${DX_ALERTS_CACHE_TTL_SECONDS:-86400}"
+}
+
+agent_coordination_cache_cooldown_seconds() {
+  printf '%s' "${DX_ALERTS_CACHE_COOLDOWN_SECONDS:-300}"
+}
+
+agent_coordination_file_mtime_epoch() {
+  local file="$1"
+  if [[ ! -f "$file" ]]; then
+    echo 0
+    return 0
+  fi
+  if stat -f '%m' "$file" >/dev/null 2>&1; then
+    stat -f '%m' "$file"
+  elif stat -c '%Y' "$file" >/dev/null 2>&1; then
+    stat -c '%Y' "$file"
+  else
+    echo 0
+  fi
+}
+
+agent_coordination_cache_fresh() {
+  local cache_file="$1"
+  local ttl now mtime age
+  ttl="$(agent_coordination_cache_ttl_seconds)"
+  [[ "$ttl" =~ ^[0-9]+$ ]] || ttl=86400
+  [[ -f "$cache_file" ]] || return 1
+  mtime="$(agent_coordination_file_mtime_epoch "$cache_file")"
+  now="$(date +%s)"
+  age=$((now - mtime))
+  [[ "$age" -le "$ttl" ]]
+}
+
+agent_coordination_load_transport_cache() {
+  # Arg1: require fresh cache (1/0). Defaults to 1.
+  local require_fresh="${1:-1}"
+  local cache_file key value
+  cache_file="$(agent_coordination_cache_file)"
+  [[ -f "$cache_file" ]] || return 1
+  if [[ "$require_fresh" == "1" ]] && ! agent_coordination_cache_fresh "$cache_file"; then
+    return 1
+  fi
+
+  while IFS='=' read -r key value; do
+    [[ -n "$key" ]] || continue
+    case "$key" in
+      SLACK_BOT_TOKEN)
+        [[ -n "${SLACK_BOT_TOKEN:-}" ]] || export SLACK_BOT_TOKEN="$value"
+        ;;
+      SLACK_APP_TOKEN)
+        [[ -n "${SLACK_APP_TOKEN:-}" ]] || export SLACK_APP_TOKEN="$value"
+        ;;
+      DX_SLACK_WEBHOOK)
+        [[ -n "${DX_SLACK_WEBHOOK:-}" ]] || export DX_SLACK_WEBHOOK="$value"
+        ;;
+      DX_ALERTS_WEBHOOK)
+        [[ -n "${DX_ALERTS_WEBHOOK:-}" ]] || export DX_ALERTS_WEBHOOK="$value"
+        ;;
+    esac
+  done < "$cache_file"
+}
+
+agent_coordination_transport_values_present() {
+  if [[ -n "$(agent_coordination_slack_token)" ]]; then
+    return 0
+  fi
+  if [[ -n "${DX_SLACK_WEBHOOK:-}" ]] || [[ -n "${DX_ALERTS_WEBHOOK:-}" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+agent_coordination_refresh_cooldown_file() {
+  printf '%s.cooldown' "$(agent_coordination_cache_file)"
+}
+
+agent_coordination_refresh_on_cooldown() {
+  local cooldown_file until now
+  cooldown_file="$(agent_coordination_refresh_cooldown_file)"
+  [[ -f "$cooldown_file" ]] || return 1
+  until="$(cat "$cooldown_file" 2>/dev/null || true)"
+  [[ "$until" =~ ^[0-9]+$ ]] || return 1
+  now="$(date +%s)"
+  [[ "$now" -lt "$until" ]]
+}
+
+agent_coordination_set_refresh_cooldown() {
+  local cooldown_file now cooldown until
+  cooldown_file="$(agent_coordination_refresh_cooldown_file)"
+  cooldown="$(agent_coordination_cache_cooldown_seconds)"
+  [[ "$cooldown" =~ ^[0-9]+$ ]] || cooldown=300
+  now="$(date +%s)"
+  until=$((now + cooldown))
+  mkdir -p "$(dirname "$cooldown_file")"
+  printf '%s\n' "$until" > "$cooldown_file"
+}
+
+agent_coordination_clear_refresh_cooldown() {
+  local cooldown_file
+  cooldown_file="$(agent_coordination_refresh_cooldown_file)"
+  rm -f "$cooldown_file" >/dev/null 2>&1 || true
+}
+
+agent_coordination_refresh_transport_cache() {
+  local cache_file lock_dir tmp_file item_json
+  cache_file="$(agent_coordination_cache_file)"
+  lock_dir="${cache_file}.lock"
+
+  if agent_coordination_refresh_on_cooldown; then
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$cache_file")"
+  if ! mkdir "$lock_dir" >/dev/null 2>&1; then
+    # Another process is refreshing; fall back to cache if available.
+    sleep 1
+    agent_coordination_load_transport_cache 1 >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  tmp_file="$(mktemp "${cache_file}.tmp.XXXXXX")"
+  trap 'rm -rf "${lock_dir:-}" "${tmp_file:-}" >/dev/null 2>&1 || true' RETURN
+
+  if ! agent_coordination_load_op_token >/dev/null 2>&1; then
+    agent_coordination_set_refresh_cooldown
+    rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
+    return 1
+  fi
+  if ! command -v op >/dev/null 2>&1; then
+    agent_coordination_set_refresh_cooldown
+    rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  item_json="$(op item get "Agent-Secrets-Production" --vault dev --format json 2>/dev/null || true)"
+  if [[ -z "$item_json" ]]; then
+    agent_coordination_set_refresh_cooldown
+    rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  AC_ITEM_JSON="$item_json" python3 - "$tmp_file" <<'PY'
+import json
+import os
+import sys
+
+out_path = sys.argv[1]
+raw = os.environ.get("AC_ITEM_JSON", "")
+data = json.loads(raw) if raw else {}
+fields = data.get("fields") or []
+wanted = {
+    "SLACK_BOT_TOKEN": "",
+    "SLACK_APP_TOKEN": "",
+    "DX_SLACK_WEBHOOK": "",
+    "DX_ALERTS_WEBHOOK": "",
+}
+for f in fields:
+    label = f.get("label")
+    value = f.get("value")
+    if label in wanted and isinstance(value, str):
+        wanted[label] = value
+
+with open(out_path, "w", encoding="utf-8") as fh:
+    for k, v in wanted.items():
+        fh.write(f"{k}={v}\n")
+PY
+
+  if ! grep -qE '^(SLACK_BOT_TOKEN|SLACK_APP_TOKEN|DX_SLACK_WEBHOOK|DX_ALERTS_WEBHOOK)=.+' "$tmp_file" 2>/dev/null; then
+    agent_coordination_set_refresh_cooldown
+    rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  chmod 600 "$tmp_file"
+  mv "$tmp_file" "$cache_file"
+  agent_coordination_clear_refresh_cooldown
+  return 0
 }
 
 agent_coordination_load_op_token() {
@@ -116,39 +306,58 @@ agent_coordination_resolve_op_ref() {
 }
 
 agent_coordination_prepare_transport() {
-  agent_coordination_load_op_token >/dev/null 2>&1 || true
+  # 1) Keep explicit env values as highest precedence.
+  if agent_coordination_transport_values_present; then
+    return 0
+  fi
 
+  # 2) Load fresh cache (24h TTL by default).
+  agent_coordination_load_transport_cache 1 >/dev/null 2>&1 || true
+  if agent_coordination_transport_values_present; then
+    return 0
+  fi
+
+  # 3) Refresh cache in a single OP API call (with cooldown on failures), then load.
+  agent_coordination_refresh_transport_cache >/dev/null 2>&1 || true
+  agent_coordination_load_transport_cache 1 >/dev/null 2>&1 || true
+  if agent_coordination_transport_values_present; then
+    return 0
+  fi
+
+  # 4) Fallback to stale cache if refresh failed (e.g., rate-limited).
+  agent_coordination_load_transport_cache 0 >/dev/null 2>&1 || true
+  if agent_coordination_transport_values_present; then
+    return 0
+  fi
+
+  # 5) Last-resort legacy per-ref lookup (used if custom refs are configured).
+  agent_coordination_load_op_token >/dev/null 2>&1 || true
   if [[ -z "${SLACK_BOT_TOKEN:-}" ]]; then
     local resolved_bot
     resolved_bot="$(agent_coordination_resolve_op_ref "${SLACK_BOT_TOKEN_REF:-op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN}")"
     [[ -n "$resolved_bot" ]] && export SLACK_BOT_TOKEN="$resolved_bot"
   fi
-
   if [[ -z "${SLACK_APP_TOKEN:-}" ]]; then
     local resolved_app
     resolved_app="$(agent_coordination_resolve_op_ref "${SLACK_APP_TOKEN_REF:-op://dev/Agent-Secrets-Production/SLACK_APP_TOKEN}")"
     [[ -n "$resolved_app" ]] && export SLACK_APP_TOKEN="$resolved_app"
   fi
-
   if [[ -z "${DX_SLACK_WEBHOOK:-}" ]]; then
     local resolved_hook
     resolved_hook="$(agent_coordination_resolve_op_ref "${DX_SLACK_WEBHOOK_REF:-op://dev/Agent-Secrets-Production/DX_SLACK_WEBHOOK}")"
     [[ -n "$resolved_hook" ]] && export DX_SLACK_WEBHOOK="$resolved_hook"
   fi
-
   if [[ -z "${DX_ALERTS_WEBHOOK:-}" ]]; then
     local resolved_alert_hook
     resolved_alert_hook="$(agent_coordination_resolve_op_ref "${DX_ALERTS_WEBHOOK_REF:-op://dev/Agent-Secrets-Production/DX_ALERTS_WEBHOOK}")"
     [[ -n "$resolved_alert_hook" ]] && export DX_ALERTS_WEBHOOK="$resolved_alert_hook"
   fi
+  return 0
 }
 
 agent_coordination_transport_ready() {
   agent_coordination_prepare_transport
-  if [[ -n "$(agent_coordination_slack_token)" ]]; then
-    return 0
-  fi
-  if [[ -n "${DX_SLACK_WEBHOOK:-}" ]] || [[ -n "${DX_ALERTS_WEBHOOK:-}" ]]; then
+  if agent_coordination_transport_values_present; then
     return 0
   fi
   return 1
