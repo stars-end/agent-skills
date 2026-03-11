@@ -36,6 +36,7 @@ Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and 
 - Use `SLACK_BOT_TOKEN` as default for Agent Coordination transport.
 - Fallback to `SLACK_APP_TOKEN` if needed.
 - Both are resolved from `op://dev/Agent-Secrets-Production/...`.
+- A valid token does not guarantee channel history access; missing channel membership or `channels:join` scope is a Slack scope issue, not an OP auth failure.
 
 ```bash
 export SLACK_BOT_TOKEN=$(op read "op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN")
@@ -99,6 +100,31 @@ op whoami
 ```
 
 Expected output: `ServiceAccount: ...` (not interactive user account)
+
+## Failure Modes: Auth vs Rate Limit
+
+Treat these as different problems:
+
+- `No accounts configured`, `not signed in`, `Unauthorized`
+  - service-account auth is missing or the token was not loaded in the same invocation
+- `Too many requests`
+  - service-account auth succeeded, but 1Password is rate-limiting the client
+
+For rate limits:
+- stop repeated `op item list`, `op item get`, `op item create`, and `op read` loops
+- batch reads where possible
+- wait and retry with backoff instead of assuming auth is broken
+
+Minimal retry pattern:
+
+```bash
+for delay in 5 15 30; do
+  if op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN" >/dev/null; then
+    break
+  fi
+  sleep "$delay"
+done
+```
 
 ### Interactive Auth (Fallback Only)
 
@@ -201,7 +227,7 @@ Right:
   '
 ```
 
-For Prime Radiant dev investigations, the active orchestrator is Railway-hosted Windmill. Check the Windmill workspace assets under `f/eodhd/*` before assuming the deprecated `eodhd-cron` service is the primary runtime surface.
+For Prime Radiant dev investigations, the active orchestrator is Railway-hosted Windmill on the canonical unsuffixed Railway stack. Check the Windmill workspace assets under `f/eodhd/*` before assuming the deprecated `eodhd-cron` service is the primary runtime surface.
 
 ### Railway Service URL Variables
 
@@ -234,6 +260,7 @@ BACKEND_URL="${RAILWAY_SERVICE_BACKEND_URL:-http://localhost:3000}"
 - Use grep/cut instead of jq for field extraction (more portable).
 - Do not put `OP_SERVICE_ACCOUNT_TOKEN` or `RAILWAY_API_TOKEN` in `~/.zshrc` or `~/.zshenv`.
 - Do not guess 1Password item names for app runtime secrets. If the value belongs to a deployed service, fetch it from Railway context.
+- Do not diagnose OP rate limits as sign-in failures without checking `op whoami` first.
 
 ## References
 

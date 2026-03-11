@@ -89,7 +89,26 @@ NEXT_COMMANDS:
 
 The inspector is read-only by design and should be the primary manual inspection path for this repo. It can bootstrap missing backend DB dependencies with `poetry install --only main --no-root` on the first real query.
 
-For Prime Radiant dev EODHD operations, start from the Railway-hosted Windmill assets `f/eodhd/eodhd_trigger_and_process`, `f/eodhd/eod_realtime`, and `f/eodhd/eod_nightly`. The legacy `eodhd-cron` service is rollback-only in dev and should not be the first debugging target.
+For Prime Radiant dev EODHD operations, start from the Railway-hosted Windmill assets `f/eodhd/eodhd_trigger_and_process`, `f/eodhd/eod_realtime`, and `f/eodhd/eod_nightly`. The legacy `eodhd-cron` service is retired in dev and must not be used as a debugging or recovery target.
+
+### Prime Radiant Windmill Incident Ladder
+
+If the user is debugging EODHD scheduling, alerting, or enqueue failures in `dev`, use this order:
+
+1. Confirm the canonical Windmill cluster is the unsuffixed Railway stack (`server`, `worker`, `platform`, `proxy`, `worker_native`).
+2. Verify workspace `eodhd` contains:
+   - `f/eodhd/eodhd_trigger_and_process`
+   - `f/eodhd/eod_realtime`
+   - `f/eodhd/eod_nightly`
+3. Verify exactly one realtime schedule and exactly one nightly schedule exist.
+4. Check Windmill run history before touching backend or database state.
+5. Use the repo-native DB inspector only after the Windmill surface has been verified.
+
+Do not:
+- debug or recreate `eodhd-cron`
+- treat duplicate `server-*` domains as evidence of a second valid orchestrator
+- use `wmill sync push` for partial recovery
+- infer Slack delivery failure from schedule failure without checking flow logs
 
 ## Direct SQL Path
 
