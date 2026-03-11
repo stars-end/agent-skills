@@ -191,6 +191,9 @@ All four tools are enabled and pass Layer 1-3 checks:
 
 Full GO achieved for all four primary clients showing MCP tool visibility (Codex verified on macmini, optional on Linux).
 
+**Merge gate source of truth:** `docs/runbook/fleet-sync/merge-acceptance-matrix.md`
+This matrix is mandatory before merge and defines required host/client pass cells.
+
 **Operator expectations:**
 - Daily/weekly audits should pass (green) if all enabled tools pass
 - CLI tools only need Layer 1 (host runtime) - NOT Layer 4 (client visibility)

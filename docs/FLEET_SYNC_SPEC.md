@@ -264,6 +264,9 @@ All four tools are enabled and pass Layer 1-4 checks:
 - Gemini CLI: All MCP tools visible and connected ✓ (using `~/.gemini/settings.json`)
 
 Full GO is achieved. All four primary clients show MCP tool visibility for Layer 4 (Codex verified on macmini, optional on Linux).
+
+Pre-merge acceptance is defined by:
+`docs/runbook/fleet-sync/merge-acceptance-matrix.md`
 ## 14) Out of Scope
 
 Fleet Sync does not introduce centralized execution, SSE gateways, or runtime multiplexers.

@@ -77,4 +77,11 @@ opencode mcp list
 
 ### Full GO Requirements
 
-For full Fleet Sync GO, all four clients must show MCP tool visibility. Current state: **Full GO** achieved for Layer 4 visibility across all canonical clients.
+For full Fleet Sync GO, required host/client cells must pass the pre-merge matrix in:
+
+`docs/runbook/fleet-sync/merge-acceptance-matrix.md`
+
+Current contract:
+- `claude`, `gemini`, `opencode` are required on all 4 canonical hosts.
+- `codex` is required on `macmini` and optional on Linux hosts.
+- `antigravity` remains `INFERRED` via Gemini runtime/config.
