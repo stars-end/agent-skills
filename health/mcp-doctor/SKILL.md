@@ -26,6 +26,7 @@ MCP_DOCTOR_STRICT=1 ~/agent-skills/health/mcp-doctor/check.sh
 - Checks canonical IDE config locations (see `docs/CANONICAL_TARGETS.md`).
 - Operates as the living operational MCP skill backed by the researched client contract.
 - Authoritative reference: `docs/runbook/fleet-sync/client-mcp-contract.md`
+- Merge gate matrix: `docs/runbook/fleet-sync/merge-acceptance-matrix.md`
 
 ## Client Contracts
 
@@ -34,7 +35,7 @@ The doctor distinguishes between host runtime health, config/render health, and 
 Current verified per-client sources of truth:
 - **Claude Code**: `~/.claude.json` (uses `mcpServers` object)
 - **Gemini CLI**: `~/.gemini/settings.json` (uses `mcpServers` object)
-- **Codex CLI**: `~/.codex/config.toml` (uses `[mcp_servers]` table)
+- **Codex CLI**: `~/.codex/config.toml` (uses `[mcp_servers]` table, required on `macmini`, optional on Linux hosts)
 - **OpenCode**: `~/.config/opencode/opencode.jsonc` (uses `mcp` object)
 - **Antigravity**: Inherits from `~/.gemini/settings.json` (uses `mcpServers` object)
 

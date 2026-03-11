@@ -20,23 +20,64 @@ missing_required=0
 missing_optional=0
 client_warnings=0
 
+if [[ -f "$CANONICAL_TARGETS" ]]; then
+  # shellcheck disable=SC1090
+  source "$CANONICAL_TARGETS"
+fi
+CANONICAL_HOST_KEY="${CANONICAL_HOST_KEY:-unknown}"
+
+client_tool_visible() {
+  local client_name="$1"
+  local tool="$2"
+  local out="$3"
+  case "$client_name" in
+    claude-code)
+      # Claude lists stdio MCP servers as: tool: ... - ✓ Connected
+      echo "$out" | rg -q "${tool}: .*Connected"
+      ;;
+    gemini-cli)
+      # Gemini lists entries as: ✓ tool: ... - Connected
+      echo "$out" | rg -q "${tool}: .*Connected"
+      ;;
+    opencode)
+      # OpenCode list shows: ✓ tool connected
+      echo "$out" | rg -q "${tool} .*connected"
+      ;;
+    codex-cli)
+      # Codex reports status as enabled/disabled, not connected/disconnected.
+      echo "$out" | rg -q "^${tool}[[:space:]].*enabled"
+      ;;
+    *)
+      echo "$out" | rg -q "$tool"
+      ;;
+  esac
+}
+
 check_mcp_client() {
   local client_name="$1"
   local config_path="$2"
   local check_key="$3"
   local list_cmd="$4"
-  local list_grep="$5"
-  local expected_status="$6" # VERIFIED or INFERRED or BLOCKED
+  local expected_status="$5" # VERIFIED or INFERRED or BLOCKED
+  local required_client="${6:-1}" # 1 required, 0 optional
 
   echo -n "- $client_name: "
   
   if [[ ! -f "$config_path" ]]; then
+    if [[ "$required_client" == "0" ]]; then
+      echo "ℹ️  Optional client not configured ($config_path)"
+      return
+    fi
     echo "⚠️  Config missing ($config_path)"
     client_warnings=$((client_warnings+1))
     return
   fi
 
   if ! grep -q "$check_key" "$config_path" 2>/dev/null; then
+    if [[ "$required_client" == "0" ]]; then
+      echo "ℹ️  Optional client config present but key '$check_key' missing"
+      return
+    fi
     echo "⚠️  Config exists but missing key '$check_key' ($config_path)"
     client_warnings=$((client_warnings+1))
     return
@@ -54,6 +95,10 @@ check_mcp_client() {
   fi
 
   if ! command -v $(echo "$list_cmd" | awk '{print $1}') >/dev/null 2>&1; then
+    if [[ "$required_client" == "0" ]]; then
+      echo "ℹ️  Optional client CLI not found ($(echo "$list_cmd" | awk '{print $1}'))"
+      return
+    fi
     echo "⚠️  CLI not found ($(echo "$list_cmd" | awk '{print $1}'))"
     client_warnings=$((client_warnings+1))
     return
@@ -63,12 +108,16 @@ check_mcp_client() {
   out=$(eval "$list_cmd" 2>&1 || true)
   local missing_tools=""
   for tool in "llm-tldr" "context-plus" "serena"; do
-    if ! echo "$out" | grep -q "$tool"; then
+    if ! client_tool_visible "$client_name" "$tool" "$out"; then
       missing_tools="$missing_tools $tool"
     fi
   done
 
   if [[ -n "$missing_tools" ]]; then
+    if [[ "$required_client" == "0" ]]; then
+      echo "ℹ️  Optional client missing Fleet Sync tools:$missing_tools"
+      return
+    fi
     echo "⚠️  Configured but tools not visible in list output:$missing_tools"
     client_warnings=$((client_warnings+1))
     return
@@ -79,12 +128,16 @@ check_mcp_client() {
 
 echo ""
 echo "Client Configuration & Visibility:"
-# check_mcp_client name path key "list cmd" "unused_grep" "STATUS"
-check_mcp_client "claude-code" "$HOME/.claude.json" "mcpServers" "claude mcp list" "" "VERIFIED"
-check_mcp_client "gemini-cli" "$HOME/.gemini/settings.json" "mcpServers" "gemini mcp list" "" "VERIFIED"
-check_mcp_client "codex-cli" "$HOME/.codex/config.toml" "mcp_servers" "codex mcp list" "" "VERIFIED"
-check_mcp_client "opencode" "$HOME/.config/opencode/opencode.jsonc" "\"mcp\"" "opencode mcp list" "" "VERIFIED"
-check_mcp_client "antigravity" "$HOME/.gemini/settings.json" "mcpServers" "none" "" "INFERRED"
+# check_mcp_client name path key "list cmd" "STATUS" "required"
+check_mcp_client "claude-code" "$HOME/.claude.json" "mcpServers" "claude mcp list" "VERIFIED" "1"
+check_mcp_client "gemini-cli" "$HOME/.gemini/settings.json" "mcpServers" "gemini mcp list" "VERIFIED" "1"
+if [[ "$CANONICAL_HOST_KEY" == "macmini" ]]; then
+  check_mcp_client "codex-cli" "$HOME/.codex/config.toml" "mcp_servers" "codex mcp list" "VERIFIED" "1"
+else
+  check_mcp_client "codex-cli" "$HOME/.codex/config.toml" "mcp_servers" "codex mcp list" "INFERRED" "0"
+fi
+check_mcp_client "opencode" "$HOME/.config/opencode/opencode.jsonc" "\"mcp\"" "opencode mcp list" "VERIFIED" "1"
+check_mcp_client "antigravity" "$HOME/.gemini/settings.json" "mcpServers" "none" "INFERRED" "1"
 
 echo ""
 echo "=========================================================="
@@ -487,7 +540,7 @@ if [[ "$missing_optional" -gt 0 ]]; then
   echo "⚠️  Also missing $missing_optional optional items"
 fi
 echo ""
-echo "Setup instructions: $SKILLS_DIR/mcp-doctor/SKILL.md"
+echo "Setup instructions: $SKILLS_DIR/health/mcp-doctor/SKILL.md"
 if [[ "$STRICT" == "1" ]]; then
   exit 1
 fi
