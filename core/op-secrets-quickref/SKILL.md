@@ -156,14 +156,25 @@ op item get --vault dev Agent-Secrets-Production --fields label
 
 ### Read a Single Secret
 
+**For high-frequency DX scripts (cached):**
 ```bash
+# Source the helper
+source ~/agent-skills/scripts/lib/dx-auth.sh
+
 # Agent API key (also used as Anthropic token via Z.ai)
-op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+dx_auth_load_zai_api_key
 
 # GitHub token (for gh CLI in cron/CI)
-op read "op://dev/Agent-Secrets-Production/GITHUB_TOKEN"
+dx_auth_load_github_token
 
 # Railway CLI token
+dx_auth_load_railway_api_token
+```
+
+**For one-off manual reads (uncached):**
+```bash
+op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+op read "op://dev/Agent-Secrets-Production/GITHUB_TOKEN"
 op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN"
 ```
 
