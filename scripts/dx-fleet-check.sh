@@ -25,6 +25,8 @@ SNAPSHOT_STALE_SECONDS=21600
 source "$SCRIPT_DIR/canonical-targets.sh" 2>/dev/null || true
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/dx-slack-alerts.sh" 2>/dev/null || true
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/dx-auth.sh" 2>/dev/null || true
 
 DAILY_CHECK_IDS=(
   beads_dolt
@@ -643,11 +645,9 @@ weekly_check_railway_auth() {
     return
   fi
 
-  if command -v op >/dev/null 2>&1; then
-    local token
-    token="$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN' 2>/dev/null || true)"
-    if [[ -n "$token" ]] && RAILWAY_API_TOKEN="$token" railway whoami >/dev/null 2>&1; then
-      echo "pass|low|railway auth verified via OP token hydration"
+  if command -v dx_auth_load_railway_api_token >/dev/null 2>&1; then
+    if dx_auth_load_railway_api_token >/dev/null 2>&1 && railway whoami >/dev/null 2>&1; then
+      echo "pass|low|railway auth verified via cached token hydration"
       return
     fi
   fi

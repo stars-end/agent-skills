@@ -130,8 +130,8 @@ case "$CANONICAL_HOST_KEY" in
     export CANONICAL_OPTIONAL_REPOS=( "affordabot" "llm-common" )
     ;;
   epyc6)
-    export CANONICAL_REQUIRED_REPOS=( "agent-skills" )
-    export CANONICAL_OPTIONAL_REPOS=( "prime-radiant-ai" "affordabot" "llm-common" )
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" )
+    export CANONICAL_OPTIONAL_REPOS=( "affordabot" "llm-common" )
     ;;
   epyc12)
     export CANONICAL_REQUIRED_REPOS=( "agent-skills" )
