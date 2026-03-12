@@ -11,11 +11,20 @@ def write_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def test_dx_railway_run_uses_linked_context(tmp_path):
-    script_src = Path(__file__).parent.parent / "scripts" / "dx-railway-run.sh"
-    script = tmp_path / "dx-railway-run.sh"
-    script.write_text(script_src.read_text())
+def write_script_fixture(tmp_path: Path, script_name: str) -> Path:
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    script = tmp_path / script_name
+    script.write_text((scripts_dir / script_name).read_text())
     script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    lib_dir = tmp_path / "lib"
+    lib_dir.mkdir(exist_ok=True)
+    (lib_dir / "dx-auth.sh").write_text((scripts_dir / "lib" / "dx-auth.sh").read_text())
+    return script
+
+
+def test_dx_railway_run_uses_linked_context(tmp_path):
+    script = write_script_fixture(tmp_path, "dx-railway-run.sh")
 
     railway = tmp_path / "railway"
     run_log = tmp_path / "run.log"
@@ -52,10 +61,7 @@ def test_dx_railway_run_uses_linked_context(tmp_path):
 
 
 def test_dx_railway_run_uses_seeded_context_when_unlinked(tmp_path):
-    script_src = Path(__file__).parent.parent / "scripts" / "dx-railway-run.sh"
-    script = tmp_path / "dx-railway-run.sh"
-    script.write_text(script_src.read_text())
-    script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    script = write_script_fixture(tmp_path, "dx-railway-run.sh")
 
     railway = tmp_path / "railway"
     run_log = tmp_path / "run.log"
@@ -108,10 +114,7 @@ def test_dx_railway_run_uses_seeded_context_when_unlinked(tmp_path):
 
 
 def test_dx_railway_run_executes_directly_in_railway_shell(tmp_path):
-    script_src = Path(__file__).parent.parent / "scripts" / "dx-railway-run.sh"
-    script = tmp_path / "dx-railway-run.sh"
-    script.write_text(script_src.read_text())
-    script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    script = write_script_fixture(tmp_path, "dx-railway-run.sh")
 
     railway = tmp_path / "railway"
     write_executable(
