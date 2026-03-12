@@ -10,6 +10,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/dx-slack-alerts.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/dx-auth.sh"
 
 # Optional dry-run mode for postless validation
 DRY_RUN="false"
@@ -44,21 +46,9 @@ run_founder_daily() {
     "${HOME}/agent-skills/scripts/dx-founder-daily.sh" --json >"$output_file" 2>"$log_file"
 }
 
-# Load V4.2 service account token (canonical pattern from cc-glm-headless.sh)
-if [[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
-    TOKEN_FILE="${OP_SERVICE_ACCOUNT_TOKEN_FILE:-$HOME/.config/systemd/user/op-$(hostname)-token}"
-    if [[ -f "$TOKEN_FILE" ]]; then
-        export OP_SERVICE_ACCOUNT_TOKEN=$(cat "$TOKEN_FILE")
-    fi
-fi
-
 # GitHub authentication for cron environment
-if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
-    GH_TOKEN=$(op read "op://dev/Agent-Secrets-Production/GITHUB_TOKEN" 2>/dev/null) || true
-    if [[ -n "${GH_TOKEN:-}" ]]; then
-        export GH_TOKEN
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Authenticated with GitHub via 1Password Service Account"
-    fi
+if dx_auth_load_github_token >/dev/null 2>&1; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Authenticated with GitHub via cached 1Password token"
 fi
 
 # Fallback: Try existing gh auth if available (interactive sessions)
