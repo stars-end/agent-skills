@@ -1,5 +1,8 @@
 # Multi-Agent Communication Guide
 
+> Legacy / archived: this guide reflects the older OpenCode HTTP server routing model.
+> Default dispatch is now `dx-runner` with CLI-first OpenCode execution.
+
 ## When to Use Multi-Agent Dispatch
 
 | Scenario | Use Multi-Agent? | Example |
@@ -54,7 +57,7 @@ Post progress to Slack #social (C09MQGMFKDE):
 
 ## Available VMs
 
-| VM | Best For | OpenCode URL |
+| VM | Best For | Legacy OpenCode URL |
 |----|----------|--------------|
 | epyc6 | Heavy compute, Linux builds | `http://epyc6.tail76761.ts.net:4105` |
 | macmini | macOS builds, iOS | `http://macmini.tail76761.ts.net:4105` |
@@ -100,7 +103,7 @@ Agents on these VMs have native Slack access:
 
 ### VM Not Responding
 ```bash
-# Restart OpenCode
+# Legacy server-mode recovery only
 ssh feng@epyc6 'systemctl --user restart opencode.service'
 ssh fengning@macmini 'launchctl kickstart -k ~/Library/LaunchAgents/com.agent.opencode-server.plist'
 ```

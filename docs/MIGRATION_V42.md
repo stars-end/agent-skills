@@ -1,5 +1,7 @@
 # V4.2 Migration Guide
 
+> Historical / legacy: this migration guide predates retirement of the default OpenCode server path.
+
 ⚠️ **V4.1 (Plaintext Tokens) is DEPRECATED**
 
 V4.1 stored service account tokens in plaintext files (`~/.config/op-service-tokens/`) with 600 permissions. While this provided basic isolation, V4.2 introduces encrypted credentials for superior security.

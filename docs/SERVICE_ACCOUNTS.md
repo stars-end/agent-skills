@@ -1,5 +1,8 @@
 # Service Accounts Guide
 
+> Note: references to `opencode.service` or Slack/OpenCode server coordination in this guide are legacy service-mode material.
+> Default DX execution is CLI-first via `dx-runner` and `opencode run`.
+
 ## Architecture
 
 This infrastructure uses 1Password Service Accounts to provide secure, non-interactive authentication for systemd services.

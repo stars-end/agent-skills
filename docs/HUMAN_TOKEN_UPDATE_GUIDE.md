@@ -1,5 +1,7 @@
 # Human Token Update Guide - Phase 1 & 2 Complete Summary
 
+> Historical / legacy: this summary predates retirement of the default OpenCode server path.
+
 ## Status: Ready for Token Update (After Rate Limit Reset)
 
 ---

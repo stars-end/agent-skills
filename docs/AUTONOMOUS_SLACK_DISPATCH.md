@@ -2,11 +2,14 @@
 
 **For: GitHub CI Integration Evaluation**
 
+> Legacy / archived: this document describes the retired OpenCode HTTP server path on port `4105`.
+> Default DX execution is now CLI-first via `dx-runner` and `opencode run`.
+
 ---
 
 ## What It Does
 
-Dispatches tasks to remote VMs running OpenCode agents, with Slack notifications for status updates. Agents post completion summaries to Slack autonomously.
+Describes a legacy pattern that dispatched tasks to remote VMs running OpenCode HTTP servers, with Slack notifications for status updates.
 
 ---
 
@@ -107,7 +110,7 @@ jobs:
 
 | Requirement | Description |
 |-------------|-------------|
-| OpenCode server | Running on VM with `opencode serve --port 4105` |
+| OpenCode server | Legacy requirement only; not part of the default fleet contract |
 | Slack MCP | Configured in opencode.json with `SLACK_MCP_XOXB_TOKEN` |
 | Network access | CI can reach VM:4105 (or use SSH tunnel) |
 

@@ -1,5 +1,7 @@
 # Phase 1 + Phase 2: Complete Implementation Summary
 
+> Historical / legacy: this implementation summary includes retired OpenCode server-service references.
+
 **Date:** 2026-01-24
 **Status:** ✅ Phase 2 Complete | Phase 1 Complete
 **Engineer:** Full-stack developer (agent execution)

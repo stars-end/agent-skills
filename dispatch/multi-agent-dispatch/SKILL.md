@@ -9,7 +9,7 @@ tags: [workflow, dispatch, dx-runner, governance, cross-vm]
 
 # Multi-Agent Dispatch (dx-runner Canonical)
 
-`dx-runner` is the **canonical dispatch/governance surface**. OpenCode (`opencode run` / `opencode serve`) remains the primary execution lane. 
+`dx-runner` is the **canonical dispatch/governance surface**. OpenCode CLI headless runs are the primary execution lane. Shared `opencode serve` server mode is legacy/opt-in only.
 
 `dx-dispatch` is a **BREAK-GLASS compatibility shim** for remote fanout when dx-runner direct dispatch is unavailable. Use only for legacy cross-VM orchestration.
 

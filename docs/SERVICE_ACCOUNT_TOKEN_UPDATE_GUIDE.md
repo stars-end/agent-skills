@@ -1,5 +1,8 @@
 # Service Account Token Update Guide
 
+> Historical / legacy: this guide includes retired `opencode.service` / server-mode material.
+> Default DX execution is now CLI-first via `dx-runner` and `opencode run`.
+
 **When:** After 1Password daily rate limit resets (~18 hours from rate limit)
 **Or:** After upgrading to Business tier / deploying Connect Server
 
