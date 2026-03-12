@@ -233,6 +233,16 @@ PY
 }
 
 agent_coordination_load_op_token() {
+  if ! command -v canonical_op_token_plaintext_candidates >/dev/null 2>&1; then
+    local lib_dir canonical_targets
+    lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    canonical_targets="${lib_dir%/lib}/canonical-targets.sh"
+    if [[ -r "$canonical_targets" ]]; then
+      # shellcheck disable=SC1090
+      source "$canonical_targets"
+    fi
+  fi
+
   if command -v dx_auth_load_op_service_account_token >/dev/null 2>&1; then
     dx_auth_load_op_service_account_token >/dev/null 2>&1 && return 0
   fi
@@ -247,19 +257,18 @@ agent_coordination_load_op_token() {
     fi
   fi
 
-  local host_short
-  host_short="$(hostname -s 2>/dev/null || hostname 2>/dev/null || printf 'unknown')"
-  local host_full
-  host_full="$(hostname 2>/dev/null || printf '%s' "$host_short")"
-  local -a plain_candidates=(
-    "${HOME}/.config/systemd/user/op-${host_short}-token"
-    "${HOME}/.config/systemd/user/op-${host_full}-token"
-    "${HOME}/.config/systemd/user/op-${CANONICAL_HOST_KEY:-}-token"
-    "${HOME}/.config/systemd/user/op-macmini-token"
-    "${HOME}/.config/systemd/user/op-homedesktop-wsl-token"
-    "${HOME}/.config/systemd/user/op-epyc6-token"
-    "${HOME}/.config/systemd/user/op-epyc12-token"
-  )
+  local -a plain_candidates=()
+  if command -v canonical_op_token_plaintext_candidates >/dev/null 2>&1; then
+    mapfile -t plain_candidates < <(canonical_op_token_plaintext_candidates "$HOME")
+  else
+    plain_candidates=(
+      "${HOME}/.config/systemd/user/op-macmini-token"
+      "${HOME}/.config/systemd/user/op-homedesktop-wsl-token"
+      "${HOME}/.config/systemd/user/op-epyc6-token"
+      "${HOME}/.config/systemd/user/op-epyc12-token"
+      "${HOME}/.config/systemd/user/op_token"
+    )
+  fi
   local candidate
   for candidate in "${plain_candidates[@]}"; do
     if [[ -r "$candidate" ]]; then
@@ -274,15 +283,18 @@ agent_coordination_load_op_token() {
     fi
   done
 
-  local -a cred_candidates=(
-    "${HOME}/.config/systemd/user/op-${host_short}-token.cred"
-    "${HOME}/.config/systemd/user/op-${host_full}-token.cred"
-    "${HOME}/.config/systemd/user/op-${CANONICAL_HOST_KEY:-}-token.cred"
-    "${HOME}/.config/systemd/user/op-macmini-token.cred"
-    "${HOME}/.config/systemd/user/op-homedesktop-wsl-token.cred"
-    "${HOME}/.config/systemd/user/op-epyc6-token.cred"
-    "${HOME}/.config/systemd/user/op-epyc12-token.cred"
-  )
+  local -a cred_candidates=()
+  if command -v canonical_op_token_cred_candidates >/dev/null 2>&1; then
+    mapfile -t cred_candidates < <(canonical_op_token_cred_candidates "$HOME")
+  else
+    cred_candidates=(
+      "${HOME}/.config/systemd/user/op-macmini-token.cred"
+      "${HOME}/.config/systemd/user/op-homedesktop-wsl-token.cred"
+      "${HOME}/.config/systemd/user/op-epyc6-token.cred"
+      "${HOME}/.config/systemd/user/op-epyc12-token.cred"
+      "${HOME}/.config/systemd/user/op_token.cred"
+    )
+  fi
   if command -v systemd-creds >/dev/null 2>&1; then
     for candidate in "${cred_candidates[@]}"; do
       if [[ -r "$candidate" ]]; then

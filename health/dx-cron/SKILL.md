@@ -41,14 +41,9 @@ for f in ~/agent-skills/scripts/dx-*.sh; do [ -x "$f" ] && echo "✅ $f" || echo
 # Check last run times of logs
 ls -lhrt ~/logs/*.log ~/logs/dx/*.log | tail -5
 
-# Verify V4.2 service account token (required for cron auth)
-TOKEN_FILE=~/.config/systemd/user/op-$(hostname)-token
-if [[ -f "$TOKEN_FILE" ]]; then
-  export OP_SERVICE_ACCOUNT_TOKEN=$(cat "$TOKEN_FILE")
-  op whoami >/dev/null 2>&1 && echo "✅ V4.2 token valid" || echo "❌ V4.2 token invalid"
-else
-  echo "❌ V4.2 token missing at $TOKEN_FILE"
-fi
+# Verify service-account auth using canonical host alias resolution
+~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami \
+  >/dev/null 2>&1 && echo "✅ OP service account valid" || echo "❌ OP service account invalid"
 ```
 
 ### 3. Debugging: `dx-cron tail <job>`

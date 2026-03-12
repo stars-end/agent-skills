@@ -11,7 +11,7 @@ V4.1 stored service account tokens in plaintext files (`~/.config/op-service-tok
 | Feature | V4.1 | V4.2 |
 |---------|------|------|
 | **Storage** | Plaintext File | Encrypted Credential |
-| **Path** | `~/.config/op-service-tokens/` | `~/.config/systemd/user/op_token.cred` |
+| **Path** | `~/.config/op-service-tokens/` | `~/.config/systemd/user/op-<canonical-host-key>-token.cred` |
 | **Systemd** | `EnvironmentFile` | `LoadCredentialEncrypted` (or `LoadCredential`) |
 | **Encryption** | None | AES-256-GCM |
 

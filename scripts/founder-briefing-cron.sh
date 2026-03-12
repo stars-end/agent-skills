@@ -3,7 +3,7 @@
 # Bypasses OpenClaw native cron (broken isolated sessions)
 #
 # Prerequisites:
-#   1. V4.2 service account token at ~/.config/systemd/user/op-$(hostname)-token
+#   1. V4.2 service account token at ~/.config/systemd/user/op-<canonical-host-key>-token
 #   2. Created via: ~/agent-skills/scripts/create-op-credential.sh
 
 set -euo pipefail

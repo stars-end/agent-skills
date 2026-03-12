@@ -3,12 +3,12 @@
 # DISTRIBUTE UNIQUE 1PASSWORD TOKENS TO ALL VMs
 # ============================================================
 #
-# Prompts for 3 unique service account tokens (one per host)
+# Prompts for 4 unique service account tokens (one per canonical host)
 # and securely distributes each to its respective VM.
 #
 # Usage: ./distribute-unique-tokens.sh
 #
-# Naming: op-<hostname>-token
+# Naming: op-<canonical-host-key>-token
 #
 # Security:
 # - Tokens transferred over SSH (encrypted)

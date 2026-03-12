@@ -3,20 +3,23 @@
 # DISTRIBUTE 1PASSWORD CREDENTIAL (V4.3)
 # ============================================================
 #
-# Copies the local op-<hostname>-token to all configured
-# remote VMs. Each VM gets its own hostname-based token.
+# Copies the local canonical token to all configured
+# remote VMs. Each VM gets its own canonical host alias token.
 #
 # Usage: ./distribute-op-credential.sh
 #
-# Naming: op-<hostname>-token (e.g., op-macmini-token)
+# Naming: op-<canonical-host-key>-token (e.g., op-macmini-token)
 #
 # ============================================================
 
 set -euo pipefail
 
-# Get local hostname and token name
-LOCAL_HOSTNAME=$(hostname)
-LOCAL_TOKEN_NAME="op-${LOCAL_HOSTNAME}-token"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/canonical-targets.sh"
+
+# Get local canonical host key and token name
+LOCAL_TOKEN_NAME="$(canonical_op_token_name)"
 LOCAL_CRED="${HOME}/.config/systemd/user/${LOCAL_TOKEN_NAME}"
 
 if [[ ! -f "$LOCAL_CRED" ]]; then

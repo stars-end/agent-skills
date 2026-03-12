@@ -60,7 +60,7 @@ Implementation uses these tokens via:
 
 Check if credential exists:
 ```bash
-ls -la ~/.config/systemd/user/op-$(hostname)-token*
+ls -la ~/.config/systemd/user/op-{macmini,homedesktop-wsl,epyc6,epyc12}-token*
 ```
 
 Create protected service-account token file (requires human to paste token):
@@ -73,8 +73,8 @@ Create protected service-account token file (requires human to paste token):
 Fallback order for service-account credentials:
 
 1. `OP_SERVICE_ACCOUNT_TOKEN_FILE` if explicitly set
-2. `~/.config/systemd/user/op-$(hostname)-token`
-3. `~/.config/systemd/user/op-$(hostname)-token.cred`
+2. `~/.config/systemd/user/op-<canonical-host-key>-token`
+3. `~/.config/systemd/user/op-<canonical-host-key>-token.cred`
 4. legacy fallback: `~/.config/systemd/user/op_token`
 5. legacy fallback: `~/.config/systemd/user/op_token.cred`
 
@@ -85,12 +85,12 @@ Fallback order for service-account credentials:
 
 **Linux (systemd-creds encrypted):**
 ```bash
-export OP_SERVICE_ACCOUNT_TOKEN="$(systemd-creds decrypt ~/.config/systemd/user/op-$(hostname)-token.cred)"
+export OP_SERVICE_ACCOUNT_TOKEN="$(systemd-creds decrypt ~/.config/systemd/user/op-epyc6-token.cred)"
 ```
 
 **macOS (plaintext fallback):**
 ```bash
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-$(hostname)-token)"
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-macmini-token)"
 ```
 
 ### Step 3: Verify Auth
@@ -195,7 +195,7 @@ op item get --vault dev Agent-Secrets-Production --fields ZAI_API_KEY,RAILWAY_AP
 If you must do it manually, keep both steps in the same shell invocation:
 
 ```bash
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-$(hostname)-token)" && \
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-epyc6-token)" && \
 export RAILWAY_API_TOKEN="$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')" && \
 railway whoami
 ```

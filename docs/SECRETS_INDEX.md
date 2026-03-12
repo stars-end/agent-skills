@@ -125,8 +125,8 @@ op read "op://dev/prime-radiant-dev/EODHD_CRON_SHARED_SECRET"
 ```
 
 This creates:
-- **Linux (with systemd-creds)**: `~/.config/systemd/user/op-<hostname>-token.cred` (encrypted)
-- **macOS (fallback)**: `~/.config/systemd/user/op-<hostname>-token` (chmod 600)
+- **Linux (with systemd-creds)**: `~/.config/systemd/user/op-<canonical-host-key>-token.cred` (encrypted)
+- **macOS (fallback)**: `~/.config/systemd/user/op-<canonical-host-key>-token` (chmod 600)
 
 ### Every Session (Before Using op CLI)
 

@@ -4,12 +4,12 @@
 # ============================================================
 #
 # Creates a protected (chmod 600) credential file for 1Password
-# service account. Uses hostname-based token naming convention.
+# service account. Uses canonical host alias naming.
 #
 # Usage: ./create-op-credential.sh [--force]
 #   --force: Overwrite existing credential
 #
-# Naming: op-<hostname>-token (e.g., op-epyc6-token)
+# Naming: op-<canonical-host-key>-token (e.g., op-epyc6-token)
 #
 # ============================================================
 
@@ -19,13 +19,18 @@ set -euo pipefail
 unset OP_SERVICE_ACCOUNT_TOKEN
 
 FORCE="${1:-}"
-HOSTNAME=$(hostname)
-TOKEN_NAME="op-${HOSTNAME}-token"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/canonical-targets.sh"
+
+RAW_HOSTNAME="$(hostname)"
+TOKEN_NAME="$(canonical_op_token_name)"
 CRED_PLAINTEXT="${HOME}/.config/systemd/user/${TOKEN_NAME}"
 CRED_ENCRYPTED="${HOME}/.config/systemd/user/${TOKEN_NAME}.cred"
 
-echo "=== Creating Protected 1Password Credential (V4.3 - Hostname-Based) ==="
-echo "Hostname: $HOSTNAME"
+echo "=== Creating Protected 1Password Credential (V4.3 - Canonical Host Alias) ==="
+echo "Canonical host key: ${CANONICAL_HOST_KEY}"
+echo "Raw hostname: ${RAW_HOSTNAME}"
 echo "Token file: $TOKEN_NAME"
 echo ""
 
