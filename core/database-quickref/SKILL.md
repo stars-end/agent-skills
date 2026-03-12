@@ -40,17 +40,19 @@ Before any DB action:
 ```bash
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 ```
-2. For Prime Radiant AI, prefer the repo-native inspector first:
+2. For Prime Radiant AI, prefer the host-safe Postgres wrapper first:
 ```bash
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
-  ~/agent-skills/scripts/dx-railway-run.sh -- \
-  bash -lc 'cd backend && poetry run python scripts/db_inspect.py tables'
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc 'cd backend && poetry run python scripts/db_inspect.py tables'
 ```
 3. Check whether host `psql` exists:
 ```bash
 command -v psql
 ```
-4. Prefer `railway run -p/-e/-s -- ...` or `dx-railway-run.sh -- ...` over partial `railway link`.
+4. Prefer `dx-railway-postgres.sh` for DB operations and `railway run -p/-e/-s -- ...` for non-DB Railway execution.
 
 If `psql` is missing and there is no verified repo-native query path already present, stop exactly with:
 
@@ -68,26 +70,36 @@ NEXT_COMMANDS:
 ```bash
 # List public tables on the transactional DB
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
-  ~/agent-skills/scripts/dx-railway-run.sh -- \
-  bash -lc 'cd backend && poetry run python scripts/db_inspect.py tables'
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc 'cd backend && poetry run python scripts/db_inspect.py tables'
 
 # Describe a table
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
-  ~/agent-skills/scripts/dx-railway-run.sh -- \
-  bash -lc 'cd backend && poetry run python scripts/db_inspect.py describe eodhd_refresh_runs'
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc 'cd backend && poetry run python scripts/db_inspect.py describe eodhd_refresh_runs'
 
 # Inspect refresh runs for a market date
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
-  ~/agent-skills/scripts/dx-railway-run.sh -- \
-  bash -lc "cd backend && poetry run python scripts/db_inspect.py refresh-runs --trade-date 2026-03-09"
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc "cd backend && poetry run python scripts/db_inspect.py refresh-runs --trade-date 2026-03-09"
 
 # Read-only ad hoc SQL on the vector DB
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
-  ~/agent-skills/scripts/dx-railway-run.sh -- \
-  bash -lc "cd backend && poetry run python scripts/db_inspect.py --db vector query --sql 'SELECT 1'"
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc "cd backend && poetry run python scripts/db_inspect.py --db vector query --sql 'SELECT 1'"
 ```
 
-The inspector is read-only by design and should be the primary manual inspection path for this repo. It can bootstrap missing backend DB dependencies with `poetry install --only main --no-root` on the first real query.
+The wrapper is the canonical host/worktree DB path for this repo. It combines backend service env with Postgres TCP proxy coordinates so host-side inspection and migrations do not depend on `postgres.railway.internal` resolving locally.
+
+The inspector is read-only by design and should remain the primary manual inspection path for Prime Radiant application data. It can bootstrap missing backend DB dependencies with `poetry install --only main --no-root` on the first real query.
 
 For Prime Radiant dev EODHD operations, start from the Railway-hosted Windmill assets `f/eodhd/eodhd_trigger_and_process`, `f/eodhd/eod_realtime`, and `f/eodhd/eod_nightly`. The legacy `eodhd-cron` service is retired in dev and must not be used as a debugging or recovery target.
 
@@ -112,13 +124,21 @@ Do not:
 
 ## Direct SQL Path
 
-`railway run` injects Railway environment variables into the command you execute locally. It does **not** guarantee a `psql` binary for you. Direct SQL works only when host `psql` exists.
+Use the wrapper for direct SQL so Railway private-network DB hosts are rewritten to the service TCP proxy automatically. Direct SQL still requires host `psql`.
 
 ### Prime Radiant AI
 ```bash
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- \
-  railway run -p <project-id> -e dev -s backend -- \
-  psql "$DATABASE_URL"
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --project-id <project-id> \
+    --env dev \
+    psql
+
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --project-id <project-id> \
+    --env dev \
+    query --sql 'SELECT 1'
 ```
 
 ### Affordabot
@@ -151,7 +171,10 @@ psql -f migration.sql
 
 ### Prime Radiant AI (Alembic)
 ```bash
-cd backend && poetry run alembic upgrade head
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    alembic-upgrade head
 ```
 
 ### Affordabot (Raw SQL)
@@ -201,7 +224,8 @@ WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';
 ### With Railway CLI
 - Use `railway run -p <project-id> -e <env> -s <service> -- <command>` for non-interactive execution
 - Prefer `~/agent-skills/scripts/dx-load-railway-auth.sh -- <command>` when Railway auth is needed
-- Prefer `~/agent-skills/scripts/dx-railway-run.sh -- <command>` in worktrees with seeded Railway context
+- Prefer `~/agent-skills/scripts/dx-railway-postgres.sh` for host-side DB inspection, SQL, and Alembic
+- Prefer `~/agent-skills/scripts/dx-railway-run.sh -- <command>` for non-DB commands in worktrees with seeded Railway context
 
 ### With Repo-Specific Skills
 - Use repo-local/backend skills for app-specific query paths when they already exist

@@ -22,9 +22,9 @@ Verify Railway CLI is authenticated and has an active context:
 
 ```bash
 # Check for Railway environment or token
-if [[ -z "${RAILWAY_ENVIRONMENT:-}" && -z "${RAILWAY_API_TOKEN:-}" ]]; then
+if [[ -z "${RAILWAY_ENVIRONMENT:-}" && -z "${RAILWAY_API_TOKEN:-}" && -z "${RAILWAY_TOKEN:-}" ]]; then
   echo "ERROR: No Railway context found."
-  echo "  Set RAILWAY_ENVIRONMENT or RAILWAY_API_TOKEN, or run: railway login"
+  echo "  Set RAILWAY_ENVIRONMENT or the canonical automation token RAILWAY_API_TOKEN, or run: railway login"
   exit 1
 fi
 
@@ -36,7 +36,8 @@ railway status 2>/dev/null || {
 
 **What it checks:**
 - `RAILWAY_ENVIRONMENT` - Environment variable set by Railway
-- `RAILWAY_API_TOKEN` - API token for Railway CLI authentication
+- `RAILWAY_API_TOKEN` - canonical automation token for Railway CLI authentication
+- `RAILWAY_TOKEN` - compatibility fallback only
 
 **Quick Fix:**
 ```bash
@@ -49,6 +50,16 @@ railway run -p <project-id> -e dev -s backend -- env | grep RAILWAY_SERVICE
 
 # Or for CI/automation, set RAILWAY_API_TOKEN from 1Password:
 export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
+```
+
+For DB-heavy host workflows, do not hand-roll `railway run ... psql "$DATABASE_URL"` if the service injects internal-only hosts. Prefer:
+
+```bash
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --project-id <project-id> \
+    --env dev \
+    query --sql 'SELECT 1'
 ```
 
 ### 2. URL Variables Check
@@ -144,8 +155,8 @@ Run all checks at once:
 ERRORS=0
 
 # 1. Railway Context
-if [[ -z "${RAILWAY_ENVIRONMENT:-}" && -z "${RAILWAY_API_TOKEN:-}" ]]; then
-  echo "[FAIL] No Railway context (RAILWAY_ENVIRONMENT or RAILWAY_API_TOKEN)"
+if [[ -z "${RAILWAY_ENVIRONMENT:-}" && -z "${RAILWAY_API_TOKEN:-}" && -z "${RAILWAY_TOKEN:-}" ]]; then
+  echo "[FAIL] No Railway context (RAILWAY_ENVIRONMENT or Railway automation token)"
   ERRORS=$((ERRORS + 1))
 else
   echo "[OK] Railway context found"

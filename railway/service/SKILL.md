@@ -201,6 +201,8 @@ SCRIPT
 
 ## Link Service
 
+For agent automation, prefer explicit `railway run -p/-e/-s -- ...` or a script wrapper with explicit context. Treat interactive linking as a human/manual flow, not the default agent path.
+
 Switch the linked service for the current directory:
 
 ```bash
@@ -211,6 +213,22 @@ Or specify directly:
 
 ```bash
 railway service link <service-name>
+```
+
+Fully non-interactive linking is acceptable only when all required flags are provided:
+
+```bash
+railway link --project <project-id> --environment <env> --service <service> --json
+```
+
+Automation-safe alternatives:
+
+```bash
+railway run -p <project-id> -e <env> -s <service> -- env | grep RAILWAY_SERVICE
+
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-run.sh -- \
+  env | grep RAILWAY_SERVICE
 ```
 
 ## Composability
@@ -226,7 +244,13 @@ railway service link <service-name>
 
 ### No Service Linked
 ```
-No service linked. Run `railway service link` to link a service.
+No service linked.
+
+Human/manual flow:
+  railway service link
+
+Agent automation:
+  railway run -p <project-id> -e <env> -s <service> -- <command>
 ```
 
 ### No Deployments
