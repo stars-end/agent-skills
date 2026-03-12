@@ -12,6 +12,92 @@ dx_auth_op_token_valid() {
   OP_SERVICE_ACCOUNT_TOKEN="$token" op whoami >/dev/null 2>&1
 }
 
+dx_auth_secret_cache_dir() {
+  printf '%s\n' "${DX_AUTH_SECRET_CACHE_DIR:-$HOME/.cache/dx/op-secrets}"
+}
+
+dx_auth_secret_cache_ttl_seconds() {
+  printf '%s\n' "${DX_AUTH_SECRET_CACHE_TTL_SECONDS:-86400}"
+}
+
+dx_auth_file_mtime_epoch() {
+  local file_path="${1:-}"
+  [[ -n "$file_path" && -e "$file_path" ]] || {
+    printf '0\n'
+    return 0
+  }
+
+  perl -e 'my @s = stat($ARGV[0]); print defined($s[9]) ? int($s[9]) : 0; exit 0' "$file_path" 2>/dev/null || printf '0\n'
+}
+
+dx_auth_secret_cache_fresh() {
+  local cache_file="${1:-}"
+  local ttl now mtime age
+  [[ -f "$cache_file" ]] || return 1
+
+  ttl="$(dx_auth_secret_cache_ttl_seconds)"
+  [[ "$ttl" =~ ^[0-9]+$ ]] || ttl=86400
+  now="$(date +%s)"
+  mtime="$(dx_auth_file_mtime_epoch "$cache_file")"
+  age=$((now - mtime))
+  [[ "$age" -le "$ttl" ]]
+}
+
+dx_auth_secret_cache_file() {
+  local cache_key="${1:-}"
+  [[ -n "$cache_key" ]] || return 1
+  printf '%s/%s' "$(dx_auth_secret_cache_dir)" "$cache_key"
+}
+
+dx_auth_secret_cache_key_for_ref() {
+  local ref="${1:-}"
+  local key="${2:-}"
+  if [[ -n "$key" ]]; then
+    printf '%s\n' "$key"
+    return 0
+  fi
+
+  case "$ref" in
+    *"/RAILWAY_API_TOKEN")
+      printf 'railway_api_token\n'
+      ;;
+    *"/GITHUB_TOKEN")
+      printf 'github_token\n'
+      ;;
+    *"/ZAI_API_KEY")
+      printf 'zai_api_key\n'
+      ;;
+    *)
+      printf '%s\n' "$ref" | tr '/:.' '_' | tr -cd '[:alnum:]_-'
+      ;;
+  esac
+}
+
+dx_auth_read_secret_cached() {
+  local ref="${1:-}"
+  local cache_key="${2:-}"
+  local cache_file secret
+  [[ -n "$ref" ]] || return 1
+
+  cache_key="$(dx_auth_secret_cache_key_for_ref "$ref" "$cache_key")"
+  cache_file="$(dx_auth_secret_cache_file "$cache_key")" || return 1
+
+  if dx_auth_secret_cache_fresh "$cache_file"; then
+    cat "$cache_file"
+    return 0
+  fi
+
+  dx_auth_load_op_service_account_token || return 1
+
+  secret="$(op read "$ref" 2>/dev/null || true)"
+  [[ -n "$secret" ]] || return 1
+
+  mkdir -p "$(dirname "$cache_file")"
+  printf '%s' "$secret" > "$cache_file"
+  chmod 600 "$cache_file" 2>/dev/null || true
+  printf '%s' "$secret"
+}
+
 dx_auth_load_op_service_account_token() {
   dx_auth_has_cmd op || return 1
 
@@ -86,12 +172,37 @@ dx_auth_load_railway_api_token() {
     return 0
   fi
 
-  dx_auth_load_op_service_account_token || return 1
-
   local token
-  token="$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN" 2>/dev/null || true)"
+  token="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN" "railway_api_token" || true)"
   [[ -n "$token" ]] || return 1
 
   export RAILWAY_API_TOKEN="$token"
+  return 0
+}
+
+dx_auth_load_github_token() {
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    return 0
+  fi
+
+  local token
+  token="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/GITHUB_TOKEN" "github_token" || true)"
+  [[ -n "$token" ]] || return 1
+
+  export GH_TOKEN="$token"
+  return 0
+}
+
+dx_auth_load_zai_api_key() {
+  if [[ -n "${ZAI_API_KEY:-}" && "${ZAI_API_KEY}" != op://* ]]; then
+    return 0
+  fi
+
+  local ref="${ZAI_API_KEY:-op://dev/Agent-Secrets-Production/ZAI_API_KEY}"
+  local token
+  token="$(dx_auth_read_secret_cached "$ref" "zai_api_key" || true)"
+  [[ -n "$token" ]] || return 1
+
+  export ZAI_API_KEY="$token"
   return 0
 }

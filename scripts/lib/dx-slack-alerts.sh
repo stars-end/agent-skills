@@ -57,13 +57,7 @@ agent_coordination_file_mtime_epoch() {
     echo 0
     return 0
   fi
-  if stat -f '%m' "$file" >/dev/null 2>&1; then
-    stat -f '%m' "$file"
-  elif stat -c '%Y' "$file" >/dev/null 2>&1; then
-    stat -c '%Y' "$file"
-  else
-    echo 0
-  fi
+  perl -e 'my @s = stat($ARGV[0]); print defined($s[9]) ? int($s[9]) : 0; exit 0' "$file" 2>/dev/null || echo 0
 }
 
 agent_coordination_cache_fresh() {

@@ -19,6 +19,28 @@
 CC_GLM_CANONICAL_MODEL="glm-5"
 ADAPTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CC_GLM_SCRIPTS="${ADAPTER_DIR}/../../extended/cc-glm/scripts"
+# shellcheck disable=SC1091
+source "${ADAPTER_DIR}/../lib/dx-auth.sh"
+
+adapter_resolve_auth_token() {
+    local default_ref="op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY"
+
+    if [[ -n "${CC_GLM_AUTH_TOKEN:-}" ]]; then
+        printf '%s\n' "$CC_GLM_AUTH_TOKEN"
+        return 0
+    fi
+
+    if [[ -n "${ZAI_API_KEY:-}" ]]; then
+        if [[ "$ZAI_API_KEY" == op://* ]]; then
+            dx_auth_read_secret_cached "$ZAI_API_KEY" "zai_api_key"
+            return $?
+        fi
+        printf '%s\n' "$ZAI_API_KEY"
+        return 0
+    fi
+
+    dx_auth_read_secret_cached "$default_ref" "zai_api_key"
+}
 
 adapter_find_cc_glm() {
     for candidate in "claude" "/home/linuxbrew/.linuxbrew/bin/claude" "/opt/homebrew/bin/claude" "$HOME/.local/bin/claude"; do
@@ -81,9 +103,9 @@ adapter_preflight() {
         fi
     elif [[ -n "${ZAI_API_KEY:-}" ]]; then
         if [[ "$ZAI_API_KEY" == op://* ]]; then
-            if command -v op >/dev/null 2>&1; then
+            if command -v dx_auth_read_secret_cached >/dev/null 2>&1; then
                 auth_source="ZAI_API_KEY (op://)"
-                if op read "$ZAI_API_KEY" >/dev/null 2>&1; then
+                if dx_auth_read_secret_cached "$ZAI_API_KEY" "zai_api_key" >/dev/null 2>&1; then
                     auth_ok=true
                 else
                     echo "OP_RESOLUTION_FAILED"
@@ -101,9 +123,9 @@ adapter_preflight() {
         fi
     else
         # Try default op:// path
-        if command -v op >/dev/null 2>&1; then
+        if command -v dx_auth_read_secret_cached >/dev/null 2>&1; then
             auth_source="default op://"
-            if op read "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" >/dev/null 2>&1; then
+            if dx_auth_read_secret_cached "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" "zai_api_key" >/dev/null 2>&1; then
                 auth_ok=true
             else
                 echo "NO_AUTH_SOURCE"
@@ -205,17 +227,7 @@ adapter_probe_model() {
     
     # Resolve auth
     local auth_token=""
-    if [[ -n "${CC_GLM_AUTH_TOKEN:-}" ]]; then
-        auth_token="$CC_GLM_AUTH_TOKEN"
-    elif [[ -n "${ZAI_API_KEY:-}" ]]; then
-        if [[ "$ZAI_API_KEY" == op://* ]]; then
-            auth_token="$(op read "$ZAI_API_KEY" 2>/dev/null)" || return 1
-        else
-            auth_token="$ZAI_API_KEY"
-        fi
-    else
-        auth_token="$(op read "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" 2>/dev/null)" || return 1
-    fi
+    auth_token="$(adapter_resolve_auth_token)" || return 1
     
     # Quick probe with timeout
     timeout 15 curl -s -X POST \
