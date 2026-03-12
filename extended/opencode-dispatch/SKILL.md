@@ -1,6 +1,6 @@
 ---
 name: opencode-dispatch
-description: OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking.
+description: OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` as the default governed lane. Treat `opencode serve` / attach workflows as legacy opt-in paths only. Pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking.
 tags: [workflow, dispatch, opencode, parallel, governance, benchmark, glm5]
 allowed-tools:
   - Bash
@@ -15,7 +15,7 @@ Use `dx-runner --provider opencode` as the governed default entrypoint.
 
 - Throughput-oriented parallel waves
 - Reproducible benchmark runs
-- Shared server execution (`opencode serve` + attach/run clients)
+- Legacy shared server execution (`opencode serve` + attach/run clients) only when explicitly required
 
 ## When To Use cc-glm Instead
 
@@ -33,7 +33,7 @@ dx-runner check --beads bd-xxx --json
 # Direct headless lane (advanced)
 opencode run -m zhipuai-coding-plan/glm-5 "Implement task T1 from plan.md"
 
-# Server lane (single host)
+# Legacy server lane (single host, opt-in only)
 opencode serve --hostname 127.0.0.1 --port 4096
 opencode run --attach http://127.0.0.1:4096 -m zhipuai-coding-plan/glm-5 "Implement task T2 from plan.md"
 ```

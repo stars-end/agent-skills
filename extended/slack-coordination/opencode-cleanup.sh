@@ -1,11 +1,22 @@
 #!/bin/bash
-# opencode-cleanup.sh - Session cleanup cron job
+# opencode-cleanup.sh - Legacy OpenCode server cleanup job
 # Deletes OpenCode sessions older than 24 hours
-# Run via cron: 0 2 * * * /home/feng/agent-skills/slack-coordination/opencode-cleanup.sh
+# Retired by default. Only run with:
+#   SLACK_COORDINATION_ENABLE_LEGACY_OPENCODE_SERVER=1
 
 set -e
 
-OPENCODE_URL="${OPENCODE_URL:-http://localhost:4105}"
+if [[ "${SLACK_COORDINATION_ENABLE_LEGACY_OPENCODE_SERVER:-0}" != "1" ]]; then
+    echo "legacy OpenCode server cleanup disabled; set SLACK_COORDINATION_ENABLE_LEGACY_OPENCODE_SERVER=1 to opt in"
+    exit 0
+fi
+
+OPENCODE_URL="${OPENCODE_URL:-}"
+if [[ -z "$OPENCODE_URL" ]]; then
+    echo "OPENCODE_URL must be set when legacy OpenCode server cleanup is enabled" >&2
+    exit 1
+fi
+
 MAX_AGE_HOURS=24
 LOG_FILE="$HOME/.local/log/opencode-cleanup.log"
 mkdir -p "$(dirname "$LOG_FILE")"

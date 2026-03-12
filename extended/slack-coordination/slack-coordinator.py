@@ -2,8 +2,11 @@
 """
 slack-coordinator.py - Multi-Agent Slack Coordinator
 
-Bridges Slack events to OpenCode servers via Socket Mode.
-Routes tasks to appropriate agents based on channel and mentions.
+Legacy Slack-to-OpenCode server bridge.
+
+This script depends on the retired OpenCode HTTP server surface. It is
+quarantined behind explicit opt-in and should not be treated as part of the
+default DX runner flow.
 
 Usage:
     python slack-coordinator.py
@@ -11,7 +14,8 @@ Usage:
 Environment Variables:
     SLACK_BOT_TOKEN    - Bot token (xoxb-...)
     SLACK_APP_TOKEN    - App-level token for Socket Mode (xapp-...)
-    OPENCODE_URL       - OpenCode server URL (default: http://localhost:4105)
+    OPENCODE_URL       - Legacy OpenCode server URL (no default)
+    SLACK_COORDINATION_ENABLE_LEGACY_OPENCODE_SERVER=1 to opt in
     AGENT_NAME         - Agent identity for responses (default: epyc6)
 """
 
@@ -33,7 +37,10 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 import httpx
 
 # Configuration
-LOCAL_OPENCODE_URL = os.environ.get("OPENCODE_URL", "http://localhost:4105")
+LEGACY_OPENCODE_SERVER_ENABLED = os.environ.get(
+    "SLACK_COORDINATION_ENABLE_LEGACY_OPENCODE_SERVER", "0"
+) == "1"
+LOCAL_OPENCODE_URL = os.environ.get("OPENCODE_URL", "")
 AGENT_NAME = os.environ.get("AGENT_NAME", "epyc6")
 MAX_SESSIONS = 10
 SESSION_TIMEOUT_MIN = 30
@@ -200,6 +207,8 @@ def parse_target_vm(text: str) -> str:
 
 def get_opencode_url(vm: str) -> str:
     """Get OpenCode URL for a VM."""
+    if not LEGACY_OPENCODE_SERVER_ENABLED:
+        return ""
     return VM_ENDPOINTS.get(vm, LOCAL_OPENCODE_URL)
 
 
@@ -293,6 +302,9 @@ async def dispatch_to_jules(issue_id: str, repo: str) -> Optional[str]:
 async def check_opencode_health(vm: str = None) -> bool:
     """Check if OpenCode server is healthy."""
     url = get_opencode_url(vm) if vm else LOCAL_OPENCODE_URL
+    if not url:
+        logger.info("Legacy OpenCode server mode disabled; skipping health check")
+        return False
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{url}/global/health", timeout=5)
@@ -359,6 +371,9 @@ async def request_approval(say, thread_ts: str, message: str) -> None:
 async def get_session_count(vm: str = None) -> int:
     """Get current active session count."""
     url = get_opencode_url(vm) if vm else LOCAL_OPENCODE_URL
+    if not url:
+        logger.warning("Legacy OpenCode server mode disabled; cannot get session count")
+        return 0
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{url}/session", timeout=5)
@@ -372,6 +387,9 @@ async def get_session_count(vm: str = None) -> int:
 async def create_opencode_session(title: str, vm: str = None) -> Optional[str]:
     """Create a new OpenCode session on specified VM."""
     url = get_opencode_url(vm) if vm else LOCAL_OPENCODE_URL
+    if not url:
+        logger.warning("Legacy OpenCode server mode disabled; refusing to create session")
+        return None
     try:
         # Check session limit
         count = await get_session_count(vm)
@@ -395,6 +413,9 @@ async def create_opencode_session(title: str, vm: str = None) -> Optional[str]:
 async def send_to_opencode(session_id: str, prompt: str, vm: str = None) -> Optional[dict]:
     """Send a prompt to OpenCode session on specified VM."""
     url = get_opencode_url(vm) if vm else LOCAL_OPENCODE_URL
+    if not url:
+        logger.warning("Legacy OpenCode server mode disabled; refusing to send request")
+        return None
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -615,6 +636,13 @@ def main():
     logger.info(f"Local OpenCode URL: {LOCAL_OPENCODE_URL}")
     logger.info(f"VM Endpoints: {VM_ENDPOINTS}")
     logger.info(f"Worktree base: {WORKTREE_BASE}")
+
+    if not LEGACY_OPENCODE_SERVER_ENABLED:
+        logger.warning(
+            "Legacy OpenCode server mode is retired. Set "
+            "SLACK_COORDINATION_ENABLE_LEGACY_OPENCODE_SERVER=1 only for explicit legacy recovery."
+        )
+        return
     
     # Verify environment
     if not os.environ.get("SLACK_BOT_TOKEN"):

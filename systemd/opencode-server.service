@@ -1,8 +1,12 @@
 [Unit]
-Description=OpenCode Server for Agent Coordination
+Description=LEGACY OpenCode Server for Agent Coordination (retired)
 After=network.target
 
 [Service]
+# RETIRED:
+# - Do not enable by default.
+# - Slack/OpenCode server coordination is quarantined behind explicit opt-in.
+# - See docs/investigations/2026-03-12-opencode-server-surface-audit.md.
 Type=simple
 Environment="PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin"
 # V4.2 Security: Load Encrypted Credential

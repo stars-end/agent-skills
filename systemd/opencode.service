@@ -1,8 +1,12 @@
 [Unit]
-Description=OpenCode AI Server (V4.2.1 - Scoped Env)
+Description=LEGACY OpenCode AI Server (retired for default DX flows)
 After=network.target
 
 [Service]
+# RETIRED:
+# - Do not enable by default.
+# - Default OpenCode execution is CLI-first via dx-runner/opencode run.
+# - See docs/investigations/2026-03-12-opencode-server-surface-audit.md.
 Type=simple
 Environment="PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin"
 

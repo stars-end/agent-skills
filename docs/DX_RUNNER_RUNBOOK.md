@@ -2,6 +2,10 @@
 
 Wave-based parallel dispatch with OpenCode (GLM-5) + Gemini.
 
+Note:
+- Default OpenCode execution is CLI-first (`dx-runner` -> `opencode run`).
+- Shared OpenCode HTTP server mode is legacy/opt-in and is not required for standard fleet health.
+
 ## Quick Reference
 
 ```bash
@@ -49,7 +53,8 @@ dx-runner preflight --provider gemini
 OpenCode CLI contract is grounded in official docs:
 - CLI docs: https://opencode.ai/docs/cli/
 - Server docs: https://opencode.ai/docs/server/
-- Covered commands: `opencode run`, `opencode serve`, `opencode attach`, `opencode models`
+- Covered commands: `opencode run`, `opencode models`
+- Legacy/opt-in only: `opencode serve`, `opencode attach`
 - Runner adapter uses documented flags: `run --model ... --format json --dir <worktree>`
 
 **Pass criteria:**
@@ -147,7 +152,7 @@ done
 |------|---------|----------|
 | `opencode_model_unavailable` | Canonical model unavailable | Use gemini or cc-glm |
 | `opencode_model_unsupported` | Requested non-canonical model | Must use GLM-5 |
-| `opencode_attach_mode_unavailable` | Attach/server mode unsupported by local CLI/runtime | Use headless run mode or upgrade CLI |
+| `opencode_attach_mode_unavailable` | Legacy attach/server mode unsupported by local CLI/runtime | Use headless run mode or upgrade CLI |
 | `opencode_attach_missing_url` | Attach mode requested without URL | Set `OPENCODE_ATTACH_URL` or use run mode |
 | `opencode_binary_missing` | CLI not installed | Install opencode |
 | `opencode_auth_blocked` | Auth/quota issue | Check API key, quota |

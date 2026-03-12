@@ -72,32 +72,28 @@ diagnose_local() {
 
     # 2. OpenCode
     echo ""
-    echo -e "${BLUE}=== OpenCode Server ===${RESET}"
-    
+    echo -e "${BLUE}=== OpenCode Execution Surface ===${RESET}"
+    echo -e "${GREEN}✅ Default contract: CLI-first via dx-runner / opencode run${RESET}"
+
+    local legacy_server_active=0
     if command -v systemctl >/dev/null 2>&1; then
-        # Linux/Systemd check
-        if systemctl --user is-active opencode.service >/dev/null 2>&1; then
-            echo -e "${GREEN}✅ OpenCode server: running${RESET}"
-        else
-            echo -e "${RED}❌ OpenCode server: not running${RESET}"
-            ((ISSUES_FOUND++))
-        fi
+        for unit in opencode.service opencode-server.service; do
+            if systemctl --user is-active "$unit" >/dev/null 2>&1; then
+                echo -e "${YELLOW}⚠️  Legacy OpenCode server active: $unit${RESET}"
+                legacy_server_active=1
+            fi
+        done
     elif command -v launchctl >/dev/null 2>&1; then
-        # macOS/Launchd check
         if launchctl list | grep -q "com.agent.opencode-server"; then
-            echo -e "${GREEN}✅ OpenCode server: running (launchd)${RESET}"
-        else
-            echo -e "${RED}❌ OpenCode server: not running${RESET}"
-            ((ISSUES_FOUND++))
+            echo -e "${YELLOW}⚠️  Legacy OpenCode server active via launchd${RESET}"
+            legacy_server_active=1
         fi
     fi
 
-    # Health check (common)
-    if curl -s http://localhost:4105/global/health 2>/dev/null | grep -q "healthy"; then
-        echo -e "${GREEN}✅ OpenCode health: OK${RESET}"
+    if [[ "$legacy_server_active" -eq 0 ]]; then
+        echo -e "${GREEN}✅ No legacy OpenCode server required or running${RESET}"
     else
-        echo -e "${RED}❌ OpenCode health: failed${RESET}"
-        ((ISSUES_FOUND++))
+        echo -e "${YELLOW}   See docs/investigations/2026-03-12-opencode-server-surface-audit.md${RESET}"
     fi
 
     # 3. Coordinator
@@ -105,17 +101,15 @@ diagnose_local() {
     echo -e "${BLUE}=== Slack Coordinator ===${RESET}"
     if command -v systemctl >/dev/null 2>&1; then
         if systemctl --user is-active slack-coordinator.service >/dev/null 2>&1; then
-            echo -e "${GREEN}✅ Coordinator: running${RESET}"
+            echo -e "${YELLOW}⚠️  Legacy coordinator server path active${RESET}"
         else
-            echo -e "${RED}❌ Coordinator: not running${RESET}"
-            ((ISSUES_FOUND++))
+            echo -e "${GREEN}✅ Legacy coordinator server path not running${RESET}"
         fi
     elif command -v launchctl >/dev/null 2>&1; then
         if launchctl list | grep -q "com.starsend.slack-coordinator"; then
-            echo -e "${GREEN}✅ Coordinator: running (launchd)${RESET}"
+            echo -e "${YELLOW}⚠️  Legacy coordinator server path active (launchd)${RESET}"
         else
-            echo -e "${RED}❌ Coordinator: not running${RESET}"
-            ((ISSUES_FOUND++))
+            echo -e "${GREEN}✅ Legacy coordinator server path not running${RESET}"
         fi
     fi
 

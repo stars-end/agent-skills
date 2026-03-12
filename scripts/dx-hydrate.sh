@@ -58,25 +58,9 @@ fi
 # 3.1 Slack MCP (OPTIONAL)
 echo -e "${GREEN} -> Slack MCP is optional (not configured by default)...${RESET}"
 
-# 3.2 Install OpenCode (Systemd) — OPTIONAL coordinator stack
-echo -e "${GREEN} -> Installing OpenCode systemd service (optional)...${RESET}"
-mkdir -p "$HOME/.config/systemd/user"
-if [ -f "$AGENTS_ROOT/systemd/opencode.service" ]; then
-    cp "$AGENTS_ROOT/systemd/opencode.service" "$HOME/.config/systemd/user/"
-
-    # Ensure scoped env file exists (safe to copy template; op run resolves op:// at runtime).
-    mkdir -p "$HOME/.config/opencode"
-    if [ ! -f "$HOME/.config/opencode/.env" ] && [ -f "$AGENTS_ROOT/scripts/env/opencode.env.template" ]; then
-        cp "$AGENTS_ROOT/scripts/env/opencode.env.template" "$HOME/.config/opencode/.env"
-        chmod 600 "$HOME/.config/opencode/.env" 2>/dev/null || true
-    fi
-
-    systemctl --user daemon-reload 2>/dev/null || true
-    systemctl --user enable opencode 2>/dev/null || true
-    echo "   OpenCode service installed. Start with: systemctl --user start opencode"
-else
-    echo "   OpenCode service file not found, skipping..."
-fi
+# 3.2 OpenCode shared server service — RETIRED
+echo -e "${GREEN} -> OpenCode systemd service is retired for default DX flows...${RESET}"
+echo "   Skipping opencode.service hydration; use dx-runner/opencode run instead."
 
 # 3.3 Slack Coordinator: REMOVED in V8 (replaced by openclawd + cron)
 # See bd-d25k for deprecation rationale.
