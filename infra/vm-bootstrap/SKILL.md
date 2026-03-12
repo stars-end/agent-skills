@@ -5,7 +5,7 @@ description: |
   Supports modes: check (warn-only), install (operator-confirmed), strict (CI-ready).
   Enforces Linux-only + mise as canonical; honors preference brew→npm (with apt fallback).
   Verifies required tools: mise, node, pnpm, python, poetry, gh, railway, op, bd, dcg, ru, tmux, rg.
-  Handles optional tools as warnings: tailscale, playwright, docker, bv.
+  Handles optional tools as warnings: tailscale, playwright, agent-browser, docker, bv.
   Never prints/seeds secrets; never stores tokens in repo/YAML; Railway vars only for app runtime env.
   Safe on dirty repos (refuses and points to dirty-repo-bootstrap skill, or snapshots WIP branch).
   Keywords: vm, bootstrap, setup, mise, toolchain, linux, environment, provision, verify, new vm
@@ -51,6 +51,7 @@ Verify and optionally install required tools for a standardized Linux developmen
 |------|-----|--------|
 | `bv` | Beads graph insights | `bv --version` |
 | `playwright` | UI/E2E | `mise exec -- playwright --version` |
+| `agent-browser` | Manual CLI browser verification | `agent-browser --help` |
 | `tailscale` | cross-VM networking | `tailscale status` |
 | `docker` | Railway `railway dev` / local deps | `docker --version` |
 
