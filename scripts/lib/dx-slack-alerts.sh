@@ -31,6 +31,11 @@ set -euo pipefail
 #   from hot-path checks and alerting loops.
 # - Default TTL is 24h and can be tuned via DX_ALERTS_CACHE_TTL_SECONDS.
 
+AGENT_COORDINATION_SELF_PATH="${BASH_SOURCE[0]:-$0}"
+AGENT_COORDINATION_LIB_DIR="$(cd "$(dirname "${AGENT_COORDINATION_SELF_PATH}")" && pwd)"
+# shellcheck disable=SC1091
+source "${AGENT_COORDINATION_LIB_DIR}/dx-auth.sh" 2>/dev/null || true
+
 agent_coordination_slack_token() {
   local token="${SLACK_MCP_XOXB_TOKEN:-}"
   if [[ -z "${token}" ]]; then token="${SLACK_MCP_XOXP_TOKEN:-}"; fi
@@ -167,17 +172,26 @@ agent_coordination_refresh_transport_cache() {
     rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
     return 1
   fi
-  if ! command -v op >/dev/null 2>&1; then
-    agent_coordination_set_refresh_cooldown
-    rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
-    return 1
-  fi
+  if command -v dx_auth_refresh_agent_item_cache >/dev/null 2>&1; then
+    if ! dx_auth_refresh_agent_item_cache >/dev/null 2>&1; then
+      agent_coordination_set_refresh_cooldown
+      rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
+      return 1
+    fi
+    item_json="$(cat "$(dx_auth_agent_item_cache_file)" 2>/dev/null || true)"
+  else
+    if ! command -v op >/dev/null 2>&1; then
+      agent_coordination_set_refresh_cooldown
+      rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
+      return 1
+    fi
 
-  item_json="$(op item get "Agent-Secrets-Production" --vault dev --format json 2>/dev/null || true)"
-  if [[ -z "$item_json" ]]; then
-    agent_coordination_set_refresh_cooldown
-    rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
-    return 1
+    item_json="$(op item get "Agent-Secrets-Production" --vault dev --format json 2>/dev/null || true)"
+    if [[ -z "$item_json" ]]; then
+      agent_coordination_set_refresh_cooldown
+      rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
+      return 1
+    fi
   fi
 
   AC_ITEM_JSON="$item_json" python3 - "$tmp_file" <<'PY'
@@ -219,6 +233,10 @@ PY
 }
 
 agent_coordination_load_op_token() {
+  if command -v dx_auth_load_op_service_account_token >/dev/null 2>&1; then
+    dx_auth_load_op_service_account_token >/dev/null 2>&1 && return 0
+  fi
+
   if ! command -v op >/dev/null 2>&1; then
     return 1
   fi
@@ -291,6 +309,10 @@ agent_coordination_resolve_op_ref() {
   if [[ "$value" != op://* ]]; then
     printf '%s' "$value"
     return 0
+  fi
+  if command -v dx_auth_read_secret_cached >/dev/null 2>&1; then
+    dx_auth_read_secret_cached "$value"
+    return $?
   fi
   agent_coordination_load_op_token >/dev/null 2>&1 || true
   if ! command -v op >/dev/null 2>&1; then
