@@ -1,5 +1,7 @@
 # Token Renaming and Security Fixes Summary
 
+> Historical / legacy: this summary includes retired OpenCode server-service references.
+
 **Date**: 2026-01-24
 **Status**: ✅ Complete
 

@@ -176,7 +176,7 @@ dx-batch doctor --wave-id <wave-id> --json
 # Headless single-run lane
 opencode run -m zhipuai-coding-plan/glm-5 "Implement task T1 from plan.md"
 
-# Server lane for parallel clients
+# Legacy server lane for parallel clients (opt-in only)
 opencode serve --hostname 127.0.0.1 --port 4096
 opencode run --attach http://127.0.0.1:4096 -m zhipuai-coding-plan/glm-5 "Implement task T2 from plan.md"
 \`\`\`

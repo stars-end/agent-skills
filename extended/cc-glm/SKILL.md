@@ -18,7 +18,7 @@ allowed-tools:
 
 ## Lane Positioning
 
-- Primary throughput lane: OpenCode (`opencode run` / `opencode serve`)
+- Primary throughput lane: OpenCode headless CLI (`opencode run`)
 - Reliability backstop lane: cc-glm via `dx-runner --provider cc-glm` with baseline/integrity/feature-key gates
 - Use cc-glm when OpenCode misses SLOs, fails governance gates, or the wave is marked critical
 

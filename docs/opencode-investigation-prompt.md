@@ -1,5 +1,7 @@
 # OpenCode Dispatch Investigation - epyc6
 
+> Historical / legacy: this prompt investigates the retired OpenCode HTTP server path on port `4105`.
+
 ## Context
 
 You are investigating why OpenCode dispatches from the Nightly Fleet Dispatcher are not completing on this VM (epyc6). The dispatches log "SUCCESS" but no code changes or PRs are being created.

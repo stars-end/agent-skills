@@ -103,8 +103,8 @@ See project-specific docs for detailed configuration.
 | `scripts/deploy.sh` | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_API_TOKEN) |
 | Automated status checks | Railway context (`railway shell` or `railway run -p/-e/-s`) | ✅ Yes (must have RAILWAY_API_TOKEN) |
 | **Systemd Services** | | |
-| opencode.service | op-only (LoadCredentialEncrypted) | N/A |
-| slack-coordinator.service | op-only (LoadCredentialEncrypted) | N/A |
+| opencode.service | legacy retired server-mode unit | N/A |
+| slack-coordinator.service | legacy retired coordination unit | N/A |
 
 ### Clarification: op-only vs Platform Context
 
