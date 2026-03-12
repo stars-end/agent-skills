@@ -10,7 +10,7 @@ This infrastructure uses 1Password Service Accounts to provide secure, non-inter
 ### V4.2 Security Model (Current)
 
 **Encrypted Credentials (Recommended)**
-- **Format**: `~/.config/systemd/user/op_token.cred`
+- **Format**: `~/.config/systemd/user/op-<canonical-host-key>-token.cred`
 - **Encryption**: AES-256-GCM via `systemd-creds`
 - **Permissions**: 0600 (user read/write only)
 - **Decryption**: Runtime only (in-memory) via `LoadCredentialEncrypted` (or `LoadCredential` fallback)
@@ -61,7 +61,7 @@ This infrastructure uses 1Password Service Accounts to provide secure, non-inter
 
 **Service Fails to Start**
 - Check logs: `journalctl --user -u opencode.service -n 50`
-- Verify credential: `systemd-creds decrypt ~/.config/systemd/user/op_token.cred` (or `op_token` file)
+- Verify credential: `systemd-creds decrypt ~/.config/systemd/user/op-<canonical-host-key>-token.cred` (or `op-<canonical-host-key>-token` file)
 - Verify `op` CLI: `op --version` (must be >= 2.18.0)
 
 **"Permission Denied" on Decryption**

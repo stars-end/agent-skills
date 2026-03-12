@@ -53,19 +53,17 @@ This document provides a deterministic verification matrix for all canonical VMs
 | VM | Token File Path | Status |
 |----|-----------------|--------|
 | homedesktop-wsl | `~/.config/systemd/user/op-homedesktop-wsl-token` | ✅ Active |
-| macmini | `~/.config/systemd/user/op-macmini-token` | ✅ Active (legacy) |
-| epyc6 | N/A | ❌ No op CLI |
+| macmini | `~/.config/systemd/user/op-macmini-token` | ✅ Active |
+| epyc6 | `~/.config/systemd/user/op-epyc6-token` | ✅ Active |
 | epyc12 | `~/.config/systemd/user/op-epyc12-token` | ✅ Token file present |
-
-**Legacy Note:** macmini uses a hardcoded legacy path `op-macmini-token` in `cc-glm-headless.sh` for backward compatibility.
 
 ### 2.4 cc-glm-headless Resolution State
 
 | VM | Resolution Path | Status | Notes |
 |----|-----------------|--------|-------|
 | homedesktop-wsl | Primary | ✅ Working | Uses `op-homedesktop-wsl-token` |
-| macmini | Primary (with fallback) | ✅ Working | Falls back to `op-macmini-token` legacy path |
-| epyc6 | Env-only | ⚠️ Requires setup | Must set `CC_GLM_AUTH_TOKEN` or `ZAI_API_KEY` env var |
+| macmini | Primary | ✅ Working | Uses `op-macmini-token` |
+| epyc6 | Primary | ✅ Working | Uses `op-epyc6-token` |
 | epyc12 | Env-only | ⚠️ Requires setup | Must set `CC_GLM_AUTH_TOKEN` or `ZAI_API_KEY` env var |
 
 **Resolution Precedence (from `cc-glm-headless.sh`):**

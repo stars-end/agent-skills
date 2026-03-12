@@ -100,6 +100,10 @@ detect_host_key() {
     *homedesktop* ) echo "homedesktop-wsl" ; return 0 ;;
     *epyc12* ) echo "epyc12" ; return 0 ;;
     *epyc6* ) echo "epyc6" ; return 0 ;;
+    fengs-mac-mini-3* ) echo "macmini" ; return 0 ;;
+    windows-r2qk3b1* ) echo "homedesktop-wsl" ; return 0 ;;
+    v2202509262171386004* ) echo "epyc6" ; return 0 ;;
+    v2202601262171429561* ) echo "epyc12" ; return 0 ;;
   esac
 
   case "$(uname -s 2>/dev/null || true)" in
@@ -118,6 +122,62 @@ detect_host_key() {
 }
 
 export CANONICAL_HOST_KEY="$(detect_host_key)"
+
+canonical_known_host_keys() {
+  printf '%s\n' macmini homedesktop-wsl epyc6 epyc12
+}
+
+canonical_op_token_name() {
+  local host_key="${1:-${CANONICAL_HOST_KEY:-$(detect_host_key)}}"
+  printf 'op-%s-token\n' "$host_key"
+}
+
+canonical_op_token_plaintext_path() {
+  local host_key="${1:-${CANONICAL_HOST_KEY:-$(detect_host_key)}}"
+  local home_dir="${2:-$HOME}"
+  printf '%s/.config/systemd/user/%s\n' "$home_dir" "$(canonical_op_token_name "$host_key")"
+}
+
+canonical_op_token_cred_path() {
+  local host_key="${1:-${CANONICAL_HOST_KEY:-$(detect_host_key)}}"
+  printf '%s.cred\n' "$(canonical_op_token_plaintext_path "$host_key" "${2:-$HOME}")"
+}
+
+canonical_op_token_plaintext_candidates() {
+  local home_dir="${1:-$HOME}"
+  local current_key="${CANONICAL_HOST_KEY:-$(detect_host_key)}"
+  local short_host full_host key
+
+  canonical_op_token_plaintext_path "$current_key" "$home_dir"
+  for key in $(canonical_known_host_keys); do
+    [[ "$key" == "$current_key" ]] && continue
+    canonical_op_token_plaintext_path "$key" "$home_dir"
+  done
+
+  short_host="$(hostname -s 2>/dev/null || hostname 2>/dev/null || printf 'unknown')"
+  full_host="$(hostname 2>/dev/null || printf '%s' "$short_host")"
+  printf '%s/.config/systemd/user/op-%s-token\n' "$home_dir" "$short_host"
+  printf '%s/.config/systemd/user/op-%s-token\n' "$home_dir" "$full_host"
+  printf '%s/.config/systemd/user/op_token\n' "$home_dir"
+}
+
+canonical_op_token_cred_candidates() {
+  local home_dir="${1:-$HOME}"
+  local current_key="${CANONICAL_HOST_KEY:-$(detect_host_key)}"
+  local short_host full_host key
+
+  canonical_op_token_cred_path "$current_key" "$home_dir"
+  for key in $(canonical_known_host_keys); do
+    [[ "$key" == "$current_key" ]] && continue
+    canonical_op_token_cred_path "$key" "$home_dir"
+  done
+
+  short_host="$(hostname -s 2>/dev/null || hostname 2>/dev/null || printf 'unknown')"
+  full_host="$(hostname 2>/dev/null || printf '%s' "$short_host")"
+  printf '%s/.config/systemd/user/op-%s-token.cred\n' "$home_dir" "$short_host"
+  printf '%s/.config/systemd/user/op-%s-token.cred\n' "$home_dir" "$full_host"
+  printf '%s/.config/systemd/user/op_token.cred\n' "$home_dir"
+}
 
 # Required vs optional repos (by host role)
 case "$CANONICAL_HOST_KEY" in

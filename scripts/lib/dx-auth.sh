@@ -2,6 +2,19 @@
 
 # Shared auth helpers for non-interactive OP + Railway workflows.
 
+dx_auth_source_canonical_targets() {
+  if command -v canonical_op_token_plaintext_candidates >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local lib_dir canonical_targets
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  canonical_targets="${lib_dir%/lib}/canonical-targets.sh"
+  [[ -r "$canonical_targets" ]] || return 1
+  # shellcheck disable=SC1090
+  source "$canonical_targets"
+}
+
 dx_auth_has_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
@@ -242,9 +255,7 @@ dx_auth_load_op_service_account_token() {
     return 0
   fi
 
-  local host_short host_full explicit_file candidate token decrypted
-  host_short="$(hostname -s 2>/dev/null || hostname 2>/dev/null || printf 'unknown')"
-  host_full="$(hostname 2>/dev/null || printf '%s' "$host_short")"
+  local explicit_file candidate token decrypted
   explicit_file="${OP_SERVICE_ACCOUNT_TOKEN_FILE:-}"
 
   if [[ -n "$explicit_file" && -r "$explicit_file" ]]; then
@@ -256,16 +267,20 @@ dx_auth_load_op_service_account_token() {
     fi
   fi
 
-  local -a plain_candidates=(
-    "${HOME}/.config/systemd/user/op-${host_short}-token"
-    "${HOME}/.config/systemd/user/op-${host_full}-token"
-    "${HOME}/.config/systemd/user/op-${CANONICAL_HOST_KEY:-}-token"
-    "${HOME}/.config/systemd/user/op_token"
-    "${HOME}/.config/systemd/user/op-macmini-token"
-    "${HOME}/.config/systemd/user/op-homedesktop-wsl-token"
-    "${HOME}/.config/systemd/user/op-epyc6-token"
-    "${HOME}/.config/systemd/user/op-epyc12-token"
-  )
+  dx_auth_source_canonical_targets >/dev/null 2>&1 || true
+
+  local -a plain_candidates=()
+  if command -v canonical_op_token_plaintext_candidates >/dev/null 2>&1; then
+    mapfile -t plain_candidates < <(canonical_op_token_plaintext_candidates "$HOME")
+  else
+    plain_candidates=(
+      "${HOME}/.config/systemd/user/op_token"
+      "${HOME}/.config/systemd/user/op-macmini-token"
+      "${HOME}/.config/systemd/user/op-homedesktop-wsl-token"
+      "${HOME}/.config/systemd/user/op-epyc6-token"
+      "${HOME}/.config/systemd/user/op-epyc12-token"
+    )
+  fi
 
   for candidate in "${plain_candidates[@]}"; do
     if [[ -r "$candidate" ]]; then
@@ -280,16 +295,18 @@ dx_auth_load_op_service_account_token() {
 
   dx_auth_has_cmd systemd-creds || return 1
 
-  local -a cred_candidates=(
-    "${HOME}/.config/systemd/user/op-${host_short}-token.cred"
-    "${HOME}/.config/systemd/user/op-${host_full}-token.cred"
-    "${HOME}/.config/systemd/user/op-${CANONICAL_HOST_KEY:-}-token.cred"
-    "${HOME}/.config/systemd/user/op_token.cred"
-    "${HOME}/.config/systemd/user/op-macmini-token.cred"
-    "${HOME}/.config/systemd/user/op-homedesktop-wsl-token.cred"
-    "${HOME}/.config/systemd/user/op-epyc6-token.cred"
-    "${HOME}/.config/systemd/user/op-epyc12-token.cred"
-  )
+  local -a cred_candidates=()
+  if command -v canonical_op_token_cred_candidates >/dev/null 2>&1; then
+    mapfile -t cred_candidates < <(canonical_op_token_cred_candidates "$HOME")
+  else
+    cred_candidates=(
+      "${HOME}/.config/systemd/user/op_token.cred"
+      "${HOME}/.config/systemd/user/op-macmini-token.cred"
+      "${HOME}/.config/systemd/user/op-homedesktop-wsl-token.cred"
+      "${HOME}/.config/systemd/user/op-epyc6-token.cred"
+      "${HOME}/.config/systemd/user/op-epyc12-token.cred"
+    )
+  fi
 
   for candidate in "${cred_candidates[@]}"; do
     if [[ -r "$candidate" ]]; then

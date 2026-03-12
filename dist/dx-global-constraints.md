@@ -69,8 +69,8 @@ New agents MUST complete these steps before any other work:
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami
 
 # Fallback search order if manual recovery is needed:
-#   1. ~/.config/systemd/user/op-\$(hostname)-token
-#   2. ~/.config/systemd/user/op-\$(hostname)-token.cred
+#   1. ~/.config/systemd/user/op-<canonical-host-key>-token
+#   2. ~/.config/systemd/user/op-<canonical-host-key>-token.cred
 #   3. ~/.config/systemd/user/op_token
 #   4. ~/.config/systemd/user/op_token.cred
 
