@@ -6,10 +6,22 @@ OUTFILE="$REPO_ROOT/AGENTS.md"
 DIST_DIR="$REPO_ROOT/dist"
 BASELINE_FILE="$DIST_DIR/universal-baseline.md"
 CONSTRAINTS_FILE="$DIST_DIR/dx-global-constraints.md"
+NAKOMI_FILE="$REPO_ROOT/@NAKOMI.md"
 SOURCE_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S UTC')
 mkdir -p "$DIST_DIR"
+
+render_nakomi_for_embed() {
+  sed -E 's/^(#+)/#\1/' "$NAKOMI_FILE"
+}
+
+verify_nakomi_generation() {
+  local target="$1"
+  grep -q "## Founder Cognitive Load Policy (Binary)" "$target"
+  grep -q "## Long-Term Payoff Bias" "$target"
+  grep -q "No burn-in, phased cutover, transition periods, or dual-path rollouts in dev/staging." "$target"
+}
 
 # 1. Generate Global Constraints (Layer A subset)
 cat > "$CONSTRAINTS_FILE" <<'EOF'
@@ -358,16 +370,10 @@ cat > "$BASELINE_FILE" <<EOF
 <!-- Last updated: $TIMESTAMP -->
 <!-- Regenerate: make publish-baseline -->
 
-## Nakomi Agent Protocol
-### Role
-Support a startup founder balancing high-leverage technical work and family responsibilities.
-### Core Constraints
-- Do not make irreversible decisions without explicit instruction
-- Do not expand scope unless asked
-- Do not optimize for cleverness or novelty
-- Do not assume time availability
-
 EOF
+
+render_nakomi_for_embed >> "$BASELINE_FILE"
+echo "" >> "$BASELINE_FILE"
 
 # Append constraints to baseline
 cat "$CONSTRAINTS_FILE" >> "$BASELINE_FILE"
@@ -376,17 +382,8 @@ echo "---" >> "$BASELINE_FILE"
 echo "" >> "$BASELINE_FILE"
 
 # 3. Build AGENTS.md by combining parts
-cat >> "$OUTFILE" <<EOF
-## Nakomi Agent Protocol
-### Role
-Support a startup founder balancing high-leverage technical work and family responsibilities.
-### Core Constraints
-- Do not make irreversible decisions without explicit instruction
-- Do not expand scope unless asked
-- Do not optimize for cleverness or novelty
-- Do not assume time availability
-
-EOF
+render_nakomi_for_embed >> "$OUTFILE"
+echo "" >> "$OUTFILE"
 
 # Include the full constraints rail in AGENTS.md (agents were missing PR metadata rules).
 sed -n '/## 1)/,$p' "$CONSTRAINTS_FILE" >> "$OUTFILE"
@@ -533,6 +530,10 @@ LINES=$(wc -l < "$OUTFILE")
 echo "✅ Generated $OUTFILE ($LINES lines)"
 echo "✅ Generated $BASELINE_FILE"
 echo "✅ Generated $CONSTRAINTS_FILE"
+
+verify_nakomi_generation "$OUTFILE"
+verify_nakomi_generation "$BASELINE_FILE"
+echo "✅ Verified Nakomi policy presence in generated outputs"
 
 if [[ $LINES -gt 800 ]]; then
     echo "⚠️  WARNING: AGENTS.md exceeds 800 lines ($LINES)"
