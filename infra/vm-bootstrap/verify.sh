@@ -289,6 +289,7 @@ main() {
     verify_optional "tailscale" "tailscale version"
     verify_optional "bv (Beads Viewer)" "bv --version"
     verify_optional "playwright" "mise exec -- playwright --version"
+    verify_optional "agent-browser" "agent-browser --help"
     
     echo ""
     echo "======================================"
