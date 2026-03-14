@@ -19,6 +19,18 @@ dx_auth_has_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+dx_auth_read_lines_into_array() {
+  local __target="${1:-}"
+  [[ -n "$__target" ]] || return 1
+
+  eval "$__target=()"
+
+  local __line
+  while IFS= read -r __line; do
+    eval "$__target+=(\"\$__line\")"
+  done
+}
+
 dx_auth_op_token_valid() {
   local token="${1:-}"
   [[ -n "$token" ]] || return 1
@@ -271,7 +283,7 @@ dx_auth_load_op_service_account_token() {
 
   local -a plain_candidates=()
   if command -v canonical_op_token_plaintext_candidates >/dev/null 2>&1; then
-    mapfile -t plain_candidates < <(canonical_op_token_plaintext_candidates "$HOME")
+    dx_auth_read_lines_into_array plain_candidates < <(canonical_op_token_plaintext_candidates "$HOME")
   else
     plain_candidates=(
       "${HOME}/.config/systemd/user/op_token"
@@ -297,7 +309,7 @@ dx_auth_load_op_service_account_token() {
 
   local -a cred_candidates=()
   if command -v canonical_op_token_cred_candidates >/dev/null 2>&1; then
-    mapfile -t cred_candidates < <(canonical_op_token_cred_candidates "$HOME")
+    dx_auth_read_lines_into_array cred_candidates < <(canonical_op_token_cred_candidates "$HOME")
   else
     cred_candidates=(
       "${HOME}/.config/systemd/user/op_token.cred"
