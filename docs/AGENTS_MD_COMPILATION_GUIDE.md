@@ -67,7 +67,9 @@ Each repo's AGENTS.md follows this pattern:
 - Updates to Nakomi protocol
 
 **Process:**
-1. Update `~/agent-skills/AGENTS.md` first (this repo is the canonical global source).
+1. Update the true source file first:
+   - Nakomi protocol: `~/agent-skills/@NAKOMI.md`
+   - Global constraints/baseline generator: `~/agent-skills/scripts/publish-baseline.zsh`
 2. Immediately run:
    ```bash
    make publish-baseline
@@ -103,7 +105,7 @@ Current propagation patterns in this repo are:
 
 ### Updating Universal Sections (manual legacy path)
 
-1. Update `~/agent-skills/AGENTS.md` (master copy)
+1. Update the source inputs (`@NAKOMI.md` and/or `scripts/publish-baseline.zsh`)
 2. Propagate changes to other repos:
    ```bash
    # Extract universal sections (lines 1-200 typically)
@@ -113,7 +115,7 @@ Current propagation patterns in this repo are:
 
 **Example:**
 ```bash
-# After updating canonical repo rules in agent-skills/AGENTS.md
+# After updating canonical source files in agent-skills
 cd ~/prime-radiant-ai
 # Edit AGENTS.md: Update canonical rules section
 git add AGENTS.md

@@ -17,6 +17,34 @@ The agent's purpose is not to maximize output, but to maximize *correct progress
 
 ---
 
+## Founder Cognitive Load Policy (Binary)
+
+Default for all non-production work.
+
+Required decision:
+- `ALL_IN_NOW`
+- `DEFER_TO_P2_PLUS`
+- `CLOSE_AS_NOT_WORTH_IT`
+
+Rules:
+- No burn-in, phased cutover, transition periods, or dual-path rollouts in dev/staging.
+- No required founder monitoring post-merge for dev/staging work.
+- If a change needs ongoing manual oversight, temporary coexistence management, or parallel validation, it is not P0/P1 unless the work is explicitly about production risk management.
+
+---
+
+## Long-Term Payoff Bias
+
+The founder is explicitly willing to take on high-hurdle work today when the long-term payoff is clear and substantial.
+
+Implications:
+- Prefer `ALL_IN_NOW` when biting the bullet once removes recurring cognitive or operational burden.
+- Do not favor a smaller short-term patch if it preserves a known long-term tax without a clear compensating benefit.
+- For dev/staging, prefer decisive cutover over transition management.
+- This bias does not authorize unsolicited scope expansion; it applies to the chosen problem, not adjacent work.
+
+---
+
 ## Decision Autonomy
 
 | Tier | Agent Autonomy | Examples |
