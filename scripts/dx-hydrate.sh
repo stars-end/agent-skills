@@ -135,6 +135,30 @@ remove_wrapper_job_entries() {
     fi
 }
 
+remove_direct_script_entries() {
+    local script_name="$1"
+    local current_cron updated_cron
+    current_cron="$(crontab -l 2>/dev/null || true)"
+
+    updated_cron="$(
+        printf '%s\n' "$current_cron" | awk -v script="$script_name" '
+            /^[[:space:]]*#/ { print; next }
+            /^[[:space:]]*$/ { print; next }
+            {
+                if (index($0, script) > 0) {
+                    next
+                }
+                print
+            }
+        '
+    )"
+
+    if [[ "$updated_cron" != "$current_cron" ]]; then
+        printf '%s\n' "$updated_cron" | crontab -
+        echo "   Pruned direct cron entries for: $script_name"
+    fi
+}
+
 remove_v8_marker_variants() {
     local marker="$1"
     local current_cron updated_cron
@@ -217,6 +241,7 @@ remove_wrapper_job_entries "worktree-push" "worktree-push.sh"
 remove_wrapper_job_entries "worktree-gc" "worktree-gc-v8.sh"
 remove_wrapper_job_entries "queue-enforcer" "queue-hygiene-enforcer.sh"
 remove_wrapper_job_entries "beads-health" "beads-health-alert.sh"
+remove_direct_script_entries "dx-heartbeat-cron.sh"
 remove_v8_marker_variants "V8.3.x: Canonical Enforcer - Active Hours (5am-5pm PT)"
 remove_v8_marker_variants "V8: canonical-evacuate-active-15m"
 remove_v8_marker_variants "V8: canonical-evacuate-active-1700"
