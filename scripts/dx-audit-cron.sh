@@ -86,11 +86,11 @@ main() {
   if [[ -n "$manifest_channel" ]]; then
     channel="$manifest_channel"
   fi
-  channel="$(agent_coordination_resolve_channel "${DX_ALERTS_CHANNEL_ID:-$channel}")"
+  channel="$(agent_coordination_resolve_channel "${FLEET_EVENTS_CHANNEL_ID:-$channel}")"
 
   {
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] mode=$MODE"
-    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] channel=${DX_ALERTS_CHANNEL_ID:-$channel}"
+    echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] channel=${FLEET_EVENTS_CHANNEL_ID:-$channel}"
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] message=$message"
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] state_dir=$STATE_DIR"
   } >> "$log_file"

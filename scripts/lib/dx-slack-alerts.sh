@@ -391,6 +391,14 @@ agent_coordination_transport_ready() {
   return 1
 }
 
+agent_coordination_dx_alerts_channel() {
+  printf '%s' "${DX_ALERTS_CHANNEL_ID:-C0ADSSZV9M2}"
+}
+
+agent_coordination_fleet_events_channel() {
+  printf '%s' "${FLEET_EVENTS_CHANNEL_ID:-C0A8YU9JW06}"
+}
+
 agent_coordination_default_channel() {
   local env="${ENVIRONMENT:-dev}"
 
@@ -410,14 +418,14 @@ agent_coordination_default_channel() {
 agent_coordination_resolve_channel() {
   local channel="${1:-}"
   if [[ -z "$channel" ]]; then
-    channel="${DX_ALERTS_CHANNEL_ID:-$(agent_coordination_default_channel)}"
+    channel="$(agent_coordination_default_channel)"
   fi
   # Human-readable alias used by Fleet Sync manifests/runbooks.
   if [[ "$channel" == "#dx-alerts" ]]; then
-    channel="${DX_ALERTS_CHANNEL_ID:-C0A8YU9JW06}"
+    channel="$(agent_coordination_dx_alerts_channel)"
   fi
   if [[ "$channel" == "#fleet-events" ]]; then
-    channel="${DX_ALERTS_CHANNEL_ID:-C0A8YU9JW06}"
+    channel="$(agent_coordination_fleet_events_channel)"
   fi
   printf '%s' "$channel"
 }
