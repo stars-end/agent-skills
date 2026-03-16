@@ -1,7 +1,12 @@
 [mcpServers."context-plus"]
 type = "stdio"
 command = "npx"
-args = ["-y", "@forloopcodes/contextplus@0.4.2", "--transport", "stdio"]
+args = ["-y", "contextplus"]
+
+[mcpServers."context-plus".env]
+OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}"
+OPENROUTER_EMBED_MODEL = "openai/text-embedding-3-small"
+CONTEXTPLUS_EMBED_PROVIDER = "auto"
 
 [mcpServers."cass-memory"]
 type = "stdio"

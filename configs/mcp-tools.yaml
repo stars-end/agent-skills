@@ -58,6 +58,8 @@ tools:
   # ============================================================
   # context-plus: Structural context analysis (MCP mode)
   # Install: npx -y contextplus OR bunx contextplus
+  # Embeddings: OpenRouter (primary) with Ollama fallback
+  # Patched fork: stars-end/contextplus (feat/openai-compatible-embeddings)
   # ============================================================
   context-plus:
     enabled: true
@@ -83,7 +85,11 @@ tools:
         - OLLAMA_EMBED_MODEL
         - OLLAMA_CHAT_MODEL
         - OLLAMA_API_KEY
+        - OPENROUTER_API_KEY
+        - OPENROUTER_EMBED_MODEL
+        - CONTEXTPLUS_EMBED_PROVIDER
     upstream: "https://github.com/ForLoopCodes/contextplus"
+    fork: "https://github.com/stars-end/contextplus"
     docs: "https://github.com/ForLoopCodes/contextplus#readme"
 
   # ============================================================

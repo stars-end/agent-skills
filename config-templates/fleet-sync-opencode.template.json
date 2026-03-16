@@ -2,7 +2,12 @@
   "mcp": {
     "context-plus": {
       "type": "local",
-      "command": ["npx", "-y", "contextplus", "--transport", "stdio"]
+      "command": ["npx", "-y", "contextplus"],
+      "environment": {
+        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
+        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
+        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
+      }
     },
     "serena": {
       "type": "local",
