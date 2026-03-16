@@ -7,6 +7,7 @@ Tests for dx-loop v1.1 fixes:
 - Operator surface fixes
 """
 
+import json
 import sys
 import subprocess
 from pathlib import Path
@@ -246,6 +247,40 @@ def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
     assert "bd-blocked: bd-upstream" in captured.out
 
     print("✓ Status output explains dependency blockers")
+
+
+def test_run_loop_exits_when_initial_frontier_is_fully_blocked(tmp_path):
+    """A zero-dispatch blocked start should persist state and exit promptly."""
+    wave_id = "wave-blocked-at-start"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 1})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-blocked-1": BeadsTask(
+            beads_id="bd-blocked-1",
+            title="Blocked task 1",
+            dependencies=["bd-upstream"],
+        ),
+        "bd-blocked-2": BeadsTask(
+            beads_id="bd-blocked-2",
+            title="Blocked task 2",
+            dependencies=["bd-blocked-1"],
+        ),
+    }
+    loop.beads_manager.layers = [["bd-blocked-1"], ["bd-blocked-2"]]
+
+    assert loop.run_loop(max_iterations=2) is True
+
+    state = json.loads(loop.state_file.read_text())
+    assert state["scheduler_state"]["dispatch_count"] == 0
+    assert state["wave_status"]["state"] == "waiting_on_dependency"
+    assert (
+        state["wave_status"]["reason"]
+        == "Initial frontier blocked with 2 task(s); exiting without resident loop"
+    )
+    assert len(state["wave_status"]["blocked_details"]) == 2
+
+    print("✓ Blocked-at-start waves exit promptly")
 
 
 def test_dx_ensure_bins_links_dx_loop(tmp_path):

@@ -39,6 +39,11 @@ dx-loop start --epic <epic-id> [--wave-id <id>] [--config <path>]
 
 Starts a wave from a Beads epic, loading tasks and computing topological layers.
 
+Default operator protection:
+- if the initial frontier has zero dispatchable tasks, `dx-loop` persists the
+  blocked state and exits instead of sitting resident for hours with no
+  implementation progress
+
 ### status
 
 ```bash
@@ -57,6 +62,9 @@ dependencies are still unmet, operators see:
 
 The JSON state includes the same detail under `wave_status.blocked_details` for
 automation.
+
+When this happens on the very first frontier, the reason text explains that the
+loop exited without becoming a resident unattended process.
 
 ## Ralph Reuse
 

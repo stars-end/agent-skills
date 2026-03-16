@@ -143,6 +143,8 @@ Operator contract:
 - operators should invoke `dx-loop` from the canonical shim, not by source-diving
 - zero-dispatch dependency-blocked waves surface as `waiting_on_dependency`
   with blocker detail in human-readable status and persisted JSON state
+- if the initial frontier is fully blocked, `dx-loop` persists the blocked
+  state and exits instead of remaining resident with zero dispatches
 
 ## Consequences
 
