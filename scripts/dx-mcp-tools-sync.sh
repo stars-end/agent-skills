@@ -387,6 +387,7 @@ for name, spec in enabled_tools:
     target_ides = [str(i) for i in spec.get("target_ides", [])] if integration_mode == "mcp" else []
     mcp = spec.get("mcp", {}) if isinstance(spec.get("mcp", {}), dict) and integration_mode == "mcp" else {}
     mcp_env = mcp.get("env", {})
+    env_from_parent = mcp.get("env_from_parent", [])
     entry = {
         "type": str(mcp.get("type", "stdio")),
         "command": str(mcp.get("command", "")),
@@ -394,6 +395,14 @@ for name, spec in enabled_tools:
     }
     if isinstance(mcp_env, dict) and mcp_env:
         entry["env"] = {str(k): str(v) for k, v in mcp_env.items()}
+    # Resolve env vars from parent process — only inject if actually set
+    if isinstance(env_from_parent, list):
+        for env_name in env_from_parent:
+            env_val = os.environ.get(str(env_name), "")
+            if env_val:
+                if "env" not in entry:
+                    entry["env"] = {}
+                entry["env"][str(env_name)] = env_val
 
     install_rc = 0
     install_out = ""

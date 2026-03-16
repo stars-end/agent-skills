@@ -7,7 +7,8 @@ index 7c8e7ca..8b64e7f 100644
 +// Vector embedding engine with Ollama (local) and OpenAI-compatible (OpenRouter) backends
  // Indexes file headers and symbols, caches embeddings to disk for speed
 +// Provider selection: OPENROUTER_API_KEY -> OpenRouter, else -> Ollama
-+// Fallback policy (auto mode): 5xx/network -> Ollama; 401/403/404 -> fail fast
++// Fallback policy (auto mode): 5xx/network -> pin to Ollama for process lifetime; 401/403/404 -> fail fast
++// Recovery from pinned Ollama: requires process restart (new MCP session)
 
  import { Ollama } from "ollama";
  import { readFile, writeFile, mkdir } from "fs/promises";
@@ -120,9 +121,10 @@ index 7c8e7ca..8b64e7f 100644
 +      return await openRouterEmbed(request.input, signal);
 +    } catch (error) {
 +      if (!isAutoMode() || !isOpenRouterRetriable(error)) throw error;
-+      // In auto mode, fall back to Ollama for retriable errors
-+      console.error(`[context-plus] OpenRouter failed, falling back to Ollama: ${error instanceof Error ? error.message : error}`);
-+      resetProvider(); // force re-resolution to ollama for subsequent calls
++      // In auto mode, pin process to Ollama for remaining lifetime.
++      // No automatic recovery within same process — requires restart.
++      console.error(`[context-plus] OpenRouter failed (retriable), pinning to Ollama for rest of process: ${error instanceof Error ? error.message : error}`);
++      _cachedProvider = "ollama";
 +      return ollama.embed({ ...request, signal } as Parameters<typeof ollama.embed>[0]);
 +    }
 +  }

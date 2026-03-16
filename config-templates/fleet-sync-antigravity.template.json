@@ -5,7 +5,6 @@
       "command": "node",
       "args": ["~/.local/share/contextplus-patched/build/index.js"],
       "env": {
-        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
         "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
         "CONTEXTPLUS_EMBED_PROVIDER": "auto"
       }

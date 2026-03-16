@@ -162,7 +162,7 @@ When `CONTEXTPLUS_EMBED_PROVIDER=auto` (default), the patched context-plus imple
 
 When `CONTEXTPLUS_EMBED_PROVIDER=openrouter` or `ollama` (explicit mode), no fallback occurs — errors propagate to the caller.
 
-After a successful fallback in auto mode, `resetProvider()` forces subsequent calls to re-evaluate provider selection. If OpenRouter recovers, the next process restart (or new session) will attempt OpenRouter again.
+**Durable fallback in auto mode**: After a retriable OpenRouter failure, the process pins to Ollama for its remaining lifetime (`_cachedProvider = "ollama"`). No automatic recovery within the same process — recovery requires a process restart (next MCP session). This prevents flapping between providers.
 
 ### 2.6 Install and Drift Detection
 
@@ -170,8 +170,9 @@ The install script (`scripts/install-contextplus-patched.sh`) manages the local 
 
 1. **Install**: Clone upstream at pinned SHA, apply patch, build to `~/.local/share/contextplus-patched`
 2. **Metadata**: Write `install-metadata.json` with upstream SHA, patch checksum, timestamp
-3. **Drift check**: `--check` flag compares installed SHA against pinned SHA in the script
+3. **Drift check**: `--check` flag verifies **both** installed SHA and patch checksum against the script's pinned values. Fails with `patch-drift` if the checksum mismatches.
 4. **Fatal on SHA miss**: If pinned SHA is not available in upstream, abort — never silently drift to latest
+5. **Recovery**: If `--check` reports drift, re-run the install script without `--clean` to re-apply the patch at the current pinned SHA.
 
 Install location: `~/.local/share/contextplus-patched` (overridable via `CONTEXTPLUS_PATCH_DIR`)
 
@@ -188,11 +189,17 @@ The boundary is strict: nightly jobs **write** enriched artifacts that `context-
 
 ### 3.2 Artifacts Produced Nightly
 
+Artifacts are written to an **external state root** (not into canonical repo clones) to comply with the no-writes-in-canonical-clones policy.
+
+Default location: `~/.dx-state/enrichment/{repo-name}/` (overridable via `ENRICHMENT_ARTIFACT_ROOT`).
+
 | Artifact | Format | Location | Consumer |
 |----------|--------|----------|----------|
-| Cluster labels | JSON | `.mcp_data/enrichment/cluster-labels.json` | `context-plus` semantic-navigate (if wired) |
-| File summaries | JSON | `.mcp_data/enrichment/file-summaries.json` | `context-plus` memory graph |
-| Semantic descriptions | JSON | `.mcp_data/enrichment/semantic-descriptions.json` | Agent prompts |
+| Cluster labels | JSON | `~/.dx-state/enrichment/{repo}/cluster-labels.json` | `context-plus` semantic-navigate (if wired) |
+| File summaries | JSON | `~/.dx-state/enrichment/{repo}/file-summaries.json` | `context-plus` memory graph |
+| Semantic descriptions | JSON | `~/.dx-state/enrichment/{repo}/semantic-descriptions.json` | Agent prompts |
+
+The enrichment job still **reads** `.mcp_data/embeddings-cache.json` from the canonical repo (read-only access is acceptable).
 
 ### 3.3 Job Design
 
@@ -266,16 +273,18 @@ All canonical hosts (macmini, homedesktop-wsl, epyc12) need `OPENROUTER_API_KEY`
 
 ### 4.2 MCP Config: Per-Client Env Injection
 
-**This is the normative contract.** Env vars are propagated through two independent mechanisms:
+**This is the normative contract.** Env vars are propagated through the fleet-sync renderer, which resolves secret env vars from the parent process environment at render time.
 
-1. **Fleet-sync renderer** (`dx-mcp-tools-sync.sh`): Reads `mcp.env` from `mcp-tools.yaml` manifest and writes env blocks to each IDE config. `${VAR}` template references are written literally — fleet-sync does NOT perform shell interpolation.
-2. **IDE client runtime**: Each IDE client passes its `env` (or `environment`) block entries to the stdio subprocess. Variable resolution behavior varies by client (see table below).
+1. **Fleet-sync renderer** (`dx-mcp-tools-sync.sh --apply`): Reads `mcp.env` and `mcp.env_from_parent` from `mcp-tools.yaml` manifest. Static env vars (like `CONTEXTPLUS_EMBED_PROVIDER`) are written as-is. Secret env vars listed in `env_from_parent` are resolved from the renderer's own process environment and written with their resolved values. If the env var is not set in the renderer's environment, it is **omitted** from the rendered config entirely.
+2. **IDE client runtime**: Each IDE client passes its `env` (or `environment`) block entries to the stdio subprocess. Since fleet-sync resolved all values, no further interpolation is needed.
 
-**Source of truth**: The `mcp.env` block in `configs/mcp-tools.yaml` for each tool.
+**Source of truth**: The `mcp.env` and `mcp.env_from_parent` blocks in `configs/mcp-tools.yaml` for each tool.
+
+**No literal `${VAR}` placeholders** are ever written to rendered IDE configs.
 
 #### Claude Code (`~/.claude.json`)
 
-Fleet-sync writes an `env` block:
+Fleet-sync writes an `env` block with resolved values:
 
 ```json
 {
@@ -285,7 +294,7 @@ Fleet-sync writes an `env` block:
       "args": ["~/.local/share/contextplus-patched/build/index.js"],
       "type": "stdio",
       "env": {
-        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
+        "OPENROUTER_API_KEY": "sk-or-v1-...",
         "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
         "CONTEXTPLUS_EMBED_PROVIDER": "auto"
       }
@@ -294,31 +303,40 @@ Fleet-sync writes an `env` block:
 }
 ```
 
-**How it works**: Claude Code reads the `env` block from `~/.claude.json` and sets those env vars on the stdio subprocess. `${VAR}` values are passed literally to the subprocess — Claude Code does NOT perform shell interpolation. The subprocess receives the literal string `"${OPENROUTER_API_KEY}"` unless resolved beforehand.
+If `OPENROUTER_API_KEY` is not set when fleet-sync runs, the key is omitted:
 
-**Resolution**: `OPENROUTER_API_KEY` must be set in the shell profile (`.zshrc`/`.bashrc`) of the user running Claude Code. Claude Code inherits the parent process environment, so the IDE's `env` block entries with `${VAR}` only work if the parent shell expands them first. Alternatively, write the resolved value directly into the config.
+```json
+{
+  "mcpServers": {
+    "context-plus": {
+      "command": "node",
+      "args": ["~/.local/share/contextplus-patched/build/index.js"],
+      "type": "stdio",
+      "env": {
+        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
+        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
+      }
+    }
+  }
+}
+```
+
+**Prerequisite**: `OPENROUTER_API_KEY` must be exported in the shell profile of the user running fleet-sync.
 
 #### Codex (`~/.codex/config.toml`)
 
-Fleet-sync writes a `[mcp_servers."name".env]` subtable:
+Same resolution pattern. Fleet-sync writes resolved values into `[mcp_servers."name".env]`:
 
 ```toml
-[mcp_servers."context-plus"]
-type = "stdio"
-command = "node"
-args = ["~/.local/share/contextplus-patched/build/index.js"]
-
 [mcp_servers."context-plus".env]
-OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}"
+OPENROUTER_API_KEY = "sk-or-v1-..."
 OPENROUTER_EMBED_MODEL = "openai/text-embedding-3-small"
 CONTEXTPLUS_EMBED_PROVIDER = "auto"
 ```
 
-**Resolution**: Same as Claude Code — TOML does not perform shell interpolation. `OPENROUTER_API_KEY` must be in the parent process environment, or the resolved value must be written directly.
-
 #### OpenCode (`~/.config/opencode/opencode.jsonc`)
 
-Fleet-sync writes an `environment` block (OpenCode uses `environment`, not `env`):
+Same resolution pattern. Fleet-sync writes resolved values into `environment`:
 
 ```jsonc
 {
@@ -327,7 +345,7 @@ Fleet-sync writes an `environment` block (OpenCode uses `environment`, not `env`
       "command": ["node", "~/.local/share/contextplus-patched/build/index.js"],
       "type": "local",
       "environment": {
-        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
+        "OPENROUTER_API_KEY": "sk-or-v1-...",
         "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
         "CONTEXTPLUS_EMBED_PROVIDER": "auto"
       }
@@ -336,17 +354,15 @@ Fleet-sync writes an `environment` block (OpenCode uses `environment`, not `env`
 }
 ```
 
-**Resolution**: OpenCode passes `environment` entries to the subprocess. Variable interpolation support varies by build — treat `${VAR}` as a literal string unless verified otherwise on the target host.
-
 ### 4.3 Summary: Per-Client Propagation Mechanism
 
-| Client | Config key | `${VAR}` interpolated? | Fallback if literal |
-|--------|-----------|----------------------|-------------------|
-| Claude Code | `env` | No (literal) | Parent process env inherits to subprocess |
-| Codex | `env` subtable | No (TOML literal) | Parent process env inherits to subprocess |
-| OpenCode | `environment` | Build-dependent | Parent process env or write resolved value |
+| Client | Config key | Values written | Secret omission behavior |
+|--------|-----------|---------------|-------------------------|
+| Claude Code | `env` | Resolved from renderer process env | Key omitted -> auto falls back to Ollama |
+| Codex | `env` subtable | Resolved from renderer process env | Key omitted -> auto falls back to Ollama |
+| OpenCode | `environment` | Resolved from renderer process env | Key omitted -> auto falls back to Ollama |
 
-**Important**: IDE clients inherit their parent process environment. If `OPENROUTER_API_KEY` is exported in the shell profile (`export OPENROUTER_API_KEY=...`), the MCP server subprocess will have access to it regardless of whether the config `env` block is present. The `env` blocks in fleet-sync configs serve as documentation and allow explicit per-tool control, but the primary mechanism is shell profile export.
+**Important**: Fleet-sync must be run from a shell where `OPENROUTER_API_KEY` is exported for the key to appear in rendered configs. If the key is not set, the rendered config simply omits it — `CONTEXTPLUS_EMBED_PROVIDER=auto` will use Ollama.
 
 **For secrets managed via 1Password**: Use `op read` in the shell profile or a launcher script to resolve the secret before the IDE process starts. See Section 4.4.
 

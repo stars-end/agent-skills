@@ -34,6 +34,7 @@ error() { echo -e "${RED}[error]${NC} $*" >&2; exit 1; }
 
 # --- Check mode ---
 # Reads install-metadata.json for deterministic drift detection.
+# Verifies both upstream SHA and patch checksum.
 # Does NOT rely on --version output (which may not exist or be stable).
 if [[ "${1:-}" == "--check" ]]; then
     if [[ ! -f "$METADATA_FILE" ]]; then
@@ -41,13 +42,19 @@ if [[ "${1:-}" == "--check" ]]; then
         exit 1
     fi
     installed_sha="$(python3 -c "import json; print(json.load(open('$METADATA_FILE')).get('upstream_sha','none'))" 2>/dev/null || echo "none")"
-    if [[ "$installed_sha" == "$UPSTREAM_SHA" ]]; then
-        echo "current (${UPSTREAM_SHA:0:12})"
-        exit 0
-    else
+    installed_checksum="$(python3 -c "import json; print(json.load(open('$METADATA_FILE')).get('patch_checksum','none'))" 2>/dev/null || echo "none")"
+    current_checksum="$(shasum "$PATCH_FILE" 2>/dev/null | cut -d' ' -f1 || echo "none")"
+
+    if [[ "$installed_sha" != "$UPSTREAM_SHA" ]]; then
         echo "outdated (installed=${installed_sha:0:12}, want=${UPSTREAM_SHA:0:12})"
         exit 1
     fi
+    if [[ "$installed_checksum" != "$current_checksum" ]]; then
+        echo "patch-drift (installed=${installed_checksum:0:12}, current=${current_checksum:0:12})"
+        exit 1
+    fi
+    echo "current (sha=${UPSTREAM_SHA:0:12}, checksum=${current_checksum:0:12})"
+    exit 0
 fi
 
 # --- Clean mode ---

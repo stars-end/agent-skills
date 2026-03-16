@@ -8,16 +8,19 @@ Usage:
     python3 scripts/enrichment/nightly-enrichment.py [--dry-run] [--repo /path/to/repo]
 
 Env vars:
-    ZAI_API_KEY        - Required. z.ai API key (op://dev/Agent-Secrets-Production/ZAI_API_KEY)
-    ZAI_MODEL          - Default: glm-4.7
-    ENRICHMENT_BATCH   - Files per cluster for labeling. Default: 20
-    ENRICHMENT_TIMEOUT - Per-call timeout seconds. Default: 30
-    ENRICHMENT_OUTPUT  - Override output dir. Default: .mcp_data/enrichment/
+    ZAI_API_KEY             - Required. z.ai API key (op://dev/Agent-Secrets-Production/ZAI_API_KEY)
+    ZAI_MODEL               - Default: glm-4.7
+    ENRICHMENT_BATCH        - Files per cluster for labeling. Default: 20
+    ENRICHMENT_TIMEOUT      - Per-call timeout seconds. Default: 30
+    ENRICHMENT_ARTIFACT_ROOT - Override artifact root dir. Default: ~/.dx-state/enrichment/
 
-Artifacts (written per repo):
-    .mcp_data/enrichment/cluster-labels.json
-    .mcp_data/enrichment/file-summaries.json
-    .mcp_data/enrichment/semantic-descriptions.json
+Artifacts (written per repo to external state root):
+    ~/.dx-state/enrichment/{repo-name}/cluster-labels.json
+    ~/.dx-state/enrichment/{repo-name}/file-summaries.json
+    ~/.dx-state/enrichment/{repo-name}/semantic-descriptions.json
+
+Artifacts are NOT written into canonical repo clones. The repo name is
+derived from the directory basename (e.g., ~/agent-skills -> agent-skills).
 
 Dependencies:
     - llm-common (for ZaiClient)
@@ -49,7 +52,7 @@ CANONICAL_REPOS = [
 ]
 
 CACHE_FILE = ".mcp_data/embeddings-cache.json"
-OUTPUT_DIR = ".mcp_data/enrichment"
+DEFAULT_ARTIFACT_ROOT = Path.home() / ".dx-state" / "enrichment"
 
 
 @dataclass
@@ -269,7 +272,8 @@ async def generate_semantic_descriptions(
 
 
 async def enrich_repo(
-    repo_root: Path, client, batch_size: int, dry_run: bool
+    repo_root: Path, client, batch_size: int, dry_run: bool,
+    artifact_dir: Path | None = None,
 ) -> dict:
     """Enrich a single repository."""
     result = {
@@ -315,7 +319,8 @@ async def enrich_repo(
     semantic_descs = await generate_semantic_descriptions(entries, client)
     result["descriptions_generated"] = len(semantic_descs)
 
-    output_dir = repo_root / OUTPUT_DIR
+    repo_name = repo_root.name
+    output_dir = artifact_dir / repo_name if artifact_dir else DEFAULT_ARTIFACT_ROOT / repo_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     (output_dir / "cluster-labels.json").write_text(
@@ -347,8 +352,12 @@ async def main() -> int:
     parser.add_argument("--timeout", type=int, default=int(os.environ.get("ENRICHMENT_TIMEOUT", "30")))
     parser.add_argument("--model", default=os.environ.get("ZAI_MODEL", "glm-4.7"))
     parser.add_argument("--api-key", default=os.environ.get("ZAI_API_KEY", ""))
+    parser.add_argument("--artifact-root", type=Path, default=None,
+                        help="Override artifact root (default: ~/.dx-state/enrichment/)")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
+
+    artifact_root = args.artifact_root or Path(os.environ.get("ENRICHMENT_ARTIFACT_ROOT", str(DEFAULT_ARTIFACT_ROOT)))
 
     if not args.api_key:
         log.error("ZAI_API_KEY is required. Set env var or use --api-key")
@@ -367,7 +376,8 @@ async def main() -> int:
     results = []
     for repo in repos:
         try:
-            result = await enrich_repo(repo, client, args.batch_size, args.dry_run)
+            result = await enrich_repo(repo, client, args.batch_size, args.dry_run,
+                                       artifact_dir=artifact_root)
             results.append(result)
         except Exception as e:
             log.error("Failed to enrich %s: %s", repo, e)
