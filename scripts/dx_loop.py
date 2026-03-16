@@ -50,6 +50,7 @@ DEFAULT_CONFIG = {
     "cadence_seconds": 600,  # 10 minutes
     "provider": "opencode",
     "require_review": True,
+    "exit_on_zero_dispatch_start": True,
     "worktree_base": "/tmp/agents",  # Base dir for worktrees
 }
 
@@ -168,10 +169,18 @@ class DxLoop:
                         item["beads_id"] for item in readiness.waiting_on_dependencies
                     ]
                     self.scheduler.state.blocked_beads_ids = set(blocked_ids)
+                    blocked_reason = (
+                        f"No dispatches: waiting on dependencies for {len(blocked_ids)} task(s)"
+                    )
+                    if self._should_exit_blocked_at_start(iteration):
+                        blocked_reason = (
+                            f"Initial frontier blocked with {len(blocked_ids)} task(s); "
+                            "exiting without resident loop"
+                        )
                     self._set_wave_status(
                         LoopState.WAITING_ON_DEPENDENCY,
                         BlockerCode.WAITING_ON_DEPENDENCY,
-                        f"No dispatches: waiting on dependencies for {len(blocked_ids)} task(s)",
+                        blocked_reason,
                         blocked_details=readiness.waiting_on_dependencies,
                     )
                     print(
@@ -180,6 +189,13 @@ class DxLoop:
                     for item in readiness.waiting_on_dependencies[:3]:
                         deps = ", ".join(item["unmet_dependencies"])
                         print(f"  {item['beads_id']} waiting on: {deps}")
+                    if self._should_exit_blocked_at_start(iteration):
+                        print(
+                            "Initial frontier has zero dispatchable tasks; exiting "
+                            "without resident loop"
+                        )
+                        self._save_state()
+                        return True
                 else:
                     self._set_wave_status(
                         LoopState.PENDING,
@@ -232,6 +248,20 @@ class DxLoop:
             time.sleep(self.config["cadence_seconds"])
 
         return False
+
+    def _should_exit_blocked_at_start(self, iteration: int) -> bool:
+        """
+        Exit early when the first frontier is fully blocked.
+
+        This prevents long-lived resident loops from masquerading as useful
+        implementation progress when a wave starts with zero dispatchable work.
+        """
+        return (
+            iteration == 1
+            and self.config.get("exit_on_zero_dispatch_start", True)
+            and self.scheduler.state.dispatch_count == 0
+            and not self.scheduler.state.active_beads_ids
+        )
 
     def _dispatch_task(self, beads_id: str, phase: str = "implement") -> bool:
         """Dispatch a single task through implement/review cycle"""
