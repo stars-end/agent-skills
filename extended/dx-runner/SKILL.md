@@ -36,8 +36,11 @@ OpenCode behavior in this skill is grounded in official docs and live CLI help:
 ## Quick Start
 
 ```bash
-# Start a job with cc-glm provider
-dx-runner start --beads bd-xxx --provider cc-glm --prompt-file /tmp/task.prompt
+# Canonical control-plane cwd
+cd ~/bd
+
+# Start a job with cc-glm provider and explicit repo worktree
+dx-runner start --beads bd-xxx --provider cc-glm --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/task.prompt
 
 # Check job status
 dx-runner status
@@ -66,6 +69,11 @@ Options:
   --required-baseline <sha>  Enforce baseline gate before dispatch
   --allow-model-override    Allow OPENCODE_MODEL env override (bd-8wdg.2)
 ```
+
+Operator contract:
+- Run control-plane commands from canonical `~/bd`.
+- Pass `--worktree /tmp/agents/<beads>/<repo>` explicitly for mutating jobs.
+- Use `DX_RUNNER_DEFAULT_WORKTREE` only as fallback for legacy wrappers or previously recorded runs.
 
 ### status
 
