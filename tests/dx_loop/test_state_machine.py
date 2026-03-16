@@ -33,6 +33,23 @@ def test_state_transitions():
     print("✓ State transitions work")
 
 
+def test_waiting_on_dependency_transition():
+    """Dependency-blocked waves should surface an explicit waiting state"""
+    sm = LoopStateMachine()
+
+    transition = sm.transition(
+        LoopState.WAITING_ON_DEPENDENCY,
+        blocker_code=BlockerCode.WAITING_ON_DEPENDENCY,
+        reason="No ready tasks due to unmet dependencies",
+    )
+
+    assert transition is not None
+    assert sm.get_state() == LoopState.WAITING_ON_DEPENDENCY
+    assert sm.get_blocker() == BlockerCode.WAITING_ON_DEPENDENCY
+
+    print("✓ Waiting-on-dependency transition works")
+
+
 def test_unchanged_suppression():
     """Test unchanged blocker suppression"""
     tracker = LoopStateTracker()
@@ -68,6 +85,7 @@ def test_notification_payload():
 
 if __name__ == "__main__":
     test_state_transitions()
+    test_waiting_on_dependency_transition()
     test_unchanged_suppression()
     test_notification_payload()
     print("\nAll state machine tests passed!")

@@ -2,5 +2,9 @@
 # dx-loop v1 - CLI wrapper for PR-aware orchestration surface
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+if [[ -L "$SCRIPT_SOURCE" ]]; then
+    SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 exec python3 "${SCRIPT_DIR}/dx_loop.py" "$@"

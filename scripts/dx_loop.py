@@ -93,6 +93,13 @@ class DxLoop:
         self.state_file = self.wave_dir / "loop_state.json"
         self.log_dir = self.wave_dir / "logs"
         self.outcome_dir = self.wave_dir / "outcomes"
+        self.wave_status: Dict[str, Any] = {
+            "state": LoopState.PENDING.value,
+            "blocker_code": None,
+            "reason": "wave initialized",
+            "blocked_details": [],
+            "dispatchable_tasks": [],
+        }
 
     def bootstrap_epic(self, epic_id: str) -> bool:
         """
@@ -143,15 +150,45 @@ class DxLoop:
             self._check_progress()
 
             # PHASE 3: Get ready tasks (respecting scheduler state)
-            ready = self.beads_manager.get_next_wave()
+            readiness = self.beads_manager.describe_wave_readiness()
+            ready = readiness.ready or None
 
             if not ready:
                 if not self.beads_manager.has_pending_tasks():
                     print("Wave complete - no pending tasks")
+                    self._set_wave_status(
+                        LoopState.COMPLETED,
+                        None,
+                        "Wave complete - no pending tasks",
+                    )
                     self._save_state()
                     return True
-                print("No ready tasks, waiting for next cadence...")
+                if readiness.waiting_on_dependencies:
+                    blocked_ids = [
+                        item["beads_id"] for item in readiness.waiting_on_dependencies
+                    ]
+                    self.scheduler.state.blocked_beads_ids = set(blocked_ids)
+                    self._set_wave_status(
+                        LoopState.WAITING_ON_DEPENDENCY,
+                        BlockerCode.WAITING_ON_DEPENDENCY,
+                        f"No dispatches: waiting on dependencies for {len(blocked_ids)} task(s)",
+                        blocked_details=readiness.waiting_on_dependencies,
+                    )
+                    print(
+                        f"No ready tasks: waiting on dependencies for {len(blocked_ids)} task(s)"
+                    )
+                    for item in readiness.waiting_on_dependencies[:3]:
+                        deps = ", ".join(item["unmet_dependencies"])
+                        print(f"  {item['beads_id']} waiting on: {deps}")
+                else:
+                    self._set_wave_status(
+                        LoopState.PENDING,
+                        None,
+                        "No ready tasks, waiting for next cadence",
+                    )
+                    print("No ready tasks, waiting for next cadence...")
             else:
+                self.scheduler.state.blocked_beads_ids.clear()
                 # FILTER OUT ALREADY ACTIVE TASKS (P0 fix with phase-awareness)
                 dispatchable = []
                 for tid in ready:
@@ -168,11 +205,24 @@ class DxLoop:
                             dispatchable.append((tid, expected_phase))
 
                 if dispatchable:
+                    dispatchable_ids = [tid for tid, _ in dispatchable]
+                    self._set_wave_status(
+                        LoopState.IN_PROGRESS_HEALTHY,
+                        None,
+                        f"Dispatching {len(dispatchable_ids)} task(s)",
+                        dispatchable_tasks=dispatchable_ids,
+                    )
                     print(f"Dispatching {len(dispatchable)} task(s)")
                     for beads_id, phase in dispatchable:
                         if self._dispatch_task(beads_id, phase):
                             self.scheduler.state.mark_dispatched(beads_id, phase)
                 else:
+                    self._set_wave_status(
+                        LoopState.IN_PROGRESS_HEALTHY,
+                        None,
+                        "All ready tasks already active, waiting for progress",
+                        dispatchable_tasks=ready,
+                    )
                     print(f"All ready tasks already active, waiting...")
 
             # Save state after each iteration
@@ -452,6 +502,34 @@ REVISION_REQUIRED: <findings>
 BLOCKED: <critical issues>
 """
 
+    def _set_wave_status(
+        self,
+        state: LoopState,
+        blocker_code: Optional[BlockerCode],
+        reason: str,
+        blocked_details: Optional[List[Dict[str, Any]]] = None,
+        dispatchable_tasks: Optional[List[str]] = None,
+    ) -> None:
+        """Update operator-facing wave summary and tracker state."""
+        metadata = {
+            "blocked_details": blocked_details or [],
+            "dispatchable_tasks": dispatchable_tasks or [],
+        }
+        self.state_machine.transition(
+            state,
+            blocker_code=blocker_code,
+            reason=reason,
+            metadata=metadata,
+            force=True,
+        )
+        self.wave_status = {
+            "state": state.value,
+            "blocker_code": blocker_code.value if blocker_code else None,
+            "reason": reason,
+            "blocked_details": blocked_details or [],
+            "dispatchable_tasks": dispatchable_tasks or [],
+        }
+
     def _save_state(self):
         """
         Save loop state to file - SYMMETRIC with load (P1 fix)
@@ -491,6 +569,8 @@ BLOCKED: <critical issues>
             "blocker_classifier": self.blocker_classifier.to_dict(),
             # P1: Notification manager state for restart
             "notification_manager": self.notification_manager.to_dict(),
+            # Operator-facing wave summary
+            "wave_status": self.wave_status,
         }
 
         tmp_file = self.state_file.with_suffix(".tmp")
@@ -548,6 +628,9 @@ BLOCKED: <critical issues>
                 self.notification_manager = NotificationManager.from_dict(
                     state["notification_manager"]
                 )
+
+            if "wave_status" in state:
+                self.wave_status = state["wave_status"]
 
             return True
 
@@ -609,6 +692,13 @@ def cmd_status(args):
             print(f"Version: {state.get('version', 'unknown')}")
             print(f"Updated: {state.get('updated_at', 'unknown')}")
 
+            wave_status = state.get("wave_status", {})
+            print(f"State: {wave_status.get('state', 'unknown')}")
+            print(f"Reason: {wave_status.get('reason', 'unknown')}")
+            blocker_code = wave_status.get("blocker_code")
+            if blocker_code:
+                print(f"Blocker Code: {blocker_code}")
+
             scheduler_state = state.get("scheduler_state", {})
             print(f"Active: {len(scheduler_state.get('active_beads_ids', []))}")
             print(f"Completed: {len(scheduler_state.get('completed_beads_ids', []))}")
@@ -616,6 +706,13 @@ def cmd_status(args):
 
             beads_state = state.get("beads_manager", {})
             print(f"Total tasks: {len(beads_state.get('tasks', {}))}")
+
+            blocked_details = wave_status.get("blocked_details", [])
+            if blocked_details:
+                print("Waiting on dependencies:")
+                for item in blocked_details[:5]:
+                    deps = ", ".join(item.get("unmet_dependencies", []))
+                    print(f"  {item.get('beads_id')}: {deps}")
 
         return 0
 

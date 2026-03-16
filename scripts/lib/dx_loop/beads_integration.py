@@ -36,6 +36,23 @@ class BeadsTask:
         }
 
 
+@dataclass
+class WaveReadiness:
+    """Summarized readiness for the current wave frontier."""
+
+    ready: List[str] = field(default_factory=list)
+    waiting_on_dependencies: List[Dict[str, Any]] = field(default_factory=list)
+    pending_tasks: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "ready": list(self.ready),
+            "waiting_on_dependencies": list(self.waiting_on_dependencies),
+            "pending_tasks": list(self.pending_tasks),
+            "waiting_count": len(self.waiting_on_dependencies),
+        }
+
+
 class BeadsWaveManager:
     """
     Manages Beads wave execution with topological dependency ordering
@@ -213,6 +230,46 @@ class BeadsWaveManager:
             if ready:
                 return ready
         return None
+
+    def describe_wave_readiness(self) -> WaveReadiness:
+        """
+        Describe why the next wave is or is not dispatchable.
+
+        Distinguishes:
+        - ready tasks that can dispatch now
+        - tasks waiting on unmet dependencies
+        - completed/no-pending conditions
+        """
+        readiness = WaveReadiness()
+
+        for task_id, task in self.tasks.items():
+            if task_id in self.completed:
+                continue
+
+            readiness.pending_tasks.append(task_id)
+
+            unmet = [dep_id for dep_id in task.dependencies if dep_id not in self.completed]
+            if unmet:
+                dependency_statuses = {
+                    dep_id: (
+                        self.tasks[dep_id].status
+                        if dep_id in self.tasks
+                        else "external_or_incomplete"
+                    )
+                    for dep_id in unmet
+                }
+                readiness.waiting_on_dependencies.append(
+                    {
+                        "beads_id": task_id,
+                        "title": task.title,
+                        "unmet_dependencies": unmet,
+                        "dependency_statuses": dependency_statuses,
+                    }
+                )
+            else:
+                readiness.ready.append(task_id)
+
+        return readiness
     
     def has_pending_tasks(self) -> bool:
         """Check if there are pending tasks remaining"""

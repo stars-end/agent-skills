@@ -14,7 +14,7 @@ from .state_machine import LoopState, BlockerCode, LoopStateMachine, LoopStateTr
 from .baton import BatonPhase, BatonManager, ReviewVerdict, BatonState
 from .blocker import BlockerClassifier, BlockerState, BlockerSeverity
 from .pr_contract import PRContractEnforcer, PRArtifact
-from .beads_integration import BeadsWaveManager, BeadsTask
+from .beads_integration import BeadsWaveManager, BeadsTask, WaveReadiness
 from .notifications import NotificationManager, Notification
 from .scheduler import DxLoopScheduler, SchedulerState
 from .runner_adapter import RunnerAdapter, RunnerTaskState
@@ -35,6 +35,7 @@ __all__ = [
     "PRArtifact",
     "BeadsWaveManager",
     "BeadsTask",
+    "WaveReadiness",
     "NotificationManager",
     "Notification",
     "DxLoopScheduler",

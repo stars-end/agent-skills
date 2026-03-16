@@ -4,19 +4,33 @@ Tests for dx-loop v1.1 fixes:
 - P0: No duplicate dispatch
 - P1: Notification logic
 - P1: State persistence
+- Operator surface fixes
 """
 
 import sys
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+import importlib.util
 
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts" / "lib"))
 
 from dx_loop.scheduler import DxLoopScheduler, SchedulerState
 from dx_loop.state_machine import LoopState, BlockerCode, LoopStateTracker
-from dx_loop.beads_integration import BeadsWaveManager
+from dx_loop.beads_integration import BeadsTask, BeadsWaveManager
 from dx_loop.blocker import BlockerClassifier
 from dx_loop.notifications import NotificationManager
+
+REPO_ROOT = Path(__file__).parent.parent.parent
+DX_LOOP_SPEC = importlib.util.spec_from_file_location(
+    "dx_loop_script", REPO_ROOT / "scripts" / "dx_loop.py"
+)
+dx_loop_script = importlib.util.module_from_spec(DX_LOOP_SPEC)
+assert DX_LOOP_SPEC.loader is not None
+DX_LOOP_SPEC.loader.exec_module(dx_loop_script)
+DxLoop = dx_loop_script.DxLoop
+cmd_status = dx_loop_script.cmd_status
 
 
 def test_no_duplicate_dispatch():
@@ -155,10 +169,128 @@ def test_restart_suppresses_unchanged_blocker_notifications():
     print("✓ Restart preserves unchanged-blocker suppression")
 
 
+def test_describe_wave_readiness_reports_dependency_blockers():
+    """Dependency-blocked zero-dispatch waves should report unmet dependencies."""
+    manager = BeadsWaveManager()
+    manager.tasks = {
+        "bd-ready": BeadsTask(
+            beads_id="bd-ready",
+            title="Ready task",
+            dependencies=[],
+        ),
+        "bd-blocked": BeadsTask(
+            beads_id="bd-blocked",
+            title="Blocked task",
+            dependencies=["bd-upstream"],
+        ),
+    }
+    manager.completed = {"bd-ready"}
+
+    readiness = manager.describe_wave_readiness()
+
+    assert readiness.ready == []
+    assert readiness.pending_tasks == ["bd-blocked"]
+    assert readiness.waiting_on_dependencies == [
+        {
+            "beads_id": "bd-blocked",
+            "title": "Blocked task",
+            "unmet_dependencies": ["bd-upstream"],
+            "dependency_statuses": {"bd-upstream": "external_or_incomplete"},
+        }
+    ]
+
+    print("✓ Dependency-blocked waves are classified explicitly")
+
+
+def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
+    """Human-readable status should explain dependency-blocked zero-dispatch waves."""
+    wave_id = "wave-operator-status-test"
+    loop = DxLoop(wave_id)
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-blocked": BeadsTask(
+            beads_id="bd-blocked",
+            title="Blocked task",
+            dependencies=["bd-upstream"],
+        )
+    }
+    loop.scheduler.state.blocked_beads_ids = {"bd-blocked"}
+    loop._set_wave_status(
+        LoopState.WAITING_ON_DEPENDENCY,
+        BlockerCode.WAITING_ON_DEPENDENCY,
+        "No dispatches: waiting on dependencies for 1 task(s)",
+        blocked_details=[
+            {
+                "beads_id": "bd-blocked",
+                "title": "Blocked task",
+                "unmet_dependencies": ["bd-upstream"],
+                "dependency_statuses": {"bd-upstream": "external_or_incomplete"},
+            }
+        ],
+    )
+    loop._save_state()
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(SimpleNamespace(wave_id=wave_id, json=False))
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "State: waiting_on_dependency" in captured.out
+    assert "Blocker Code: waiting_on_dependency" in captured.out
+    assert "Waiting on dependencies:" in captured.out
+    assert "bd-blocked: bd-upstream" in captured.out
+
+    print("✓ Status output explains dependency blockers")
+
+
+def test_dx_ensure_bins_links_dx_loop(tmp_path):
+    """dx-loop should be linked into the canonical operator bin dir and execute."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "scripts" / "dx-ensure-bins.sh")],
+        env={
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(tmp_path),
+            "AGENTS_ROOT": str(REPO_ROOT),
+            "BIN_DIR": str(bin_dir),
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "ensured ~/bin tools" in result.stdout
+    linked = bin_dir / "dx-loop"
+    assert linked.is_symlink()
+    assert linked.resolve() == REPO_ROOT / "scripts" / "dx-loop"
+
+    version = subprocess.run(
+        [str(linked), "--version"],
+        env={
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "HOME": str(tmp_path),
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "dx-loop 1.1.0" in version.stdout
+
+    print("✓ dx-loop canonical entrypoint is linked")
+
+
 if __name__ == "__main__":
     test_no_duplicate_dispatch()
     test_notification_first_occurrence()
     test_state_persistence_round_trip()
     test_scheduler_state_persistence()
     test_restart_suppresses_unchanged_blocker_notifications()
+    test_describe_wave_readiness_reports_dependency_blockers()
     print("\nAll v1.1 fix tests passed!")

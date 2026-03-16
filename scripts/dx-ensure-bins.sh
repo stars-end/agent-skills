@@ -28,6 +28,8 @@ link "$AGENTS_ROOT/scripts/dx-runner" "$BIN_DIR/dx-runner"
 link "$AGENTS_ROOT/scripts/dx-batch" "$BIN_DIR/dx-batch"
 # dx-wave is the profile-first operator wrapper for safe dispatch
 link "$AGENTS_ROOT/scripts/dx-wave" "$BIN_DIR/dx-wave"
+# dx-loop is the PR-aware orchestration operator surface
+link "$AGENTS_ROOT/scripts/dx-loop" "$BIN_DIR/dx-loop"
 # dx-dispatch shell shim is canonical compatibility entrypoint.
 # Fall back to the legacy Python implementation only if shell shim is missing.
 if [[ -x "$AGENTS_ROOT/scripts/dx-dispatch" ]]; then

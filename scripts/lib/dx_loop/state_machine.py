@@ -21,6 +21,7 @@ class BlockerCode(str, Enum):
     KICKOFF_ENV_BLOCKED = "kickoff_env_blocked"
     RUN_BLOCKED = "run_blocked"
     REVIEW_BLOCKED = "review_blocked"
+    WAITING_ON_DEPENDENCY = "waiting_on_dependency"
     DETERMINISTIC_REDISPATCH_NEEDED = "deterministic_redispatch_needed"
     NEEDS_DECISION = "needs_decision"
     MERGE_READY = "merge_ready"
@@ -31,6 +32,7 @@ class LoopState(str, Enum):
     """dx-loop state model"""
     PENDING = "pending"
     IN_PROGRESS_HEALTHY = "in_progress_healthy"
+    WAITING_ON_DEPENDENCY = "waiting_on_dependency"
     DETERMINISTIC_REDISPATCH_NEEDED = "deterministic_redispatch_needed"
     KICKOFF_ENV_BLOCKED = "kickoff_env_blocked"
     RUN_BLOCKED = "run_blocked"
@@ -166,12 +168,16 @@ class LoopStateTracker:
         }
 
     def to_dict(self) -> Dict[str, Any]:
+        last_transition = (
+            self.transition_history[-1].to_dict() if self.transition_history else None
+        )
         return {
             "current_state": self.current_state.value,
             "current_blocker": self.current_blocker.value if self.current_blocker else None,
             "last_blocker": self.last_blocker.value if self.last_blocker else None,
             "unchanged_count": self.unchanged_count,
             "transition_count": len(self.transition_history),
+            "last_transition": last_transition,
         }
 
     @classmethod
@@ -200,9 +206,16 @@ class LoopStateMachine:
     ALLOWED_TRANSITIONS = {
         LoopState.PENDING: [
             LoopState.IN_PROGRESS_HEALTHY,
+            LoopState.WAITING_ON_DEPENDENCY,
             LoopState.KICKOFF_ENV_BLOCKED,
         ],
+        LoopState.WAITING_ON_DEPENDENCY: [
+            LoopState.IN_PROGRESS_HEALTHY,
+            LoopState.COMPLETED,
+            LoopState.NEEDS_DECISION,
+        ],
         LoopState.IN_PROGRESS_HEALTHY: [
+            LoopState.WAITING_ON_DEPENDENCY,
             LoopState.DETERMINISTIC_REDISPATCH_NEEDED,
             LoopState.RUN_BLOCKED,
             LoopState.REVIEW_BLOCKED,
