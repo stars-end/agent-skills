@@ -7,6 +7,10 @@
 #
 set -euo pipefail
 
+export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
+export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-${EPYC12_BEADS_HOST:-100.107.173.83}}"
+export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-${EPYC12_BEADS_PORT:-3307}}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 STATE_ROOT="${DX_FLEET_STATE_ROOT:-${HOME}/.dx-state/fleet}"
@@ -58,6 +62,50 @@ json_escape() {
   s="${s//$'\r'/\\r}"
   s="${s//$'\t'/\\t}"
   printf '%s' "$s"
+}
+
+read_triplet() {
+  local __status_var="$1"
+  local __severity_var="$2"
+  local __details_var="$3"
+  shift 3
+  local __payload="$1"
+  local __status=""
+  local __severity=""
+  local __details=""
+  local IFS='|'
+  read -r __status __severity __details <<<"$__payload"
+  printf -v "$__status_var" '%s' "$__status"
+  printf -v "$__severity_var" '%s' "$__severity"
+  printf -v "$__details_var" '%s' "$__details"
+}
+
+read_host_payload() {
+  local __overall_var="$1"
+  local __pass_var="$2"
+  local __warn_var="$3"
+  local __fail_var="$4"
+  local __unknown_var="$5"
+  local __rows_var="$6"
+  local __reason_var="$7"
+  shift 7
+  local __payload="$1"
+  local __overall=""
+  local __pass=""
+  local __warn=""
+  local __fail=""
+  local __unknown=""
+  local __rows=""
+  local __reason=""
+  local IFS='|'
+  read -r __overall __pass __warn __fail __unknown __rows __reason <<<"$__payload"
+  printf -v "$__overall_var" '%s' "$__overall"
+  printf -v "$__pass_var" '%s' "$__pass"
+  printf -v "$__warn_var" '%s' "$__warn"
+  printf -v "$__fail_var" '%s' "$__fail"
+  printf -v "$__unknown_var" '%s' "$__unknown"
+  printf -v "$__rows_var" '%s' "$__rows"
+  printf -v "$__reason_var" '%s' "$__reason"
 }
 
 write_atomic() {
@@ -371,7 +419,9 @@ check_beads_dolt() {
   local status="pass" severity="low" details="Beads runtime ready"
   if ! command -v bd >/dev/null 2>&1; then
     status="fail"; severity="high"; details="bd binary missing"
-  elif ! bd dolt test --json >/dev/null 2>&1; then
+  elif [[ ! -d "${HOME}/bd/.git" ]]; then
+    status="fail"; severity="high"; details="canonical beads repo missing at ~/bd"
+  elif ! (cd "${HOME}/bd" && bd dolt test --json >/dev/null 2>&1); then
     status="fail"; severity="high"; details="bd dolt test failed"
   fi
   echo "$status|$severity|$details"
@@ -595,7 +645,7 @@ weekly_check_ide_config_drift() {
 
   local mcp_status
   mcp_status="$(mcp_tools_sync_status)"
-  IFS='|' read -r status _severity details <<<"$mcp_status"
+  read_triplet status _severity details "$mcp_status"
   if [[ "$status" != "pass" ]]; then
     echo "fail|high|MCP drift: $details"
   else
@@ -683,52 +733,52 @@ build_local_rows() {
 
   local status severity details
   if [[ "$MODE" == "daily" ]]; then
-    IFS='|' read -r status severity details <<<"$(check_beads_dolt)"
+    read_triplet status severity details "$(check_beads_dolt)"
     add_row "beads_dolt" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(mcp_tools_sync_status)"
+    read_triplet status severity details "$(mcp_tools_sync_status)"
     add_row "tool_mcp_health" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(check_required_service_health "$role")"
+    read_triplet status severity details "$(check_required_service_health "$role")"
     add_row "required_service_health" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(check_op_auth_readiness)"
+    read_triplet status severity details "$(check_op_auth_readiness)"
     add_row "op_auth_readiness" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(check_alerts_transport_readiness)"
+    read_triplet status severity details "$(check_alerts_transport_readiness)"
     add_row "alerts_transport_readiness" "$status" "$severity" "$details"
   else
-    IFS='|' read -r status severity details <<<"$(weekly_check_canonical_repo_hygiene)"
+    read_triplet status severity details "$(weekly_check_canonical_repo_hygiene)"
     add_row "canonical_repo_hygiene" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(weekly_check_skills_symlink)"
+    read_triplet status severity details "$(weekly_check_skills_symlink)"
     add_row "skills_symlink_integrity" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(weekly_check_skills_plane_alignment)"
+    read_triplet status severity details "$(weekly_check_skills_plane_alignment)"
     add_row "skills_plane_alignment" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(weekly_check_ide_bootstrap_alignment)"
+    read_triplet status severity details "$(weekly_check_ide_bootstrap_alignment)"
     add_row "ide_bootstrap_alignment" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(weekly_check_global_constraints)"
+    read_triplet status severity details "$(weekly_check_global_constraints)"
     add_row "global_constraints_rails" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(weekly_check_ide_config_drift)"
+    read_triplet status severity details "$(weekly_check_ide_config_drift)"
     add_row "ide_config_presence_and_drift" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(weekly_check_cron_health)"
+    read_triplet status severity details "$(weekly_check_cron_health)"
     add_row "cron_health" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(weekly_check_service_cap)"
+    read_triplet status severity details "$(weekly_check_service_cap)"
     add_row "service_cap_and_forbidden_components" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(weekly_check_deployment_stack)"
+    read_triplet status severity details "$(weekly_check_deployment_stack)"
     add_row "deployment_stack_readiness" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(weekly_check_railway_auth)"
+    read_triplet status severity details "$(weekly_check_railway_auth)"
     add_row "railway_auth_context" "$status" "$severity" "$details"
 
-    IFS='|' read -r status severity details <<<"$(weekly_check_gh_readiness)"
+    read_triplet status severity details "$(weekly_check_gh_readiness)"
     add_row "gh_deploy_readiness" "$status" "$severity" "$details"
   fi
 
@@ -914,7 +964,7 @@ main() {
     fi
 
     hosts_checked=$((hosts_checked + 1))
-    IFS='|' read -r host_overall host_pass host_warn host_fail host_unknown host_rows host_reason <<<"$row_payload"
+    read_host_payload host_overall host_pass host_warn host_fail host_unknown host_rows host_reason "$row_payload"
     if [[ -n "${host_reason:-}" && "${host_reason}" != "ok" ]]; then
       reason_codes+=("$host_reason")
     fi
