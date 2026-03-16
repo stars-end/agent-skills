@@ -57,16 +57,16 @@ tools:
 
   # ============================================================
   # context-plus: Structural context analysis (MCP mode)
-  # Install: npx -y contextplus OR bunx contextplus
+  # LOCAL PATCHED BUILD — not from npm
+  # Install: scripts/install-contextplus-patched.sh
   # Embeddings: OpenRouter (primary) with Ollama fallback
-  # Patched fork: stars-end/contextplus (feat/openai-compatible-embeddings)
   # ============================================================
   context-plus:
     enabled: true
     integration_mode: mcp
-    version: "latest"
-    install_cmd: "npx -y contextplus --version 2>/dev/null || echo 'contextplus available via npx'"
-    health_cmd: "npx -y contextplus --help 2>&1 | head -1"
+    version: "patched"
+    install_cmd: "scripts/install-contextplus-patched.sh"
+    health_cmd: "node /tmp/contextplus-patched/build/index.js --help 2>&1 | head -1"
     target_ides:
       - codex-cli
       - claude-code
@@ -75,10 +75,9 @@ tools:
       - gemini-cli
     mcp:
       type: stdio
-      command: "npx"
+      command: "node"
       args:
-        - "-y"
-        - "contextplus"
+        - "/tmp/contextplus-patched/build/index.js"
     runtime: node
     env:
       optional:
@@ -89,7 +88,6 @@ tools:
         - OPENROUTER_EMBED_MODEL
         - CONTEXTPLUS_EMBED_PROVIDER
     upstream: "https://github.com/ForLoopCodes/contextplus"
-    fork: "https://github.com/stars-end/contextplus"
     docs: "https://github.com/ForLoopCodes/contextplus#readme"
 
   # ============================================================
