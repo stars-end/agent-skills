@@ -1,30 +1,50 @@
 # Context-Plus OpenRouter Rollout Checklist
 
 **Beads**: bd-hil7.2
-**Status**: Draft
+**Status**: Draft (revised 2026-03-17)
 
-## Pre-Flight
+## Pre-Implementation Gate (T0)
 
-- [ ] 1Password entry exists: `op://dev/Agent-Secrets-Production/OPENROUTER_API_KEY`
-- [ ] OpenRouter API key is active and has credit (or free tier)
-- [ ] OpenRouter `/embeddings` endpoint responds with `openai/nomic-embed-text` model
-- [ ] Compat layer wrapper script (`contextplus-openrouter-embed.js`) is committed and tested
+- [ ] Verify `OPENROUTER_API_KEY` is active (1Password entry exists)
+- [ ] Run model availability test:
+  ```bash
+  curl -s -X POST "https://openrouter.ai/api/v1/embeddings" \
+    -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"model":"openai/text-embedding-3-small","input":"test"}'
+  ```
+  Expected: 200 with `data[0].embedding` of length 1536
+- [ ] If `openai/text-embedding-3-small` fails, test `qwen/qwen3-embedding-0.6b`
+- [ ] Record chosen model and dimension in task notes
+
+## Pre-Flight (T1)
+
+- [ ] Upstream PR submitted to `contextplus` repo (or internal fork created)
+- [ ] Patch includes provider branching logic (Section 1.3 of spec)
+- [ ] Patch includes cache invalidation on dimension mismatch (Section 2.4)
 - [ ] All existing `context-plus` tools pass with Ollama fallback (no regressions)
+- [ ] Patched `contextplus` installed globally on one host for initial testing
 
-## Per-Host Rollout
+## Per-Host Rollout (T2)
 
 ### macmini (Apple Silicon, primary dev)
 
-- [ ] `OPENROUTER_API_KEY` added to shell profile
+- [ ] `OPENROUTER_API_KEY` added to shell profile (`.zshrc`)
+- [ ] Claude Code MCP env block updated with `OPENROUTER_API_KEY` and `OPENROUTER_EMBED_MODEL`
+- [ ] Codex MCP env block updated (or shell profile if TOML lacks env support)
+- [ ] OpenCode: verified `OPENROUTER_API_KEY` available in parent process env
 - [ ] `context-plus` restarted with OpenRouter active
 - [ ] `semantic_code_search` smoke test passes
 - [ ] `semantic_identifier_search` smoke test passes
-- [ ] Embedding cache written to `.mcp_data/embeddings-cache.json`
-- [ ] Fallback verified: unset key, confirm Ollama takeover
+- [ ] Embedding cache written with correct dimensions
+- [ ] Fallback verified: unset key, confirm Ollama takeover + cache invalidation
 
 ### homedesktop-wsl
 
 - [ ] `OPENROUTER_API_KEY` added to shell profile
+- [ ] Claude Code MCP env block updated
+- [ ] Codex MCP env block updated
+- [ ] OpenCode: verified parent process env
 - [ ] `context-plus` restarted with OpenRouter active
 - [ ] Smoke tests pass (same as macmini)
 - [ ] Fallback verified
@@ -32,12 +52,15 @@
 ### epyc12
 
 - [ ] `OPENROUTER_API_KEY` added to shell profile
+- [ ] Claude Code MCP env block updated
+- [ ] Codex MCP env block updated
+- [ ] OpenCode: verified parent process env
 - [ ] `context-plus` restarted with OpenRouter active
 - [ ] Smoke tests pass (same as macmini)
-- [ ] CPU usage normal during indexing (no spikes expected - OpenRouter is remote)
+- [ ] CPU usage normal during indexing (no spikes — OpenRouter is remote)
 - [ ] Fallback verified
 
-## IDE Validation
+## IDE Validation (T3)
 
 ### Codex
 
@@ -57,8 +80,9 @@
 - [ ] `context-plus` MCP tools listed in OpenCode
 - [ ] `semantic_code_search` returns ranked results
 - [ ] `semantic_identifier_search` returns identifier matches
+- [ ] Env propagation confirmed (OPENROUTER_API_KEY reachable)
 
-## Nightly Enrichment
+## Nightly Enrichment (T4)
 
 - [ ] `scripts/enrichment/nightly-enrichment.py` committed
 - [ ] Cron job or systemd timer installed on one host
@@ -68,7 +92,9 @@
 
 ## Rollback Procedure
 
-1. Unset `OPENROUTER_API_KEY` on affected host(s)
-2. Restart MCP servers (Claude Code, OpenCode, Codex)
-3. Verify Ollama fallback activates (or fail gracefully if Ollama absent)
-4. No code rollback needed
+1. Remove `OPENROUTER_API_KEY` from MCP env blocks on all clients
+2. Remove `OPENROUTER_API_KEY` from shell profiles on all hosts
+3. Restart MCP servers (Claude Code, OpenCode, Codex)
+4. Clear `.mcp_data/embeddings-cache.json` on all repos (dimension mismatch)
+5. Verify Ollama fallback activates (or fail gracefully if Ollama absent)
+6. No code rollback needed (Ollama fallback is always present)
