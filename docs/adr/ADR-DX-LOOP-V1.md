@@ -88,6 +88,7 @@ From `scripts/ralph/beads-parallel.sh`:
    kickoff_env_blocked      - Bootstrap/worktree/host gates failed
    run_blocked              - dx-runner execution blocked (not stalled)
    review_blocked           - Reviewer verdict blocked
+   waiting_on_dependency    - zero-dispatch wave blocked on upstream deps
    deterministic_redispatch_needed - Stalled/timeout, safe to retry
    needs_decision           - Requires human decision
    merge_ready              - PR artifacts present, checks passing
@@ -130,11 +131,18 @@ dx-loop v1
 ## Command Surface
 
 ```bash
+dx-ensure-bins.sh
 dx-loop start --epic <epic-id> [--config <path>]
 dx-loop status [--wave-id <id>] [--json]
 dx-loop check --wave-id <id> [--json]
 dx-loop report --wave-id <id> [--format json|markdown]
 ```
+
+Operator contract:
+- `dx-loop` is installed into `~/bin` by `scripts/dx-ensure-bins.sh`
+- operators should invoke `dx-loop` from the canonical shim, not by source-diving
+- zero-dispatch dependency-blocked waves surface as `waiting_on_dependency`
+  with blocker detail in human-readable status and persisted JSON state
 
 ## Consequences
 

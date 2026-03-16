@@ -16,6 +16,9 @@
 ## Quick Start
 
 ```bash
+# Install or refresh canonical operator shims in ~/bin
+dx-ensure-bins.sh
+
 # Start wave from Beads epic
 dx-loop start --epic bd-5w5o
 
@@ -43,6 +46,17 @@ dx-loop status [--wave-id <id>] [--json]
 ```
 
 Shows wave status or lists all waves if no `--wave-id` provided.
+
+For zero-dispatch waves, status now distinguishes generic pending from
+dependency-blocked frontiers. When no task is dispatchable because upstream
+dependencies are still unmet, operators see:
+
+- `State: waiting_on_dependency`
+- `Blocker Code: waiting_on_dependency`
+- `Waiting on dependencies:` with the blocked task ids and unmet dependency ids
+
+The JSON state includes the same detail under `wave_status.blocked_details` for
+automation.
 
 ## Ralph Reuse
 
@@ -86,6 +100,7 @@ dx-loop replaces from Ralph:
 | `kickoff_env_blocked` | Bootstrap/worktree/host gates failed | Fix bootstrap environment |
 | `run_blocked` | dx-runner execution blocked | Wait or switch provider |
 | `review_blocked` | Reviewer verdict blocked | Address review findings |
+| `waiting_on_dependency` | No ready tasks because upstream deps are unmet | Wait for upstream work to complete |
 | `deterministic_redispatch_needed` | Stalled/timeout, safe to retry | Automatic redispatch |
 | `needs_decision` | Requires human decision | Human intervention required |
 | `merge_ready` | PR artifacts present, checks passing | Human merge approval |
