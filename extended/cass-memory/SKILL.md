@@ -17,7 +17,7 @@ CLI-native episodic memory for recurring patterns, decisions, and failure playbo
 
 **`integration_mode: cli`**
 
-CASS Memory is a CLI-native tool, NOT rendered to IDE MCP configs. It runs as a standalone binary.
+CASS Memory is a CLI-native tool. It is NOT rendered to IDE MCP configs. It runs as a standalone binary.
 
 ## Installation
 
