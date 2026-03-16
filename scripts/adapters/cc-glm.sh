@@ -182,10 +182,14 @@ adapter_start() {
     rm -f "$rc_file"
     local launch_mode="detached-script"
     local launcher
-    launcher="$(mktemp "/tmp/ccglm-launcher-${beads}.XXXXXX.sh")"
+    launcher="$(mktemp "/tmp/ccglm-launcher-${beads}.XXXXXX")"
     chmod +x "$launcher"
 
     local run_q=""
+    local worktree_q=""
+    if [[ -n "$worktree" ]]; then
+        printf -v worktree_q 'cd %q && ' "$worktree"
+    fi
     if [[ "${USE_PTY:-false}" == "true" && -x "$pty_run" ]]; then
         launch_mode="pty-detached-script"
         printf -v run_q '%q ' "$pty_run" --output "$log_file" -- env CC_GLM_MODEL="$model" CC_GLM_BASE_URL="$base_url" "$headless" --prompt-file "$prompt_file"
@@ -195,24 +199,49 @@ adapter_start() {
         run_q="${run_q% }"
     fi
 
-    cat > "$launcher" <<EOF
+cat > "$launcher" <<EOF
 #!/usr/bin/env bash
 set +e
-$run_q >> $(printf '%q' "$log_file") 2>&1
+echo "[cc-glm-adapter] LAUNCHER_ENTER pid=\$\$" >> $(printf '%q' "$log_file") 2>&1
+${worktree_q}${run_q} >> $(printf '%q' "$log_file") 2>&1
 rc=\$?
+echo "[cc-glm-adapter] LAUNCHER_EXIT pid=\$\$ rc=\$rc" >> $(printf '%q' "$log_file") 2>&1
 echo "\$rc" > $(printf '%q' "$rc_file")
 rm -f $(printf '%q' "$launcher")
 EOF
 
-    if command -v setsid >/dev/null 2>&1; then
+    local pid=""
+    if command -v python3 >/dev/null 2>&1; then
+        launch_mode="${launch_mode}+python-detach"
+        pid="$(python3 - <<PY
+import subprocess
+p = subprocess.Popen(
+    ['/usr/bin/env', 'bash', ${launcher@Q}],
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    start_new_session=True,
+)
+print(p.pid)
+PY
+)"
+    elif command -v setsid >/dev/null 2>&1; then
         launch_mode="${launch_mode}+setsid"
-        setsid "$launcher" >/dev/null 2>&1 < /dev/null &
+        setsid /usr/bin/env bash "$launcher" >/dev/null 2>&1 < /dev/null &
+        disown "$!" 2>/dev/null || true
+        pid="$!"
     else
-        launch_mode="${launch_mode}+nohup"
-        nohup "$launcher" >/dev/null 2>&1 < /dev/null &
+        launch_mode="${launch_mode}+nohup-bg"
+        nohup /usr/bin/env bash "$launcher" >/dev/null 2>&1 < /dev/null &
+        disown "$!" 2>/dev/null || true
+        pid="$!"
     fi
 
-    local pid="$!"
+    if [[ -z "$pid" ]]; then
+        echo "[cc-glm-adapter] SPAWN_FAILED launch_mode=$launch_mode" >> "$log_file"
+        return 1
+    fi
+
     printf 'pid=%s\n' "$pid"
     printf 'selected_model=%s\n' "$model"
     printf 'fallback_reason=%s\n' "none"

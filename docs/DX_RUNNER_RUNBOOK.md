@@ -8,6 +8,9 @@ Wave-based parallel dispatch with OpenCode (GLM-5) + Gemini.
 # Canonical control-plane cwd (required)
 cd ~/bd
 
+# Mutating runs should name the repo worktree explicitly.
+REPO_WORKTREE=/tmp/agents/<beads-id>/<repo>
+
 # Preflight checks
 dx-runner preflight --provider opencode
 dx-runner preflight --provider gemini
@@ -17,9 +20,9 @@ dx-runner preflight --provider opencode --require-railway-auth
 dx-runner beads-gate --repo /path/to/repo [--probe-id bd-xxx] [--write-probe]
 
 # Start parallel jobs
-dx-runner start --beads bd-xxx --provider opencode --prompt-file /tmp/p.prompt
-dx-runner start --beads bd-yyy --provider gemini --prompt-file /tmp/q.prompt
-dx-runner start --beads bd-zzz --provider opencode --prompt-file /tmp/r.prompt --require-commit-artifact
+dx-runner start --beads bd-xxx --provider opencode --worktree "$REPO_WORKTREE" --prompt-file /tmp/p.prompt
+dx-runner start --beads bd-yyy --provider gemini --worktree "$REPO_WORKTREE" --prompt-file /tmp/q.prompt
+dx-runner start --beads bd-zzz --provider opencode --worktree "$REPO_WORKTREE" --prompt-file /tmp/r.prompt --require-commit-artifact
 
 # Monitor
 dx-runner status [--json]
@@ -31,6 +34,21 @@ dx-runner prune
 dx-runner stop --beads bd-xxx
 dx-runner finalize --beads bd-xxx --reason stalled --exit-code 1
 ```
+
+## Canonical Cwd + Repo Worktree Contract
+
+Run the control plane from canonical `~/bd`, but pass a repo worktree explicitly for any mutating job:
+
+```bash
+cd ~/bd
+dx-runner start --beads bd-xxx --provider cc-glm --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/p.prompt
+```
+
+Rules:
+- `preflight`, `start`, `check`, and `report` run from canonical `~/bd`.
+- `--worktree` is the primary mutating-run contract and should be passed explicitly.
+- `DX_RUNNER_DEFAULT_WORKTREE` is fallback-only for legacy wrappers or previously recorded runs.
+- If a run records the wrong worktree, prune stale artifacts and relaunch with explicit `--worktree`.
 
 ## Preflight / Beads Gate
 
