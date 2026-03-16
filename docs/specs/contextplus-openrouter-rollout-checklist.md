@@ -32,7 +32,7 @@
 - [ ] `OPENROUTER_API_KEY` added to shell profile (`.zshrc`)
 - [ ] Claude Code MCP env block updated with `OPENROUTER_API_KEY` and `OPENROUTER_EMBED_MODEL`
 - [ ] Codex MCP env block updated (or shell profile if TOML lacks env support)
-- [ ] OpenCode: verified `OPENROUTER_API_KEY` available in parent process env
+- [ ] OpenCode `environment` block updated with `OPENROUTER_API_KEY` and `OPENROUTER_EMBED_MODEL`
 - [ ] `context-plus` restarted with OpenRouter active
 - [ ] `semantic_code_search` smoke test passes
 - [ ] `semantic_identifier_search` smoke test passes
@@ -44,7 +44,7 @@
 - [ ] `OPENROUTER_API_KEY` added to shell profile
 - [ ] Claude Code MCP env block updated
 - [ ] Codex MCP env block updated
-- [ ] OpenCode: verified parent process env
+- [ ] OpenCode `environment` block updated
 - [ ] `context-plus` restarted with OpenRouter active
 - [ ] Smoke tests pass (same as macmini)
 - [ ] Fallback verified
@@ -54,7 +54,7 @@
 - [ ] `OPENROUTER_API_KEY` added to shell profile
 - [ ] Claude Code MCP env block updated
 - [ ] Codex MCP env block updated
-- [ ] OpenCode: verified parent process env
+- [ ] OpenCode `environment` block updated
 - [ ] `context-plus` restarted with OpenRouter active
 - [ ] Smoke tests pass (same as macmini)
 - [ ] CPU usage normal during indexing (no spikes — OpenRouter is remote)
@@ -80,7 +80,7 @@
 - [ ] `context-plus` MCP tools listed in OpenCode
 - [ ] `semantic_code_search` returns ranked results
 - [ ] `semantic_identifier_search` returns identifier matches
-- [ ] Env propagation confirmed (OPENROUTER_API_KEY reachable)
+- [ ] Env propagation confirmed (`OPENROUTER_API_KEY` reachable via OpenCode `environment` block or parent env)
 
 ## Nightly Enrichment (T4)
 

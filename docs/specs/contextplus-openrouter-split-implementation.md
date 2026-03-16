@@ -275,23 +275,24 @@ Note: Codex's TOML config may or may not support shell variable interpolation. I
 
 #### OpenCode (`~/.config/opencode/opencode.jsonc`)
 
-OpenCode MCP config does **not** currently support `env` blocks for local MCP servers. For OpenCode, env vars must be in the parent process environment. This means `OPENROUTER_API_KEY` must be in the shell profile (`.zshrc`/`.bashrc`) that launches OpenCode.
+OpenCode local MCP config supports an `environment` block. This should be used as the primary injection mechanism, with parent shell environment as a secondary/backstop path.
 
 ```jsonc
-// No env block available for local MCP in OpenCode
-// OPENROUTER_API_KEY must be set in the parent shell
 {
   "mcp": {
     "context-plus": {
       "command": ["contextplus"],
-      "type": "local"
-      // env: NOT SUPPORTED for "local" type
+      "type": "local",
+      "environment": {
+        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
+        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small"
+      }
     }
   }
 }
 ```
 
-**OpenCode risk**: If OpenCode is launched from a desktop shortcut or IDE integration that does not source the shell profile, `OPENROUTER_API_KEY` will not be available. The implementation agent should verify this on each host during T3 (validation).
+**OpenCode caveat**: If variable interpolation is not supported on a given build, write the resolved value directly into the managed config or ensure the parent process environment already contains `OPENROUTER_API_KEY`. The implementation agent should verify the effective behavior on each host during T3 (validation).
 
 ### 4.3 Summary: Per-Client Propagation Mechanism
 
@@ -299,9 +300,9 @@ OpenCode MCP config does **not** currently support `env` blocks for local MCP se
 |--------|-----------|------------------------|
 | Claude Code | MCP `env` block (shell var interpolation) | Yes (resolved at launch) |
 | Codex | MCP `env` block (if supported) or shell profile | Yes (resolved at launch or parent env) |
-| OpenCode | Parent process environment only | Yes (no `env` block support) |
+| OpenCode | MCP `environment` block (preferred) or parent process env | Yes (unless resolved value is written directly) |
 
-**Conclusion**: Shell profile is necessary for all three clients. Claude Code and Codex additionally support MCP-level env injection for defense-in-depth. OpenCode relies solely on parent process env.
+**Conclusion**: Shell profile remains a convenient backstop, but the normative contract is explicit per-client MCP env injection wherever the client supports it. OpenCode should use its `environment` block rather than relying solely on parent process env.
 
 ### 4.4 Secret Resolution
 
@@ -465,6 +466,7 @@ This spec (bd-hil7.2)
 
 - `contextplus/src/core/embeddings.ts` (upstream, 499 lines) - Ollama-only embedding engine
 - `contextplus/src/tools/semantic-navigate.ts` (upstream, 295 lines) - Chat-based cluster labeling
+- `contextplus/src/index.ts` - OpenCode config generator uses `environment` for local MCP config
 - `contextplus/package.json` - Confirms `"type": "module"`, ESM-only, no exports/main
 - `llm_common/providers/zai_client.py` - z.ai LLM client (reference for nightly job)
 - `llm_common/providers/openrouter_client.py` - OpenRouter LLM client (reference for API patterns)
