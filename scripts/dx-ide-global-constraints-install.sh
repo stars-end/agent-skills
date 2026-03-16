@@ -6,7 +6,7 @@ usage() {
 dx-ide-global-constraints-install.sh
 
 Installs the DX "global constraints rail" into IDE-global instruction files by symlinking:
-  ~/agent-skills/dist/dx-global-constraints.md
+  ~/.agent/skills/AGENTS.md
 
 Targets (per-user):
   ~/.codex/AGENTS.md
@@ -20,7 +20,7 @@ Usage:
   dx-ide-global-constraints-install.sh --apply --force
 
 Notes:
-  - Default source is: $HOME/agent-skills/dist/dx-global-constraints.md
+  - Default source is: $HOME/.agent/skills/AGENTS.md
   - Set DX_GLOBAL_CONSTRAINTS_SOURCE to override the source file.
   - This script is intentionally small and deterministic.
 EOF
@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-SOURCE="${DX_GLOBAL_CONSTRAINTS_SOURCE:-$HOME/agent-skills/dist/dx-global-constraints.md}"
+SOURCE="${DX_GLOBAL_CONSTRAINTS_SOURCE:-$HOME/.agent/skills/AGENTS.md}"
 if [[ ! -f "$SOURCE" ]]; then
   echo "❌ Missing source rail: $SOURCE" >&2
   echo "   Fix: cd ~/agent-skills && git pull origin master" >&2
@@ -125,4 +125,3 @@ if [[ $fail -eq 0 ]]; then
 fi
 echo "❌ FAILED ($MODE)"
 exit 1
-

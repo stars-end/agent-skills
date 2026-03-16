@@ -244,9 +244,9 @@ Verifies the shared skills plane on each canonical host:
 **`ide_bootstrap_alignment`**
 
 Verifies IDE bootstrap rails point at skills plane:
-- `~/.claude/CLAUDE.md` references AGENTS.md
-- `~/.gemini/GEMINI.md` references AGENTS.md
-- `~/.opencode/config.json` references AGENTS.md
+- `~/.claude/CLAUDE.md` points at `~/.agent/skills/AGENTS.md`
+- `~/.gemini/GEMINI.md` points at `~/.agent/skills/AGENTS.md`
+- `~/.config/opencode/AGENTS.md` points at `~/.agent/skills/AGENTS.md`
 
 ### Why Weekly, Not Daily?
 

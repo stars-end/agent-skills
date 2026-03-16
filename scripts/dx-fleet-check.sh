@@ -598,13 +598,19 @@ weekly_check_ide_bootstrap_alignment() {
     warnings+=("gemini_md_missing")
   fi
 
-  # OpenCode: config.json should reference AGENTS.md
-  if [[ -f "${HOME}/.opencode/config.json" ]]; then
-    if ! grep -q "AGENTS.md" "${HOME}/.opencode/config.json" 2>/dev/null; then
+  # OpenCode: AGENTS rail should live in the canonical config directory
+  if [[ -f "${HOME}/.config/opencode/AGENTS.md" ]]; then
+    if [[ -L "${HOME}/.config/opencode/AGENTS.md" ]]; then
+      local opencode_link
+      opencode_link="$(readlink "${HOME}/.config/opencode/AGENTS.md" 2>/dev/null || true)"
+      if [[ "$opencode_link" != *".agent/skills/AGENTS.md"* ]] && [[ "$opencode_link" != *"agent-skills/AGENTS.md"* ]]; then
+        warnings+=("opencode_no_agents_ref")
+      fi
+    elif ! grep -q "AGENTS.md" "${HOME}/.config/opencode/AGENTS.md" 2>/dev/null; then
       warnings+=("opencode_no_agents_ref")
     fi
   else
-    warnings+=("opencode_config_missing")
+    warnings+=("opencode_no_agents_ref")
   fi
 
   # Failures indicate broken bootstrap, warnings indicate missing/non-canonical

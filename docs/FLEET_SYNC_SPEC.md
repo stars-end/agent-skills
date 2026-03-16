@@ -27,7 +27,7 @@ Non-negotiable constraints:
 - `antigravity` -> `~/.gemini/antigravity/mcp_config.json`
 - `claude-code` -> `~/.claude.json`
 - `codex-cli` -> `~/.codex/config.toml`
-- `opencode` -> `~/.opencode/config.json`
+- `opencode` -> `~/.config/opencode/opencode.jsonc` (+ `~/.config/opencode/AGENTS.md` rail)
 - `gemini-cli` -> `~/.gemini/antigravity/mcp_config.json` (+ `~/.gemini/GEMINI.md` rail)
 
 Source of truth for IDE paths/artifacts is `scripts/canonical-targets.sh`.
@@ -111,9 +111,9 @@ This check is weekly because:
 **`ide_bootstrap_alignment`**
 
 Verifies IDE bootstrap/config rails point at the shared skills plane:
-- `~/.claude/CLAUDE.md` exists and references AGENTS.md
-- `~/.gemini/GEMINI.md` exists and references AGENTS.md
-- `~/.opencode/config.json` references AGENTS.md
+- `~/.claude/CLAUDE.md` exists and points at `~/.agent/skills/AGENTS.md`
+- `~/.gemini/GEMINI.md` exists and points at `~/.agent/skills/AGENTS.md`
+- `~/.config/opencode/AGENTS.md` points at `~/.agent/skills/AGENTS.md`
 
 This check is weekly because:
 - IDE configuration is typically set up once per host
