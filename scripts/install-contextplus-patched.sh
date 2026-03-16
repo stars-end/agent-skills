@@ -2,16 +2,15 @@
 # install-contextplus-patched.sh — Build and install a locally-patched contextplus
 #
 # Fetches upstream contextplus at a pinned SHA, applies the OpenRouter
-# embeddings patch, builds, and symlinks the binary to ~/.local/bin.
+# embeddings patch, builds, and writes install metadata for drift detection.
 #
 # Usage:
 #   scripts/install-contextplus-patched.sh          # install/update
 #   scripts/install-contextplus-patched.sh --check  # check if install is current
-#   scripts/install-contextplus-patched.sh --clean  # remove installed binary
+#   scripts/install-contextplus-patched.sh --clean  # remove installed build
 #
 # Env vars:
-#   CONTEXTPLUS_PATCH_DIR  — override working directory (default: /tmp/contextplus-patched)
-#   CONTEXTPLUS_INSTALL_DIR — override install target (default: ~/.local)
+#   CONTEXTPLUS_PATCH_DIR  — override build directory (default: ~/.local/share/contextplus-patched)
 
 set -euo pipefail
 
@@ -19,9 +18,9 @@ set -euo pipefail
 UPSTREAM_REPO="https://github.com/ForLoopCodes/contextplus.git"
 UPSTREAM_SHA="d2f44d32cf14fbd258bd1f012be6bd626ae20361"
 PATCH_FILE="$(cd "$(dirname "$0")/.." && pwd)/patches/contextplus-openrouter-embeddings.patch"
-WORK_DIR="${CONTEXTPLUS_PATCH_DIR:-/tmp/contextplus-patched}"
-INSTALL_DIR="${CONTEXTPLUS_INSTALL_DIR:-$HOME/.local}"
-BIN_NAME="contextplus"
+WORK_DIR="${CONTEXTPLUS_PATCH_DIR:-$HOME/.local/share/contextplus-patched}"
+METADATA_FILE="$WORK_DIR/install-metadata.json"
+ENTRYPOINT="$WORK_DIR/build/index.js"
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -34,8 +33,14 @@ warn()  { echo -e "${YELLOW}[warn]${NC}  $*"; }
 error() { echo -e "${RED}[error]${NC} $*" >&2; exit 1; }
 
 # --- Check mode ---
+# Reads install-metadata.json for deterministic drift detection.
+# Does NOT rely on --version output (which may not exist or be stable).
 if [[ "${1:-}" == "--check" ]]; then
-    installed_sha="$("${INSTALL_DIR}/bin/${BIN_NAME}" --version 2>/dev/null | grep -o 'sha:[a-f0-9]*' | cut -d: -f2 || echo "none")"
+    if [[ ! -f "$METADATA_FILE" ]]; then
+        echo "not-installed"
+        exit 1
+    fi
+    installed_sha="$(python3 -c "import json; print(json.load(open('$METADATA_FILE')).get('upstream_sha','none'))" 2>/dev/null || echo "none")"
     if [[ "$installed_sha" == "$UPSTREAM_SHA" ]]; then
         echo "current (${UPSTREAM_SHA:0:12})"
         exit 0
@@ -47,15 +52,11 @@ fi
 
 # --- Clean mode ---
 if [[ "${1:-}" == "--clean" ]]; then
-    target="${INSTALL_DIR}/bin/${BIN_NAME}"
-    if [[ -L "$target" ]]; then
-        rm "$target"
-        info "Removed symlink: $target"
-    elif [[ -f "$target" ]]; then
-        rm "$target"
-        info "Removed binary: $target"
+    if [[ -d "$WORK_DIR" ]]; then
+        rm -rf "$WORK_DIR"
+        info "Removed build directory: $WORK_DIR"
     else
-        warn "Nothing to remove at $target"
+        warn "Nothing to remove at $WORK_DIR"
     fi
     exit 0
 fi
@@ -70,9 +71,6 @@ fi
 if [[ ! -f "$PATCH_FILE" ]]; then
     error "Patch file not found: $PATCH_FILE"
 fi
-if ! mkdir -p "$INSTALL_DIR/bin" 2>/dev/null; then
-    error "Cannot create $INSTALL_DIR/bin"
-fi
 
 # --- Clone or update ---
 if [[ -d "$WORK_DIR/.git" ]]; then
@@ -82,16 +80,17 @@ if [[ -d "$WORK_DIR/.git" ]]; then
     git checkout "origin/main" 2>/dev/null
 else
     info "Cloning upstream contextplus to $WORK_DIR"
+    mkdir -p "$(dirname "$WORK_DIR")"
     git clone --depth 50 "$UPSTREAM_REPO" "$WORK_DIR"
 fi
 
 cd "$WORK_DIR"
 
-# Verify we have the right base
+# Verify we have the right base — FAIL LOUD if pinned SHA is unavailable
 current_sha="$(git rev-parse HEAD)"
-if [[ "$current_sha" != "$UPSTREAM_SHA" ]]; then
-    warn "Current HEAD ($current_sha) differs from pinned SHA ($UPSTREAM_SHA)"
-    warn "Attempting to reset to pinned version..."
+if [[ "$current_sha" == "$UPSTREAM_SHA" ]]; then
+    info "Already at pinned SHA $UPSTREAM_SHA"
+else
     # If full history isn't available, fetch it
     if ! git cat-file -t "$UPSTREAM_SHA" &>/dev/null; then
         git fetch --unshallow 2>/dev/null || true
@@ -100,7 +99,7 @@ if [[ "$current_sha" != "$UPSTREAM_SHA" ]]; then
         git reset --hard "$UPSTREAM_SHA"
         info "Reset to pinned SHA $UPSTREAM_SHA"
     else
-        warn "Cannot find pinned SHA $UPSTREAM_SHA — installing from latest fetched main"
+        error "Pinned SHA $UPSTREAM_SHA not found in upstream. Aborting — will not silently drift to latest main."
     fi
 fi
 
@@ -129,20 +128,31 @@ if [[ ! -f "build/index.js" ]]; then
     error "Build failed — build/index.js not found"
 fi
 
-# --- Install binary ---
-info "Installing to ${INSTALL_DIR}/bin/${BIN_NAME}"
-# Remove old link if exists
-rm -f "${INSTALL_DIR}/bin/${BIN_NAME}"
+# --- Write install metadata ---
+# Deterministic drift check: records SHA, patch checksum, and timestamp
+patch_sha="$(shasum "$PATCH_FILE" | cut -d' ' -f1)"
+python3 -c "
+import json, datetime
+meta = {
+    'upstream_sha': '$UPSTREAM_SHA',
+    'patch_checksum': '$patch_sha',
+    'patch_file': '$PATCH_FILE',
+    'installed_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    'entrypoint': '$ENTRYPOINT',
+}
+json.dump(meta, open('$METADATA_FILE', 'w'), indent=2)
+" 2>/dev/null || warn "Could not write install metadata (python3 not available)"
 
-# Create symlink to the build entry point
-ln -s "$WORK_DIR/build/index.js" "${INSTALL_DIR}/bin/${BIN_NAME}"
-chmod +x "$WORK_DIR/build/index.js"
+chmod +x "$ENTRYPOINT"
 
-# Verify
-installed_version="$("${INSTALL_DIR}/bin/${BIN_NAME}" --version 2>/dev/null || echo "unknown")"
-info "Installed ${BIN_NAME}: ${installed_version}"
-info "Install path: ${INSTALL_DIR}/bin/${BIN_NAME} -> ${WORK_DIR}/build/index.js"
-info "Upstream SHA: $(git rev-parse --short HEAD)"
+# --- Summary ---
+info "Installed contextplus-patched"
+info "  Build dir:  $WORK_DIR"
+info "  Entrypoint: $ENTRYPOINT"
+info "  Upstream:   $(git rev-parse --short HEAD)"
+info "  Metadata:   $METADATA_FILE"
 info ""
-info "To verify: ${INSTALL_DIR}/bin/${BIN_NAME} --help"
-info "To roll back: $0 --clean && npx -y contextplus"
+info "MCP config should use: node $ENTRYPOINT"
+info "Health check: test -f $ENTRYPOINT"
+info "Drift check:  $0 --check"
+info "Remove:        $0 --clean"

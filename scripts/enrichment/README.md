@@ -45,9 +45,8 @@ ENRICHMENT_BATCH=15 ZAI_MODEL=glm-5 \
 
 ## Dependencies
 
-- Python 3.13+
-- httpx (`pip install httpx`)
-- No llm-common dependency (uses raw Anthropic-compatible API)
+- Python 3.11+
+- llm-common (`pip install llm-common`) — provides `ZaiClient` for z.ai API access
 
 ## Volume Estimate
 

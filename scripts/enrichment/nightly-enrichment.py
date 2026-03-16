@@ -10,7 +10,6 @@ Usage:
 Env vars:
     ZAI_API_KEY        - Required. z.ai API key (op://dev/Agent-Secrets-Production/ZAI_API_KEY)
     ZAI_MODEL          - Default: glm-4.7
-    OPENROUTER_API_KEY - Not needed (reads existing cache, no live embeddings)
     ENRICHMENT_BATCH   - Files per cluster for labeling. Default: 20
     ENRICHMENT_TIMEOUT - Per-call timeout seconds. Default: 30
     ENRICHMENT_OUTPUT  - Override output dir. Default: .mcp_data/enrichment/
@@ -19,6 +18,10 @@ Artifacts (written per repo):
     .mcp_data/enrichment/cluster-labels.json
     .mcp_data/enrichment/file-summaries.json
     .mcp_data/enrichment/semantic-descriptions.json
+
+Dependencies:
+    - llm-common (for ZaiClient)
+    - Python 3.11+
 """
 
 import argparse
@@ -155,31 +158,36 @@ Symbols: {symbols}
 Respond with ONLY the description text."""
 
 
-async def call_zai(prompt: str, api_key: str, model: str, timeout: int = 30) -> str:
-    """Call z.ai API using raw httpx (no llm-common dependency required)."""
-    import httpx
+async def call_zai(prompt: str, client) -> str:
+    """Call z.ai via llm-common ZaiClient."""
+    from llm_common.providers import LLMConfig, LLMMessage, ZaiClient
+    from llm_common.core import MessageRole
 
-    url = "https://api.z.ai/api/anthropic/v1/messages"
-    headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-    payload = {
-        "model": model,
-        "max_tokens": 1024,
-        "messages": [{"role": "user", "content": prompt}],
-    }
+    response = await client.chat_completion(
+        messages=[LLMMessage(role=MessageRole.USER, content=prompt)],
+    )
+    return response.content if response.content else ""
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        return data["content"][0]["text"]
+
+def create_zai_client(api_key: str, model: str):
+    """Create a ZaiClient instance. Raises on missing deps."""
+    try:
+        from llm_common.providers import LLMConfig, ZaiClient
+    except ImportError:
+        raise ImportError(
+            "llm-common is required. Install with: pip install llm-common "
+            "or add it to your Python environment."
+        )
+    config = LLMConfig(
+        api_key=api_key,
+        default_model=model,
+        provider="zai",
+    )
+    return ZaiClient(config)
 
 
 async def generate_cluster_labels(
-    clusters: list[list[FileEntry]], api_key: str, model: str, timeout: int
+    clusters: list[list[FileEntry]], client
 ) -> list[ClusterLabel]:
     """Generate labels for each cluster via z.ai."""
     labels: list[ClusterLabel] = []
@@ -190,7 +198,7 @@ async def generate_cluster_labels(
         prompt = CLUSTER_LABEL_PROMPT.format(clusters=f"Cluster {i + 1}:\n{cluster_desc}")
 
         try:
-            response = await call_zai(prompt, api_key, model, timeout)
+            response = await call_zai(prompt, client)
             json_match = __import__("re").search(r"\[[\s\S]*\]", response)
             if json_match:
                 parsed = json.loads(json_match.group())
@@ -217,7 +225,7 @@ async def generate_cluster_labels(
 
 
 async def generate_file_summaries(
-    entries: list[FileEntry], api_key: str, model: str, timeout: int
+    entries: list[FileEntry], client
 ) -> list[FileSummary]:
     """Generate summaries for individual files via z.ai."""
     summaries: list[FileSummary] = []
@@ -228,7 +236,7 @@ async def generate_file_summaries(
             symbols=", ".join(entry.symbols) if entry.symbols else "none",
         )
         try:
-            response = await call_zai(prompt, api_key, model, timeout)
+            response = await call_zai(prompt, client)
             summaries.append(FileSummary(path=entry.path, summary=response.strip()))
         except Exception as e:
             log.warning("Failed to summarize %s: %s", entry.path, e)
@@ -238,7 +246,7 @@ async def generate_file_summaries(
 
 
 async def generate_semantic_descriptions(
-    entries: list[FileEntry], api_key: str, model: str, timeout: int
+    entries: list[FileEntry], client
 ) -> list[SemanticDescription]:
     """Generate semantic descriptions for agent prompt enrichment."""
     descriptions: list[SemanticDescription] = []
@@ -251,7 +259,7 @@ async def generate_semantic_descriptions(
             f"Symbols: {', '.join(entry.symbols) if entry.symbols else 'none'}"
         )
         try:
-            response = await call_zai(prompt, api_key, model, timeout)
+            response = await call_zai(prompt, client)
             descriptions.append(SemanticDescription(path=entry.path, description=response.strip()))
         except Exception as e:
             log.warning("Failed to describe %s: %s", entry.path, e)
@@ -261,7 +269,7 @@ async def generate_semantic_descriptions(
 
 
 async def enrich_repo(
-    repo_root: Path, api_key: str, model: str, batch_size: int, timeout: int, dry_run: bool
+    repo_root: Path, client, batch_size: int, dry_run: bool
 ) -> dict:
     """Enrich a single repository."""
     result = {
@@ -298,13 +306,13 @@ async def enrich_repo(
     clusters = cluster_files(entries, batch_size)
     log.info("Split into %d clusters (batch_size=%d)", len(clusters), batch_size)
 
-    cluster_labels = await generate_cluster_labels(clusters, api_key, model, timeout)
+    cluster_labels = await generate_cluster_labels(clusters, client)
     result["clusters_labeled"] = len(cluster_labels)
 
-    file_summaries = await generate_file_summaries(entries, api_key, model, timeout)
+    file_summaries = await generate_file_summaries(entries, client)
     result["summaries_generated"] = len(file_summaries)
 
-    semantic_descs = await generate_semantic_descriptions(entries, api_key, model, timeout)
+    semantic_descs = await generate_semantic_descriptions(entries, client)
     result["descriptions_generated"] = len(semantic_descs)
 
     output_dir = repo_root / OUTPUT_DIR
@@ -346,6 +354,8 @@ async def main() -> int:
         log.error("ZAI_API_KEY is required. Set env var or use --api-key")
         return 1
 
+    client = create_zai_client(args.api_key, args.model)
+
     repos = args.repo if args.repo else [r for r in CANONICAL_REPOS if r.exists()]
     if not repos:
         log.error("No repos found. Pass --repo or ensure canonical repos exist.")
@@ -357,9 +367,7 @@ async def main() -> int:
     results = []
     for repo in repos:
         try:
-            result = await enrich_repo(
-                repo, args.api_key, args.model, args.batch_size, args.timeout, args.dry_run
-            )
+            result = await enrich_repo(repo, client, args.batch_size, args.dry_run)
             results.append(result)
         except Exception as e:
             log.error("Failed to enrich %s: %s", repo, e)

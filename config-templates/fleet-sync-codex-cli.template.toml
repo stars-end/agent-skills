@@ -1,7 +1,7 @@
 [mcpServers."context-plus"]
 type = "stdio"
 command = "node"
-args = ["/tmp/contextplus-patched/build/index.js"]
+args = ["~/.local/share/contextplus-patched/build/index.js"]
 
 [mcpServers."context-plus".env]
 OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}"

@@ -2,7 +2,7 @@
   "mcp": {
     "context-plus": {
       "type": "local",
-      "command": ["node", "/tmp/contextplus-patched/build/index.js"],
+      "command": ["node", "~/.local/share/contextplus-patched/build/index.js"],
       "environment": {
         "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
         "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
