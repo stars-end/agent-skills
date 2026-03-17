@@ -88,9 +88,11 @@ Phase 1 does **not** add OpenRouter-backed chat to `context-plus`. The `semantic
 - The patch is applied deterministically via `install-metadata.json` with SHA and checksum tracking
 - Fleet-sync renders IDE configs to point at the local patched build
 
-### 2.2 Upstream Patch Approach (rejected, retained for context)
+### 2.2 Upstream Patch Approach (REJECTED)
 
-**Chosen path**: Submit a PR to the upstream `contextplus` repository that adds an OpenAI-compatible embeddings provider alongside the existing Ollama provider, gated by `OPENROUTER_API_KEY`.
+The original spec proposed submitting an upstream PR. This was rejected in favor of the local-only patch (Section 2.1). The rationale below is retained for context on why the alternative was considered.
+
+**Original proposal**: Submit a PR to the upstream `contextplus` repository that adds an OpenAI-compatible embeddings provider alongside the existing Ollama provider, gated by `OPENROUTER_API_KEY`.
 
 ### 2.2 Why This Path (and why alternatives are rejected)
 
@@ -108,16 +110,17 @@ The original spec proposed a `NODE_OPTIONS --require` preload monkey-patch. That
 
 | Option | Implementability | Maintenance Cost | Upgrade Path |
 |--------|-----------------|-------------------|-------------|
-| **Upstream patch (RECOMMENDED)** | Direct — modify `src/core/embeddings.ts` | Low — upstream merges it, we track releases | Automatic via `npm update` |
+| **Local-only patch (CHOSEN)** | Direct — modify `src/core/embeddings.ts`, apply at install time | Low — pinned SHA + checksum, full control | Manual re-base on upstream changes |
+| Upstream patch | Direct — submit PR | Low if accepted, blocked if rejected | Automatic via `npm update` if accepted |
 | Internal fork | Direct — full control | High — merge upstream changes manually | Manual rebase on every release |
 | HTTP proxy as `OLLAMA_HOST` | Complex — must translate OpenAI schema to Ollama schema | Medium — maintain proxy process | Decoupled from contextplus updates |
 | Wrapper MCP server that delegates to contextplus | Complex — must re-implement tool registrations | Very High — must track tool interface changes | Fragile |
 
-**Why upstream patch wins**: The actual code change is small (~40 lines in `embeddings.ts` to add an `OpenAIEmbeddings` client class and a provider selector). The upstream maintainer has a clear incentive to accept it (broens provider support). Once merged, we get it for free on `npm update`. If the upstream maintainer rejects it, we fall back to an internal fork at that point — but we try the low-cost path first.
+**Why local-only wins**: No dependency on upstream maintainer acceptance timeline. The pinned SHA + patch checksum gives deterministic, auditable builds. Fleet-sync renders all IDE configs to the local binary. If upstream later accepts a similar change, we can drop the patch and switch to `npx -y contextplus`.
 
-### 2.3 Patch Scope (for follow-on T1)
+### 2.3 Patch Scope
 
-The upstream PR would modify `src/core/embeddings.ts`:
+The local patch modifies `src/core/embeddings.ts`:
 
 **Current code** (lines 77, 90, 126-135):
 ```typescript
@@ -449,13 +452,15 @@ After implementation, verify in each IDE:
 
 | Scenario | Expected Behavior |
 |----------|-------------------|
-| `OPENROUTER_API_KEY` invalid | Fall back to Ollama; log warning |
-| OpenRouter API down | Fall back to Ollama; log error |
-| OpenRouter rate limited | Retry with backoff (3 attempts); then fall back |
-| Model not routable (404) | Fail fast with clear error; do not silently fall back |
+| `OPENROUTER_API_KEY` invalid (401) | Fail fast; propagate error |
+| OpenRouter API down (5xx) | Pin process to Ollama for lifetime; log error |
+| OpenRouter rate limited (403) | Fail fast; propagate error |
+| Model not routable (404) | Fail fast with clear error |
 | Ollama not running and OpenRouter absent | Embeddings fail gracefully; tools return empty results |
-| Network timeout | 60s timeout per batch; fall back to Ollama |
+| Network timeout | Fail fast (AbortError is non-retriable) |
 | Dimension mismatch (provider switch) | Invalidate cache, trigger full re-index |
+
+In `auto` mode, only 5xx and network errors trigger fallback to Ollama. Auth errors (401/403), model-not-found (404), and timeouts fail fast. After fallback, the process stays on Ollama until restart — there is no automatic recovery or retry-with-backoff.
 
 ### 5.5 Rollback
 
@@ -500,8 +505,7 @@ For the future implementation PR:
 ### 6.2 Suggested Beads Task Titles
 
 - **T0**: `bd-hil7.2a` - "Gate: validate OpenRouter embedding model availability"
-- **T1**: `bd-hil7.3` - "Impl: upstream PR for OpenAI-compatible embeddings in contextplus"
-- **T1b**: `bd-hil7.3b` - "Fallback: internal contextplus fork with embeddings provider"
+- **T1**: `bd-hil7.3` - "Impl: local-only patch for OpenAI-compatible embeddings in contextplus"
 - **T2**: `bd-hil7.4` - "Rollout: OPENROUTER_API_KEY to all canonical hosts"
 - **T3**: `bd-hil7.5` - "Validate: context-plus embeddings on Codex, Claude Code, OpenCode"
 - **T4**: `bd-hil7.6` - "Impl: nightly z.ai enrichment job for semantic labeling"
@@ -513,12 +517,11 @@ For the future implementation PR:
 ```
 This spec (bd-hil7.2)
   -> T0 (bd-hil7.2a): validate model availability [GATE]
-     -> T1 (bd-hil7.3): upstream patch
-     |  -> (rejected?) -> T1b (bd-hil7.3b): internal fork
-     |     -> T2 (bd-hil7.4): fleet rollout
-     |        -> T3 (bd-hil7.5): validation
-     |           -> T4 (bd-hil7.6): nightly enrichment
-     |              -> T5 (bd-hil7.7): wire enrichment
+     -> T1 (bd-hil7.3): local-only patch
+        -> T2 (bd-hil7.4): fleet rollout
+           -> T3 (bd-hil7.5): validation
+              -> T4 (bd-hil7.6): nightly enrichment
+                 -> T5 (bd-hil7.7): wire enrichment
      -> T6 (bd-hil7.8): chat support (parallel with T2)
 ```
 

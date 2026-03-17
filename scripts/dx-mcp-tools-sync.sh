@@ -214,9 +214,10 @@ def render_json(path: Path, servers: dict, ide: str):
         if ide == "opencode":
             cmd = entry.get("command", "")
             args = entry.get("args", [])
+            entry_env = entry.get("env", {})
             entry = {"type": "local", "command": ([cmd] if isinstance(cmd, str) else cmd) + args}
-            if "env" in entry:
-                entry["environment"] = entry.pop("env")
+            if entry_env:
+                entry["environment"] = entry_env
         elif "env" in entry:
             # Claude Code / Gemini use "env" key
             pass  # already in entry as "env"
