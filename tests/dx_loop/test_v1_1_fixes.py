@@ -203,6 +203,49 @@ def test_describe_wave_readiness_reports_dependency_blockers():
     print("✓ Dependency-blocked waves are classified explicitly")
 
 
+def test_external_closed_dependency_counts_as_satisfied():
+    """Closed non-wave dependencies should make downstream tasks dispatchable."""
+    manager = BeadsWaveManager()
+    manager.tasks = {
+        "bd-blocked": BeadsTask(
+            beads_id="bd-blocked",
+            title="Blocked task",
+            dependencies=["bd-upstream"],
+        ),
+    }
+    manager.dependency_status_cache["bd-upstream"] = "closed"
+    manager.layers = [["bd-blocked"]]
+
+    readiness = manager.describe_wave_readiness()
+
+    assert readiness.ready == ["bd-blocked"]
+    assert readiness.waiting_on_dependencies == []
+    assert manager.get_ready_tasks(0) == ["bd-blocked"]
+
+    print("✓ Closed external dependencies unlock ready work")
+
+
+def test_from_dict_restores_dependency_status_cache():
+    """Persisted dependency status cache should survive save/load round trips."""
+    manager1 = BeadsWaveManager()
+    manager1.tasks = {
+        "bd-blocked": BeadsTask(
+            beads_id="bd-blocked",
+            title="Blocked task",
+            dependencies=["bd-upstream"],
+        ),
+    }
+    manager1.dependency_status_cache = {"bd-upstream": "closed"}
+    manager1.layers = [["bd-blocked"]]
+
+    manager2 = BeadsWaveManager.from_dict(manager1.to_dict())
+
+    assert manager2.dependency_status_cache == {"bd-upstream": "closed"}
+    assert manager2.get_ready_tasks(0) == ["bd-blocked"]
+
+    print("✓ Dependency status cache persists across resume")
+
+
 def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
     """Human-readable status should explain dependency-blocked zero-dispatch waves."""
     wave_id = "wave-operator-status-test"
