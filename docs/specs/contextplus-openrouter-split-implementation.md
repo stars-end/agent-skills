@@ -494,9 +494,8 @@ For the future implementation PR:
 | # | Task | Scope | Priority | Dependencies |
 |---|------|-------|----------|-------------|
 | T0 | Validate OpenRouter embedding model availability | curl test against `/api/v1/embeddings` with candidate models | P0 (gate) | None |
-| T1 | Upstream PR: add OpenAI-compatible embeddings provider to `contextplus` | Patch `src/core/embeddings.ts` with provider branching, cache invalidation | P1 | T0 passes |
-| T1b | Fallback: internal fork if upstream PR rejected | Fork `stars-end/contextplus`, pin in npm | P2 (contingent) | T1 rejected |
-| T2 | Fleet config rollout: `OPENROUTER_API_KEY` on all hosts | MCP env blocks + shell profile on macmini, homedesktop-wsl, epyc12 | P1 | T1 merged/forked |
+| T1 | Local-only patch: add OpenAI-compatible embeddings provider to `contextplus` | Patch `src/core/embeddings.ts` with provider branching, cache invalidation | P1 | T0 passes |
+| T2 | Fleet config rollout: `OPENROUTER_API_KEY` on all hosts | MCP env blocks + shell profile on macmini, homedesktop-wsl, epyc12 | P1 | T1 complete |
 | T3 | Validate embeddings on all three IDEs | Smoke test per Section 5 | P1 | T2 complete |
 | T4 | Implement nightly z.ai enrichment job | New Python script at `scripts/enrichment/nightly-enrichment.py` | P2 | T3 complete |
 | T5 | Wire enrichment artifacts into `context-plus` reads | Optional: make semantic-navigate read cluster-labels.json | P2 | T4 complete |
