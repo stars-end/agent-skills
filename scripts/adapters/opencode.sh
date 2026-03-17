@@ -33,6 +33,15 @@ OPENCODE_EXECUTION_MODE="${OPENCODE_EXECUTION_MODE:-run}"
 DX_RUNNER_ALLOW_MODEL_OVERRIDE="${DX_RUNNER_ALLOW_MODEL_OVERRIDE:-0}"
 MODEL_OVERRIDE_AUDIT_LOG=""
 
+adapter_canonical_model_aliases() {
+    local model="$1"
+    case "$model" in
+        zhipuai-coding-plan/glm-5)
+            printf '%s\n' "zai-coding-plan/glm-5"
+            ;;
+    esac
+}
+
 adapter_run_with_timeout() {
     local seconds="$1"
     shift
@@ -345,6 +354,15 @@ adapter_resolve_model() {
         echo "$CANONICAL_MODEL|${selection_reason}|override_source=${override_source}"
         return 0
     fi
+
+    local alias_model
+    while IFS= read -r alias_model; do
+        [[ -n "$alias_model" ]] || continue
+        if printf '%s\n' "$available_models" | grep -qxF "$alias_model"; then
+            echo "$alias_model|canonical_alias|alias_for=${CANONICAL_MODEL}"
+            return 0
+        fi
+    done < <(adapter_canonical_model_aliases "$CANONICAL_MODEL")
 
     echo "|unavailable|canonical model '$CANONICAL_MODEL' unavailable; use cc-glm or gemini"
     return 1

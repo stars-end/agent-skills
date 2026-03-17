@@ -22,6 +22,7 @@ from dx_loop.state_machine import LoopState, BlockerCode, LoopStateTracker
 from dx_loop.beads_integration import BeadsTask, BeadsWaveManager
 from dx_loop.blocker import BlockerClassifier
 from dx_loop.notifications import NotificationManager
+from dx_loop.runner_adapter import RunnerAdapter, RunnerStartResult, RunnerTaskState
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 DX_LOOP_SPEC = importlib.util.spec_from_file_location(
@@ -246,6 +247,17 @@ def test_from_dict_restores_dependency_status_cache():
     print("✓ Dependency status cache persists across resume")
 
 
+def test_beads_manager_infers_repo_from_title_prefix():
+    """Title prefixes should map to the correct canonical repo."""
+    manager = BeadsWaveManager()
+
+    assert manager._infer_repo_from_title("Prime Radiant: fix V2 auth") == "prime-radiant-ai"
+    assert manager._infer_repo_from_title("Agent-skills: harden dx-loop") == "agent-skills"
+    assert manager._infer_repo_from_title("Unknown: task") is None
+
+    print("✓ Repo inference works from task title prefixes")
+
+
 def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
     """Human-readable status should explain dependency-blocked zero-dispatch waves."""
     wave_id = "wave-operator-status-test"
@@ -286,7 +298,7 @@ def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
     assert rc == 0
     assert "State: waiting_on_dependency" in captured.out
     assert "Blocker Code: waiting_on_dependency" in captured.out
-    assert "Waiting on dependencies:" in captured.out
+    assert "Blocked details:" in captured.out
     assert "bd-blocked: bd-upstream" in captured.out
 
     print("✓ Status output explains dependency blockers")
@@ -362,6 +374,197 @@ def test_dx_ensure_bins_links_dx_loop(tmp_path):
     assert "dx-loop 1.1.0" in version.stdout
 
     print("✓ dx-loop canonical entrypoint is linked")
+
+
+def test_runner_adapter_uses_homebrew_bash_on_macos(monkeypatch):
+    """macOS launches should wrap dx-runner with a bash 4+ entrypoint."""
+    adapter = RunnerAdapter(provider="opencode")
+
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    monkeypatch.setattr("shutil.which", lambda name: "/Users/fengning/bin/dx-runner")
+    monkeypatch.setattr(adapter, "_preferred_bash", lambda: Path("/opt/homebrew/bin/bash"))
+
+    result = adapter._build_dx_runner_command(["status"])
+
+    assert result.ok is True
+    assert result.command == [
+        "/opt/homebrew/bin/bash",
+        str(adapter._dx_runner_script_path()),
+        "status",
+    ]
+
+    print("✓ RunnerAdapter wraps dx-runner with Homebrew bash on macOS")
+
+
+def test_runner_adapter_prefers_local_dx_runner_script_over_path(monkeypatch, tmp_path):
+    """dx-loop should use the co-located dx-runner script, not a stale PATH binary."""
+    adapter = RunnerAdapter(provider="opencode")
+    local_runner = tmp_path / "dx-runner"
+    local_runner.write_text("#!/usr/bin/env bash\n")
+
+    monkeypatch.setattr(adapter, "_dx_runner_script_path", lambda: local_runner)
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+    monkeypatch.setattr("shutil.which", lambda name: "/Users/fengning/bin/dx-runner")
+
+    result = adapter._build_dx_runner_command(["status"])
+
+    assert result.ok is True
+    assert result.command == [str(local_runner), "status"]
+
+    print("✓ RunnerAdapter prefers the local dx-runner script over PATH")
+
+
+def test_runner_adapter_reports_shell_preflight_failure_without_bash4(monkeypatch):
+    """macOS should fail explicitly when no bash 4+ entrypoint is available."""
+    adapter = RunnerAdapter(provider="opencode")
+
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    monkeypatch.setattr("shutil.which", lambda name: "/Users/fengning/bin/dx-runner")
+    monkeypatch.setattr(adapter, "_preferred_bash", lambda: None)
+
+    result = adapter.start("bd-test", Path("/tmp/test.prompt"))
+
+    assert result.ok is False
+    assert result.reason_code == "dx_runner_shell_preflight_failed"
+    assert "bash >= 4" in (result.detail or "")
+
+    print("✓ RunnerAdapter surfaces shell preflight failure explicitly")
+
+
+def test_runner_adapter_accepts_timeout_when_runner_state_exists(monkeypatch):
+    """A slow dx-runner start should still count as success if the job is live."""
+    adapter = RunnerAdapter(provider="opencode")
+    timeout_result = RunnerStartResult(
+        ok=False,
+        returncode=124,
+        reason_code="dx_runner_start_timeout",
+        detail="dx-runner timed out after 30s",
+        command=["dx-runner", "start"],
+    )
+
+    monkeypatch.setattr(adapter, "_run_dx_runner", lambda *args, **kwargs: timeout_result)
+    monkeypatch.setattr(
+        adapter,
+        "check",
+        lambda beads_id: RunnerTaskState(
+            beads_id=beads_id,
+            state="healthy",
+            reason_code="recent_log_activity",
+        ),
+    )
+
+    result = adapter.start("bd-test", Path("/tmp/test.prompt"))
+
+    assert result.ok is True
+    assert result.reason_code == "dx_runner_start_timeout_handoff"
+
+    print("✓ RunnerAdapter treats timeout as success when the job is already live")
+
+
+def test_start_implement_marks_kickoff_env_blocked(tmp_path):
+    """Failed starts before any run exists should not leave the wave healthy."""
+    wave_id = "wave-start-failure"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Dispatchable task",
+            dependencies=[],
+        )
+    }
+    worktree = tmp_path / "agents" / "bd-test" / "prime-radiant-ai"
+    worktree.mkdir(parents=True)
+    loop.beads_manager.tasks["bd-test"].repo = "prime-radiant-ai"
+    loop._ensure_worktree = lambda beads_id: worktree
+
+    failure = RunnerStartResult(
+        ok=False,
+        returncode=2,
+        reason_code="dx_runner_shell_preflight_failed",
+        detail="dx-runner requires bash >= 4",
+        command=["/Users/fengning/bin/dx-runner", "start"],
+    )
+    loop.runner_adapter.start = lambda *args, **kwargs: failure
+
+    assert loop._start_implement("bd-test") is False
+    assert loop.wave_status["state"] == "kickoff_env_blocked"
+    assert loop.wave_status["blocker_code"] == "kickoff_env_blocked"
+    assert loop.wave_status["blocked_details"][0]["reason_code"] == "dx_runner_shell_preflight_failed"
+
+    print("✓ Failed starts produce truthful kickoff-env-blocked state")
+
+
+def test_run_loop_persists_truthful_state_when_initial_dispatch_fails(tmp_path):
+    """A failed initial dispatch should persist blocked state instead of healthy progress."""
+    wave_id = "wave-dispatch-failure"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Dispatchable task",
+            dependencies=[],
+        )
+    }
+    loop.beads_manager.layers = [["bd-test"]]
+    worktree = tmp_path / "agents" / "bd-test" / "prime-radiant-ai"
+    worktree.mkdir(parents=True)
+    loop.beads_manager.tasks["bd-test"].repo = "prime-radiant-ai"
+    loop._ensure_worktree = lambda beads_id: worktree
+
+    failure = RunnerStartResult(
+        ok=False,
+        returncode=21,
+        reason_code="dx_runner_preflight_failed",
+        detail="canonical model unavailable",
+        command=["/opt/homebrew/bin/bash", "/Users/fengning/bin/dx-runner", "start"],
+    )
+    loop.runner_adapter.start = lambda *args, **kwargs: failure
+
+    assert loop.run_loop(max_iterations=1) is False
+
+    state = json.loads(loop.state_file.read_text())
+    assert state["scheduler_state"]["dispatch_count"] == 0
+    assert state["wave_status"]["state"] == "kickoff_env_blocked"
+    assert state["wave_status"]["blocker_code"] == "kickoff_env_blocked"
+    assert state["wave_status"]["blocked_details"][0]["reason_code"] == "dx_runner_preflight_failed"
+    assert "exiting without resident loop" in state["wave_status"]["reason"]
+
+    print("✓ Failed initial dispatch persists blocked state")
+
+
+def test_ensure_worktree_creates_missing_repo_workspace(tmp_path, monkeypatch):
+    """dx-loop should provision the inferred repo worktree before dispatch."""
+    wave_id = "wave-worktree-create"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0, "worktree_base": str(tmp_path / "agents")})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Prime Radiant: fix auth lane",
+            repo="prime-radiant-ai",
+            dependencies=[],
+        )
+    }
+    created = tmp_path / "agents" / "bd-test" / "prime-radiant-ai"
+
+    def fake_run(cmd, **kwargs):
+        created.mkdir(parents=True, exist_ok=True)
+        return SimpleNamespace(returncode=0, stdout=f"{created}\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    resolved = loop._ensure_worktree("bd-test")
+
+    assert resolved == created
+    assert created.is_dir()
+    assert loop._get_worktree_path("bd-test") == created
+
+    print("✓ Missing worktrees are provisioned for the inferred repo")
 
 
 if __name__ == "__main__":

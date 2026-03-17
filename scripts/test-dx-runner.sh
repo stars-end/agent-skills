@@ -480,29 +480,31 @@ EOF
     local r2
     rm -f /tmp/dx-runner/opencode/.models_cache
     r2="$(adapter_resolve_model "zhipuai-coding-plan/glm-5" "epyc12" || true)"
-    [[ "$r2" == "|unavailable|"* ]] && pass "model resolution fails when canonical model is missing" || fail "expected unavailable when canonical missing: $r2"
+    [[ "$r2" == "zai-coding-plan/glm-5|canonical_alias|"* ]] && pass "model resolution accepts canonical alias when provider renamed the model" || fail "expected canonical alias resolution: $r2"
 
     local r3
     r3="$(adapter_resolve_model "zai-coding-plan/glm-5" "epyc12" || true)"
     [[ "$r3" == "|unavailable|"* ]] && pass "model resolution rejects non-canonical requested models" || fail "expected non-canonical rejection: $r3"
 
-    # Start should fail with deterministic rc=25 and reason_code when canonical-only policy cannot be satisfied
+    # Start should succeed when the canonical model can be satisfied via a provider alias
     local prompt_file log_file start_out rc
     prompt_file="$(mktemp)"
     log_file="$(mktemp)"
     echo "READY" > "$prompt_file"
+    local worktree
+    worktree="$(mktemp -d)"
     set +e
     rm -f /tmp/dx-runner/opencode/.models_cache
-    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "/tmp" "$log_file" 2>/dev/null)"
+    start_out="$(OPENCODE_MODEL="zhipuai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "$worktree" "$log_file" 2>/dev/null)"
     rc=$?
     set -e
-    if [[ "$rc" -eq 25 ]] && echo "$start_out" | grep -q "reason_code=opencode_model_unavailable"; then
-        pass "opencode start returns rc=25 with opencode_model_unavailable when canonical-only policy cannot be satisfied"
+    if [[ "$rc" -eq 0 ]] && echo "$start_out" | grep -q "selected_model=zai-coding-plan/glm-5"; then
+        pass "opencode start uses canonical alias when provider renamed the model"
     else
-        fail "expected rc=25 + reason_code for unavailable canonical-only model policy (rc=$rc, out=$start_out)"
+        fail "expected alias-backed start success (rc=$rc, out=$start_out)"
     fi
 
-    rm -rf "$tmp_bin" "$models_file" "$prompt_file" "$log_file"
+    rm -rf "$tmp_bin" "$models_file" "$prompt_file" "$log_file" "$worktree"
     unset OPENCODE_MODELS_CACHE_TTL_SEC
 }
 

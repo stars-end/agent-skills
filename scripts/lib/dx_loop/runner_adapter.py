@@ -8,11 +8,13 @@ Source of truth for task execution state is dx-runner report --format json.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from dataclasses import dataclass, field
+from typing import Optional, Dict, Any, List
 from pathlib import Path
+import platform
 import subprocess
 import json
+import shutil
 
 
 @dataclass
@@ -50,6 +52,19 @@ class RunnerTaskState:
         }
 
 
+@dataclass
+class RunnerStartResult:
+    """Structured dx-runner start result for truthful operator handling."""
+
+    ok: bool
+    returncode: int
+    stdout: str = ""
+    stderr: str = ""
+    reason_code: Optional[str] = None
+    detail: Optional[str] = None
+    command: List[str] = field(default_factory=list)
+
+
 class RunnerAdapter:
     """
     Governed adapter for dx-runner integration
@@ -60,42 +75,188 @@ class RunnerAdapter:
     
     def __init__(self, provider: str = "opencode"):
         self.provider = provider
-    
+
+    def _dx_runner_script_path(self) -> Path:
+        """Resolve the canonical dx-runner script path."""
+        script_path = Path(__file__).resolve().parents[2] / "dx-runner"
+        resolved = script_path.resolve()
+        return resolved if resolved.exists() else script_path
+
+    def _preferred_bash(self) -> Optional[Path]:
+        """Find a bash 4+ entrypoint suitable for dx-runner on macOS."""
+        for candidate in (Path("/opt/homebrew/bin/bash"), Path("/usr/local/bin/bash")):
+            if candidate.exists():
+                return candidate
+        return None
+
+    def _build_dx_runner_command(self, args: List[str]) -> RunnerStartResult:
+        """
+        Build an invocation command that works across host shells.
+
+        On macOS, force dx-runner through a modern bash instead of inheriting the
+        system bash 3.2 shebang path.
+        """
+        script_path = self._dx_runner_script_path()
+        dx_runner = str(script_path) if script_path.exists() else shutil.which("dx-runner")
+
+        if not dx_runner:
+            return RunnerStartResult(
+                ok=False,
+                returncode=127,
+                reason_code="dx_runner_missing",
+                detail="dx-runner command not found on PATH",
+            )
+
+        if platform.system() == "Darwin":
+            bash_path = self._preferred_bash()
+            if not bash_path:
+                return RunnerStartResult(
+                    ok=False,
+                    returncode=2,
+                    reason_code="dx_runner_shell_preflight_failed",
+                    detail=(
+                        "dx-runner requires bash >= 4 on macOS, but no Homebrew "
+                        "bash was found at /opt/homebrew/bin/bash or "
+                        "/usr/local/bin/bash"
+                    ),
+                    command=[dx_runner, *args],
+                )
+            return RunnerStartResult(
+                ok=True,
+                returncode=0,
+                command=[str(bash_path), dx_runner, *args],
+            )
+
+        return RunnerStartResult(
+            ok=True,
+            returncode=0,
+            command=[dx_runner, *args],
+        )
+
+    def _classify_start_failure(
+        self,
+        returncode: int,
+        stdout: str,
+        stderr: str,
+    ) -> tuple[str, str]:
+        """Convert dx-runner launch failures into stable operator-facing reason codes."""
+        detail = stderr.strip() or stdout.strip() or f"dx-runner exited with rc={returncode}"
+        combined = f"{stdout}\n{stderr}".lower()
+
+        if "requires bash >= 4" in combined:
+            return "dx_runner_shell_preflight_failed", detail
+        if returncode == 21:
+            return "dx_runner_preflight_failed", detail
+        if returncode == 22:
+            return "dx_runner_permission_denied", detail
+        if returncode == 25:
+            return "dx_runner_model_unavailable", detail
+        if returncode == 26:
+            return "dx_runner_provider_capacity_blocked", detail
+        return "dx_runner_start_failed", detail
+
+    def _run_dx_runner(
+        self,
+        args: List[str],
+        *,
+        timeout: int = 30,
+    ) -> RunnerStartResult:
+        """Run dx-runner with host-compatible invocation and structured failures."""
+        cmd_result = self._build_dx_runner_command(args)
+        if not cmd_result.ok:
+            return cmd_result
+
+        try:
+            result = subprocess.run(
+                cmd_result.command,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return RunnerStartResult(
+                ok=False,
+                returncode=124,
+                reason_code="dx_runner_start_timeout",
+                detail=f"dx-runner timed out after {timeout}s",
+                command=cmd_result.command,
+            )
+        except FileNotFoundError:
+            return RunnerStartResult(
+                ok=False,
+                returncode=127,
+                reason_code="dx_runner_missing",
+                detail="dx-runner command not found on PATH",
+                command=cmd_result.command,
+            )
+
+        if result.returncode == 0:
+            return RunnerStartResult(
+                ok=True,
+                returncode=0,
+                stdout=result.stdout,
+                stderr=result.stderr,
+                command=cmd_result.command,
+            )
+
+        reason_code, detail = self._classify_start_failure(
+            result.returncode,
+            result.stdout,
+            result.stderr,
+        )
+        return RunnerStartResult(
+            ok=False,
+            returncode=result.returncode,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            reason_code=reason_code,
+            detail=detail,
+            command=cmd_result.command,
+        )
+
     def start(
         self,
         beads_id: str,
         prompt_file: Path,
         worktree: Optional[Path] = None,
         **kwargs,
-    ) -> bool:
+    ) -> RunnerStartResult:
         """
         Start task via dx-runner
-        
-        Returns True if dispatch succeeded, False otherwise.
+
+        Returns structured outcome for truthful operator handling.
         """
-        cmd = [
-            "dx-runner", "start",
+        args = [
+            "start",
             "--beads", beads_id,
             "--provider", self.provider,
             "--prompt-file", str(prompt_file),
         ]
-        
+
         if worktree:
-            cmd.extend(["--worktree", str(worktree)])
-        
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            
-            # dx-runner returns 0 on success
-            return result.returncode == 0
-        
-        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            return False
+            args.extend(["--worktree", str(worktree)])
+
+        result = self._run_dx_runner(args, timeout=30)
+        if result.ok:
+            return result
+
+        if result.reason_code == "dx_runner_start_timeout":
+            task_state = self.check(beads_id)
+            if task_state and task_state.state not in {"missing", "unknown"}:
+                return RunnerStartResult(
+                    ok=True,
+                    returncode=0,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                    reason_code="dx_runner_start_timeout_handoff",
+                    detail=(
+                        f"dx-runner start timed out, but runner state is "
+                        f"{task_state.state}"
+                    ),
+                    command=result.command,
+                )
+
+        return result
     
     def check(self, beads_id: str) -> Optional[RunnerTaskState]:
         """
@@ -104,14 +265,12 @@ class RunnerAdapter:
         Source of truth is dx-runner check --json
         """
         try:
-            result = subprocess.run(
-                ["dx-runner", "check", "--beads", beads_id, "--json"],
-                capture_output=True,
-                text=True,
+            result = self._run_dx_runner(
+                ["check", "--beads", beads_id, "--json"],
                 timeout=30,
             )
             
-            if not result.stdout.strip():
+            if not result.ok or not result.stdout.strip():
                 # Task not found
                 return RunnerTaskState(beads_id=beads_id, state="missing")
             
@@ -128,7 +287,7 @@ class RunnerAdapter:
             
             return state
         
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+        except json.JSONDecodeError:
             return RunnerTaskState(beads_id=beads_id, state="missing")
     
     def report(self, beads_id: str) -> Optional[Dict[str, Any]]:
@@ -138,19 +297,17 @@ class RunnerAdapter:
         Source of truth is dx-runner report --format json
         """
         try:
-            result = subprocess.run(
-                ["dx-runner", "report", "--beads", beads_id, "--format", "json"],
-                capture_output=True,
-                text=True,
+            result = self._run_dx_runner(
+                ["report", "--beads", beads_id, "--format", "json"],
                 timeout=30,
             )
             
-            if result.returncode != 0 or not result.stdout.strip():
+            if not result.ok or not result.stdout.strip():
                 return None
             
             return json.loads(result.stdout)
         
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+        except json.JSONDecodeError:
             return None
     
     def extract_pr_artifacts(self, beads_id: str) -> Optional[tuple[str, str]]:
@@ -199,14 +356,5 @@ class RunnerAdapter:
     
     def stop(self, beads_id: str) -> bool:
         """Stop task via dx-runner"""
-        try:
-            result = subprocess.run(
-                ["dx-runner", "stop", "--beads", beads_id],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            return result.returncode == 0
-        
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return False
+        result = self._run_dx_runner(["stop", "--beads", beads_id], timeout=30)
+        return result.ok
