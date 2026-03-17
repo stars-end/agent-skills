@@ -214,7 +214,13 @@ def render_json(path: Path, servers: dict, ide: str):
         if ide == "opencode":
             cmd = entry.get("command", "")
             args = entry.get("args", [])
+            entry_env = entry.get("env", {})
             entry = {"type": "local", "command": ([cmd] if isinstance(cmd, str) else cmd) + args}
+            if entry_env:
+                entry["environment"] = entry_env
+        elif "env" in entry:
+            # Claude Code / Gemini use "env" key
+            pass  # already in entry as "env"
         mcp[name] = entry
     payload[key] = mcp
     atomic_write(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -236,6 +242,13 @@ def render_toml(path: Path, servers: dict):
         args = entry.get("args", [])
         args_toml = "[" + ", ".join(json.dumps(a) for a in args) + "]"
         lines.append(f"args = {args_toml}")
+        # Propagate env block if present
+        entry_env = entry.get("env", {})
+        if isinstance(entry_env, dict) and entry_env:
+            lines.append(f"[mcp_servers.{json.dumps(name)}.env]")
+            for ek, ev in entry_env.items():
+                lines.append(f"{ek} = {json.dumps(ev)}")
+            lines.append("")
         lines.append("")
     lines.append(managed_end)
     managed = "\n".join(lines) + "\n"
@@ -374,11 +387,23 @@ for name, spec in enabled_tools:
     # Only MCP tools need target_ides and mcp config blocks
     target_ides = [str(i) for i in spec.get("target_ides", [])] if integration_mode == "mcp" else []
     mcp = spec.get("mcp", {}) if isinstance(spec.get("mcp", {}), dict) and integration_mode == "mcp" else {}
+    mcp_env = mcp.get("env", {})
+    env_from_parent = mcp.get("env_from_parent", [])
     entry = {
         "type": str(mcp.get("type", "stdio")),
         "command": str(mcp.get("command", "")),
         "args": [str(a) for a in mcp.get("args", [])],
     }
+    if isinstance(mcp_env, dict) and mcp_env:
+        entry["env"] = {str(k): str(v) for k, v in mcp_env.items()}
+    # Resolve env vars from parent process — only inject if actually set
+    if isinstance(env_from_parent, list):
+        for env_name in env_from_parent:
+            env_val = os.environ.get(str(env_name), "")
+            if env_val:
+                if "env" not in entry:
+                    entry["env"] = {}
+                entry["env"][str(env_name)] = env_val
 
     install_rc = 0
     install_out = ""

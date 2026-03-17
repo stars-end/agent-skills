@@ -2,7 +2,11 @@
   "mcp": {
     "context-plus": {
       "type": "local",
-      "command": ["npx", "-y", "contextplus", "--transport", "stdio"]
+      "command": ["node", "~/.local/share/contextplus-patched/build/index.js"],
+      "environment": {
+        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
+        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
+      }
     },
     "serena": {
       "type": "local",
