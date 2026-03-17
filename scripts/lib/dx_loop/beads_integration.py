@@ -66,6 +66,24 @@ class BeadsWaveManager:
         self.tasks: Dict[str, BeadsTask] = {}
         self.layers: List[List[str]] = []
         self.completed: Set[str] = set()
+        self.dependency_status_cache: Dict[str, str] = {}
+
+    @staticmethod
+    def _is_terminal_dependency_status(status: Optional[str]) -> bool:
+        """Return True when a Beads dependency status should count as satisfied."""
+        if not status:
+            return False
+        return status.lower() in {"closed", "resolved", "completed", "done"}
+
+    def _is_dependency_satisfied(self, dep_id: str) -> bool:
+        """Check whether a dependency is satisfied via wave completion or Beads status."""
+        if dep_id in self.completed:
+            return True
+
+        if dep_id in self.tasks:
+            return self._is_terminal_dependency_status(self.tasks[dep_id].status)
+
+        return self._is_terminal_dependency_status(self.dependency_status_cache.get(dep_id))
     
     def load_epic_tasks(self, epic_id: str) -> List[BeadsTask]:
         """
@@ -127,11 +145,14 @@ class BeadsWaveManager:
                 return task
             
             task_data = data[0]
-            task.dependencies = [
-                dep["id"]
-                for dep in task_data.get("dependencies", [])
-                if dep.get("dependency_type") == "blocks"
-            ]
+            task.dependencies = []
+            for dep in task_data.get("dependencies", []):
+                if dep.get("dependency_type") != "blocks":
+                    continue
+                dep_id = dep["id"]
+                task.dependencies.append(dep_id)
+                if "status" in dep:
+                    self.dependency_status_cache[dep_id] = dep["status"]
             task.status = task_data.get("status", task.status)
             
             return task
@@ -210,7 +231,7 @@ class BeadsWaveManager:
                 continue
             
             # Check if all dependencies are completed
-            if all(dep_id in self.completed for dep_id in task.dependencies):
+            if all(self._is_dependency_satisfied(dep_id) for dep_id in task.dependencies):
                 ready.append(tid)
         
         return ready
@@ -248,13 +269,15 @@ class BeadsWaveManager:
 
             readiness.pending_tasks.append(task_id)
 
-            unmet = [dep_id for dep_id in task.dependencies if dep_id not in self.completed]
+            unmet = [
+                dep_id for dep_id in task.dependencies if not self._is_dependency_satisfied(dep_id)
+            ]
             if unmet:
                 dependency_statuses = {
                     dep_id: (
                         self.tasks[dep_id].status
                         if dep_id in self.tasks
-                        else "external_or_incomplete"
+                        else self.dependency_status_cache.get(dep_id, "external_or_incomplete")
                     )
                     for dep_id in unmet
                 }
@@ -280,6 +303,7 @@ class BeadsWaveManager:
             "tasks": {tid: task.to_dict() for tid, task in self.tasks.items()},
             "layers": self.layers,
             "completed": list(self.completed),
+            "dependency_status_cache": dict(self.dependency_status_cache),
         }
     
     @classmethod
@@ -311,5 +335,8 @@ class BeadsWaveManager:
         # Restore completed set
         if "completed" in data:
             manager.completed = set(data["completed"])
+
+        if "dependency_status_cache" in data:
+            manager.dependency_status_cache = dict(data["dependency_status_cache"])
         
         return manager
