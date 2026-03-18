@@ -163,7 +163,7 @@ Respond with ONLY the description text."""
 
 async def call_zai(prompt: str, client) -> str:
     """Call z.ai via llm-common ZaiClient."""
-    from llm_common.providers import LLMConfig, LLMMessage, ZaiClient
+    from llm_common.providers.zai_client import LLMConfig, LLMMessage, ZaiClient
     from llm_common.core import MessageRole
 
     response = await client.chat_completion(
@@ -175,7 +175,7 @@ async def call_zai(prompt: str, client) -> str:
 def create_zai_client(api_key: str, model: str):
     """Create a ZaiClient instance. Raises on missing deps."""
     try:
-        from llm_common.providers import LLMConfig, ZaiClient
+        from llm_common.providers.zai_client import LLMConfig, ZaiClient
     except ImportError:
         raise ImportError(
             "llm-common is required. Install with: pip install llm-common "

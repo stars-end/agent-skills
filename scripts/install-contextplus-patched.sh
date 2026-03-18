@@ -112,15 +112,35 @@ fi
 
 # --- Apply patch ---
 info "Applying OpenRouter embeddings patch..."
-# Check if patch is already applied
-if git apply --reverse --check "$PATCH_FILE" 2>/dev/null; then
-    info "Patch already applied, skipping"
-else
-    if git apply --check "$PATCH_FILE" 2>/dev/null; then
-        git apply "$PATCH_FILE"
-        info "Patch applied successfully"
+# Check if patch is already applied (compare HEAD to working tree)
+if git diff --quiet HEAD -- src/core/embeddings.ts 2>/dev/null; then
+    # No diff from HEAD means either: clean tree (unpatched) OR all changes staged
+    # Try reverse apply to detect already-patched state
+    if git apply --reverse --check "$PATCH_FILE" 2>/dev/null; then
+        info "Patch already applied, skipping"
     else
-        error "Patch does not apply cleanly. Patch may need updating for new upstream version."
+        if git apply --check "$PATCH_FILE" 2>/dev/null; then
+            git apply "$PATCH_FILE"
+            git add src/core/embeddings.ts
+            info "Patch applied successfully"
+        else
+            error "Patch does not apply cleanly. Patch may need updating for new upstream version."
+        fi
+    fi
+else
+    # Working tree has changes — check if they match the patch
+    if git apply --reverse --check "$PATCH_FILE" 2>/dev/null; then
+        info "Patch already applied (working tree matches), skipping"
+    else
+        warn "Working tree has unexpected changes; resetting src/core/embeddings.ts and re-applying"
+        git checkout HEAD -- src/core/embeddings.ts
+        if git apply --check "$PATCH_FILE" 2>/dev/null; then
+            git apply "$PATCH_FILE"
+            git add src/core/embeddings.ts
+            info "Patch applied successfully"
+        else
+            error "Patch does not apply cleanly. Patch may need updating for new upstream version."
+        fi
     fi
 fi
 
