@@ -286,8 +286,10 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 \`\`\`
 
 ### Route Matrix Verification
-- **no-cookie mode**: \`/\`, \`/sign-in\`, \`/sign-up\`
-- **bypass-cookie mode**: \`/v2\`, \`/brokerage\` (if auth bypass available)
+- **no-auth lane**: `/demo` for guest/demo validation only
+- **bypass-default lanes**: `/v2`, `/brokerage` for routine product verification
+- **real-auth**: exception-only, reserved for auth-specific behavior or bypass-path validation
+- **manual QA helper**: use Prime Radiant's canonical helper from PR #974, `make qa-bypass-cookie` (or `FORMAT=verify` for backend-facing checks), instead of ad hoc token creation
 
 ### Runtime Health Requirements
 - No "Unexpected Application Error" on page

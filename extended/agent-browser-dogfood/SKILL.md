@@ -12,6 +12,14 @@ allowed-tools:
 
 Use this skill for structured browser QA with `agent-browser`.
 
+## Prime Radiant Lane Rules
+
+- `/demo` is the no-auth lane for guest/demo validation.
+- `/v2` and `/brokerage` are bypass-default lanes for routine product verification.
+- real-auth is exception-only and should be used only when testing auth-specific behavior.
+- For guarded-route QA, use the canonical Prime Radiant helper from PR #974: `make qa-bypass-cookie` or `make qa-bypass-cookie FORMAT=verify BACKEND_URL=...`.
+- Stay on `agent-browser` by default; use `Playwright` only for narrow debugging cases such as interception or assertion-heavy reproduction.
+
 ## Default Output Pattern
 
 ```bash
@@ -79,7 +87,7 @@ Suggested format:
 - Document issues as you find them; do not reconstruct from memory later
 - Re-snapshot after each meaningful navigation step
 - Prefer breadth first, then go deep where the app is broken
-- Keep Playwright out of the loop unless the user asks for automated tests
+- Keep Playwright out of the loop unless the user asks for automated tests or the bug requires narrow interception-based debugging
 
 ## Upstream Docs
 
