@@ -29,13 +29,24 @@ Override via `ENRICHMENT_ARTIFACT_ROOT` env var or `--artifact-root` flag.
 
 ## Invocation
 
-```bash
-# Full run against all canonical repos
-ZAI_API_KEY=$(op read 'op://dev/Agent-Secrets-Production/ZAI_API_KEY') \
-  python3 scripts/enrichment/nightly-enrichment.py
+### Cron / automation (cached OP resolution)
 
-# Dry run (no z.ai calls)
-python3 scripts/enrichment/nightly-enrichment.py --dry-run
+The cron wrapper uses cached 1Password resolution (`dx_auth_load_zai_api_key`) so it does not hit `op read` on every invocation.
+
+```bash
+# 3 AM UTC daily
+0 3 * * * /path/to/agent-skills/scripts/enrichment/enrichment-cron-wrapper.sh >> /tmp/enrichment.log 2>&1
+
+# Dry run via wrapper
+scripts/enrichment/enrichment-cron-wrapper.sh --dry-run
+```
+
+### Interactive (manual)
+
+```bash
+# One-shot with cached resolution
+source scripts/lib/dx-auth.sh && dx_auth_load_zai_api_key
+python3 scripts/enrichment/nightly-enrichment.py
 
 # Single repo
 python3 scripts/enrichment/nightly-enrichment.py --repo ~/agent-skills
@@ -48,22 +59,25 @@ ENRICHMENT_BATCH=15 ZAI_MODEL=glm-5 \
 python3 scripts/enrichment/nightly-enrichment.py --artifact-root /tmp/enrichment-out
 ```
 
-## Cron Installation
-
-```bash
-# 3 AM UTC daily
-0 3 * * * ZAI_API_KEY=$(op read 'op://dev/Agent-Secrets-Production/ZAI_API_KEY') /path/to/python3 /path/to/agent-skills/scripts/enrichment/nightly-enrichment.py >> /tmp/enrichment.log 2>&1
-```
-
 ## Environment Variables
 
 | Var | Default | Description |
 |-----|---------|-------------|
-| `ZAI_API_KEY` | (required) | z.ai API key |
+| `ZAI_API_KEY` | (required) | z.ai API key (resolved via cached OP helper) |
 | `ZAI_MODEL` | `glm-4.7` | z.ai model for labeling |
 | `ENRICHMENT_BATCH` | `20` | Files per cluster |
 | `ENRICHMENT_TIMEOUT` | `30` | Per-call timeout (seconds) |
 | `ENRICHMENT_ARTIFACT_ROOT` | `~/.dx-state/enrichment/` | Override artifact output root |
+
+### Secret Resolution
+
+`ZAI_API_KEY` is sourced from `op://dev/Agent-Secrets-Production/ZAI_API_KEY` via the cached helper in `scripts/lib/dx-auth.sh`. The wrapper calls `dx_auth_load_zai_api_key` which:
+1. Checks if `ZAI_API_KEY` is already exported and not an `op://` reference — returns immediately
+2. Reads from the local secret cache (`~/.cache/dx/op-secrets/`, 24h TTL)
+3. On cache miss, refreshes via `op item get` using the service account token
+4. Exports `ZAI_API_KEY` for the Python script
+
+No raw `op read` is needed in cron or automation. See `core/op-secrets-quickref/SKILL.md` for the full cached-secret contract.
 
 ## Dependencies
 

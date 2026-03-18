@@ -39,8 +39,10 @@ Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and 
 - A valid token does not guarantee channel history access; missing channel membership or `channels:join` scope is a Slack scope issue, not an OP auth failure.
 
 ```bash
-export SLACK_BOT_TOKEN=$(op read "op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN")
-export SLACK_APP_TOKEN=$(op read "op://dev/Agent-Secrets-Production/SLACK_APP_TOKEN")
+# Use cached resolution for automation / cron
+source scripts/lib/dx-auth.sh
+export SLACK_BOT_TOKEN="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN")"
+export SLACK_APP_TOKEN="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/SLACK_APP_TOKEN")"
 ```
 
 Implementation uses these tokens via:
@@ -154,24 +156,65 @@ Alternative using op's native field output:
 op item get --vault dev Agent-Secrets-Production --fields label
 ```
 
-### Read a Single Secret
+### Read a Single Secret (interactive / one-shot)
+
+For occasional manual use, `op read` is fine:
 
 ```bash
-# Agent API key (also used as Anthropic token via Z.ai)
 op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
-
-# GitHub token (for gh CLI in cron/CI)
-op read "op://dev/Agent-Secrets-Production/GITHUB_TOKEN"
-
-# Railway CLI token
-op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN"
 ```
+
+### Cached Secret Resolution (standard for automation / repeated reads)
+
+For cron, systemd, scripts, or any path that reads secrets repeatedly, use the
+cached helpers from `scripts/lib/dx-auth.sh`.  These avoid hitting 1Password on
+every invocation by maintaining a local file cache (`~/.cache/dx/op-secrets/`,
+24h TTL) refreshed via the service account token.
+
+**General-purpose cached read:**
+
+```bash
+source scripts/lib/dx-auth.sh
+token="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/ZAI_API_KEY")"
+```
+
+**Named loaders for common secrets:**
+
+| Helper | Env var set | Source ref |
+|--------|-------------|------------|
+| `dx_auth_load_zai_api_key` | `ZAI_API_KEY` | `op://dev/Agent-Secrets-Production/ZAI_API_KEY` |
+| `dx_auth_load_railway_api_token` | `RAILWAY_API_TOKEN` | `op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN` |
+| `dx_auth_load_github_token` | `GH_TOKEN` | `op://dev/Agent-Secrets-Production/GITHUB_TOKEN` |
+| `dx_auth_load_op_service_account_token` | `OP_SERVICE_ACCOUNT_TOKEN` | host credential files |
+
+**Example — cron / automation:**
+
+```bash
+# Nightly enrichment (uses cached ZAI_API_KEY)
+0 3 * * * /path/to/agent-skills/scripts/enrichment/enrichment-cron-wrapper.sh >> /tmp/enrichment.log 2>&1
+```
+
+**Example — script preamble:**
+
+```bash
+#!/usr/bin/env bash
+source scripts/lib/dx-auth.sh
+dx_auth_load_zai_api_key || { echo "BLOCKED: ZAI_API_KEY" >&2; exit 1; }
+# $ZAI_API_KEY is now exported and ready
+```
+
+**How the cache works:**
+
+1. If the target env var is already set (and not an `op://` reference), return immediately.
+2. Check the local cache file (`~/.cache/dx/op-secrets/`). If fresh (within TTL), read from it.
+3. On cache miss, load the OP service account token and refresh the cache via `op item get`.
+4. Export the resolved value.
 
 ### Export for CLI Usage (cron/CI)
 
 ```bash
-# GitHub CLI auth in non-interactive contexts
-export GH_TOKEN=$(op read "op://dev/Agent-Secrets-Production/GITHUB_TOKEN")
+# GitHub CLI — use cached loader
+source scripts/lib/dx-auth.sh && dx_auth_load_github_token
 gh auth status  # Should show: ✓ Logged in to github.com (GH_TOKEN)
 
 # Railway CLI auth (same invocation recommended)
@@ -255,6 +298,7 @@ BACKEND_URL="${RAILWAY_SERVICE_BACKEND_URL:-http://localhost:3000}"
 
 - Never hardcode secrets in repos.
 - Prefer service account auth over interactive biometric auth.
+- **Prefer cached secret helpers** (`dx_auth_read_secret_cached`, `dx_auth_load_zai_api_key`, etc.) for cron, systemd, automation, and any repeated secret reads. Use raw `op read` only for occasional manual one-shot use.
 - Prefer `op://...` references in env templates and resolve at runtime via `op run --env-file=... -- <command>`.
 - Avoid printing secrets in logs. If you must verify, do it once and then stop output.
 - Use grep/cut instead of jq for field extraction (more portable).
