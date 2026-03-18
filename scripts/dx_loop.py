@@ -87,7 +87,10 @@ class DxLoop:
 
         # NEW: Scheduler and runner adapter (P0 fix)
         self.scheduler = DxLoopScheduler(cadence_seconds=self.config["cadence_seconds"])
-        self.runner_adapter = RunnerAdapter(provider=self.config["provider"])
+        self.runner_adapter = RunnerAdapter(
+            provider=self.config["provider"],
+            beads_repo_path=self.beads_manager.beads_repo_path,
+        )
 
         # Artifact paths
         self.wave_dir = ARTIFACT_BASE / "waves" / wave_id
@@ -575,8 +578,10 @@ class DxLoop:
 
         if task_state.is_complete():
             # Parse review verdict
-            report = self.runner_adapter.report(review_beads_id)
-            verdict = self._parse_review_verdict(report)
+            verdict = self._parse_review_verdict(
+                self.runner_adapter.report(review_beads_id),
+                self.runner_adapter.extract_review_verdict(review_beads_id),
+            )
 
             if verdict:
                 baton_state = self.baton_manager.complete_review(
@@ -618,14 +623,17 @@ class DxLoop:
                     print(f"Review verdict for {beads_id}: {verdict.value}")
 
     def _parse_review_verdict(
-        self, report: Optional[Dict[str, Any]]
+        self,
+        report: Optional[Dict[str, Any]],
+        raw_verdict: Optional[str] = None,
     ) -> Optional[ReviewVerdict]:
         """Parse review verdict from report"""
-        if not report:
-            return None
-
-        # Check for explicit verdict in report
-        verdict_str = report.get("verdict", "").upper()
+        verdict_str = ""
+        if report:
+            verdict_str = str(report.get("verdict", ""))
+        if not verdict_str and raw_verdict:
+            verdict_str = raw_verdict
+        verdict_str = verdict_str.upper()
 
         if "APPROVED" in verdict_str:
             return ReviewVerdict.APPROVED

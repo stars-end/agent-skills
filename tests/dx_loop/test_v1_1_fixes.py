@@ -461,6 +461,85 @@ def test_runner_adapter_accepts_timeout_when_runner_state_exists(monkeypatch):
     print("✓ RunnerAdapter treats timeout as success when the job is already live")
 
 
+def test_runner_adapter_check_parses_json_after_banner(monkeypatch):
+    """check/report should tolerate canonical banner text before JSON payloads."""
+    adapter = RunnerAdapter(provider="opencode")
+
+    banner_json = """
+━━━━━━━━ reminder ━━━━━━━━
+Use worktrees.
+{"state":"exited_ok","reason_code":"process_exit_with_rc","pr_url":"https://example/pull/1","pr_head_sha":"abc123"}
+"""
+    monkeypatch.setattr(
+        adapter,
+        "_run_dx_runner",
+        lambda *args, **kwargs: RunnerStartResult(
+            ok=True,
+            returncode=0,
+            stdout=banner_json,
+            stderr="",
+            command=["dx-runner", "check"],
+        ),
+    )
+
+    state = adapter.check("bd-test")
+    report = adapter.report("bd-test")
+
+    assert state is not None
+    assert state.state == "exited_ok"
+    assert state.has_pr_artifacts is True
+    assert state.pr_url == "https://example/pull/1"
+    assert report is not None
+    assert report["pr_head_sha"] == "abc123"
+
+    print("✓ RunnerAdapter parses JSON payloads after banner text")
+
+
+def test_runner_adapter_uses_canonical_bd_cwd(monkeypatch, tmp_path):
+    """All dx-runner subprocesses should run from the canonical Beads repo cwd."""
+    adapter = RunnerAdapter(provider="opencode", beads_repo_path=tmp_path / "bd")
+
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+    local_runner = tmp_path / "dx-runner"
+    local_runner.write_text("#!/usr/bin/env bash\n")
+    monkeypatch.setattr(adapter, "_dx_runner_script_path", lambda: local_runner)
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["cwd"] = kwargs.get("cwd")
+        return SimpleNamespace(returncode=0, stdout='{"state":"healthy"}', stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    state = adapter.check("bd-test")
+
+    assert state is not None
+    assert state.state == "healthy"
+    assert captured["cwd"] == str(tmp_path / "bd")
+
+    print("✓ RunnerAdapter invokes dx-runner from canonical Beads cwd")
+
+
+def test_runner_adapter_extracts_review_verdict_from_log(tmp_path):
+    """Review chaining should work even if dx-runner report lacks a verdict field."""
+    adapter = RunnerAdapter(provider="opencode")
+    log_dir = Path("/tmp/dx-runner/opencode")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "bd-test-review.log"
+    log_path.write_text("noise\nREVISION_REQUIRED: fix the helper contract\n")
+
+    try:
+        verdict = adapter.extract_review_verdict("bd-test-review")
+    finally:
+        log_path.unlink(missing_ok=True)
+
+    assert verdict == "REVISION_REQUIRED: fix the helper contract"
+
+    print("✓ RunnerAdapter extracts review verdicts from logs")
+
+
 def test_start_implement_marks_kickoff_env_blocked(tmp_path):
     """Failed starts before any run exists should not leave the wave healthy."""
     wave_id = "wave-start-failure"
