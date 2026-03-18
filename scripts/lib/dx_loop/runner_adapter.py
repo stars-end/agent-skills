@@ -342,32 +342,61 @@ class RunnerAdapter:
         if pr_url and pr_head_sha:
             return (pr_url, pr_head_sha)
         
-        # Fall back to reading log
+        transcript = self.extract_agent_output(beads_id)
+        if transcript:
+            pr_url = None
+            pr_head_sha = None
+            for line in reversed(transcript.splitlines()):
+                line = line.strip()
+                if line.startswith("PR_URL:"):
+                    pr_url = line.split(":", 1)[1].strip()
+                elif line.startswith("PR_HEAD_SHA:"):
+                    pr_head_sha = line.split(":", 1)[1].strip()
+                if pr_url and pr_head_sha:
+                    return (pr_url, pr_head_sha)
+
+        return None
+
+    def extract_agent_output(self, beads_id: str) -> Optional[str]:
+        """
+        Recover agent-authored text from the dx-runner JSONL log stream.
+        """
         log_path = Path(f"/tmp/dx-runner/{self.provider}/{beads_id}.log")
         if not log_path.exists():
             return None
-        
+
+        text_parts: List[str] = []
         try:
-            log_content = log_path.read_text()
-            
-            # Extract PR_URL and PR_HEAD_SHA from log
-            pr_url = None
-            pr_head_sha = None
-            
-            for line in reversed(log_content.split('\n')):
-                line = line.strip()
-                if line.startswith('PR_URL:'):
-                    pr_url = line.split(':', 1)[1].strip()
-                elif line.startswith('PR_HEAD_SHA:'):
-                    pr_head_sha = line.split(':', 1)[1].strip()
-                
-                if pr_url and pr_head_sha:
-                    return (pr_url, pr_head_sha)
-        
+            for raw_line in log_path.read_text().splitlines():
+                raw_line = raw_line.strip()
+                if not raw_line or not raw_line.startswith("{"):
+                    continue
+                try:
+                    event = json.loads(raw_line)
+                except JSONDecodeError:
+                    continue
+                if event.get("type") != "text":
+                    continue
+                part = event.get("part", {})
+                text = part.get("text")
+                if text:
+                    text_parts.append(str(text))
         except OSError:
-            pass
-        
-        return None
+            return None
+
+        if not text_parts:
+            return None
+        return "\n\n".join(text_parts)
+
+    def _read_raw_log(self, beads_id: str) -> Optional[str]:
+        """Fallback raw log reader for legacy/plaintext log fixtures."""
+        log_path = Path(f"/tmp/dx-runner/{self.provider}/{beads_id}.log")
+        if not log_path.exists():
+            return None
+        try:
+            return log_path.read_text()
+        except OSError:
+            return None
 
     def extract_review_verdict(self, beads_id: str) -> Optional[str]:
         """
@@ -382,12 +411,14 @@ class RunnerAdapter:
         if report_data and report_data.get("verdict"):
             return str(report_data["verdict"])
 
-        log_path = Path(f"/tmp/dx-runner/{self.provider}/{beads_id}.log")
-        if not log_path.exists():
+        transcript = self.extract_agent_output(beads_id)
+        if not transcript:
+            transcript = self._read_raw_log(beads_id)
+        if not transcript:
             return None
 
         try:
-            for line in reversed(log_path.read_text().splitlines()):
+            for line in reversed(transcript.splitlines()):
                 line = line.strip()
                 if line.startswith("APPROVED:"):
                     return line

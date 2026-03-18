@@ -6,6 +6,11 @@
 
 `dx-loop` is a PR-aware orchestration surface that reuses Ralph's proven patterns (baton, topological dependencies, checkpoint/resume) while replacing the control plane with governed `dx-runner` dispatch and enforcing PR artifact contracts.
 
+Current baton contract:
+- implement prompts are shaped using the `prompt-writing` outbound structure
+- implementers must return a `tech-lead-handoff` compatible `MODE: implementation_return`
+- review prompts consume that structured return and enforce the `dx-loop-review-contract`
+
 ## When To Use
 
 - Running multi-wave Beads execution with PR artifact requirements
@@ -95,6 +100,7 @@ dx-loop replaces from Ralph:
 | dx-runner substrate | All execution via dx-runner adapters |
 | Bootstrap gates | Host/worktree/prompt locality checks |
 | PR artifact contract | PR_URL + PR_HEAD_SHA required |
+| Structured handoff contract | `implementation_return` required before review |
 | Merge-ready detection | Predicate over PR + CI checks |
 | Blocker taxonomy | 6 codes with deterministic classification |
 | Unchanged suppression | Only emit when state materially changes |
