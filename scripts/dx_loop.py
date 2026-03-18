@@ -39,7 +39,7 @@ from dx_loop import (
     NotificationManager,
 )
 from dx_loop.scheduler import DxLoopScheduler, SchedulerState
-from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState
+from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState, RunnerStartResult
 
 VERSION = "1.1.0"
 ARTIFACT_BASE = Path("/tmp/dx-loop")
@@ -221,17 +221,30 @@ class DxLoop:
                             dispatchable.append((tid, expected_phase))
 
                 if dispatchable:
-                    dispatchable_ids = [tid for tid, _ in dispatchable]
-                    self._set_wave_status(
-                        LoopState.IN_PROGRESS_HEALTHY,
-                        None,
-                        f"Dispatching {len(dispatchable_ids)} task(s)",
-                        dispatchable_tasks=dispatchable_ids,
-                    )
                     print(f"Dispatching {len(dispatchable)} task(s)")
+                    successful_dispatches = []
                     for beads_id, phase in dispatchable:
                         if self._dispatch_task(beads_id, phase):
                             self.scheduler.state.mark_dispatched(beads_id, phase)
+                            successful_dispatches.append(beads_id)
+                    if successful_dispatches:
+                        self._set_wave_status(
+                            LoopState.IN_PROGRESS_HEALTHY,
+                            None,
+                            f"Dispatching {len(successful_dispatches)} task(s)",
+                            dispatchable_tasks=successful_dispatches,
+                        )
+                    elif self._should_exit_failed_initial_dispatch(iteration):
+                        print(
+                            "Initial dispatch failed before any run started; "
+                            "exiting without resident loop"
+                        )
+                        self.wave_status["reason"] = (
+                            f"{self.wave_status.get('reason', 'Dispatch failed')} "
+                            "[exiting without resident loop]"
+                        )
+                        self._save_state()
+                        return False
                 else:
                     self._set_wave_status(
                         LoopState.IN_PROGRESS_HEALTHY,
@@ -263,6 +276,19 @@ class DxLoop:
             and not self.scheduler.state.active_beads_ids
         )
 
+    def _should_exit_failed_initial_dispatch(self, iteration: int) -> bool:
+        """Exit early if the first dispatch attempt fails before any run exists."""
+        return (
+            iteration == 1
+            and self.scheduler.state.dispatch_count == 0
+            and not self.scheduler.state.active_beads_ids
+            and self.wave_status.get("state")
+            in {
+                LoopState.KICKOFF_ENV_BLOCKED.value,
+                LoopState.RUN_BLOCKED.value,
+            }
+        )
+
     def _dispatch_task(self, beads_id: str, phase: str = "implement") -> bool:
         """Dispatch a single task through implement/review cycle"""
         # Check baton phase
@@ -287,17 +313,85 @@ class DxLoop:
         Compute worktree path for a beads_id (P0 fix)
 
         Uses standard /tmp/agents/<beads-id>/<repo> pattern.
-        Falls back to beads_id as repo name if task has no repo info.
+        Falls back to agent-skills only when repo inference is unavailable.
         """
         task = self.beads_manager.tasks.get(beads_id)
         repo = "agent-skills"  # Default repo
 
-        # Try to extract repo from task metadata if available
-        if task and hasattr(task, "metadata") and task.metadata:
-            repo = task.metadata.get("repo", repo)
+        if task and getattr(task, "repo", None):
+            repo = task.repo
 
         worktree_base = Path(self.config.get("worktree_base", "/tmp/agents"))
         return worktree_base / beads_id / repo
+
+    def _ensure_worktree(self, beads_id: str) -> Optional[Path]:
+        """Ensure the task worktree exists before dispatch."""
+        worktree = self._get_worktree_path(beads_id)
+        if worktree.is_dir():
+            return worktree
+
+        task = self.beads_manager.tasks.get(beads_id)
+        repo = getattr(task, "repo", None) or worktree.name
+        try:
+            result = subprocess.run(
+                ["dx-worktree", "create", beads_id, repo],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            self._set_wave_status(
+                LoopState.KICKOFF_ENV_BLOCKED,
+                BlockerCode.KICKOFF_ENV_BLOCKED,
+                f"Failed to create worktree for {beads_id}: {exc}",
+                blocked_details=[
+                    {
+                        "beads_id": beads_id,
+                        "phase": "worktree",
+                        "reason_code": "dx_worktree_create_failed",
+                        "detail": str(exc),
+                    }
+                ],
+            )
+            return None
+
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "dx-worktree create failed"
+            self._set_wave_status(
+                LoopState.KICKOFF_ENV_BLOCKED,
+                BlockerCode.KICKOFF_ENV_BLOCKED,
+                f"Failed to create worktree for {beads_id}: {detail}",
+                blocked_details=[
+                    {
+                        "beads_id": beads_id,
+                        "phase": "worktree",
+                        "reason_code": "dx_worktree_create_failed",
+                        "detail": detail,
+                    }
+                ],
+            )
+            return None
+
+        created_path = Path((result.stdout.strip().splitlines() or [str(worktree)])[-1]).expanduser()
+        if created_path.is_dir():
+            return created_path
+        if worktree.is_dir():
+            return worktree
+
+        self._set_wave_status(
+            LoopState.KICKOFF_ENV_BLOCKED,
+            BlockerCode.KICKOFF_ENV_BLOCKED,
+            f"dx-worktree reported success but worktree missing for {beads_id}",
+            blocked_details=[
+                {
+                    "beads_id": beads_id,
+                    "phase": "worktree",
+                    "reason_code": "dx_worktree_missing_after_create",
+                    "detail": str(worktree),
+                }
+            ],
+        )
+        return None
 
     def _start_implement(self, beads_id: str) -> bool:
         """Start implement phase via RunnerAdapter (P0 fix: explicit worktree)"""
@@ -307,19 +401,23 @@ class DxLoop:
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(prompt)
 
-        # Compute worktree path (P0 fix)
-        worktree = self._get_worktree_path(beads_id)
+        # Compute/create worktree (P0 fix)
+        worktree = self._ensure_worktree(beads_id)
+        if not worktree:
+            return False
 
         # Use RunnerAdapter with explicit worktree (governed dispatch)
         run_id = f"{beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
 
-        if self.runner_adapter.start(beads_id, prompt_file, worktree=worktree):
+        result = self.runner_adapter.start(beads_id, prompt_file, worktree=worktree)
+
+        if result.ok:
             # Track baton state
             self.baton_manager.start_implement(beads_id, run_id=run_id)
             print(f"Started implement for {beads_id} (run_id={run_id})")
             return True
         else:
-            print(f"ERROR: Failed to start implement for {beads_id}", file=sys.stderr)
+            self._handle_dispatch_start_failure(beads_id, "implement", result)
             return False
 
     def _start_review(self, beads_id: str) -> bool:
@@ -341,19 +439,69 @@ class DxLoop:
         prompt_file.write_text(prompt)
 
         # P0 FIX: Use explicit worktree (same as implement, review happens on same codebase)
-        worktree = self._get_worktree_path(beads_id)
+        worktree = self._ensure_worktree(beads_id)
+        if not worktree:
+            return False
 
         # Start via RunnerAdapter with explicit worktree
         review_beads_id = f"{beads_id}-review"
         run_id = f"{review_beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
 
-        if self.runner_adapter.start(review_beads_id, prompt_file, worktree=worktree):
+        result = self.runner_adapter.start(review_beads_id, prompt_file, worktree=worktree)
+
+        if result.ok:
             self.baton_manager.start_review(beads_id, run_id=run_id)
             print(f"Started review for {beads_id} (run_id={run_id})")
             return True
         else:
-            print(f"ERROR: Failed to start review for {beads_id}", file=sys.stderr)
+            self._handle_dispatch_start_failure(beads_id, "review", result)
             return False
+
+    def _handle_dispatch_start_failure(
+        self,
+        beads_id: str,
+        phase: str,
+        result: RunnerStartResult,
+    ) -> None:
+        """Convert failed dx-runner starts into truthful wave state and output."""
+        start_reason = result.detail or result.reason_code or "dx-runner start failed"
+        blocker_state = LoopState.RUN_BLOCKED
+        blocker_code = BlockerCode.RUN_BLOCKED
+
+        if result.reason_code in {
+            "dx_runner_missing",
+            "dx_runner_shell_preflight_failed",
+            "dx_runner_preflight_failed",
+            "dx_runner_permission_denied",
+            "dx_runner_model_unavailable",
+            "dx_runner_start_timeout",
+        }:
+            blocker_state = LoopState.KICKOFF_ENV_BLOCKED
+            blocker_code = BlockerCode.KICKOFF_ENV_BLOCKED
+
+        self.scheduler.state.mark_blocked(beads_id)
+        self._set_wave_status(
+            blocker_state,
+            blocker_code,
+            f"Failed to start {phase} for {beads_id}: {start_reason}",
+            blocked_details=[
+                {
+                    "beads_id": beads_id,
+                    "phase": phase,
+                    "reason_code": result.reason_code,
+                    "detail": start_reason,
+                    "command": result.command,
+                    "returncode": result.returncode,
+                }
+            ],
+        )
+        print(
+            f"ERROR: Failed to start {phase} for {beads_id} "
+            f"(reason={result.reason_code or 'unknown'}, rc={result.returncode})",
+            file=sys.stderr,
+        )
+        if start_reason:
+            print(f"  {start_reason}", file=sys.stderr)
 
     def _check_progress(self):
         """Check progress of all active tasks via RunnerAdapter"""
@@ -739,10 +887,22 @@ def cmd_status(args):
 
             blocked_details = wave_status.get("blocked_details", [])
             if blocked_details:
-                print("Waiting on dependencies:")
+                print("Blocked details:")
                 for item in blocked_details[:5]:
-                    deps = ", ".join(item.get("unmet_dependencies", []))
-                    print(f"  {item.get('beads_id')}: {deps}")
+                    if item.get("unmet_dependencies"):
+                        deps = ", ".join(item.get("unmet_dependencies", []))
+                        print(f"  {item.get('beads_id')}: {deps}")
+                    else:
+                        phase = item.get("phase")
+                        reason_code = item.get("reason_code")
+                        detail = item.get("detail")
+                        line = item.get("beads_id", "unknown")
+                        if phase:
+                            line = f"{line} [{phase}]"
+                        extras = [value for value in (reason_code, detail) if value]
+                        if extras:
+                            line = f"{line}: {' | '.join(extras)}"
+                        print(f"  {line}")
 
         return 0
 

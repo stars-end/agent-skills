@@ -20,6 +20,7 @@ class BeadsTask:
     """Represents a Beads task with dependency metadata"""
     beads_id: str
     title: str
+    repo: Optional[str] = None
     status: str = "open"
     dependencies: List[str] = field(default_factory=list)
     dependents: List[str] = field(default_factory=list)
@@ -29,6 +30,7 @@ class BeadsTask:
         return {
             "beads_id": self.beads_id,
             "title": self.title,
+            "repo": self.repo,
             "status": self.status,
             "dependencies": self.dependencies,
             "dependents": self.dependents,
@@ -84,6 +86,21 @@ class BeadsWaveManager:
             return self._is_terminal_dependency_status(self.tasks[dep_id].status)
 
         return self._is_terminal_dependency_status(self.dependency_status_cache.get(dep_id))
+
+    @staticmethod
+    def _infer_repo_from_title(title: str) -> Optional[str]:
+        """Infer repo from a conventional task title prefix."""
+        lowered = (title or "").strip().lower()
+        repo_map = {
+            "prime radiant:": "prime-radiant-ai",
+            "agent-skills:": "agent-skills",
+            "affordabot:": "affordabot",
+            "llm-common:": "llm-common",
+        }
+        for prefix, repo in repo_map.items():
+            if lowered.startswith(prefix):
+                return repo
+        return None
     
     def load_epic_tasks(self, epic_id: str) -> List[BeadsTask]:
         """
@@ -114,6 +131,7 @@ class BeadsWaveManager:
                     task = BeadsTask(
                         beads_id=dep["id"],
                         title=dep.get("title", ""),
+                        repo=self._infer_repo_from_title(dep.get("title", "")),
                         status=dep.get("status", "open"),
                         priority=dep.get("priority", 2),
                     )
@@ -145,6 +163,7 @@ class BeadsWaveManager:
                 return task
             
             task_data = data[0]
+            task.repo = task.repo or self._infer_repo_from_title(task_data.get("title", task.title))
             task.dependencies = []
             for dep in task_data.get("dependencies", []):
                 if dep.get("dependency_type") != "blocks":
@@ -321,6 +340,7 @@ class BeadsWaveManager:
                 task = BeadsTask(
                     beads_id=task_data.get("beads_id", tid),
                     title=task_data.get("title", ""),
+                    repo=task_data.get("repo"),
                     status=task_data.get("status", "open"),
                     dependencies=task_data.get("dependencies", []),
                     dependents=task_data.get("dependents", []),
