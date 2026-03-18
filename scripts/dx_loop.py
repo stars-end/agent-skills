@@ -87,7 +87,10 @@ class DxLoop:
 
         # NEW: Scheduler and runner adapter (P0 fix)
         self.scheduler = DxLoopScheduler(cadence_seconds=self.config["cadence_seconds"])
-        self.runner_adapter = RunnerAdapter(provider=self.config["provider"])
+        self.runner_adapter = RunnerAdapter(
+            provider=self.config["provider"],
+            beads_repo_path=self.beads_manager.beads_repo_path,
+        )
 
         # Artifact paths
         self.wave_dir = ARTIFACT_BASE / "waves" / wave_id
@@ -142,6 +145,13 @@ class DxLoop:
         while iteration < max_iterations:
             iteration += 1
             print(f"\n=== Iteration {iteration} ===")
+
+            # Clear one-cycle cooldown blockers only for bounded redispatch cases.
+            if (
+                self.wave_status.get("state")
+                == LoopState.DETERMINISTIC_REDISPATCH_NEEDED.value
+            ):
+                self.scheduler.state.blocked_beads_ids.clear()
 
             # PHASE 1: Wake-up - Check time
             now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -217,7 +227,7 @@ class DxLoop:
 
                     # Check if THIS phase is already active
                     if not self.scheduler.state.is_active(tid, expected_phase):
-                        if not self.scheduler.state.is_completed(tid):
+                        if not self.scheduler.state.is_completed(tid) and not self.scheduler.state.is_blocked(tid):
                             dispatchable.append((tid, expected_phase))
 
                 if dispatchable:
@@ -395,16 +405,15 @@ class DxLoop:
 
     def _start_implement(self, beads_id: str) -> bool:
         """Start implement phase via RunnerAdapter (P0 fix: explicit worktree)"""
-        # Generate prompt
-        prompt = self._generate_implement_prompt(beads_id)
-        prompt_file = ARTIFACT_BASE / "prompts" / f"{beads_id}.implement.prompt"
-        prompt_file.parent.mkdir(parents=True, exist_ok=True)
-        prompt_file.write_text(prompt)
-
         # Compute/create worktree (P0 fix)
         worktree = self._ensure_worktree(beads_id)
         if not worktree:
             return False
+
+        prompt = self._resolve_prompt(beads_id, "implement", worktree)
+        prompt_file = ARTIFACT_BASE / "prompts" / f"{beads_id}.implement.prompt"
+        prompt_file.parent.mkdir(parents=True, exist_ok=True)
+        prompt_file.write_text(prompt)
 
         # Use RunnerAdapter with explicit worktree (governed dispatch)
         run_id = f"{beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
@@ -430,18 +439,15 @@ class DxLoop:
             )
             return False
 
-        # Generate review prompt
-        prompt = self._generate_review_prompt(
-            beads_id, baton_state.pr_url, baton_state.pr_head_sha
-        )
-        prompt_file = ARTIFACT_BASE / "prompts" / f"{beads_id}.review.prompt"
-        prompt_file.parent.mkdir(parents=True, exist_ok=True)
-        prompt_file.write_text(prompt)
-
         # P0 FIX: Use explicit worktree (same as implement, review happens on same codebase)
         worktree = self._ensure_worktree(beads_id)
         if not worktree:
             return False
+
+        prompt = self._resolve_prompt(beads_id, "review", worktree)
+        prompt_file = ARTIFACT_BASE / "prompts" / f"{beads_id}.review.prompt"
+        prompt_file.parent.mkdir(parents=True, exist_ok=True)
+        prompt_file.write_text(prompt)
 
         # Start via RunnerAdapter with explicit worktree
         review_beads_id = f"{beads_id}-review"
@@ -523,10 +529,23 @@ class DxLoop:
 
         # Check for completion
         if task_state.is_complete():
-            # Extract PR artifacts
-            artifacts = self.runner_adapter.extract_pr_artifacts(beads_id)
+            transcript = self.runner_adapter.extract_agent_output(beads_id) or ""
+            implementation_return = self.pr_enforcer.extract_implementation_return(
+                transcript
+            )
+            if implementation_return:
+                self.pr_enforcer.register_implementation_return(
+                    beads_id, implementation_return
+                )
 
-            if artifacts:
+            artifacts = self.runner_adapter.extract_pr_artifacts(beads_id)
+            if not artifacts and implementation_return:
+                artifacts = (
+                    implementation_return.pr_url,
+                    implementation_return.pr_head_sha,
+                )
+
+            if artifacts and implementation_return:
                 pr_url, pr_head_sha = artifacts
                 # Register artifact and transition to review
                 self.pr_enforcer.register_artifact(beads_id, pr_url, pr_head_sha)
@@ -551,9 +570,13 @@ class DxLoop:
             else:
                 # Classify blocker
                 blocker = self.blocker_classifier.classify(
-                    task_state.reason_code,
+                    task_state.reason_code or "missing_implementation_return",
                     beads_id=beads_id,
                     wave_id=self.wave_id,
+                    metadata={
+                        "has_pr_artifacts": bool(artifacts),
+                        "has_implementation_return": bool(implementation_return),
+                    },
                     has_pr_artifacts=False,
                 )
 
@@ -565,6 +588,48 @@ class DxLoop:
                 # Mark as blocked in scheduler
                 self.scheduler.state.mark_blocked(beads_id)
 
+                if blocker.code == BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED:
+                    baton_state = self.baton_manager.record_implement_retry(
+                        beads_id, task_state.reason_code
+                    )
+                    if baton_state.phase == BatonPhase.FAILED:
+                        self._set_wave_status(
+                            LoopState.NEEDS_DECISION,
+                            BlockerCode.NEEDS_DECISION,
+                            (
+                                f"Implement retries exhausted for {beads_id} after "
+                                f"{task_state.reason_code or 'unknown failure'}"
+                            ),
+                            blocked_details=[
+                                {
+                                    "beads_id": beads_id,
+                                    "phase": "implement",
+                                    "reason_code": task_state.reason_code,
+                                    "detail": baton_state.metadata.get("failure_reason"),
+                                    "attempt": baton_state.attempt,
+                                    "max_attempts": baton_state.max_attempts,
+                                }
+                            ],
+                        )
+                    else:
+                        self._set_wave_status(
+                            LoopState.DETERMINISTIC_REDISPATCH_NEEDED,
+                            BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
+                            (
+                                f"Implement attempt {baton_state.attempt - 1} for {beads_id} "
+                                f"failed with {task_state.reason_code}; retrying next cadence"
+                            ),
+                            blocked_details=[
+                                {
+                                    "beads_id": beads_id,
+                                    "phase": "implement",
+                                    "reason_code": task_state.reason_code,
+                                    "attempt": baton_state.attempt,
+                                    "max_attempts": baton_state.max_attempts,
+                                }
+                            ],
+                        )
+
     def _check_review_progress(self, beads_id: str):
         """Check review phase progress"""
         review_beads_id = f"{beads_id}-review"
@@ -575,8 +640,10 @@ class DxLoop:
 
         if task_state.is_complete():
             # Parse review verdict
-            report = self.runner_adapter.report(review_beads_id)
-            verdict = self._parse_review_verdict(report)
+            verdict = self._parse_review_verdict(
+                self.runner_adapter.report(review_beads_id),
+                self.runner_adapter.extract_review_verdict(review_beads_id),
+            )
 
             if verdict:
                 baton_state = self.baton_manager.complete_review(
@@ -618,14 +685,17 @@ class DxLoop:
                     print(f"Review verdict for {beads_id}: {verdict.value}")
 
     def _parse_review_verdict(
-        self, report: Optional[Dict[str, Any]]
+        self,
+        report: Optional[Dict[str, Any]],
+        raw_verdict: Optional[str] = None,
     ) -> Optional[ReviewVerdict]:
         """Parse review verdict from report"""
-        if not report:
-            return None
-
-        # Check for explicit verdict in report
-        verdict_str = report.get("verdict", "").upper()
+        verdict_str = ""
+        if report:
+            verdict_str = str(report.get("verdict", ""))
+        if not verdict_str and raw_verdict:
+            verdict_str = raw_verdict
+        verdict_str = verdict_str.upper()
 
         if "APPROVED" in verdict_str:
             return ReviewVerdict.APPROVED
@@ -637,48 +707,153 @@ class DxLoop:
         return None
 
     def _generate_implement_prompt(self, beads_id: str) -> str:
-        """Generate implementer prompt"""
+        """Generate implementer prompt using prompt-writing + handoff contracts."""
         task = self.beads_manager.tasks.get(beads_id)
         title = task.title if task else beads_id
+        repo = task.repo if task and task.repo else "unknown-repo"
+        description = (task.description or "No additional description provided.").strip()
+        dependencies = ", ".join(task.dependencies) if task and task.dependencies else "none"
 
-        return f"""Implement task for Beads issue {beads_id}.
+        return f"""you're a full-stack implementation agent working inside dx-loop:
 
-Title: {title}
+Use [$tech-lead-handoff](/Users/fengning/agent-skills/core/tech-lead-handoff/SKILL.md) for your final return package.
+This prompt follows the structure of [$prompt-writing](/Users/fengning/agent-skills/extended/prompt-writing/SKILL.md).
 
-Requirements:
-1. Implement the task completely following repository conventions
-2. Write tests if applicable
-3. Create a draft PR after first real commit
-4. Commit with Feature-Key: {beads_id}
+## DX Global Constraints (Always-On)
+1) NO WRITES in canonical clones: `~/{'{'}agent-skills,prime-radiant-ai,affordabot,llm-common{'}'}`
+2) Worktree-first: you are already in the task worktree for `{beads_id}`
+3) Before claiming complete, run repo-appropriate validation for the files you changed
+4) Open or update a draft PR after the first real commit
+5) Commit with `Feature-Key: {beads_id}`
 
-REQUIRED OUTPUT (must be last line):
-PR_URL: https://github.com/<org>/<repo>/pull/<number>
-PR_HEAD_SHA: <40-char-sha>
+## Assignment Metadata (Required)
+- MODE: initial_implementation
+- BEADS_EPIC: none
+- BEADS_SUBTASK: {beads_id}
+- BEADS_DEPENDENCIES: {dependencies}
+- FEATURE_KEY: {beads_id}
+- TARGET_REPO: {repo}
 
-Example:
-PR_URL: https://github.com/example/myapp/pull/42
-PR_HEAD_SHA: abc123def456789012345678901234567890abcd
+## Objective
+Implement the Beads task below fully enough to hand off for review without requiring the orchestrator to reconstruct your intent from logs.
+
+## Beads Task
+- Title: {title}
+- Description:
+{description}
+
+## Required Execution Plan
+Before substantial edits, inspect the relevant code and decide:
+1. The exact files/modules you need to change
+2. The smallest validation commands that prove the task is done
+3. Whether an existing PR/branch for this task already exists
+
+## Required Deliverables
+1. Code changes committed and pushed
+2. Draft PR created or updated
+3. Validation run and summarized
+4. Final response MUST end with a tech-lead-handoff compatible implementation return:
+
+## Tech Lead Review (Implementation Return)
+- MODE: implementation_return
+- PR_URL: https://github.com/<org>/<repo>/pull/<n>
+- PR_HEAD_SHA: <40-char sha>
+- BEADS_EPIC: none
+- BEADS_SUBTASK: {beads_id}
+- BEADS_DEPENDENCIES: {dependencies}
+
+### Validation
+- <command>: PASS|FAIL
+
+### Changed Files Summary
+- <repo-relative path>: <what changed>
+
+### Risks / Blockers
+- None
+
+### Decisions Needed
+- None
+
+### How To Review
+1. <first review step>
+2. <second review step>
+
+## Done Gate
+Do not claim complete until:
+- code is committed and pushed
+- a draft PR exists
+- the final response includes the implementation return block above
+- `PR_URL` and `PR_HEAD_SHA` are concrete, not placeholders
 """
 
     def _generate_review_prompt(
         self, beads_id: str, pr_url: str, pr_head_sha: str
     ) -> str:
-        """Generate reviewer prompt"""
-        return f"""Review implementation for Beads issue {beads_id}.
+        """Generate reviewer prompt from implementation return + review contract."""
+        task = self.beads_manager.tasks.get(beads_id)
+        title = task.title if task else beads_id
+        description = (task.description or "No additional description provided.").strip()
+        implementation_return = self.pr_enforcer.get_implementation_return(beads_id)
+        handoff_block = (
+            implementation_return.raw_text
+            if implementation_return and implementation_return.raw_text
+            else "No implementation return captured."
+        )
 
-PR: {pr_url}
-Commit: {pr_head_sha}
+        return f"""you're a strict reviewer inside dx-loop:
 
-Requirements:
-1. Review the implementation for correctness
-2. Verify tests pass
-3. Check code follows conventions
+Use [$dx-loop-review-contract](/Users/fengning/agent-skills/extended/dx-loop-review-contract/SKILL.md) as your review contract.
+This review prompt follows the structure of [$prompt-writing](/Users/fengning/agent-skills/extended/prompt-writing/SKILL.md) and consumes the implementer's [$tech-lead-handoff](/Users/fengning/agent-skills/core/tech-lead-handoff/SKILL.md) return.
 
-OUTPUT (one of):
-APPROVED: <reason>
-REVISION_REQUIRED: <findings>
-BLOCKED: <critical issues>
+## Assignment Metadata
+- MODE: review_fix_redispatch
+- BEADS_SUBTASK: {beads_id}
+- PR_URL: {pr_url}
+- PR_HEAD_SHA: {pr_head_sha}
+
+## Task Under Review
+- Title: {title}
+- Description:
+{description}
+
+## Implementer Return
+{handoff_block}
+
+## Review Requirements
+1. Review the actual implementation against the Beads task and the implementer return
+2. Prioritize concrete bugs, regressions, overclaims, missing validation, and contract drift
+3. Use findings-first review style with file references when possible
+4. End with exactly one verdict line in one of these forms:
+   - `APPROVED: <reason>`
+   - `REVISION_REQUIRED: <findings summary>`
+   - `BLOCKED: <critical issue>`
+
+## Done Gate
+Do not return a verdict until you have checked whether:
+- the implementation matches the Beads task scope
+- the PR/handoff claims are actually supported by the diff
+- validation is sufficient for the claimed outcome
 """
+
+    def _resolve_prompt(self, beads_id: str, phase: str, worktree: Path) -> str:
+        """
+        Prefer repo-local prompt artifacts when present, otherwise generate one.
+        """
+        candidates = [
+            worktree / ".dx-loop" / "prompts" / f"{beads_id}.{phase}.prompt.md",
+            worktree / ".dx-loop" / "prompts" / f"{beads_id}.{phase}.md",
+            worktree / "docs" / "dx-loop" / f"{beads_id}.{phase}.prompt.md",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate.read_text()
+
+        if phase == "review":
+            baton_state = self.baton_manager.get_state(beads_id)
+            pr_url = baton_state.pr_url if baton_state else ""
+            pr_head_sha = baton_state.pr_head_sha if baton_state else ""
+            return self._generate_review_prompt(beads_id, pr_url, pr_head_sha)
+        return self._generate_implement_prompt(beads_id)
 
     def _set_wave_status(
         self,
@@ -739,10 +914,7 @@ BLOCKED: <critical issues>
             # Scheduler state
             "scheduler_state": self.scheduler.state.to_dict(),
             # PR artifacts
-            "pr_artifacts": {
-                bid: {"pr_url": art.pr_url, "pr_head_sha": art.pr_head_sha}
-                for bid, art in self.pr_enforcer.artifacts.items()
-            },
+            "pr_contract": self.pr_enforcer.to_dict(),
             # P1: Blocker classifier state for restart
             "blocker_classifier": self.blocker_classifier.to_dict(),
             # P1: Notification manager state for restart
@@ -788,8 +960,10 @@ BLOCKED: <critical issues>
                     state["scheduler_state"]
                 )
 
-            # Restore PR artifacts
-            if "pr_artifacts" in state:
+            # Restore PR artifacts / handoffs
+            if "pr_contract" in state:
+                self.pr_enforcer = PRContractEnforcer.from_dict(state["pr_contract"])
+            elif "pr_artifacts" in state:
                 for bid, art_dict in state["pr_artifacts"].items():
                     self.pr_enforcer.artifacts[bid] = PRArtifact(
                         pr_url=art_dict["pr_url"], pr_head_sha=art_dict["pr_head_sha"]

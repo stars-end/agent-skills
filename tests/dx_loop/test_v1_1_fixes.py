@@ -23,6 +23,7 @@ from dx_loop.beads_integration import BeadsTask, BeadsWaveManager
 from dx_loop.blocker import BlockerClassifier
 from dx_loop.notifications import NotificationManager
 from dx_loop.runner_adapter import RunnerAdapter, RunnerStartResult, RunnerTaskState
+from dx_loop.pr_contract import PRContractEnforcer
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 DX_LOOP_SPEC = importlib.util.spec_from_file_location(
@@ -96,6 +97,7 @@ def test_state_persistence_round_trip():
         "bd-1": BeadsTask(
             beads_id="bd-1",
             title="Test",
+            description="Test description",
             status="open",
             dependencies=[],
             dependents=[],
@@ -114,6 +116,7 @@ def test_state_persistence_round_trip():
     # Verify symmetric
     assert "bd-1" in manager2.tasks
     assert manager2.tasks["bd-1"].title == "Test"
+    assert manager2.tasks["bd-1"].description == "Test description"
     assert manager2.layers == [["bd-1"]]
     assert manager2.completed == {"bd-0"}
     
@@ -258,6 +261,193 @@ def test_beads_manager_infers_repo_from_title_prefix():
     print("✓ Repo inference works from task title prefixes")
 
 
+def test_extract_implementation_return_from_agent_output():
+    """Implementation returns should parse structured tech-lead-handoff blocks."""
+    enforcer = PRContractEnforcer()
+    output = """
+Exploration text
+
+## Tech Lead Review (Implementation Return)
+- MODE: implementation_return
+- PR_URL: https://github.com/stars-end/prime-radiant-ai/pull/999
+- PR_HEAD_SHA: abcdef1234567890abcdef1234567890abcdef12
+- BEADS_EPIC: none
+- BEADS_SUBTASK: bd-test-1
+- BEADS_DEPENDENCIES: bd-upstream
+
+### Validation
+- pnpm test: PASS
+
+### Changed Files Summary
+- frontend/src/app.tsx: updated test prompt
+
+### Risks / Blockers
+- None
+
+### Decisions Needed
+- None
+
+### How To Review
+1. Inspect the PR
+2. Run the validation
+"""
+    handoff = enforcer.extract_implementation_return(output)
+
+    assert handoff is not None
+    assert handoff.mode == "implementation_return"
+    assert handoff.pr_url == "https://github.com/stars-end/prime-radiant-ai/pull/999"
+    assert handoff.beads_subtask == "bd-test-1"
+    assert handoff.validation == ["pnpm test: PASS"]
+    assert handoff.changed_files == ["frontend/src/app.tsx: updated test prompt"]
+    assert handoff.how_to_review == ["Inspect the PR", "Run the validation"]
+
+    print("✓ Implementation return parsing works")
+
+
+def test_pr_contract_round_trip_persists_implementation_return():
+    """Structured handoffs should survive save/load."""
+    enforcer1 = PRContractEnforcer()
+    handoff = enforcer1.extract_implementation_return(
+        """
+## Tech Lead Review (Implementation Return)
+- MODE: implementation_return
+- PR_URL: https://github.com/stars-end/agent-skills/pull/123
+- PR_HEAD_SHA: abcdef1234567890abcdef1234567890abcdef12
+- BEADS_EPIC: none
+- BEADS_SUBTASK: bd-test-2
+- BEADS_DEPENDENCIES: none
+
+### Validation
+- pytest: PASS
+"""
+    )
+    assert handoff is not None
+    enforcer1.register_implementation_return("bd-test-2", handoff)
+
+    enforcer2 = PRContractEnforcer.from_dict(enforcer1.to_dict())
+
+    restored = enforcer2.get_implementation_return("bd-test-2")
+    assert restored is not None
+    assert restored.pr_url == "https://github.com/stars-end/agent-skills/pull/123"
+    assert enforcer2.has_valid_artifact("bd-test-2")
+
+    print("✓ PR contract persistence includes implementation return")
+
+
+def test_generated_implement_prompt_uses_handoff_contract():
+    """Implement prompts should carry structured handoff instructions."""
+    loop = DxLoop("wave-test")
+    loop.beads_manager.tasks["bd-test-3"] = BeadsTask(
+        beads_id="bd-test-3",
+        title="Prime Radiant: improve dx-loop prompts",
+        description="Tighten implement prompts so product runs stop wandering.",
+        repo="agent-skills",
+        dependencies=["bd-upstream"],
+    )
+
+    prompt = loop._generate_implement_prompt("bd-test-3")
+
+    assert "tech-lead-handoff" in prompt
+    assert "prompt-writing" in prompt
+    assert "MODE: implementation_return" in prompt
+    assert "Tighten implement prompts" in prompt
+    assert "BEADS_DEPENDENCIES: bd-upstream" in prompt
+
+    print("✓ Implement prompt carries structured handoff contract")
+
+
+def test_generated_review_prompt_consumes_implementation_return():
+    """Review prompts should include the captured implementation return."""
+    loop = DxLoop("wave-test")
+    loop.beads_manager.tasks["bd-test-4"] = BeadsTask(
+        beads_id="bd-test-4",
+        title="Agent-skills: review prompt test",
+        description="Ensure reviewer sees the implementer handoff.",
+        repo="agent-skills",
+    )
+    handoff = PRContractEnforcer().extract_implementation_return(
+        """
+## Tech Lead Review (Implementation Return)
+- MODE: implementation_return
+- PR_URL: https://github.com/stars-end/agent-skills/pull/222
+- PR_HEAD_SHA: abcdef1234567890abcdef1234567890abcdef12
+- BEADS_EPIC: none
+- BEADS_SUBTASK: bd-test-4
+- BEADS_DEPENDENCIES: none
+"""
+    )
+    assert handoff is not None
+    loop.pr_enforcer.register_implementation_return("bd-test-4", handoff)
+
+    prompt = loop._generate_review_prompt(
+        "bd-test-4",
+        "https://github.com/stars-end/agent-skills/pull/222",
+        "abcdef1234567890abcdef1234567890abcdef12",
+    )
+
+    assert "dx-loop-review-contract" in prompt
+    assert "Implementer Return" in prompt
+    assert "MODE: implementation_return" in prompt
+    assert "APPROVED:" in prompt
+
+    print("✓ Review prompt consumes implementation return")
+
+
+def test_deterministic_implement_failure_transitions_to_retry_state(tmp_path):
+    """Quick-fail implement runs should trigger bounded redispatch, not fake healthy state."""
+    wave_id = "wave-retry-test"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test-retry": BeadsTask(
+            beads_id="bd-test-retry",
+            title="Retry task",
+            description="Retry deterministic failures cleanly.",
+            dependencies=[],
+        )
+    }
+
+    loop.baton_manager.start_implement("bd-test-retry", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-test-retry", "implement")
+    loop.runner_adapter.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_err",
+        reason_code="monitor_no_rc_file",
+    )
+    loop.runner_adapter.extract_agent_output = lambda beads_id: ""
+    loop.runner_adapter.extract_pr_artifacts = lambda beads_id: None
+
+    loop._check_implement_progress("bd-test-retry")
+
+    baton = loop.baton_manager.get_state("bd-test-retry")
+    assert baton is not None
+    assert baton.phase.value == "implement"
+    assert baton.attempt == 2
+    assert loop.scheduler.state.is_blocked("bd-test-retry")
+    assert loop.wave_status["state"] == "deterministic_redispatch_needed"
+    assert loop.wave_status["blocker_code"] == "deterministic_redispatch_needed"
+
+    print("✓ Deterministic implement failures enter bounded retry state")
+
+
+def test_deterministic_implement_failure_exhausts_attempts():
+    """Repeated quick-fail implement runs should eventually require a decision."""
+    from dx_loop.baton import BatonManager
+
+    baton = BatonManager(max_attempts=2, max_revisions=1)
+    baton.start_implement("bd-test")
+
+    state1 = baton.record_implement_retry("bd-test", "monitor_no_rc_file")
+    assert state1.phase.value == "implement"
+    state2 = baton.record_implement_retry("bd-test", "monitor_no_rc_file")
+
+    assert state2.phase.value == "failed"
+    assert state2.metadata["failure_reason"] == "max_attempts_exceeded"
+
+    print("✓ Implement retries are bounded")
+
+
 def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
     """Human-readable status should explain dependency-blocked zero-dispatch waves."""
     wave_id = "wave-operator-status-test"
@@ -359,7 +549,7 @@ def test_dx_ensure_bins_links_dx_loop(tmp_path):
     assert "ensured ~/bin tools" in result.stdout
     linked = bin_dir / "dx-loop"
     assert linked.is_symlink()
-    assert linked.resolve() == REPO_ROOT / "scripts" / "dx-loop"
+    assert linked.resolve().samefile(REPO_ROOT / "scripts" / "dx-loop")
 
     version = subprocess.run(
         [str(linked), "--version"],
@@ -459,6 +649,85 @@ def test_runner_adapter_accepts_timeout_when_runner_state_exists(monkeypatch):
     assert result.reason_code == "dx_runner_start_timeout_handoff"
 
     print("✓ RunnerAdapter treats timeout as success when the job is already live")
+
+
+def test_runner_adapter_check_parses_json_after_banner(monkeypatch):
+    """check/report should tolerate canonical banner text before JSON payloads."""
+    adapter = RunnerAdapter(provider="opencode")
+
+    banner_json = """
+━━━━━━━━ reminder ━━━━━━━━
+Use worktrees.
+{"state":"exited_ok","reason_code":"process_exit_with_rc","pr_url":"https://example/pull/1","pr_head_sha":"abc123"}
+"""
+    monkeypatch.setattr(
+        adapter,
+        "_run_dx_runner",
+        lambda *args, **kwargs: RunnerStartResult(
+            ok=True,
+            returncode=0,
+            stdout=banner_json,
+            stderr="",
+            command=["dx-runner", "check"],
+        ),
+    )
+
+    state = adapter.check("bd-test")
+    report = adapter.report("bd-test")
+
+    assert state is not None
+    assert state.state == "exited_ok"
+    assert state.has_pr_artifacts is True
+    assert state.pr_url == "https://example/pull/1"
+    assert report is not None
+    assert report["pr_head_sha"] == "abc123"
+
+    print("✓ RunnerAdapter parses JSON payloads after banner text")
+
+
+def test_runner_adapter_uses_canonical_bd_cwd(monkeypatch, tmp_path):
+    """All dx-runner subprocesses should run from the canonical Beads repo cwd."""
+    adapter = RunnerAdapter(provider="opencode", beads_repo_path=tmp_path / "bd")
+
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+    local_runner = tmp_path / "dx-runner"
+    local_runner.write_text("#!/usr/bin/env bash\n")
+    monkeypatch.setattr(adapter, "_dx_runner_script_path", lambda: local_runner)
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["cwd"] = kwargs.get("cwd")
+        return SimpleNamespace(returncode=0, stdout='{"state":"healthy"}', stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    state = adapter.check("bd-test")
+
+    assert state is not None
+    assert state.state == "healthy"
+    assert captured["cwd"] == str(tmp_path / "bd")
+
+    print("✓ RunnerAdapter invokes dx-runner from canonical Beads cwd")
+
+
+def test_runner_adapter_extracts_review_verdict_from_log(tmp_path):
+    """Review chaining should work even if dx-runner report lacks a verdict field."""
+    adapter = RunnerAdapter(provider="opencode")
+    log_dir = Path("/tmp/dx-runner/opencode")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "bd-test-review.log"
+    log_path.write_text("noise\nREVISION_REQUIRED: fix the helper contract\n")
+
+    try:
+        verdict = adapter.extract_review_verdict("bd-test-review")
+    finally:
+        log_path.unlink(missing_ok=True)
+
+    assert verdict == "REVISION_REQUIRED: fix the helper contract"
+
+    print("✓ RunnerAdapter extracts review verdicts from logs")
 
 
 def test_start_implement_marks_kickoff_env_blocked(tmp_path):

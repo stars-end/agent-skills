@@ -156,7 +156,32 @@ class BatonManager:
         state.phase = BatonPhase.IMPLEMENT
         state.implement_started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         state.implement_run_id = run_id
-        
+        state.metadata.pop("last_retry_reason", None)
+
+        return state
+
+    def record_implement_retry(
+        self, beads_id: str, failure_reason: Optional[str] = None
+    ) -> BatonState:
+        """
+        Record a failed implement attempt that should be retried on a later cadence.
+        """
+        state = self.baton_states.get(beads_id)
+        if not state:
+            raise ValueError(f"No baton state for {beads_id}")
+
+        state.attempt += 1
+        if failure_reason:
+            state.metadata["last_retry_reason"] = failure_reason
+
+        if state.attempt > state.max_attempts:
+            state.phase = BatonPhase.FAILED
+            state.metadata["failure_reason"] = "max_attempts_exceeded"
+        else:
+            state.phase = BatonPhase.IMPLEMENT
+            state.implement_started_at = None
+            state.implement_run_id = None
+
         return state
 
     def complete_implement(

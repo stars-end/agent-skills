@@ -20,6 +20,7 @@ class BeadsTask:
     """Represents a Beads task with dependency metadata"""
     beads_id: str
     title: str
+    description: str = ""
     repo: Optional[str] = None
     status: str = "open"
     dependencies: List[str] = field(default_factory=list)
@@ -30,6 +31,7 @@ class BeadsTask:
         return {
             "beads_id": self.beads_id,
             "title": self.title,
+            "description": self.description,
             "repo": self.repo,
             "status": self.status,
             "dependencies": self.dependencies,
@@ -131,6 +133,7 @@ class BeadsWaveManager:
                     task = BeadsTask(
                         beads_id=dep["id"],
                         title=dep.get("title", ""),
+                        description=dep.get("description", ""),
                         repo=self._infer_repo_from_title(dep.get("title", "")),
                         status=dep.get("status", "open"),
                         priority=dep.get("priority", 2),
@@ -164,6 +167,7 @@ class BeadsWaveManager:
             
             task_data = data[0]
             task.repo = task.repo or self._infer_repo_from_title(task_data.get("title", task.title))
+            task.description = task_data.get("description", task.description or "")
             task.dependencies = []
             for dep in task_data.get("dependencies", []):
                 if dep.get("dependency_type") != "blocks":
@@ -340,6 +344,7 @@ class BeadsWaveManager:
                 task = BeadsTask(
                     beads_id=task_data.get("beads_id", tid),
                     title=task_data.get("title", ""),
+                    description=task_data.get("description", ""),
                     repo=task_data.get("repo"),
                     status=task_data.get("status", "open"),
                     dependencies=task_data.get("dependencies", []),

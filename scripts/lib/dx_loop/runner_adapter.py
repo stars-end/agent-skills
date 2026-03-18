@@ -15,6 +15,7 @@ import platform
 import subprocess
 import json
 import shutil
+from json import JSONDecoder, JSONDecodeError
 
 
 @dataclass
@@ -73,8 +74,13 @@ class RunnerAdapter:
     use of dx-runner as the canonical substrate.
     """
     
-    def __init__(self, provider: str = "opencode"):
+    def __init__(
+        self,
+        provider: str = "opencode",
+        beads_repo_path: Optional[Path] = None,
+    ):
         self.provider = provider
+        self.beads_repo_path = beads_repo_path or Path.home() / "bd"
 
     def _dx_runner_script_path(self) -> Path:
         """Resolve the canonical dx-runner script path."""
@@ -172,6 +178,7 @@ class RunnerAdapter:
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                cwd=str(self.beads_repo_path),
             )
         except subprocess.TimeoutExpired:
             return RunnerStartResult(
@@ -213,6 +220,26 @@ class RunnerAdapter:
             detail=detail,
             command=cmd_result.command,
         )
+
+    @staticmethod
+    def _extract_json_payload(output: str) -> Optional[Dict[str, Any]]:
+        """
+        Parse the first JSON object from stdout, ignoring banner/preamble text.
+        """
+        if not output:
+            return None
+
+        decoder = JSONDecoder()
+        for idx, char in enumerate(output):
+            if char != "{":
+                continue
+            try:
+                parsed, _ = decoder.raw_decode(output[idx:])
+            except JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return None
 
     def start(
         self,
@@ -264,31 +291,26 @@ class RunnerAdapter:
         
         Source of truth is dx-runner check --json
         """
-        try:
-            result = self._run_dx_runner(
-                ["check", "--beads", beads_id, "--json"],
-                timeout=30,
-            )
-            
-            if not result.ok or not result.stdout.strip():
-                # Task not found
-                return RunnerTaskState(beads_id=beads_id, state="missing")
-            
-            data = json.loads(result.stdout)
-            
-            state = RunnerTaskState(
-                beads_id=beads_id,
-                state=data.get("state", "unknown"),
-                reason_code=data.get("reason_code"),
-                exit_code=data.get("exit_code"),
-                started_at=data.get("started_at"),
-                duration_sec=data.get("duration_sec"),
-            )
-            
-            return state
-        
-        except json.JSONDecodeError:
+        result = self._run_dx_runner(
+            ["check", "--beads", beads_id, "--json"],
+            timeout=30,
+        )
+
+        data = self._extract_json_payload(result.stdout)
+        if not data:
             return RunnerTaskState(beads_id=beads_id, state="missing")
+
+        return RunnerTaskState(
+            beads_id=beads_id,
+            state=data.get("state", "unknown"),
+            reason_code=data.get("reason_code"),
+            exit_code=data.get("exit_code"),
+            started_at=data.get("started_at"),
+            duration_sec=data.get("duration_sec"),
+            has_pr_artifacts=bool(data.get("pr_url") and data.get("pr_head_sha")),
+            pr_url=data.get("pr_url"),
+            pr_head_sha=data.get("pr_head_sha"),
+        )
     
     def report(self, beads_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -296,19 +318,12 @@ class RunnerAdapter:
         
         Source of truth is dx-runner report --format json
         """
-        try:
-            result = self._run_dx_runner(
-                ["report", "--beads", beads_id, "--format", "json"],
-                timeout=30,
-            )
-            
-            if not result.ok or not result.stdout.strip():
-                return None
-            
-            return json.loads(result.stdout)
-        
-        except json.JSONDecodeError:
-            return None
+        result = self._run_dx_runner(
+            ["report", "--beads", beads_id, "--format", "json"],
+            timeout=30,
+        )
+
+        return self._extract_json_payload(result.stdout)
     
     def extract_pr_artifacts(self, beads_id: str) -> Optional[tuple[str, str]]:
         """
@@ -327,31 +342,93 @@ class RunnerAdapter:
         if pr_url and pr_head_sha:
             return (pr_url, pr_head_sha)
         
-        # Fall back to reading log
+        transcript = self.extract_agent_output(beads_id)
+        if transcript:
+            pr_url = None
+            pr_head_sha = None
+            for line in reversed(transcript.splitlines()):
+                line = line.strip()
+                if line.startswith("PR_URL:"):
+                    pr_url = line.split(":", 1)[1].strip()
+                elif line.startswith("PR_HEAD_SHA:"):
+                    pr_head_sha = line.split(":", 1)[1].strip()
+                if pr_url and pr_head_sha:
+                    return (pr_url, pr_head_sha)
+
+        return None
+
+    def extract_agent_output(self, beads_id: str) -> Optional[str]:
+        """
+        Recover agent-authored text from the dx-runner JSONL log stream.
+        """
         log_path = Path(f"/tmp/dx-runner/{self.provider}/{beads_id}.log")
         if not log_path.exists():
             return None
-        
+
+        text_parts: List[str] = []
         try:
-            log_content = log_path.read_text()
-            
-            # Extract PR_URL and PR_HEAD_SHA from log
-            pr_url = None
-            pr_head_sha = None
-            
-            for line in reversed(log_content.split('\n')):
-                line = line.strip()
-                if line.startswith('PR_URL:'):
-                    pr_url = line.split(':', 1)[1].strip()
-                elif line.startswith('PR_HEAD_SHA:'):
-                    pr_head_sha = line.split(':', 1)[1].strip()
-                
-                if pr_url and pr_head_sha:
-                    return (pr_url, pr_head_sha)
-        
+            for raw_line in log_path.read_text().splitlines():
+                raw_line = raw_line.strip()
+                if not raw_line or not raw_line.startswith("{"):
+                    continue
+                try:
+                    event = json.loads(raw_line)
+                except JSONDecodeError:
+                    continue
+                if event.get("type") != "text":
+                    continue
+                part = event.get("part", {})
+                text = part.get("text")
+                if text:
+                    text_parts.append(str(text))
         except OSError:
-            pass
-        
+            return None
+
+        if not text_parts:
+            return None
+        return "\n\n".join(text_parts)
+
+    def _read_raw_log(self, beads_id: str) -> Optional[str]:
+        """Fallback raw log reader for legacy/plaintext log fixtures."""
+        log_path = Path(f"/tmp/dx-runner/{self.provider}/{beads_id}.log")
+        if not log_path.exists():
+            return None
+        try:
+            return log_path.read_text()
+        except OSError:
+            return None
+
+    def extract_review_verdict(self, beads_id: str) -> Optional[str]:
+        """
+        Extract review verdict from report or raw log output.
+
+        Review prompts currently emit one of:
+        - APPROVED: ...
+        - REVISION_REQUIRED: ...
+        - BLOCKED: ...
+        """
+        report_data = self.report(beads_id)
+        if report_data and report_data.get("verdict"):
+            return str(report_data["verdict"])
+
+        transcript = self.extract_agent_output(beads_id)
+        if not transcript:
+            transcript = self._read_raw_log(beads_id)
+        if not transcript:
+            return None
+
+        try:
+            for line in reversed(transcript.splitlines()):
+                line = line.strip()
+                if line.startswith("APPROVED:"):
+                    return line
+                if line.startswith("REVISION_REQUIRED:"):
+                    return line
+                if line.startswith("BLOCKED:"):
+                    return line
+        except OSError:
+            return None
+
         return None
     
     def stop(self, beads_id: str) -> bool:
