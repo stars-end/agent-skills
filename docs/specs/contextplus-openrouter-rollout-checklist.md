@@ -1,7 +1,7 @@
 # Context-Plus OpenRouter Rollout Checklist
 
-**Beads**: bd-hil7.3
-**Status**: Revised for local-only patch model + repaired env/fallback/enrichment/drift
+**Beads**: bd-hil7.3 / bd-hil7.4
+**Status**: Revised for local-only patch model + repaired env/fallback/enrichment/drift + cached-secret contract
 
 ## Pre-Implementation Gate (T0)
 
@@ -32,9 +32,10 @@
 
 ### Common Steps (all hosts)
 
-- [ ] `OPENROUTER_API_KEY` exported in shell profile (`.zshrc` / `.bashrc`):
+- [ ] `OPENROUTER_API_KEY` exported in shell profile (`.zshrc` / `.bashrc`) using cached OP resolution:
   ```bash
-  export OPENROUTER_API_KEY="$(op read 'op://dev/Agent-Secrets-Production/OPENROUTER_API_KEY')"
+  source ~/agent-skills/scripts/lib/dx-auth.sh
+  export OPENROUTER_API_KEY="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/OPENROUTER_API_KEY")"
   ```
 - [ ] Run install script: `scripts/install-contextplus-patched.sh`
 - [ ] Verify drift check: `scripts/install-contextplus-patched.sh --check`
@@ -86,10 +87,10 @@
 
 - [ ] `scripts/enrichment/nightly-enrichment.py` committed (uses llm-common ZaiClient)
 - [ ] `llm-common` installed: `pip install llm-common`
-- [ ] Cron job installed on one host:
+- [ ] Cron job installed on one host (uses cached OP resolution, no raw `op read`):
   ```bash
   # 3 AM UTC daily
-  0 3 * * * ZAI_API_KEY=$(op read 'op://dev/Agent-Secrets-Production/ZAI_API_KEY') /path/to/python3 /path/to/agent-skills/scripts/enrichment/nightly-enrichment.py >> /tmp/enrichment.log 2>&1
+  0 3 * * * /path/to/agent-skills/scripts/enrichment/enrichment-cron-wrapper.sh >> /tmp/enrichment.log 2>&1
   ```
 - [ ] First run (dry): `python3 scripts/enrichment/nightly-enrichment.py --dry-run`
 - [ ] Artifacts written to `~/.dx-state/enrichment/{repo-name}/` (NOT into canonical clones)

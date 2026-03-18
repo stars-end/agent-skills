@@ -210,6 +210,8 @@ The enrichment job still **reads** `.mcp_data/embeddings-cache.json` from the ca
 nightly-enrichment:
   schedule: "0 3 * * *"  # 3 AM UTC
   timeout: 30m
+  secret_resolution: cached  # dx_auth_load_zai_api_key via enrichment-cron-wrapper.sh
+  launcher: scripts/enrichment/enrichment-cron-wrapper.sh
   steps:
     1. For each tracked repo in fleet:
        a. Read .mcp_data/embeddings-cache.json
@@ -217,7 +219,7 @@ nightly-enrichment:
        c. Batch into clusters of ~20 files
        d. For each cluster, call z.ai (GLM-4.7) with labeling prompt
        e. For each file, call z.ai with summary prompt
-       f. Write results to .mcp_data/enrichment/
+       f. Write results to ~/.dx-state/enrichment/{repo}/
 ```
 
 ### 3.4 Prompt Templates
@@ -251,6 +253,7 @@ Use `z.ai` GLM-4.7 via `ZaiClient` from `llm-common`:
 - Model: `glm-4.7` (or `glm-5` if available)
 - Endpoint: `https://api.z.ai/api/anthropic` (Anthropic-compatible)
 - Auth: `ZAI_API_KEY` from 1Password (`op://dev/Agent-Secrets-Production/ZAI_API_KEY`)
+- **Secret resolution**: `dx_auth_load_zai_api_key` from `scripts/lib/dx-auth.sh` (cached, 24h TTL)
 - Cost: $0.00 (z.ai provides free GLM access)
 
 ### 3.6 Implementation Reference
@@ -258,9 +261,9 @@ Use `z.ai` GLM-4.7 via `ZaiClient` from `llm-common`:
 The nightly job should reuse:
 - `llm_common/providers/zai_client.py` for the LLM client
 - `llm_common/core/models.py` for `LLMConfig`, `LLMMessage`
-- Existing `dx-auth` secret resolution from `scripts/adapters/lib/dx-auth.sh`
+- Cached secret resolution from `scripts/lib/dx-auth.sh` (`dx_auth_load_zai_api_key`)
 
-The job itself is a new Python script at `scripts/enrichment/nightly-enrichment.py` in `agent-skills`, invoked via cron or systemd timer.
+The job itself is a Python script at `scripts/enrichment/nightly-enrichment.py` in `agent-skills`, invoked via `scripts/enrichment/enrichment-cron-wrapper.sh` in cron. The wrapper handles OP service-account auth and cached secret resolution before exec-ing the Python script.
 
 ### 3.7 Volume Estimate
 
@@ -375,9 +378,10 @@ Same resolution pattern. Fleet-sync writes resolved values into `environment`:
 # 1Password reference for OPENROUTER_API_KEY
 op://dev/Agent-Secrets-Production/OPENROUTER_API_KEY
 
-# Resolution for shell profile (all hosts):
+# Resolution for shell profile (all hosts) — use cached OP resolution:
 # Add to ~/.zshrc or ~/.bashrc:
-export OPENROUTER_API_KEY="$(op read 'op://dev/Agent-Secrets-Production/OPENROUTER_API_KEY')"
+source ~/agent-skills/scripts/lib/dx-auth.sh
+export OPENROUTER_API_KEY="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/OPENROUTER_API_KEY")"
 
 # For MCP env blocks that require resolved values (Codex fallback):
 # Write resolved value directly, NOT the op:// reference
@@ -396,7 +400,9 @@ export OPENROUTER_API_KEY="$(op read 'op://dev/Agent-Secrets-Production/OPENROUT
 
 ```bash
 # Required for nightly z.ai enrichment job
-ZAI_API_KEY=<from 1password>
+# ZAI_API_KEY is resolved by enrichment-cron-wrapper.sh via dx_auth_load_zai_api_key
+# (cached from 1Password, 24h TTL — no raw op read in cron)
+ZAI_API_KEY=<resolved by enrichment-cron-wrapper.sh>
 ZAI_BASE_URL=https://api.z.ai/api/anthropic  # or use default from ZaiClient
 
 # Not required (uses local embedding cache, no live embeddings)
