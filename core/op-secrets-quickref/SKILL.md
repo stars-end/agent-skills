@@ -2,7 +2,7 @@
 name: op-secrets-quickref
 description: |
   Quick reference for 1Password service account auth and secret management.
-  Use for: API keys, tokens, service accounts, op:// references, or auth failures in non-interactive contexts (cron, systemd, CI).
+Use for: API keys, tokens, service accounts, op:// references, or auth failures in non-interactive contexts (cron, systemd, CI).
   Triggers: ZAI_API_KEY, OP_SERVICE_ACCOUNT_TOKEN, 1Password, "where do secrets live", auth failure, 401, permission denied.
 tags: [secrets, auth, token, 1password, op-cli, dx, env, railway]
 allowed-tools:
@@ -13,12 +13,13 @@ allowed-tools:
 
 ## Goal
 
-Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and runtime resolution (`op read`, `op run --`) with **service account auth** (default, not interactive biometric).
+Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and runtime resolution (`op read`, `op run --`) with **cached service-account auth by default** (not interactive biometric).
 
 ## Critical Rule
 
-- Tool calls do **not** share shell exports reliably. If you need `op read` and `railway` in automation, load `OP_SERVICE_ACCOUNT_TOKEN` and `RAILWAY_API_TOKEN` in the **same command invocation**.
-- Prefer the canonical helper:
+- Tool calls do **not** share shell exports reliably. If auth needs to survive across tool calls, prefer cached service-account mode from `scripts/lib/dx-auth.sh` and keep OP/Railway auth inside the same shell invocation.
+- If you need `op read` and `railway` in automation, load `OP_SERVICE_ACCOUNT_TOKEN` and `RAILWAY_API_TOKEN` in the **same command invocation**.
+- Prefer the canonical helper for Railway-linked shells:
 
 ```bash
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
@@ -52,7 +53,7 @@ Implementation uses these tokens via:
 
 | Item | Fields | Purpose |
 |------|--------|---------|
-| `Agent-Secrets-Production` | `ZAI_API_KEY`, `RAILWAY_API_TOKEN`, `GITHUB_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | DX/dev workflow secrets (default source) |
+| `Agent-Secrets-Production` | `ZAI_API_KEY`, `RAILWAY_API_TOKEN`, `GITHUB_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `WINDMILL_API_TOKEN` | DX/dev workflow secrets (default source) |
 
 **Note:** ZAI_API_KEY is used as ANTHROPIC_AUTH_TOKEN (Z.ai routes to Anthropic-compatible API).
 
@@ -102,6 +103,20 @@ op whoami
 ```
 
 Expected output: `ServiceAccount: ...` (not interactive user account)
+
+### Windmill CLI Auth
+
+Canonical source:
+`op://dev/Agent-Secrets-Production/WINDMILL_API_TOKEN`
+
+Legacy or ambiguous standalone references like "windmill dev api token" should be treated as migration artifacts unless a specific environment explicitly requires them.
+
+For repeated reads or commands that need the token to survive across tool calls, use cached service-account mode:
+
+```bash
+source scripts/lib/dx-auth.sh
+export WINDMILL_API_TOKEN="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/WINDMILL_API_TOKEN")"
+```
 
 ## Failure Modes: Auth vs Rate Limit
 
