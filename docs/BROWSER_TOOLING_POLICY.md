@@ -26,6 +26,15 @@ Use `Playwright` for:
 
 Do not treat `agent-browser` as a replacement for Playwright test coverage.
 
+For Prime Radiant guarded-route QA, `Playwright` is a narrow debugging exception only when you need interception or a reproducible assertion trace that `agent-browser` cannot provide.
+
+## Prime Radiant QA Lanes
+
+- `/demo` is the no-auth lane for guest/demo validation.
+- `/v2` and `/brokerage` are bypass-default lanes for routine product verification.
+- real-auth is exception-only and should be used only when testing auth-specific behavior.
+- For manual QA on guarded routes, use the canonical Prime Radiant helper from PR #974: `make qa-bypass-cookie` or `make qa-bypass-cookie FORMAT=verify BACKEND_URL=...`.
+
 ## Exceptions
 
 - `subbrowser` remains an antigravity-specific exception

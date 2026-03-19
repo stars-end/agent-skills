@@ -14,7 +14,7 @@ Use `agent-browser` as the default manual browser surface for CLI agents.
 ## Browser Tooling Contract
 
 - `agent-browser` = primary manual verification tool for CLI agents
-- `Playwright` = CI/E2E, assertions, reproducible automated browser tests
+- `Playwright` = CI/E2E, assertions, reproducible automated browser tests, and narrow request-interception debugging when the manual path cannot isolate the issue
 - `subbrowser` = antigravity-specific exception, not the cross-agent default
 - browser MCP surfaces = optional specialist/debug tools, not the standard manual path
 
@@ -113,7 +113,7 @@ agent-browser snapshot -i
 - Re-snapshot after navigation, modal open/close, or major DOM changes
 - Prefer `agent-browser` directly over `npx agent-browser`
 - Store ad hoc screenshots under `/tmp` unless the task explicitly needs repo evidence
-- If a flow needs assertions or regression protection, move it to Playwright instead of overloading manual verification
+- If a flow needs assertions, interception, or regression protection, move it to Playwright instead of overloading manual verification
 
 ## Quick Verification
 
