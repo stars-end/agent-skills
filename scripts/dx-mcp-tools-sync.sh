@@ -215,7 +215,17 @@ def render_json(path: Path, servers: dict, ide: str):
             cmd = entry.get("command", "")
             args = entry.get("args", [])
             entry_env = entry.get("env", {})
-            entry = {"type": "local", "command": ([cmd] if isinstance(cmd, str) else cmd) + args}
+
+            def normalize_local_path(part: str) -> str:
+                if isinstance(part, str) and part.startswith("~"):
+                    return str(Path(part).expanduser())
+                return part
+
+            cmd_parts = [cmd] if isinstance(cmd, str) else list(cmd)
+            cmd_parts = [normalize_local_path(part) for part in cmd_parts]
+            args = [normalize_local_path(part) for part in args]
+
+            entry = {"type": "local", "command": cmd_parts + args}
             if entry_env:
                 entry["environment"] = entry_env
         elif "env" in entry:
