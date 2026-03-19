@@ -56,10 +56,11 @@ Do not wait for the user to say "prompt-writing" explicitly if delegation intent
 
 Every generated delegation prompt MUST enforce:
 
-0) **Orchestrator push-first workflow**
+0) **Orchestrator push-first / delegate pull-first workflow**
 - Orchestrator MUST push context (docs/specs/plans) to GitHub BEFORE generating prompt
 - Use resulting `PR_HEAD_SHA` or `PR_URL` in prompt
-- Delegate fetches from that SHA, not from local paths
+- **Delegate MUST `git fetch` the remote PR branch and read specs/docs from that fetched state before doing anything else.**
+- Delegate must NOT assume the PR branch exists locally — always fetch + checkout first
 - Never embed file contents in prompt text
 
 1) **Cross-VM accessibility**
@@ -162,6 +163,15 @@ you're a full-stack dev agent at a tiny fintech startup:
 
 If PR_URL/PR_HEAD_SHA is not available yet, create/refresh branch and open draft PR before finishing.
 
+## Step 0: Fetch Remote PR (MANDATORY — do before anything else)
+
+    # Fetch the orchestrator's spec/docs PR — do NOT skip this
+    git fetch origin pull/937/head:pr-937
+    git checkout pr-937
+
+Then read every file listed under "Repo paths to read first" above.
+Only after reading all specs/docs, proceed to Step 1 (worktree creation).
+
 ## Objective
 Implement shadcn/ui foundation with design tokens for V2 routes.
 
@@ -212,7 +222,13 @@ Two-PR pattern:
 2. **Delegate's implementation PR** — code changes pushed by delegate
 
 Prompts that reference local absolute paths as required inputs are invalid for cross-VM delegation.
-Orchestrator must push context to GitHub BEFORE generating the prompt. Delegate fetches from that SHA.
+Orchestrator must push context to GitHub BEFORE generating the prompt.
+
+**Delegate's first action MUST be to fetch and read the remote PR:**
+- `git fetch origin pull/<N>/head:<branch>` or `git fetch origin <branch>`
+- Read all listed spec/doc/plan files from the fetched state
+- Only then proceed with worktree creation and implementation
+- Do NOT skip this step — the PR branch is the authoritative spec source
 
 ## Hardened Rule
 

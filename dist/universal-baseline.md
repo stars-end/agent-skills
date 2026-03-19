@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 833a42bb60e9e913d1baf58ca303f8c9985932de -->
-<!-- Last updated: 2026-03-18 09:01:15 UTC -->
+<!-- Source SHA: ea199f212aaa419a2869ff40cd3aa0a4af6d1cc4 -->
+<!-- Last updated: 2026-03-19 10:47:59 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -423,10 +423,8 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 \`\`\`
 
 ### Route Matrix Verification
-- **no-auth lane**: `/demo` for guest/demo validation only
-- **bypass-default lanes**: `/v2`, `/brokerage` for routine product verification
-- **real-auth**: exception-only, reserved for auth-specific behavior or bypass-path validation
-- **manual QA helper**: use Prime Radiant's canonical helper from PR #974, `make qa-bypass-cookie` (or `FORMAT=verify` for backend-facing checks), instead of ad hoc token creation
+- **no-cookie mode**: \`/\`, \`/sign-in\`, \`/sign-up\`
+- **bypass-cookie mode**: \`/v2\`, \`/brokerage\` (if auth bypass available)
 
 ### Runtime Health Requirements
 - No "Unexpected Application Error" on page
