@@ -29,11 +29,18 @@ class SchedulerState:
     transitions while still preventing duplicate dispatch of the same phase.
 
     Key format: "beads_id:phase" (e.g., "bd-abc:implement", "bd-abc:review")
+
+    FIX for bd-5w5o.17: Separate tracking for dependency-blocked vs failed-blocked:
+    - blocked_beads_ids: Tasks that failed during execution and need attention
+    - waiting_on_dependency_ids: Tasks waiting on upstream dependencies (healthy wait)
     """
 
     active_beads_ids: Set[str] = field(default_factory=set)  # Now phase-aware keys
     completed_beads_ids: Set[str] = field(default_factory=set)  # Plain beads_ids
-    blocked_beads_ids: Set[str] = field(default_factory=set)  # Plain beads_ids
+    blocked_beads_ids: Set[str] = field(default_factory=set)  # Failed/blocked tasks
+    waiting_on_dependency_ids: Set[str] = field(
+        default_factory=set
+    )  # Dependency-blocked (bd-5w5o.17)
     last_poll_time: Optional[str] = None
     poll_count: int = 0
     dispatch_count: int = 0
@@ -56,6 +63,7 @@ class SchedulerState:
             "active_beads_ids": list(self.active_beads_ids),
             "completed_beads_ids": list(self.completed_beads_ids),
             "blocked_beads_ids": list(self.blocked_beads_ids),
+            "waiting_on_dependency_ids": list(self.waiting_on_dependency_ids),
             "last_poll_time": self.last_poll_time,
             "poll_count": self.poll_count,
             "dispatch_count": self.dispatch_count,
@@ -67,6 +75,7 @@ class SchedulerState:
         state.active_beads_ids = set(data.get("active_beads_ids", []))
         state.completed_beads_ids = set(data.get("completed_beads_ids", []))
         state.blocked_beads_ids = set(data.get("blocked_beads_ids", []))
+        state.waiting_on_dependency_ids = set(data.get("waiting_on_dependency_ids", []))
         state.last_poll_time = data.get("last_poll_time")
         state.poll_count = data.get("poll_count", 0)
         state.dispatch_count = data.get("dispatch_count", 0)
@@ -126,6 +135,18 @@ class SchedulerState:
     def mark_unblocked(self, beads_id: str):
         """Mark task as no longer blocked"""
         self.blocked_beads_ids.discard(beads_id)
+
+    def mark_waiting_on_dependency(self, beads_id: str):
+        """Mark task as waiting on upstream dependency"""
+        self.waiting_on_dependency_ids.add(beads_id)
+
+    def clear_waiting_on_dependency(self, beads_id: str):
+        """Clear waiting-on-dependency status for a task"""
+        self.waiting_on_dependency_ids.discard(beads_id)
+
+    def is_waiting_on_dependency(self, beads_id: str) -> bool:
+        """Check if task is waiting on dependency"""
+        return beads_id in self.waiting_on_dependency_ids
 
 
 class DxLoopScheduler:

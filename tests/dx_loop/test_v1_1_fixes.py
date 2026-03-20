@@ -39,51 +39,47 @@ cmd_status = dx_loop_script.cmd_status
 def test_no_duplicate_dispatch():
     """P0 fix: Active work not redispatched"""
     scheduler = DxLoopScheduler(cadence_seconds=1)
-    
+
     # Mark as active
     scheduler.state.mark_dispatched("bd-test-1")
-    
+
     # Should be active
     assert scheduler.state.is_active("bd-test-1")
-    
+
     # Mark as completed
     scheduler.state.mark_completed("bd-test-1")
-    
+
     # Should not be active, should be completed
     assert not scheduler.state.is_active("bd-test-1")
     assert scheduler.state.is_completed("bd-test-1")
-    
+
     print("✓ No duplicate dispatch works")
 
 
 def test_notification_first_occurrence():
     """P1 fix: Blocked notifications emit on FIRST occurrence"""
     tracker = LoopStateTracker()
-    
+
     # First occurrence - should emit
     t1 = tracker.transition(
-        LoopState.RUN_BLOCKED,
-        blocker_code=BlockerCode.RUN_BLOCKED,
-        reason="First"
+        LoopState.RUN_BLOCKED, blocker_code=BlockerCode.RUN_BLOCKED, reason="First"
     )
     assert t1 is not None, "First occurrence should emit"
-    
+
     # Second occurrence (unchanged) - should be suppressed
     t2 = tracker.transition(
-        LoopState.RUN_BLOCKED,
-        blocker_code=BlockerCode.RUN_BLOCKED,
-        reason="Second"
+        LoopState.RUN_BLOCKED, blocker_code=BlockerCode.RUN_BLOCKED, reason="Second"
     )
     assert t2 is None, "Unchanged second occurrence should be suppressed"
-    
+
     # Different blocker - should emit
     t3 = tracker.transition(
         LoopState.REVIEW_BLOCKED,
         blocker_code=BlockerCode.REVIEW_BLOCKED,
-        reason="Third"
+        reason="Third",
     )
     assert t3 is not None, "Different blocker should emit"
-    
+
     print("✓ Notification first occurrence works")
 
 
@@ -106,20 +102,20 @@ def test_state_persistence_round_trip():
     }
     manager1.layers = [["bd-1"]]
     manager1.completed = {"bd-0"}
-    
+
     # Save
     state_dict = manager1.to_dict()
-    
+
     # Load
     manager2 = BeadsWaveManager.from_dict(state_dict)
-    
+
     # Verify symmetric
     assert "bd-1" in manager2.tasks
     assert manager2.tasks["bd-1"].title == "Test"
     assert manager2.tasks["bd-1"].description == "Test description"
     assert manager2.layers == [["bd-1"]]
     assert manager2.completed == {"bd-0"}
-    
+
     print("✓ State persistence round-trip works")
 
 
@@ -129,18 +125,18 @@ def test_scheduler_state_persistence():
     state1.active_beads_ids = {"bd-1", "bd-2"}
     state1.completed_beads_ids = {"bd-0"}
     state1.dispatch_count = 5
-    
+
     # Save
     data = state1.to_dict()
-    
+
     # Load
     state2 = SchedulerState.from_dict(data)
-    
+
     # Verify
     assert state2.active_beads_ids == {"bd-1", "bd-2"}
     assert state2.completed_beads_ids == {"bd-0"}
     assert state2.dispatch_count == 5
-    
+
     print("✓ Scheduler state persistence works")
 
 
@@ -254,8 +250,13 @@ def test_beads_manager_infers_repo_from_title_prefix():
     """Title prefixes should map to the correct canonical repo."""
     manager = BeadsWaveManager()
 
-    assert manager._infer_repo_from_title("Prime Radiant: fix V2 auth") == "prime-radiant-ai"
-    assert manager._infer_repo_from_title("Agent-skills: harden dx-loop") == "agent-skills"
+    assert (
+        manager._infer_repo_from_title("Prime Radiant: fix V2 auth")
+        == "prime-radiant-ai"
+    )
+    assert (
+        manager._infer_repo_from_title("Agent-skills: harden dx-loop") == "agent-skills"
+    )
     assert manager._infer_repo_from_title("Unknown: task") is None
 
     print("✓ Repo inference works from task title prefixes")
@@ -488,10 +489,66 @@ def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
     assert rc == 0
     assert "State: waiting_on_dependency" in captured.out
     assert "Blocker Code: waiting_on_dependency" in captured.out
-    assert "Blocked details:" in captured.out
+    assert "Waiting on dependencies:" in captured.out
     assert "bd-blocked: bd-upstream" in captured.out
 
     print("✓ Status output explains dependency blockers")
+
+
+def test_waiting_on_dependency_ids_tracked_separately_from_blocked(tmp_path):
+    """waiting_on_dependency_ids should be tracked separately from failed/blocked_beads_ids."""
+    from scripts.lib.dx_loop.scheduler import SchedulerState
+
+    state = SchedulerState()
+    assert state.waiting_on_dependency_ids == set()
+
+    state.mark_waiting_on_dependency("bd-dep-1")
+    state.mark_waiting_on_dependency("bd-dep-2")
+    assert "bd-dep-1" in state.waiting_on_dependency_ids
+    assert "bd-dep-2" in state.waiting_on_dependency_ids
+    assert state.is_waiting_on_dependency("bd-dep-1")
+    assert not state.is_waiting_on_dependency("bd-dep-3")
+
+    state.mark_blocked("bd-failed-1")
+    assert "bd-failed-1" in state.blocked_beads_ids
+    assert "bd-failed-1" not in state.waiting_on_dependency_ids
+
+    data = state.to_dict()
+    assert "waiting_on_dependency_ids" in data
+    assert set(data["waiting_on_dependency_ids"]) == {"bd-dep-1", "bd-dep-2"}
+    assert set(data["blocked_beads_ids"]) == {"bd-failed-1"}
+
+    restored = SchedulerState.from_dict(data)
+    assert restored.waiting_on_dependency_ids == {"bd-dep-1", "bd-dep-2"}
+    assert restored.blocked_beads_ids == {"bd-failed-1"}
+
+    state.clear_waiting_on_dependency("bd-dep-1")
+    assert "bd-dep-1" not in state.waiting_on_dependency_ids
+
+    print("✓ waiting_on_dependency_ids tracked separately from blocked_beads_ids")
+
+
+def test_status_shows_waiting_on_deps_count(tmp_path, capsys):
+    """Status output should show 'Waiting on Deps' count when tasks are dependency-blocked."""
+    wave_id = "wave-waiting-deps-count"
+    loop = DxLoop(wave_id)
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.scheduler.state.waiting_on_dependency_ids = {"bd-dep-1", "bd-dep-2"}
+    loop._save_state()
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(SimpleNamespace(wave_id=wave_id, json=False))
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "Waiting on Deps: 2" in captured.out
+
+    print("✓ Status shows Waiting on Deps count")
 
 
 def test_run_loop_exits_when_initial_frontier_is_fully_blocked(tmp_path):
@@ -572,7 +629,9 @@ def test_runner_adapter_uses_homebrew_bash_on_macos(monkeypatch):
 
     monkeypatch.setattr("platform.system", lambda: "Darwin")
     monkeypatch.setattr("shutil.which", lambda name: "/Users/fengning/bin/dx-runner")
-    monkeypatch.setattr(adapter, "_preferred_bash", lambda: Path("/opt/homebrew/bin/bash"))
+    monkeypatch.setattr(
+        adapter, "_preferred_bash", lambda: Path("/opt/homebrew/bin/bash")
+    )
 
     result = adapter._build_dx_runner_command(["status"])
 
@@ -632,7 +691,9 @@ def test_runner_adapter_accepts_timeout_when_runner_state_exists(monkeypatch):
         command=["dx-runner", "start"],
     )
 
-    monkeypatch.setattr(adapter, "_run_dx_runner", lambda *args, **kwargs: timeout_result)
+    monkeypatch.setattr(
+        adapter, "_run_dx_runner", lambda *args, **kwargs: timeout_result
+    )
     monkeypatch.setattr(
         adapter,
         "check",
@@ -760,7 +821,10 @@ def test_start_implement_marks_kickoff_env_blocked(tmp_path):
     assert loop._start_implement("bd-test") is False
     assert loop.wave_status["state"] == "kickoff_env_blocked"
     assert loop.wave_status["blocker_code"] == "kickoff_env_blocked"
-    assert loop.wave_status["blocked_details"][0]["reason_code"] == "dx_runner_shell_preflight_failed"
+    assert (
+        loop.wave_status["blocked_details"][0]["reason_code"]
+        == "dx_runner_shell_preflight_failed"
+    )
 
     print("✓ Failed starts produce truthful kickoff-env-blocked state")
 
@@ -799,7 +863,10 @@ def test_run_loop_persists_truthful_state_when_initial_dispatch_fails(tmp_path):
     assert state["scheduler_state"]["dispatch_count"] == 0
     assert state["wave_status"]["state"] == "kickoff_env_blocked"
     assert state["wave_status"]["blocker_code"] == "kickoff_env_blocked"
-    assert state["wave_status"]["blocked_details"][0]["reason_code"] == "dx_runner_preflight_failed"
+    assert (
+        state["wave_status"]["blocked_details"][0]["reason_code"]
+        == "dx_runner_preflight_failed"
+    )
     assert "exiting without resident loop" in state["wave_status"]["reason"]
 
     print("✓ Failed initial dispatch persists blocked state")
@@ -808,7 +875,10 @@ def test_run_loop_persists_truthful_state_when_initial_dispatch_fails(tmp_path):
 def test_ensure_worktree_creates_missing_repo_workspace(tmp_path, monkeypatch):
     """dx-loop should provision the inferred repo worktree before dispatch."""
     wave_id = "wave-worktree-create"
-    loop = DxLoop(wave_id, config={"cadence_seconds": 0, "worktree_base": str(tmp_path / "agents")})
+    loop = DxLoop(
+        wave_id,
+        config={"cadence_seconds": 0, "worktree_base": str(tmp_path / "agents")},
+    )
     loop.wave_dir = tmp_path / "waves" / wave_id
     loop.state_file = loop.wave_dir / "loop_state.json"
     loop.beads_manager.tasks = {
