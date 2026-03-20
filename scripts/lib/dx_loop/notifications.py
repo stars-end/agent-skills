@@ -9,6 +9,11 @@ Emits interrupts only for:
 Suppresses:
 - Unchanged blockers (same state as last notification)
 - Healthy/pending states (no interrupt needed)
+
+Every emitted interrupt includes a concise operator handoff payload:
+- what task/wave is affected
+- why the operator is being interrupted
+- what the next action is
 """
 
 from __future__ import annotations
@@ -21,9 +26,9 @@ from .blocker import BlockerState, BlockerCode
 
 @dataclass
 class Notification:
-    """Represents an operator notification"""
+    """Represents an operator notification with handoff context"""
 
-    notification_type: str  # merge_ready, blocked, needs_decision
+    notification_type: str
     blocker_code: BlockerCode
     message: str
     beads_id: Optional[str] = None
@@ -36,8 +41,14 @@ class Notification:
     next_action: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
 
+    pr_url: Optional[str] = None
+    pr_head_sha: Optional[str] = None
+    task_title: Optional[str] = None
+    attempt: Optional[int] = None
+    max_attempts: Optional[int] = None
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "notification_type": self.notification_type,
             "blocker_code": self.blocker_code.value,
             "message": self.message,
@@ -45,19 +56,39 @@ class Notification:
             "wave_id": self.wave_id,
             "timestamp": self.timestamp,
             "next_action": self.next_action,
-            "metadata": self.metadata,
         }
+        if self.pr_url:
+            d["pr_url"] = self.pr_url
+        if self.pr_head_sha:
+            d["pr_head_sha"] = self.pr_head_sha
+        if self.task_title:
+            d["task_title"] = self.task_title
+        if self.attempt is not None:
+            d["attempt"] = self.attempt
+        if self.max_attempts is not None:
+            d["max_attempts"] = self.max_attempts
+        if self.metadata:
+            d["metadata"] = self.metadata
+        return d
+
+    def to_operator_payload(self) -> Dict[str, Any]:
+        """Structured handoff payload for machine consumption."""
+        payload = self.to_dict()
+        payload["operator_handoff"] = True
+        return payload
 
     def format_cli(self) -> str:
-        """Format notification for CLI output"""
-        lines = [
-            f"[{self.notification_type.upper()}] {self.message}",
-            f"  Blocker: {self.blocker_code.value}",
-        ]
+        lines = [f"[{self.notification_type.upper()}] {self.message}"]
         if self.beads_id:
-            lines.append(f"  Beads: {self.beads_id}")
-        if self.wave_id:
-            lines.append(f"  Wave: {self.wave_id}")
+            label = self.task_title or self.beads_id
+            lines.append(f"  Task: {label}")
+        if self.notification_type == "merge_ready":
+            if self.pr_url:
+                lines.append(f"  PR: {self.pr_url}")
+            if self.pr_head_sha:
+                lines.append(f"  SHA: {self.pr_head_sha}")
+        if self.attempt is not None and self.max_attempts is not None:
+            lines.append(f"  Attempt: {self.attempt}/{self.max_attempts}")
         if self.next_action:
             lines.append(f"  Next: {self.next_action}")
         return "\n".join(lines)
@@ -75,19 +106,15 @@ class NotificationManager:
     Suppresses noise from unchanged blockers and healthy states.
 
     FIX for P1: Added serialization for last_notification_hash to survive restart.
+    bd-5w5o.10: Enriched handoff payloads with PR artifacts and triage context.
     """
 
     def __init__(self, slack_webhook_url: Optional[str] = None):
         self.slack_webhook_url = slack_webhook_url
         self.notifications: List[Notification] = []
-        self.last_notification_hash: Dict[str, str] = {}  # keyed by beads_id
+        self.last_notification_hash: Dict[str, str] = {}
 
     def to_dict(self) -> Dict[str, Any]:
-        """
-        Serialize notification state for persistence (P1 fix)
-
-        Saves last_notification_hash to maintain suppression semantics.
-        """
         return {
             "last_notification_hash": dict(self.last_notification_hash),
         }
@@ -96,28 +123,15 @@ class NotificationManager:
     def from_dict(
         cls, data: Dict[str, Any], slack_webhook_url: Optional[str] = None
     ) -> "NotificationManager":
-        """
-        Restore notification state from persistence (P1 fix)
-
-        Restores last_notification_hash for unchanged detection.
-        """
         manager = cls(slack_webhook_url=slack_webhook_url)
         if "last_notification_hash" in data:
             manager.last_notification_hash = dict(data["last_notification_hash"])
         return manager
 
     def should_notify(self, blocker: BlockerState) -> bool:
-        """
-        Determine if notification should be sent
-
-        Notify for: merge_ready, blocked, needs_decision
-        Suppress: unchanged blockers, healthy states
-        """
-        # Never notify for unchanged blockers
         if blocker.is_unchanged:
             return False
 
-        # Only notify for actionable states
         if blocker.code == BlockerCode.MERGE_READY:
             return True
 
@@ -127,7 +141,6 @@ class NotificationManager:
             BlockerCode.REVIEW_BLOCKED,
             BlockerCode.NEEDS_DECISION,
         ):
-            # Check if we already notified for this state
             if blocker.beads_id:
                 current_hash = blocker.compute_hash()
                 last_hash = self.last_notification_hash.get(blocker.beads_id)
@@ -137,13 +150,20 @@ class NotificationManager:
 
         return False
 
-    def create_notification(self, blocker: BlockerState) -> Optional[Notification]:
-        """Create notification from blocker state if should_notify()"""
+    def create_notification(
+        self,
+        blocker: BlockerState,
+        pr_url: Optional[str] = None,
+        pr_head_sha: Optional[str] = None,
+        task_title: Optional[str] = None,
+        attempt: Optional[int] = None,
+        max_attempts: Optional[int] = None,
+    ) -> Optional[Notification]:
         if not self.should_notify(blocker):
             return None
 
         notification_type = self._get_notification_type(blocker.code)
-        next_action = self._get_next_action(blocker.code)
+        next_action = self._get_next_action(blocker.code, blocker.metadata)
 
         notification = Notification(
             notification_type=notification_type,
@@ -153,9 +173,13 @@ class NotificationManager:
             wave_id=blocker.wave_id,
             next_action=next_action,
             metadata=blocker.metadata,
+            pr_url=pr_url,
+            pr_head_sha=pr_head_sha,
+            task_title=task_title,
+            attempt=attempt,
+            max_attempts=max_attempts,
         )
 
-        # Update hash to prevent duplicates
         if blocker.beads_id:
             self.last_notification_hash[blocker.beads_id] = blocker.compute_hash()
 
@@ -163,7 +187,6 @@ class NotificationManager:
         return notification
 
     def _get_notification_type(self, blocker_code: BlockerCode) -> str:
-        """Map blocker code to notification type"""
         if blocker_code == BlockerCode.MERGE_READY:
             return "merge_ready"
         elif blocker_code in (
@@ -177,8 +200,9 @@ class NotificationManager:
         else:
             return "info"
 
-    def _get_next_action(self, blocker_code: BlockerCode) -> str:
-        """Map blocker code to next action"""
+    def _get_next_action(
+        self, blocker_code: BlockerCode, metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
         action_map = {
             BlockerCode.MERGE_READY: "Review and merge PR via GitHub UI",
             BlockerCode.KICKOFF_ENV_BLOCKED: "Fix bootstrap environment (worktree/host/Beads)",
@@ -186,18 +210,21 @@ class NotificationManager:
             BlockerCode.REVIEW_BLOCKED: "Address review findings and re-submit",
             BlockerCode.NEEDS_DECISION: "Manual intervention required - check logs",
         }
-        return action_map.get(blocker_code, "Review logs")
+        default = action_map.get(blocker_code, "Review logs")
+
+        if blocker_code == BlockerCode.NEEDS_DECISION and metadata:
+            reason = metadata.get("failure_reason", "")
+            if reason == "max_attempts_exceeded":
+                return "All retries exhausted - inspect logs and decide: retry, skip, or takeover"
+            if reason == "retry_chain_exhausted":
+                return "Revision chain exhausted - inspect logs and decide: accept or takeover"
+
+        return default
 
     def emit_cli(self, notification: Notification):
-        """Emit notification to CLI stdout"""
         print(notification.format_cli())
 
     def emit_slack(self, notification: Notification) -> bool:
-        """
-        Emit notification to Slack (if webhook configured)
-
-        Returns True if sent successfully, False otherwise.
-        """
         if not self.slack_webhook_url:
             return False
 
@@ -223,5 +250,4 @@ class NotificationManager:
             return False
 
     def get_recent_notifications(self, limit: int = 10) -> List[Notification]:
-        """Get recent notifications"""
         return self.notifications[-limit:]

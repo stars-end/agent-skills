@@ -179,9 +179,7 @@ class DxLoop:
                         item["beads_id"] for item in readiness.waiting_on_dependencies
                     ]
                     self.scheduler.state.blocked_beads_ids = set(blocked_ids)
-                    blocked_reason = (
-                        f"No dispatches: waiting on dependencies for {len(blocked_ids)} task(s)"
-                    )
+                    blocked_reason = f"No dispatches: waiting on dependencies for {len(blocked_ids)} task(s)"
                     if self._should_exit_blocked_at_start(iteration):
                         blocked_reason = (
                             f"Initial frontier blocked with {len(blocked_ids)} task(s); "
@@ -227,7 +225,9 @@ class DxLoop:
 
                     # Check if THIS phase is already active
                     if not self.scheduler.state.is_active(tid, expected_phase):
-                        if not self.scheduler.state.is_completed(tid) and not self.scheduler.state.is_blocked(tid):
+                        if not self.scheduler.state.is_completed(
+                            tid
+                        ) and not self.scheduler.state.is_blocked(tid):
                             dispatchable.append((tid, expected_phase))
 
                 if dispatchable:
@@ -366,7 +366,11 @@ class DxLoop:
             return None
 
         if result.returncode != 0:
-            detail = result.stderr.strip() or result.stdout.strip() or "dx-worktree create failed"
+            detail = (
+                result.stderr.strip()
+                or result.stdout.strip()
+                or "dx-worktree create failed"
+            )
             self._set_wave_status(
                 LoopState.KICKOFF_ENV_BLOCKED,
                 BlockerCode.KICKOFF_ENV_BLOCKED,
@@ -382,7 +386,9 @@ class DxLoop:
             )
             return None
 
-        created_path = Path((result.stdout.strip().splitlines() or [str(worktree)])[-1]).expanduser()
+        created_path = Path(
+            (result.stdout.strip().splitlines() or [str(worktree)])[-1]
+        ).expanduser()
         if created_path.is_dir():
             return created_path
         if worktree.is_dir():
@@ -453,7 +459,9 @@ class DxLoop:
         review_beads_id = f"{beads_id}-review"
         run_id = f"{review_beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
 
-        result = self.runner_adapter.start(review_beads_id, prompt_file, worktree=worktree)
+        result = self.runner_adapter.start(
+            review_beads_id, prompt_file, worktree=worktree
+        )
 
         if result.ok:
             self.baton_manager.start_review(beads_id, run_id=run_id)
@@ -580,8 +588,15 @@ class DxLoop:
                     has_pr_artifacts=False,
                 )
 
-                # Emit notification (P1 fix: emits on first occurrence)
-                notification = self.notification_manager.create_notification(blocker)
+                task = self.beads_manager.tasks.get(beads_id)
+                baton = self.baton_manager.get_state(beads_id)
+
+                notification = self.notification_manager.create_notification(
+                    blocker,
+                    task_title=task.title if task else None,
+                    attempt=baton.attempt if baton else None,
+                    max_attempts=baton.max_attempts if baton else None,
+                )
                 if notification:
                     print(notification.format_cli())
 
@@ -605,12 +620,31 @@ class DxLoop:
                                     "beads_id": beads_id,
                                     "phase": "implement",
                                     "reason_code": task_state.reason_code,
-                                    "detail": baton_state.metadata.get("failure_reason"),
+                                    "detail": baton_state.metadata.get(
+                                        "failure_reason"
+                                    ),
                                     "attempt": baton_state.attempt,
                                     "max_attempts": baton_state.max_attempts,
                                 }
                             ],
                         )
+                        nd_blocker = self.blocker_classifier.classify(
+                            "max_attempts_exceeded",
+                            beads_id=beads_id,
+                            wave_id=self.wave_id,
+                            metadata={
+                                "failure_reason": "max_attempts_exceeded",
+                                "runner_reason_code": task_state.reason_code,
+                            },
+                        )
+                        nd_notification = self.notification_manager.create_notification(
+                            nd_blocker,
+                            task_title=task.title if task else None,
+                            attempt=baton_state.attempt,
+                            max_attempts=baton_state.max_attempts,
+                        )
+                        if nd_notification:
+                            print(nd_notification.format_cli())
                     else:
                         self._set_wave_status(
                             LoopState.DETERMINISTIC_REDISPATCH_NEEDED,
@@ -662,7 +696,9 @@ class DxLoop:
                     self.scheduler.state.mark_completed(beads_id)
                     print(f"Review APPROVED for {beads_id}, task complete")
 
-                    # Emit merge_ready notification
+                    # Emit merge_ready notification with handoff context
+                    task = self.beads_manager.tasks.get(beads_id)
+                    artifact = self.pr_enforcer.get_artifact(beads_id)
                     blocker = self.blocker_classifier.classify(
                         None,
                         beads_id=beads_id,
@@ -671,7 +707,10 @@ class DxLoop:
                         checks_passing=True,
                     )
                     notification = self.notification_manager.create_notification(
-                        blocker
+                        blocker,
+                        pr_url=artifact.pr_url if artifact else None,
+                        pr_head_sha=artifact.pr_head_sha if artifact else None,
+                        task_title=task.title if task else None,
                     )
                     if notification:
                         print(notification.format_cli())
@@ -711,8 +750,12 @@ class DxLoop:
         task = self.beads_manager.tasks.get(beads_id)
         title = task.title if task else beads_id
         repo = task.repo if task and task.repo else "unknown-repo"
-        description = (task.description or "No additional description provided.").strip()
-        dependencies = ", ".join(task.dependencies) if task and task.dependencies else "none"
+        description = (
+            task.description or "No additional description provided."
+        ).strip()
+        dependencies = (
+            ", ".join(task.dependencies) if task and task.dependencies else "none"
+        )
 
         return f"""you're a full-stack implementation agent working inside dx-loop:
 
@@ -720,7 +763,7 @@ Use [$tech-lead-handoff](/Users/fengning/agent-skills/core/tech-lead-handoff/SKI
 This prompt follows the structure of [$prompt-writing](/Users/fengning/agent-skills/extended/prompt-writing/SKILL.md).
 
 ## DX Global Constraints (Always-On)
-1) NO WRITES in canonical clones: `~/{'{'}agent-skills,prime-radiant-ai,affordabot,llm-common{'}'}`
+1) NO WRITES in canonical clones: `~/{"{"}agent-skills,prime-radiant-ai,affordabot,llm-common{"}"}`
 2) Worktree-first: you are already in the task worktree for `{beads_id}`
 3) Before claiming complete, run repo-appropriate validation for the files you changed
 4) Open or update a draft PR after the first real commit
@@ -792,7 +835,9 @@ Do not claim complete until:
         """Generate reviewer prompt from implementation return + review contract."""
         task = self.beads_manager.tasks.get(beads_id)
         title = task.title if task else beads_id
-        description = (task.description or "No additional description provided.").strip()
+        description = (
+            task.description or "No additional description provided."
+        ).strip()
         implementation_return = self.pr_enforcer.get_implementation_return(beads_id)
         handoff_block = (
             implementation_return.raw_text
