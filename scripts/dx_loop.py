@@ -41,7 +41,7 @@ from dx_loop import (
 from dx_loop.scheduler import DxLoopScheduler, SchedulerState
 from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState, RunnerStartResult
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 ARTIFACT_BASE = Path("/tmp/dx-loop")
 DEFAULT_CONFIG = {
     "max_attempts": 3,
@@ -53,6 +53,44 @@ DEFAULT_CONFIG = {
     "exit_on_zero_dispatch_start": True,
     "worktree_base": "/tmp/agents",  # Base dir for worktrees
 }
+
+RUNNER_LIFECYCLE_DEFECT_REASONS = frozenset(
+    {
+        "monitor_no_rc_file",
+        "late_finalize_no_rc",
+    }
+)
+
+
+def load_config_file(path: Optional[str]) -> Dict[str, Any]:
+    """Load and merge a YAML config file into DEFAULT_CONFIG."""
+    config = dict(DEFAULT_CONFIG)
+    if not path:
+        return config
+    config_path = Path(path)
+    if not config_path.exists():
+        print(f"WARN: config file not found: {config_path}", file=sys.stderr)
+        return config
+    try:
+        import yaml
+
+        with open(config_path) as f:
+            overrides = yaml.safe_load(f) or {}
+        for key, value in overrides.items():
+            if (
+                isinstance(value, dict)
+                and key in config
+                and isinstance(config[key], dict)
+            ):
+                config[key] = {**config[key], **value}
+            else:
+                config[key] = value
+        print(f"Loaded config from {config_path}")
+    except ImportError:
+        print("WARN: PyYAML not installed, skipping --config", file=sys.stderr)
+    except Exception as exc:
+        print(f"WARN: failed to load config: {exc}", file=sys.stderr)
+    return config
 
 
 def now_utc() -> str:
@@ -298,6 +336,57 @@ class DxLoop:
                 LoopState.RUN_BLOCKED.value,
             }
         )
+
+    def adopt_running_jobs(self) -> list[str]:
+        """
+        Probe dx-runner for already-running jobs and adopt them into the scheduler.
+
+        On restart, dx-runner may have live jobs that this loop instance doesn't
+        know about. This prevents misclassifying live work as 'blocked' or
+        starting duplicate dispatches.
+
+        Safety constraints:
+        - Only adopts jobs that are currently RUNNING (not exited_ok, exited_err, etc).
+        - Rebuilds baton state so that _check_progress can poll the right phase.
+        - Keys scheduler under the base beads_id (not bd-*-review) so
+          progress polling and duplicate-dispatch work correctly.
+        """
+        adopted: list[str] = []
+        for beads_id in list(self.beads_manager.tasks.keys()):
+            if self.scheduler.state.is_completed(beads_id):
+                continue
+
+            baton_state = self.baton_manager.get_state(beads_id)
+            if baton_state and baton_state.phase in (
+                BatonPhase.COMPLETE,
+                BatonPhase.FAILED,
+            ):
+                continue
+
+            task_state = self.runner_adapter.check(beads_id)
+            if task_state and task_state.is_running():
+                phase = "implement"
+                if baton_state and baton_state.phase == BatonPhase.REVIEW:
+                    phase = "review"
+                else:
+                    baton_state = None
+
+                if not baton_state or baton_state.phase == BatonPhase.IDLE:
+                    self.baton_manager.start_implement(
+                        beads_id,
+                        run_id=f"adopted-{beads_id}",
+                    )
+                elif phase == "review" and (baton_state.phase != BatonPhase.REVIEW):
+                    self.baton_manager.start_review(
+                        beads_id,
+                        run_id=f"adopted-{beads_id}-review",
+                    )
+
+                self.scheduler.state.mark_dispatched(beads_id, phase)
+                self.scheduler.state.blocked_beads_ids.discard(beads_id)
+                adopted.append(beads_id)
+
+        return adopted
 
     def _dispatch_task(self, beads_id: str, phase: str = "implement") -> bool:
         """Dispatch a single task through implement/review cycle"""
@@ -576,93 +665,114 @@ class DxLoop:
                     self.scheduler.state.mark_completed(beads_id)
                     print(f"Implement complete for {beads_id} (no review required)")
             else:
-                # Classify blocker
-                blocker = self.blocker_classifier.classify(
-                    task_state.reason_code or "missing_implementation_return",
-                    beads_id=beads_id,
-                    wave_id=self.wave_id,
-                    metadata={
-                        "has_pr_artifacts": bool(artifacts),
-                        "has_implementation_return": bool(implementation_return),
-                    },
-                    has_pr_artifacts=False,
-                )
+                reason = task_state.reason_code or "missing_implementation_return"
 
-                task = self.beads_manager.tasks.get(beads_id)
-                baton = self.baton_manager.get_state(beads_id)
-
-                notification = self.notification_manager.create_notification(
-                    blocker,
-                    task_title=task.title if task else None,
-                    attempt=baton.attempt if baton else None,
-                    max_attempts=baton.max_attempts if baton else None,
-                )
-                if notification:
-                    print(notification.format_cli())
-
-                # Mark as blocked in scheduler
-                self.scheduler.state.mark_blocked(beads_id)
-
-                if blocker.code == BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED:
-                    baton_state = self.baton_manager.record_implement_retry(
-                        beads_id, task_state.reason_code
+                if reason in RUNNER_LIFECYCLE_DEFECT_REASONS:
+                    self._set_wave_status(
+                        LoopState.KICKOFF_ENV_BLOCKED,
+                        BlockerCode.KICKOFF_ENV_BLOCKED,
+                        (
+                            f"Runner lifecycle defect for {beads_id}: {reason}. "
+                            f"This is not a task failure — the execution harness did not "
+                            f"capture an exit code. Check dx-runner logs and shell/toolchain "
+                            f"on this host."
+                        ),
+                        blocked_details=[
+                            {
+                                "beads_id": beads_id,
+                                "phase": "implement",
+                                "reason_code": reason,
+                                "detail": (
+                                    f"Runner monitor could not find rc file. "
+                                    f"Root cause: dx-runner completion monitor or shell "
+                                    f"wrapper failed to capture the child exit code. "
+                                    f"Check: bash version, dx-runner adapter logs, and "
+                                    f"/tmp/dx-runner/{self.config['provider']}/{beads_id}.* artifacts."
+                                ),
+                            }
+                        ],
                     )
-                    if baton_state.phase == BatonPhase.FAILED:
-                        self._set_wave_status(
-                            LoopState.NEEDS_DECISION,
-                            BlockerCode.NEEDS_DECISION,
-                            (
-                                f"Implement retries exhausted for {beads_id} after "
-                                f"{task_state.reason_code or 'unknown failure'}"
-                            ),
-                            blocked_details=[
-                                {
-                                    "beads_id": beads_id,
-                                    "phase": "implement",
-                                    "reason_code": task_state.reason_code,
-                                    "detail": baton_state.metadata.get(
-                                        "failure_reason"
-                                    ),
-                                    "attempt": baton_state.attempt,
-                                    "max_attempts": baton_state.max_attempts,
-                                }
-                            ],
-                        )
-                        nd_blocker = self.blocker_classifier.classify(
-                            "max_attempts_exceeded",
+                    self.scheduler.state.mark_blocked(beads_id)
+                    notification = self.notification_manager.create_notification(
+                        self.blocker_classifier.classify(
+                            reason,
                             beads_id=beads_id,
                             wave_id=self.wave_id,
-                            metadata={
-                                "failure_reason": "max_attempts_exceeded",
-                                "runner_reason_code": task_state.reason_code,
-                            },
+                            metadata={"runner_lifecycle_defect": True},
+                            has_pr_artifacts=False,
                         )
-                        nd_notification = self.notification_manager.create_notification(
-                            nd_blocker,
-                            task_title=task.title if task else None,
-                            attempt=baton_state.attempt,
-                            max_attempts=baton_state.max_attempts,
+                    )
+                    if notification:
+                        print(notification.format_cli())
+                else:
+                    blocker = self.blocker_classifier.classify(
+                        reason,
+                        beads_id=beads_id,
+                        wave_id=self.wave_id,
+                        metadata={
+                            "has_pr_artifacts": bool(artifacts),
+                            "has_implementation_return": bool(implementation_return),
+                        },
+                        has_pr_artifacts=False,
+                    )
+
+                    task = self.beads_manager.tasks.get(beads_id)
+                    baton = self.baton_manager.get_state(beads_id)
+
+                    notification = self.notification_manager.create_notification(
+                        blocker,
+                        task_title=task.title if task else None,
+                        attempt=baton.attempt if baton else None,
+                        max_attempts=baton.max_attempts if baton else None,
+                    )
+                    if notification:
+                        print(notification.format_cli())
+
+                    self.scheduler.state.mark_blocked(beads_id)
+
+                    if blocker.code == BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED:
+                        baton_state = self.baton_manager.record_implement_retry(
+                            beads_id, task_state.reason_code
                         )
-                        if nd_notification:
-                            print(nd_notification.format_cli())
-                    else:
-                        self._set_wave_status(
-                            LoopState.DETERMINISTIC_REDISPATCH_NEEDED,
-                            BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
-                            (
-                                f"Implement attempt {baton_state.attempt - 1} for {beads_id} "
-                                f"failed with {task_state.reason_code}; retrying next cadence"
-                            ),
-                            blocked_details=[
-                                {
-                                    "beads_id": beads_id,
-                                    "phase": "implement",
-                                    "reason_code": task_state.reason_code,
-                                    "attempt": baton_state.attempt,
-                                    "max_attempts": baton_state.max_attempts,
-                                }
-                            ],
-                        )
+                        if baton_state.phase == BatonPhase.FAILED:
+                            self._set_wave_status(
+                                LoopState.NEEDS_DECISION,
+                                BlockerCode.NEEDS_DECISION,
+                                (
+                                    f"Implement retries exhausted for {beads_id} after "
+                                    f"{task_state.reason_code or 'unknown failure'}"
+                                ),
+                                blocked_details=[
+                                    {
+                                        "beads_id": beads_id,
+                                        "phase": "implement",
+                                        "reason_code": task_state.reason_code,
+                                        "detail": baton_state.metadata.get(
+                                            "failure_reason"
+                                        ),
+                                        "attempt": baton_state.attempt,
+                                        "max_attempts": baton_state.max_attempts,
+                                    }
+                                ],
+                            )
+                        else:
+                            self._set_wave_status(
+                                LoopState.DETERMINISTIC_REDISPATCH_NEEDED,
+                                BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
+                                (
+                                    f"Implement attempt {baton_state.attempt - 1} for {beads_id} "
+                                    f"failed with {task_state.reason_code}; retrying next cadence"
+                                ),
+                                blocked_details=[
+                                    {
+                                        "beads_id": beads_id,
+                                        "phase": "implement",
+                                        "reason_code": task_state.reason_code,
+                                        "attempt": baton_state.attempt,
+                                        "max_attempts": baton_state.max_attempts,
+                                    }
+                                ],
+                            )
 
     def _check_review_progress(self, beads_id: str):
         """Check review phase progress"""
@@ -1041,12 +1151,23 @@ def cmd_start(args):
     wave_id = args.wave_id or f"wave-{now_utc().replace(':', '-').replace('T', '-')}"
     epic_id = args.epic
 
-    loop = DxLoop(wave_id)
+    config = load_config_file(getattr(args, "config", None))
+    loop = DxLoop(wave_id, config=config)
 
     if not loop.bootstrap_epic(epic_id):
         return 1
 
     print(f"\nStarting dx-loop wave {wave_id} for epic {epic_id}")
+
+    is_restart = loop._load_state()
+    if is_restart:
+        adopted = loop.adopt_running_jobs()
+        if adopted:
+            print(
+                f"Adopted {len(adopted)} already-running job(s): {', '.join(adopted)}"
+            )
+
+    loop._save_state()
     success = loop.run_loop()
 
     return 0 if success else 1
