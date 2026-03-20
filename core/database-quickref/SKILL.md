@@ -167,13 +167,54 @@ Use the wrapper for direct SQL so Railway private-network DB hosts are rewritten
 
 ### Affordabot
 
-Affordabot currently has no verified repo-native DB inspector documented in this skill.
+Use the repo-native read-only inspector via the Railway Postgres wrapper:
 
-That means:
-- prefer app/runtime verification scripts first
-- use direct SQL only if both:
-  1. Railway project/environment/service are explicitly known
-  2. `psql` is available either on the host or inside the target runtime
+```bash
+# List public tables
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc 'cd backend && poetry run python scripts/db_inspect.py tables'
+
+# Describe a table
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc 'cd backend && poetry run python scripts/db_inspect.py describe legislation'
+
+# Jurisdiction/source/scrape health summary
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc 'cd backend && poetry run python scripts/db_inspect.py jurisdiction-summary --limit 25'
+
+# Recent pipeline runs
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc 'cd backend && poetry run python scripts/db_inspect.py pipeline-runs --limit 25'
+
+# Recent raw scrapes
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc 'cd backend && poetry run python scripts/db_inspect.py raw-scrapes --hours 24 --limit 25'
+
+# Read-only ad hoc SQL
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  ~/agent-skills/scripts/dx-railway-postgres.sh \
+    --repo-root "$PWD" \
+    backend-python -- \
+    bash -lc "cd backend && poetry run python scripts/db_inspect.py query --sql 'SELECT COUNT(*) AS c FROM jurisdictions'"
+```
+
+The inspector is read-only by contract (`SELECT`/`WITH`/`SHOW` only with mutating tokens blocked).
+Do not use host `psql` as the primary Affordabot inspection path.
 
 Canonical Railway rule:
 - do not rely on ambient `railway status`
