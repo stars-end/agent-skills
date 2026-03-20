@@ -64,6 +64,30 @@ NEXT_COMMANDS:
 2) or provide an approved DB access path
 ```
 
+## Hard Stop Rule (Mandatory)
+
+If a DB inspection task reaches any of these conditions:
+- host `psql` is missing
+- the target runtime does not have `psql`
+- there is no verified repo-native query runner for the active repo
+- Railway project / environment / service context is unknown
+
+STOP immediately with:
+
+```text
+BLOCKED: no_sql_client_and_no_verified_query_runtime
+NEEDS: approved DB query path or provisioned client/runtime
+NEXT_COMMANDS:
+1) verify an existing repo-native query runner inside the active worktree
+2) or provide an approved DB access path
+```
+
+Do not:
+- guess Railway service names
+- use interactive `railway service` flows
+- use ambient Railway link state from another repo/project
+- install packages ad hoc in a verification pass
+
 ## Preferred Repo-Native Query Path
 
 ### Prime Radiant AI
@@ -142,9 +166,27 @@ Use the wrapper for direct SQL so Railway private-network DB hosts are rewritten
 ```
 
 ### Affordabot
-```bash
-railway run --service affordabot-pgvector -- psql "$DATABASE_URL"
-```
+
+Affordabot currently has no verified repo-native DB inspector documented in this skill.
+
+That means:
+- prefer app/runtime verification scripts first
+- use direct SQL only if both:
+  1. Railway project/environment/service are explicitly known
+  2. `psql` is available either on the host or inside the target runtime
+
+Canonical Railway rule:
+- do not rely on ambient `railway status`
+- do not guess service names
+- use explicit non-interactive flags when Railway execution is required:
+  `railway run -p <project-id> -e <environment> -s <service> -- <command>`
+
+Interpretation rule:
+- `No such file or directory (os error 2)` from
+  `railway run ... -- psql "$DATABASE_URL"` means the runtime likely does not contain the `psql` binary.
+- This is a runtime/client availability failure, not evidence that the service name is wrong.
+
+If no verified query runtime exists, return the BLOCKED contract above.
 
 ### Common Psql Commands
 ```bash
@@ -178,10 +220,8 @@ psql -f migration.sql
 ```
 
 ### Affordabot (Raw SQL)
-```bash
-cp backend/migrations/006_new.sql /tmp/migrate.sql
-railway run --service affordabot-pgvector -- psql "$DATABASE_URL" -f /tmp/migrate.sql
-```
+Only use raw SQL migrations when a verified SQL client/runtime already exists for the task.
+Do not guess service names or improvise a SQL runtime from an audit/verification pass.
 
 ## Common Validation Queries
 
@@ -237,11 +277,14 @@ WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';
 
 ✅ Use the repo-native inspector first when it exists
 ✅ Use `railway run --service <name>` for service isolation
+✅ Use `~/agent-skills/scripts/dx-load-railway-auth.sh -- <command>` instead of `source ...`
 ✅ Quote `"$DATABASE_URL"` to handle special characters
 ✅ Use `\dt` to list tables before querying
 ✅ Run EXPLAIN ANALYZE for slow queries
 ✅ Check connection limits: `SELECT count(*) FROM pg_stat_activity;`
 ✅ Stop immediately if no host `psql` and no verified repo-native query runner exists
+✅ Treat missing `psql` in the target runtime as a blocker unless a verified alternate query path exists
+✅ Treat Railway project mismatch as a blocker until explicit context is restored
 
 ### Don't
 
@@ -252,6 +295,10 @@ WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';
 ❌ Don't install packages with `sudo`, `apt`, `brew`, or Docker for ad hoc DB inspection
 ❌ Don't write scratch query scripts outside the active worktree
 ❌ Don't substitute logs or HTTP endpoints for direct DB state unless you explicitly call them secondary evidence
+❌ Don't infer a wrong Railway service from `psql: No such file or directory`
+❌ Don't use `railway service` or similar interactive discovery commands in non-TTY sessions
+❌ Don't keep probing after the blocker condition has been met
+❌ Don't use ad hoc dependency installs inside a QA or audit batch to compensate for a missing query path
 
 ## What This Skill Does
 
