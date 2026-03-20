@@ -74,6 +74,7 @@ Prefer:
 - numbered acceptance criteria
 - enumerated validation commands
 - concrete response schema
+- non-blocking execution-plan checkpoints
 
 Avoid:
 - long prose explanations
@@ -144,6 +145,22 @@ Default sequence:
 3. review/repair/merge A and B
 4. integrated verification batch
 
+### 3.5. Active monitoring is part of the topology
+
+For multi-prompt packs, the orchestrator should not rely on passive completion notifications alone.
+
+Default monitoring expectation:
+- poll on a short cadence after dispatch
+- confirm each implementation batch moved past any planning checkpoint
+- if an agent is silent after early polls, request status explicitly
+- if the agent still does not respond clearly, interrupt and demand progress or blocker state
+
+Prompt packs should be written so the orchestrator can tell the difference between:
+- waiting for approval
+- active implementation
+- real blocker
+- silent stall
+
 ### 4. One repair round max by default
 
 For Spark-shaped execution:
@@ -188,6 +205,18 @@ Required sections:
 13. `Blockers Protocol`
 14. `Done Gate`
 
+Execution-plan wording should be non-blocking by default:
+- ask the delegate to report the plan briefly
+- then continue automatically unless blocked
+
+Preferred wording:
+- `Before coding, reply with your execution plan, then continue automatically unless blocked.`
+
+Avoid wording that implies:
+- stop after plan
+- wait for approval
+- hold for confirmation before implementation
+
 ### B. Integrated Verification Pass
 
 Use this shape when Spark should verify a repaired end-to-end product flow after implementation batches land.
@@ -213,6 +242,9 @@ For overnight implementation prompts:
 - make root-cause consolidation an explicit deliverable
 - require the agent to say whether included issues collapsed into one cause or remained separate
 - cap scope to the named incident family
+- make the execution-plan response non-blocking
+- tell the agent to continue automatically after the plan unless blocked
+- require the agent to adapt validation to current repo truth if one named command is stale
 
 Good bundle examples:
 - analytics integrity
@@ -240,6 +272,7 @@ If the user asks how to run the pack, say explicitly:
 - which prompts run in parallel
 - which prompts wait on review/merge
 - what the orchestrator should do between waves
+- what cadence the orchestrator should use for active monitoring
 
 ## Preflight Checklist
 
@@ -250,9 +283,11 @@ Before emitting a Spark prompt, verify:
 - no local absolute paths in required context
 - `PR_URL` and `PR_HEAD_SHA` are present
 - file list is short and relevant
-- validation commands are explicit
+- validation commands are explicit and still match current repo config
 - stale/trunk-already-fixed behavior is defined
 - dispatch topology is defined when emitting a multi-prompt pack
+- execution-plan wording does not create a stop-and-wait checkpoint
+- active monitoring expectations are defined when emitting a multi-prompt pack
 
 If any of these are missing, stop and resolve them first.
 
@@ -274,6 +309,8 @@ Use direct language:
 - prompts that allow a "done" response without a real PR artifact
 - prompts that split a single incident family into multiple small side quests
 - prompt packs that do not say which prompts run in parallel vs sequentially
+- prompts whose execution-plan step causes the delegate to wait for approval
+- prompts with validation commands that are stale relative to the current repo configuration
 
 ## Relationship to Other Skills
 
