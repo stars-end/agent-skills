@@ -18,6 +18,7 @@ import json
 
 class BlockerCode(str, Enum):
     """Blocker taxonomy for dx-loop classification"""
+
     KICKOFF_ENV_BLOCKED = "kickoff_env_blocked"
     RUN_BLOCKED = "run_blocked"
     REVIEW_BLOCKED = "review_blocked"
@@ -30,6 +31,7 @@ class BlockerCode(str, Enum):
 
 class LoopState(str, Enum):
     """dx-loop state model"""
+
     PENDING = "pending"
     IN_PROGRESS_HEALTHY = "in_progress_healthy"
     WAITING_ON_DEPENDENCY = "waiting_on_dependency"
@@ -41,16 +43,22 @@ class LoopState(str, Enum):
     MERGE_READY = "merge_ready"
     COMPLETED = "completed"
     FAILED = "failed"
+    MANUAL_TAKEOVER = "manual_takeover"
 
 
 @dataclass
 class StateTransition:
     """Represents a state transition with blocker metadata"""
+
     from_state: LoopState
     to_state: LoopState
     blocker_code: Optional[BlockerCode]
     reason: str
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+    )
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -68,10 +76,11 @@ class StateTransition:
 class LoopStateTracker:
     """
     Tracks loop state with unchanged-blocker suppression
-    
+
     Only emits blocker notifications when state materially changes,
     preventing noise from repeated identical states.
     """
+
     current_state: LoopState = LoopState.PENDING
     current_blocker: Optional[BlockerCode] = None
     last_blocker: Optional[BlockerCode] = None
@@ -89,9 +98,9 @@ class LoopStateTracker:
     ) -> Optional[StateTransition]:
         """
         Attempt state transition with unchanged suppression
-        
+
         FIX for P1: Emit on FIRST occurrence, suppress only on REPEATED unchanged.
-        
+
         Returns:
             StateTransition if emitted (not suppressed), None if suppressed
         """
@@ -103,7 +112,8 @@ class LoopStateTracker:
             new_state == old_state
             and blocker_code == old_blocker
             and blocker_code is not None
-            and self.last_emitted_blocker == blocker_code  # Only suppress if already emitted
+            and self.last_emitted_blocker
+            == blocker_code  # Only suppress if already emitted
         ):
             self.unchanged_count += 1
             # Only emit every N unchanged occurrences
@@ -138,7 +148,7 @@ class LoopStateTracker:
     def should_notify(self) -> bool:
         """
         Determine if operator notification should be sent
-        
+
         Only notify for: merge_ready, blocked states, needs_decision
         """
         if self.current_state == LoopState.MERGE_READY:
@@ -160,10 +170,14 @@ class LoopStateTracker:
 
         return {
             "state": self.current_state.value,
-            "blocker_code": self.current_blocker.value if self.current_blocker else None,
+            "blocker_code": self.current_blocker.value
+            if self.current_blocker
+            else None,
             "unchanged_count": self.unchanged_count,
             "last_transition": (
-                self.transition_history[-1].to_dict() if self.transition_history else None
+                self.transition_history[-1].to_dict()
+                if self.transition_history
+                else None
             ),
         }
 
@@ -173,7 +187,9 @@ class LoopStateTracker:
         )
         return {
             "current_state": self.current_state.value,
-            "current_blocker": self.current_blocker.value if self.current_blocker else None,
+            "current_blocker": self.current_blocker.value
+            if self.current_blocker
+            else None,
             "last_blocker": self.last_blocker.value if self.last_blocker else None,
             "unchanged_count": self.unchanged_count,
             "transition_count": len(self.transition_history),
@@ -197,7 +213,7 @@ class LoopStateTracker:
 class LoopStateMachine:
     """
     State machine with deterministic transition rules
-    
+
     Validates transitions against allowed paths and enforces
     blocker taxonomy consistency.
     """
@@ -222,6 +238,7 @@ class LoopStateMachine:
             LoopState.MERGE_READY,
             LoopState.COMPLETED,
             LoopState.FAILED,
+            LoopState.MANUAL_TAKEOVER,
         ],
         LoopState.DETERMINISTIC_REDISPATCH_NEEDED: [
             LoopState.IN_PROGRESS_HEALTHY,
@@ -230,11 +247,13 @@ class LoopStateMachine:
         LoopState.KICKOFF_ENV_BLOCKED: [
             LoopState.PENDING,
             LoopState.NEEDS_DECISION,
+            LoopState.MANUAL_TAKEOVER,
         ],
         LoopState.RUN_BLOCKED: [
             LoopState.IN_PROGRESS_HEALTHY,
             LoopState.DETERMINISTIC_REDISPATCH_NEEDED,
             LoopState.NEEDS_DECISION,
+            LoopState.MANUAL_TAKEOVER,
         ],
         LoopState.REVIEW_BLOCKED: [
             LoopState.IN_PROGRESS_HEALTHY,
@@ -247,6 +266,13 @@ class LoopStateMachine:
         ],
         LoopState.MERGE_READY: [
             LoopState.COMPLETED,
+        ],
+        LoopState.MANUAL_TAKEOVER: [
+            LoopState.IN_PROGRESS_HEALTHY,
+            LoopState.DETERMINISTIC_REDISPATCH_NEEDED,
+            LoopState.NEEDS_DECISION,
+            LoopState.COMPLETED,
+            LoopState.FAILED,
         ],
         LoopState.COMPLETED: [],
         LoopState.FAILED: [],
@@ -270,17 +296,17 @@ class LoopStateMachine:
     ) -> Optional[StateTransition]:
         """
         Attempt transition with validation
-        
+
         Args:
             to_state: Target state
             blocker_code: Optional blocker classification
             reason: Human-readable reason
             metadata: Additional metadata
             force: Skip validation (use with caution)
-        
+
         Returns:
             StateTransition if valid and not suppressed, None otherwise
-        
+
         Raises:
             ValueError: If transition invalid and force=False
         """

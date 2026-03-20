@@ -563,7 +563,7 @@ def test_dx_ensure_bins_links_dx_loop(tmp_path):
         text=True,
         check=True,
     )
-    assert "dx-loop 1.2.0" in version.stdout
+    assert "dx-loop 1.3.0" in version.stdout
 
     print("✓ dx-loop canonical entrypoint is linked")
 
