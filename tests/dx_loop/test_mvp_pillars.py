@@ -663,6 +663,310 @@ def test_default_config_has_phase_providers():
     print("DEFAULT_CONFIG has phase-aware provider keys")
 
 
+# ---------------------------------------------------------------------------
+# Finding 1: review-phase adoption under dual-runner
+# ---------------------------------------------------------------------------
+
+
+def test_adopt_running_jobs_probes_review_runner_for_review_phase(tmp_path):
+    """Adoption must probe review_runner for REVIEW-phase tasks via bd-<id>-review."""
+    wave_id = "wave-adopt-review"
+    loop = DxLoop(
+        wave_id,
+        config={
+            "cadence_seconds": 0,
+            "implement_provider": "opencode",
+            "review_provider": "cc-glm",
+        },
+    )
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-rev": BeadsTask(
+            beads_id="bd-rev",
+            title="Review task",
+            dependencies=[],
+        ),
+    }
+    loop.baton_manager.start_implement("bd-rev", run_id="run-1")
+    loop.baton_manager.complete_implement(
+        "bd-rev", pr_url="http://x/1", pr_head_sha="a" * 40
+    )
+    loop.baton_manager.start_review("bd-rev", run_id="rev-1")
+
+    probed_ids = {"implement": [], "review": []}
+
+    def fake_impl_check(beads_id):
+        probed_ids["implement"].append(beads_id)
+        return None
+
+    def fake_rev_check(beads_id):
+        probed_ids["review"].append(beads_id)
+        return RunnerTaskState(
+            beads_id=beads_id,
+            state="healthy",
+            reason_code="recent_log_activity",
+        )
+
+    loop.implement_runner.check = fake_impl_check
+    loop.review_runner.check = fake_rev_check
+
+    adopted = loop.adopt_running_jobs()
+
+    assert "bd-rev" in adopted
+    assert "bd-rev" not in probed_ids["implement"]
+    assert "bd-rev-review" in probed_ids["review"]
+    assert loop.scheduler.state.is_active("bd-rev", "review")
+    assert not loop.scheduler.state.is_active("bd-rev", "implement")
+
+    print("Finding 1: review-phase adoption probes review_runner with bd-*-review")
+
+
+def test_adopt_running_jobs_probes_implement_runner_for_implement_phase(tmp_path):
+    """Adoption must probe implement_runner for IMPLEMENT-phase tasks."""
+    wave_id = "wave-adopt-impl"
+    loop = DxLoop(
+        wave_id,
+        config={
+            "cadence_seconds": 0,
+            "implement_provider": "opencode",
+            "review_provider": "cc-glm",
+        },
+    )
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-impl": BeadsTask(
+            beads_id="bd-impl",
+            title="Implement task",
+            dependencies=[],
+        ),
+    }
+    loop.baton_manager.start_implement("bd-impl", run_id="run-1")
+
+    probed_ids = {"implement": [], "review": []}
+
+    def fake_impl_check(beads_id):
+        probed_ids["implement"].append(beads_id)
+        return RunnerTaskState(
+            beads_id=beads_id,
+            state="healthy",
+            reason_code="recent_log_activity",
+        )
+
+    def fake_rev_check(beads_id):
+        probed_ids["review"].append(beads_id)
+        return None
+
+    loop.implement_runner.check = fake_impl_check
+    loop.review_runner.check = fake_rev_check
+
+    adopted = loop.adopt_running_jobs()
+
+    assert "bd-impl" in adopted
+    assert "bd-impl" in probed_ids["implement"]
+    assert not probed_ids["review"]
+    assert loop.scheduler.state.is_active("bd-impl", "implement")
+
+    print("Finding 1: implement-phase adoption probes implement_runner")
+
+
+def test_adopt_running_jobs_no_bd_review_scheduler_key(tmp_path):
+    """Adopted review tasks must use base beads_id as scheduler key, not bd-*-review."""
+    wave_id = "wave-adopt-key"
+    loop = DxLoop(
+        wave_id,
+        config={
+            "cadence_seconds": 0,
+            "implement_provider": "opencode",
+            "review_provider": "cc-glm",
+        },
+    )
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-rev": BeadsTask(
+            beads_id="bd-rev",
+            title="Review task",
+            dependencies=[],
+        ),
+    }
+    loop.baton_manager.start_implement("bd-rev", run_id="run-1")
+    loop.baton_manager.complete_implement(
+        "bd-rev", pr_url="http://x/1", pr_head_sha="a" * 40
+    )
+    loop.baton_manager.start_review("bd-rev", run_id="rev-1")
+
+    loop.review_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="healthy",
+    )
+    loop.implement_runner.check = lambda beads_id: None
+
+    adopted = loop.adopt_running_jobs()
+
+    assert "bd-rev" in adopted
+    assert not loop.scheduler.state.is_active("bd-rev-review")
+    assert loop.scheduler.state.is_active("bd-rev", "review")
+
+    print("Finding 1: no bd-*-review keys in scheduler after review adoption")
+
+
+# ---------------------------------------------------------------------------
+# Finding 2: takeover/resume scheduler state reconciliation
+# ---------------------------------------------------------------------------
+
+
+def test_cmd_takeover_clears_scheduler_active_state(tmp_path):
+    """Takeover must remove the task's scheduler active keys."""
+    wave_id = "wave-takeover-sched"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Test",
+            dependencies=[],
+        ),
+    }
+    loop.baton_manager.start_implement("bd-test", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-test", "implement")
+    loop._save_state()
+
+    args = SimpleNamespace(
+        wave_id=wave_id,
+        beads_id="bd-test",
+        note="Manual fix",
+    )
+
+    original_artifact_base = cmd_takeover.__globals__["ARTIFACT_BASE"]
+    cmd_takeover.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_takeover(args)
+    finally:
+        cmd_takeover.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    assert rc == 0
+    state = json.loads(loop.state_file.read_text())
+    active_keys = state["scheduler_state"]["active_beads_ids"]
+    for key in active_keys:
+        assert not key.startswith("bd-test:"), (
+            f"Active key {key} should have been removed on takeover"
+        )
+
+    print("Finding 2: takeover clears scheduler active state")
+
+
+def test_cmd_takeover_clears_scheduler_blocked_state(tmp_path):
+    """Takeover must remove the task from blocked set."""
+    wave_id = "wave-takeover-blocked"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Test",
+            dependencies=[],
+        ),
+    }
+    loop.baton_manager.start_implement("bd-test", run_id="run-1")
+    loop.scheduler.state.mark_blocked("bd-test")
+    loop._save_state()
+
+    args = SimpleNamespace(wave_id=wave_id, beads_id="bd-test", note=None)
+
+    original_artifact_base = cmd_takeover.__globals__["ARTIFACT_BASE"]
+    cmd_takeover.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_takeover(args)
+    finally:
+        cmd_takeover.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    assert rc == 0
+    state = json.loads(loop.state_file.read_text())
+    assert "bd-test" not in state["scheduler_state"]["blocked_beads_ids"]
+
+    print("Finding 2: takeover clears scheduler blocked state")
+
+
+def test_cmd_resume_clears_stale_scheduler_state(tmp_path):
+    """Resume must clear stale active/blocked so the task can redispatch."""
+    wave_id = "wave-resume-sched"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Test",
+            dependencies=[],
+        ),
+    }
+    loop.baton_manager.start_implement("bd-test", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-test", "implement")
+    loop.baton_manager.start_manual_takeover("bd-test")
+    loop._save_state()
+
+    args = SimpleNamespace(wave_id=wave_id, beads_id="bd-test")
+
+    original_artifact_base = cmd_resume.__globals__["ARTIFACT_BASE"]
+    cmd_resume.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_resume(args)
+    finally:
+        cmd_resume.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    assert rc == 0
+    state = json.loads(loop.state_file.read_text())
+    active_keys = state["scheduler_state"]["active_beads_ids"]
+    for key in active_keys:
+        assert not key.startswith("bd-test:"), (
+            f"Active key {key} should have been cleared on resume"
+        )
+    assert "bd-test" not in state["scheduler_state"]["blocked_beads_ids"]
+
+    restored_bs = state["baton_states"]["bd-test"]
+    assert restored_bs["phase"] == "implement"
+
+    print("Finding 2: resume clears stale scheduler state for clean redispatch")
+
+
+def test_resume_does_not_fabricate_active_state(tmp_path):
+    """Resume must NOT mark the task as active unless a real runner is live."""
+    wave_id = "wave-resume-no-fabricate"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Test",
+            dependencies=[],
+        ),
+    }
+    loop.baton_manager.start_implement("bd-test", run_id="run-1")
+    loop.baton_manager.start_manual_takeover("bd-test")
+    loop._save_state()
+
+    args = SimpleNamespace(wave_id=wave_id, beads_id="bd-test")
+
+    original_artifact_base = cmd_resume.__globals__["ARTIFACT_BASE"]
+    cmd_resume.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_resume(args)
+    finally:
+        cmd_resume.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    assert rc == 0
+    state = json.loads(loop.state_file.read_text())
+    active_keys = state["scheduler_state"]["active_beads_ids"]
+    assert not any(k.startswith("bd-test") for k in active_keys)
+
+    print("Finding 2: resume does not fabricate active state")
+
+
 if __name__ == "__main__":
     test_version_is_1_3_0()
     test_collect_dependency_artifacts_from_completed_deps(Path("/tmp"))
@@ -679,4 +983,11 @@ if __name__ == "__main__":
     test_single_provider_defaults_both(Path("/tmp"))
     test_null_provider_falls_back_to_default(Path("/tmp"))
     test_default_config_has_phase_providers()
+    test_adopt_running_jobs_probes_review_runner_for_review_phase(Path("/tmp"))
+    test_adopt_running_jobs_probes_implement_runner_for_implement_phase(Path("/tmp"))
+    test_adopt_running_jobs_no_bd_review_scheduler_key(Path("/tmp"))
+    test_cmd_takeover_clears_scheduler_active_state(Path("/tmp"))
+    test_cmd_takeover_clears_scheduler_blocked_state(Path("/tmp"))
+    test_cmd_resume_clears_stale_scheduler_state(Path("/tmp"))
+    test_resume_does_not_fabricate_active_state(Path("/tmp"))
     print("\nAll MVP pillar tests passed!")

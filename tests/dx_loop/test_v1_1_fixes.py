@@ -1100,11 +1100,12 @@ def test_adopt_running_jobs_keys_by_base_beads_id(tmp_path):
     )
     loop.baton_manager.start_review("bd-reviewing", run_id="review-run-1")
 
-    loop.runner_adapter.check = lambda beads_id: RunnerTaskState(
+    loop.review_runner.check = lambda beads_id: RunnerTaskState(
         beads_id=beads_id,
         state="healthy",
         reason_code="recent_log_activity",
     )
+    loop.implement_runner.check = lambda beads_id: None
 
     adopted = loop.adopt_running_jobs()
 

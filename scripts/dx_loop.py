@@ -366,6 +366,9 @@ class DxLoop:
         - Rebuilds baton state so that _check_progress can poll the right phase.
         - Keys scheduler under the base beads_id (not bd-*-review) so
           progress polling and duplicate-dispatch work correctly.
+        - Probes the correct runner for the task's baton phase:
+          REVIEW tasks are checked on review_runner (bd-<id>-review),
+          IMPLEMENT/IDLE tasks are checked on implement_runner.
         """
         adopted: list[str] = []
         for beads_id in list(self.beads_manager.tasks.keys()):
@@ -380,28 +383,38 @@ class DxLoop:
             ):
                 continue
 
-            task_state = self.implement_runner.check(beads_id)
-            if task_state and task_state.is_running():
-                phase = "implement"
-                if baton_state and baton_state.phase == BatonPhase.REVIEW:
+            is_running = False
+            phase = "implement"
+
+            if baton_state and baton_state.phase == BatonPhase.REVIEW:
+                review_beads_id = f"{beads_id}-review"
+                task_state = self.review_runner.check(review_beads_id)
+                if task_state and task_state.is_running():
+                    is_running = True
                     phase = "review"
-                else:
-                    baton_state = None
+            else:
+                task_state = self.implement_runner.check(beads_id)
+                if task_state and task_state.is_running():
+                    is_running = True
+                    phase = "implement"
 
-                if not baton_state or baton_state.phase == BatonPhase.IDLE:
-                    self.baton_manager.start_implement(
-                        beads_id,
-                        run_id=f"adopted-{beads_id}",
-                    )
-                elif phase == "review" and (baton_state.phase != BatonPhase.REVIEW):
-                    self.baton_manager.start_review(
-                        beads_id,
-                        run_id=f"adopted-{beads_id}-review",
-                    )
+            if not is_running:
+                continue
 
-                self.scheduler.state.mark_dispatched(beads_id, phase)
-                self.scheduler.state.blocked_beads_ids.discard(beads_id)
-                adopted.append(beads_id)
+            if not baton_state or baton_state.phase == BatonPhase.IDLE:
+                self.baton_manager.start_implement(
+                    beads_id,
+                    run_id=f"adopted-{beads_id}",
+                )
+            elif phase == "review" and baton_state.phase != BatonPhase.REVIEW:
+                self.baton_manager.start_review(
+                    beads_id,
+                    run_id=f"adopted-{beads_id}-review",
+                )
+
+            self.scheduler.state.mark_dispatched(beads_id, phase)
+            self.scheduler.state.blocked_beads_ids.discard(beads_id)
+            adopted.append(beads_id)
 
         return adopted
 
@@ -1378,6 +1391,19 @@ def cmd_takeover(args):
     if args.note:
         bs["metadata"]["operator_note"] = args.note
 
+    scheduler_raw = state.get("scheduler_state", {})
+    active_ids = set(scheduler_raw.get("active_beads_ids", []))
+    new_active = []
+    for key in active_ids:
+        bid, _ = (key.split(":", 1) + ["implement"])[:2]
+        if bid != beads_id:
+            new_active.append(key)
+    scheduler_raw["active_beads_ids"] = new_active
+
+    blocked_ids = set(scheduler_raw.get("blocked_beads_ids", []))
+    blocked_ids.discard(beads_id)
+    scheduler_raw["blocked_beads_ids"] = list(blocked_ids)
+
     state_file_tmp = state_file.with_suffix(".tmp")
     state_file_tmp.write_text(json.dumps(state, indent=2))
     state_file_tmp.rename(state_file)
@@ -1415,6 +1441,19 @@ def cmd_resume(args):
     prev_phase = bs["metadata"].get("takeover_from", "implement")
     bs["phase"] = prev_phase
     bs["metadata"]["resumed_at"] = now_utc()
+
+    scheduler_raw = state.get("scheduler_state", {})
+    active_ids = set(scheduler_raw.get("active_beads_ids", []))
+    new_active = []
+    for key in active_ids:
+        bid, _ = (key.split(":", 1) + ["implement"])[:2]
+        if bid != beads_id:
+            new_active.append(key)
+    scheduler_raw["active_beads_ids"] = new_active
+
+    blocked_ids = set(scheduler_raw.get("blocked_beads_ids", []))
+    blocked_ids.discard(beads_id)
+    scheduler_raw["blocked_beads_ids"] = list(blocked_ids)
 
     state_file_tmp = state_file.with_suffix(".tmp")
     state_file_tmp.write_text(json.dumps(state, indent=2))
