@@ -1,7 +1,9 @@
 # ADR: dx-loop v1 - PR-Aware Orchestration Surface
 
 ## Status
-PROPOSED - 2026-03-08
+ACCEPTED - 2026-03-20
+
+Functional contract frozen at `docs/dx-loop/DX-LOOP-V1-FUNCTIONAL-CONTRACT.md`
 
 ## Context
 
