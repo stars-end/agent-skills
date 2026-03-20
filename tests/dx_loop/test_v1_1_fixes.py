@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts" / "lib"))
 
 from dx_loop.scheduler import DxLoopScheduler, SchedulerState
 from dx_loop.state_machine import LoopState, BlockerCode, LoopStateTracker
+from dx_loop.baton import BatonPhase, BatonManager, ReviewVerdict, BatonState
 from dx_loop.beads_integration import BeadsTask, BeadsWaveManager
 from dx_loop.blocker import BlockerClassifier
 from dx_loop.notifications import NotificationManager
@@ -39,51 +40,47 @@ cmd_status = dx_loop_script.cmd_status
 def test_no_duplicate_dispatch():
     """P0 fix: Active work not redispatched"""
     scheduler = DxLoopScheduler(cadence_seconds=1)
-    
+
     # Mark as active
     scheduler.state.mark_dispatched("bd-test-1")
-    
+
     # Should be active
     assert scheduler.state.is_active("bd-test-1")
-    
+
     # Mark as completed
     scheduler.state.mark_completed("bd-test-1")
-    
+
     # Should not be active, should be completed
     assert not scheduler.state.is_active("bd-test-1")
     assert scheduler.state.is_completed("bd-test-1")
-    
+
     print("✓ No duplicate dispatch works")
 
 
 def test_notification_first_occurrence():
     """P1 fix: Blocked notifications emit on FIRST occurrence"""
     tracker = LoopStateTracker()
-    
+
     # First occurrence - should emit
     t1 = tracker.transition(
-        LoopState.RUN_BLOCKED,
-        blocker_code=BlockerCode.RUN_BLOCKED,
-        reason="First"
+        LoopState.RUN_BLOCKED, blocker_code=BlockerCode.RUN_BLOCKED, reason="First"
     )
     assert t1 is not None, "First occurrence should emit"
-    
+
     # Second occurrence (unchanged) - should be suppressed
     t2 = tracker.transition(
-        LoopState.RUN_BLOCKED,
-        blocker_code=BlockerCode.RUN_BLOCKED,
-        reason="Second"
+        LoopState.RUN_BLOCKED, blocker_code=BlockerCode.RUN_BLOCKED, reason="Second"
     )
     assert t2 is None, "Unchanged second occurrence should be suppressed"
-    
+
     # Different blocker - should emit
     t3 = tracker.transition(
         LoopState.REVIEW_BLOCKED,
         blocker_code=BlockerCode.REVIEW_BLOCKED,
-        reason="Third"
+        reason="Third",
     )
     assert t3 is not None, "Different blocker should emit"
-    
+
     print("✓ Notification first occurrence works")
 
 
@@ -106,20 +103,20 @@ def test_state_persistence_round_trip():
     }
     manager1.layers = [["bd-1"]]
     manager1.completed = {"bd-0"}
-    
+
     # Save
     state_dict = manager1.to_dict()
-    
+
     # Load
     manager2 = BeadsWaveManager.from_dict(state_dict)
-    
+
     # Verify symmetric
     assert "bd-1" in manager2.tasks
     assert manager2.tasks["bd-1"].title == "Test"
     assert manager2.tasks["bd-1"].description == "Test description"
     assert manager2.layers == [["bd-1"]]
     assert manager2.completed == {"bd-0"}
-    
+
     print("✓ State persistence round-trip works")
 
 
@@ -129,18 +126,18 @@ def test_scheduler_state_persistence():
     state1.active_beads_ids = {"bd-1", "bd-2"}
     state1.completed_beads_ids = {"bd-0"}
     state1.dispatch_count = 5
-    
+
     # Save
     data = state1.to_dict()
-    
+
     # Load
     state2 = SchedulerState.from_dict(data)
-    
+
     # Verify
     assert state2.active_beads_ids == {"bd-1", "bd-2"}
     assert state2.completed_beads_ids == {"bd-0"}
     assert state2.dispatch_count == 5
-    
+
     print("✓ Scheduler state persistence works")
 
 
@@ -254,8 +251,13 @@ def test_beads_manager_infers_repo_from_title_prefix():
     """Title prefixes should map to the correct canonical repo."""
     manager = BeadsWaveManager()
 
-    assert manager._infer_repo_from_title("Prime Radiant: fix V2 auth") == "prime-radiant-ai"
-    assert manager._infer_repo_from_title("Agent-skills: harden dx-loop") == "agent-skills"
+    assert (
+        manager._infer_repo_from_title("Prime Radiant: fix V2 auth")
+        == "prime-radiant-ai"
+    )
+    assert (
+        manager._infer_repo_from_title("Agent-skills: harden dx-loop") == "agent-skills"
+    )
     assert manager._infer_repo_from_title("Unknown: task") is None
 
     print("✓ Repo inference works from task title prefixes")
@@ -413,7 +415,7 @@ def test_deterministic_implement_failure_transitions_to_retry_state(tmp_path):
     loop.runner_adapter.check = lambda beads_id: RunnerTaskState(
         beads_id=beads_id,
         state="exited_err",
-        reason_code="monitor_no_rc_file",
+        reason_code="stalled_no_progress",
     )
     loop.runner_adapter.extract_agent_output = lambda beads_id: ""
     loop.runner_adapter.extract_pr_artifacts = lambda beads_id: None
@@ -561,7 +563,7 @@ def test_dx_ensure_bins_links_dx_loop(tmp_path):
         text=True,
         check=True,
     )
-    assert "dx-loop 1.1.0" in version.stdout
+    assert "dx-loop 1.2.0" in version.stdout
 
     print("✓ dx-loop canonical entrypoint is linked")
 
@@ -572,7 +574,9 @@ def test_runner_adapter_uses_homebrew_bash_on_macos(monkeypatch):
 
     monkeypatch.setattr("platform.system", lambda: "Darwin")
     monkeypatch.setattr("shutil.which", lambda name: "/Users/fengning/bin/dx-runner")
-    monkeypatch.setattr(adapter, "_preferred_bash", lambda: Path("/opt/homebrew/bin/bash"))
+    monkeypatch.setattr(
+        adapter, "_preferred_bash", lambda: Path("/opt/homebrew/bin/bash")
+    )
 
     result = adapter._build_dx_runner_command(["status"])
 
@@ -632,7 +636,9 @@ def test_runner_adapter_accepts_timeout_when_runner_state_exists(monkeypatch):
         command=["dx-runner", "start"],
     )
 
-    monkeypatch.setattr(adapter, "_run_dx_runner", lambda *args, **kwargs: timeout_result)
+    monkeypatch.setattr(
+        adapter, "_run_dx_runner", lambda *args, **kwargs: timeout_result
+    )
     monkeypatch.setattr(
         adapter,
         "check",
@@ -760,7 +766,10 @@ def test_start_implement_marks_kickoff_env_blocked(tmp_path):
     assert loop._start_implement("bd-test") is False
     assert loop.wave_status["state"] == "kickoff_env_blocked"
     assert loop.wave_status["blocker_code"] == "kickoff_env_blocked"
-    assert loop.wave_status["blocked_details"][0]["reason_code"] == "dx_runner_shell_preflight_failed"
+    assert (
+        loop.wave_status["blocked_details"][0]["reason_code"]
+        == "dx_runner_shell_preflight_failed"
+    )
 
     print("✓ Failed starts produce truthful kickoff-env-blocked state")
 
@@ -799,7 +808,10 @@ def test_run_loop_persists_truthful_state_when_initial_dispatch_fails(tmp_path):
     assert state["scheduler_state"]["dispatch_count"] == 0
     assert state["wave_status"]["state"] == "kickoff_env_blocked"
     assert state["wave_status"]["blocker_code"] == "kickoff_env_blocked"
-    assert state["wave_status"]["blocked_details"][0]["reason_code"] == "dx_runner_preflight_failed"
+    assert (
+        state["wave_status"]["blocked_details"][0]["reason_code"]
+        == "dx_runner_preflight_failed"
+    )
     assert "exiting without resident loop" in state["wave_status"]["reason"]
 
     print("✓ Failed initial dispatch persists blocked state")
@@ -808,7 +820,10 @@ def test_run_loop_persists_truthful_state_when_initial_dispatch_fails(tmp_path):
 def test_ensure_worktree_creates_missing_repo_workspace(tmp_path, monkeypatch):
     """dx-loop should provision the inferred repo worktree before dispatch."""
     wave_id = "wave-worktree-create"
-    loop = DxLoop(wave_id, config={"cadence_seconds": 0, "worktree_base": str(tmp_path / "agents")})
+    loop = DxLoop(
+        wave_id,
+        config={"cadence_seconds": 0, "worktree_base": str(tmp_path / "agents")},
+    )
     loop.wave_dir = tmp_path / "waves" / wave_id
     loop.state_file = loop.wave_dir / "loop_state.json"
     loop.beads_manager.tasks = {
@@ -834,6 +849,470 @@ def test_ensure_worktree_creates_missing_repo_workspace(tmp_path, monkeypatch):
     assert loop._get_worktree_path("bd-test") == created
 
     print("✓ Missing worktrees are provisioned for the inferred repo")
+
+
+# ---------------------------------------------------------------------------
+# v1.2 regression tests — bd-5w5o.28 hardening batch
+# ---------------------------------------------------------------------------
+
+
+def test_config_file_override_is_honored(tmp_path):
+    """--config should merge YAML overrides into DEFAULT_CONFIG (bd-5w5o.27)."""
+    config_path = tmp_path / "override.yaml"
+    config_path.write_text("provider: cc-glm\ncadence_seconds: 120\nmax_attempts: 5\n")
+
+    dx_loop_main = importlib.util.spec_from_file_location(
+        "dx_loop_main_v12", REPO_ROOT / "scripts" / "dx_loop.py"
+    )
+    mod = importlib.util.module_from_spec(dx_loop_main)
+    assert dx_loop_main.loader is not None
+    dx_loop_main.loader.exec_module(mod)
+
+    config = mod.load_config_file(str(config_path))
+
+    assert config["provider"] == "cc-glm"
+    assert config["cadence_seconds"] == 120
+    assert config["max_attempts"] == 5
+    assert config["max_revisions"] == 3  # unchanged default
+
+    print("✓ --config file overrides are honored")
+
+
+def test_config_missing_file_returns_defaults():
+    """A nonexistent --config path should warn and return defaults."""
+    dx_loop_main = importlib.util.spec_from_file_location(
+        "dx_loop_main_missing", REPO_ROOT / "scripts" / "dx_loop.py"
+    )
+    mod = importlib.util.module_from_spec(dx_loop_main)
+    assert dx_loop_main.loader is not None
+    dx_loop_main.loader.exec_module(mod)
+
+    config = mod.load_config_file("/nonexistent/path.yaml")
+    assert config["provider"] == "opencode"
+
+    print("✓ Missing config file returns defaults with warning")
+
+
+def test_cmd_start_loads_config(tmp_path, capsys, monkeypatch):
+    """cmd_start should create DxLoop with merged config when --config is given."""
+    config_path = tmp_path / "test-config.yaml"
+    config_path.write_text("cadence_seconds: 42\n")
+
+    dx_loop_main = importlib.util.spec_from_file_location(
+        "dx_loop_main_cmd", REPO_ROOT / "scripts" / "dx_loop.py"
+    )
+    mod = importlib.util.module_from_spec(dx_loop_main)
+    assert dx_loop_main.loader is not None
+    dx_loop_main.loader.exec_module(mod)
+
+    args = SimpleNamespace(
+        epic="bd-test-epic",
+        wave_id="wave-config-test",
+        config=str(config_path),
+    )
+
+    created_loop = {}
+
+    class FakeDxLoop:
+        def __init__(self, wave_id, config=None):
+            self.wave_id = wave_id
+            self.config = config or {}
+            self.state_file = tmp_path / "loop_state.json"
+            created_loop["instance"] = self
+
+        def bootstrap_epic(self, epic_id):
+            return True
+
+        def _load_state(self):
+            return False
+
+        def adopt_running_jobs(self):
+            return []
+
+        def _save_state(self):
+            pass
+
+        def run_loop(self, max_iterations=100):
+            return True
+
+    monkeypatch.setattr(mod, "DxLoop", FakeDxLoop)
+    rc = mod.cmd_start(args)
+
+    assert rc == 0
+    assert created_loop["instance"].config["cadence_seconds"] == 42
+    assert created_loop["instance"].config["provider"] == "opencode"
+
+    print("✓ cmd_start passes merged config to DxLoop")
+
+
+def test_bootstrap_state_persisted_before_run_loop(tmp_path, monkeypatch):
+    """Bootstrap state should be saved to disk before run_loop starts (bd-5w5o.19)."""
+    wave_id = "wave-bootstrap-vis"
+    state_file = tmp_path / "waves" / wave_id / "loop_state.json"
+    config = {"cadence_seconds": 0}
+
+    saved_states = []
+
+    class FakeDxLoop:
+        def __init__(self, wid, config=None):
+            self.wave_id = wid
+            self.config = config or {}
+            self.state_file = state_file
+            self.wave_dir = tmp_path / "waves" / wid
+
+        def bootstrap_epic(self, epic_id):
+            self.tasks_loaded = True
+            return True
+
+        def _load_state(self):
+            return False
+
+        def adopt_running_jobs(self):
+            return []
+
+        def _save_state(self):
+            saved_states.append(True)
+            self.wave_dir.mkdir(parents=True, exist_ok=True)
+            state_file.write_text(
+                json.dumps(
+                    {"wave_id": self.wave_id, "wave_status": {"state": "pending"}}
+                )
+            )
+
+        def run_loop(self, max_iterations=100):
+            return True
+
+    dx_loop_main = importlib.util.spec_from_file_location(
+        "dx_loop_main_bs", REPO_ROOT / "scripts" / "dx_loop.py"
+    )
+    mod = importlib.util.module_from_spec(dx_loop_main)
+    assert dx_loop_main.loader is not None
+    dx_loop_main.loader.exec_module(mod)
+
+    monkeypatch.setattr(mod, "DxLoop", FakeDxLoop)
+
+    args = SimpleNamespace(epic="bd-test", wave_id=wave_id, config=None)
+    mod.cmd_start(args)
+
+    assert len(saved_states) >= 1, "State should be saved before run_loop"
+    assert state_file.exists(), "State file should exist immediately after bootstrap"
+
+    print("✓ Bootstrap state is persisted before run_loop starts")
+
+
+def test_adopt_running_jobs_marks_active_in_scheduler(tmp_path):
+    """Restart should adopt already-running dx-runner jobs (bd-5w5o.25)."""
+    wave_id = "wave-adoption-test"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-active": BeadsTask(
+            beads_id="bd-active",
+            title="Active task",
+            dependencies=[],
+        ),
+        "bd-idle": BeadsTask(
+            beads_id="bd-idle",
+            title="Idle task",
+            dependencies=[],
+        ),
+    }
+
+    call_log = []
+
+    def fake_check(beads_id):
+        call_log.append(beads_id)
+        if beads_id == "bd-active":
+            return RunnerTaskState(
+                beads_id=beads_id,
+                state="healthy",
+                reason_code="recent_log_activity",
+            )
+        return RunnerTaskState(beads_id=beads_id, state="missing")
+
+    loop.runner_adapter.check = fake_check
+
+    adopted = loop.adopt_running_jobs()
+
+    assert "bd-active" in adopted
+    assert "bd-idle" not in adopted
+    assert loop.scheduler.state.is_active("bd-active")
+    assert not loop.scheduler.state.is_active("bd-idle")
+
+    baton = loop.baton_manager.get_state("bd-active")
+    assert baton is not None
+    assert baton.phase == BatonPhase.IMPLEMENT
+
+    print("✓ Already-running jobs are adopted on restart with baton state")
+
+
+def test_adopt_running_jobs_rebuilds_baton_for_fresh_restart(tmp_path):
+    """Adoption on fresh restart should set baton to IMPLEMENT (bd-5w5o.25 P0)."""
+    wave_id = "wave-adoption-fresh"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-live": BeadsTask(
+            beads_id="bd-live",
+            title="Live task",
+            dependencies=[],
+        ),
+    }
+
+    assert loop.baton_manager.get_state("bd-live") is None
+
+    loop.runner_adapter.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="healthy",
+        reason_code="recent_log_activity",
+    )
+
+    adopted = loop.adopt_running_jobs()
+
+    assert "bd-live" in adopted
+    baton = loop.baton_manager.get_state("bd-live")
+    assert baton is not None
+    assert baton.phase == BatonPhase.IMPLEMENT
+    assert baton.implement_run_id is not None
+    assert loop.scheduler.state.is_active("bd-live", "implement")
+
+    print("✓ Fresh restart adoption rebuilds baton state for implement phase")
+
+
+def test_adopt_running_jobs_keys_by_base_beads_id(tmp_path):
+    """Adoption should use base beads_id, not bd-*-review (bd-5w5o.25 P0)."""
+    wave_id = "wave-adoption-key"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-reviewing": BeadsTask(
+            beads_id="bd-reviewing",
+            title="Reviewing task",
+            dependencies=[],
+        ),
+    }
+    loop.baton_manager.start_implement("bd-reviewing")
+    loop.baton_manager.complete_implement(
+        "bd-reviewing", pr_url="http://example/1", pr_head_sha="a" * 40
+    )
+    loop.baton_manager.start_review("bd-reviewing", run_id="review-run-1")
+
+    loop.runner_adapter.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="healthy",
+        reason_code="recent_log_activity",
+    )
+
+    adopted = loop.adopt_running_jobs()
+
+    assert "bd-reviewing" in adopted
+    assert loop.scheduler.state.is_active("bd-reviewing", "review")
+    assert not any(
+        "bd-reviewing-review" in key for key in loop.scheduler.state.active_beads_ids
+    )
+
+    print("✓ Adoption keys by base beads_id, not bd-*-review")
+
+
+def test_adopt_running_jobs_skips_completed(tmp_path):
+    """Adoption should skip tasks already marked completed."""
+    wave_id = "wave-adoption-skip"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-done": BeadsTask(
+            beads_id="bd-done",
+            title="Completed task",
+            dependencies=[],
+        ),
+    }
+    loop.scheduler.state.mark_completed("bd-done")
+
+    def fake_check(beads_id):
+        return RunnerTaskState(beads_id=beads_id, state="healthy")
+
+    loop.runner_adapter.check = fake_check
+
+    adopted = loop.adopt_running_jobs()
+
+    assert adopted == []
+    assert not loop.scheduler.state.is_active("bd-done")
+
+    print("✓ Adoption skips completed tasks")
+
+
+def test_monitor_no_rc_file_classified_as_kickoff_defect(tmp_path):
+    """monitor_no_rc_file should be kickoff_env_blocked, not retryable (bd-5w5o.22+bd-5w5o.26)."""
+    wave_id = "wave-rc-defect"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-rc-fail": BeadsTask(
+            beads_id="bd-rc-fail",
+            title="RC defect task",
+            dependencies=[],
+        )
+    }
+
+    loop.baton_manager.start_implement("bd-rc-fail", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-rc-fail", "implement")
+    loop.runner_adapter.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_err",
+        reason_code="monitor_no_rc_file",
+    )
+    loop.runner_adapter.extract_agent_output = lambda beads_id: ""
+    loop.runner_adapter.extract_pr_artifacts = lambda beads_id: None
+
+    loop._check_implement_progress("bd-rc-fail")
+
+    assert loop.wave_status["state"] == "kickoff_env_blocked"
+    assert loop.wave_status["blocker_code"] == "kickoff_env_blocked"
+    assert "lifecycle defect" in loop.wave_status["reason"]
+    assert loop.scheduler.state.is_blocked("bd-rc-fail")
+
+    detail = loop.wave_status["blocked_details"][0]
+    assert detail["reason_code"] == "monitor_no_rc_file"
+    assert "rc file" in detail["detail"]
+
+    baton = loop.baton_manager.get_state("bd-rc-fail")
+    assert baton is not None
+    assert baton.attempt == 1, "monitor_no_rc_file should NOT increment retry count"
+
+    print("✓ monitor_no_rc_file classified as kickoff_env_blocked lifecycle defect")
+
+
+def test_late_finalize_no_rc_also_classified_as_kickoff_defect(tmp_path):
+    """late_finalize_no_rc should be treated the same as monitor_no_rc_file."""
+    wave_id = "wave-late-finalize"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-late": BeadsTask(
+            beads_id="bd-late",
+            title="Late finalize task",
+            dependencies=[],
+        )
+    }
+
+    loop.baton_manager.start_implement("bd-late", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-late", "implement")
+    loop.runner_adapter.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_err",
+        reason_code="late_finalize_no_rc",
+    )
+    loop.runner_adapter.extract_agent_output = lambda beads_id: ""
+    loop.runner_adapter.extract_pr_artifacts = lambda beads_id: None
+
+    loop._check_implement_progress("bd-late")
+
+    assert loop.wave_status["state"] == "kickoff_env_blocked"
+    assert loop.wave_status["blocker_code"] == "kickoff_env_blocked"
+
+    print("✓ late_finalize_no_rc also classified as kickoff_env_blocked defect")
+
+
+def test_normal_retryable_failure_still_enters_redispatch(tmp_path):
+    """Non-lifecycle-defect failures should still enter deterministic_redispatch_needed."""
+    wave_id = "wave-normal-retry"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-retry": BeadsTask(
+            beads_id="bd-retry",
+            title="Retry task",
+            dependencies=[],
+        )
+    }
+
+    loop.baton_manager.start_implement("bd-retry", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-retry", "implement")
+    loop.runner_adapter.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_err",
+        reason_code="stalled_no_progress",
+    )
+    loop.runner_adapter.extract_agent_output = lambda beads_id: ""
+    loop.runner_adapter.extract_pr_artifacts = lambda beads_id: None
+
+    loop._check_implement_progress("bd-retry")
+
+    assert loop.wave_status["state"] == "deterministic_redispatch_needed"
+    assert loop.wave_status["blocker_code"] == "deterministic_redispatch_needed"
+
+    print("✓ Normal retryable failures still enter redispatch state")
+
+
+def test_adopt_and_no_double_dispatch(tmp_path):
+    """After adoption, run_loop should not double-dispatch adopted tasks."""
+    wave_id = "wave-adopt-no-double"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-adopted": BeadsTask(
+            beads_id="bd-adopted",
+            title="Adopted task",
+            dependencies=[],
+        )
+    }
+    loop.beads_manager.layers = [["bd-adopted"]]
+
+    loop.runner_adapter.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="healthy",
+        reason_code="recent_log_activity",
+    )
+    adopted = loop.adopt_running_jobs()
+
+    assert loop.scheduler.state.is_active("bd-adopted")
+    dispatchable = []
+    for tid in loop.beads_manager.layers[0]:
+        if not loop.scheduler.state.is_active(
+            tid
+        ) and not loop.scheduler.state.is_completed(tid):
+            dispatchable.append(tid)
+
+    assert dispatchable == [], "Adopted task should not appear in dispatchable list"
+
+    print("✓ Adopted tasks are not double-dispatched")
+
+
+def test_adopt_does_not_adopt_exited_jobs(tmp_path):
+    """Adoption should only adopt RUNNING jobs, not exited ones (P1)."""
+    wave_id = "wave-adopt-exited"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-exited": BeadsTask(
+            beads_id="bd-exited",
+            title="Exited task",
+            dependencies=[],
+        ),
+    }
+
+    loop.runner_adapter.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_ok",
+        reason_code="process_exit_with_rc",
+    )
+
+    adopted = loop.adopt_running_jobs()
+
+    assert adopted == []
+    assert not loop.scheduler.state.is_active("bd-exited")
+    assert loop.baton_manager.get_state("bd-exited") is None
+
+    print("✓ Exited jobs are not adopted")
 
 
 if __name__ == "__main__":
