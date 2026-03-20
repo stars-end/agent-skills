@@ -8,6 +8,11 @@ v1.1 fixes:
 - P0: Active work no longer redispatched every cadence (scheduler)
 - P1: Blocked notifications emit on FIRST occurrence (state_machine)
 - P1: State persistence is symmetric and durable (beads_integration)
+
+v1.3 MVP pillars:
+- Pillar A: Stacked-PR bootstrap (dependency artifact collection + prompt injection)
+- Pillar B: Human takeover / bypass / resume
+- Pillar C: Phase-aware provider routing
 """
 
 from .state_machine import LoopState, BlockerCode, LoopStateMachine, LoopStateTracker
@@ -44,4 +49,4 @@ __all__ = [
     "RunnerTaskState",
 ]
 
-__version__ = "1.1.0"
+__version__ = "1.3.0"
