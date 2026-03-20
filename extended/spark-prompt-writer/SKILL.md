@@ -100,6 +100,72 @@ Every implementation prompt must require:
 
 If any of those are missing, the run is incomplete.
 
+## Dispatch Workflow
+
+This skill writes prompt packs, but prompt packs also need an execution topology.
+
+Use this default workflow unless the user explicitly asks for a different rollout:
+
+### 1. Run independent implementation batches first
+
+If the pack contains multiple implementation batches:
+- run independent batches in parallel
+- cap parallelism at `2` by default
+- give each batch one coherent outcome and one PR
+
+Good parallel pair:
+- analytics integrity batch
+- Plaid reliability batch
+
+Do not add the verification pass to this first wave.
+
+### 2. Review and converge before verification
+
+After implementation batches return:
+- review each return in the orchestrator session
+- accept, repair, or redispatch each batch
+- merge accepted batches before launching integrated verification
+
+The orchestrator owns:
+- outcome review
+- repair decisions
+- merge gating
+- final decision on whether the system is ready for integrated verification
+
+### 3. Run integrated verification last
+
+Integrated verification should run only after the upstream implementation batches are landed, or at minimum materially validated on one convergence base.
+
+Do not run the verification pass in parallel with the implementation wave unless the user explicitly wants early failure sampling and accepts noisy results.
+
+Default sequence:
+1. implementation batch A
+2. implementation batch B
+3. review/repair/merge A and B
+4. integrated verification batch
+
+### 4. One repair round max by default
+
+For Spark-shaped execution:
+- allow one repair redispatch per batch by default
+- if the batch is still messy after one repair round, take over locally or switch execution surfaces
+
+This keeps Spark fast without letting it churn indefinitely.
+
+### 5. Keep the topology generic
+
+Write prompts so they are portable across execution surfaces:
+- Spark subagents in-session
+- other subagent models
+- governed runners such as `dx-runner`
+
+The prompt should encode:
+- the batch outcome
+- the acceptance contract
+- the review gate
+
+The surrounding orchestration can change later without rewriting the batch intent.
+
 ## Default Prompt Shapes
 
 ### A. Overnight Implementation Batch
@@ -170,6 +236,11 @@ When asked to produce prompts, return:
 2. one copy/paste prompt per batch
 3. nothing else unless the user asks for commentary
 
+If the user asks how to run the pack, say explicitly:
+- which prompts run in parallel
+- which prompts wait on review/merge
+- what the orchestrator should do between waves
+
 ## Preflight Checklist
 
 Before emitting a Spark prompt, verify:
@@ -181,6 +252,7 @@ Before emitting a Spark prompt, verify:
 - file list is short and relevant
 - validation commands are explicit
 - stale/trunk-already-fixed behavior is defined
+- dispatch topology is defined when emitting a multi-prompt pack
 
 If any of these are missing, stop and resolve them first.
 
@@ -201,6 +273,7 @@ Use direct language:
 - prompts that rely on local `/Users/...` paths as the source of truth
 - prompts that allow a "done" response without a real PR artifact
 - prompts that split a single incident family into multiple small side quests
+- prompt packs that do not say which prompts run in parallel vs sequentially
 
 ## Relationship to Other Skills
 
