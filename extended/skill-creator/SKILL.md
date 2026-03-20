@@ -17,6 +17,7 @@ This skill remains only to preserve old trigger phrases.
 
 - For creating or updating shared skills in `~/agent-skills`, use `agent-skills-creator`.
 - For "write a comprehensive implementation plan with Beads epic, dependencies, and subtasks", use `implementation-planner`.
+- If Codex cannot see a newly added canonical skill yet, repair the Codex user skills plane with `~/agent-skills/scripts/dx-codex-skills-install.sh --apply` and restart Codex.
 
 ## Why This Skill Was Deprecated
 

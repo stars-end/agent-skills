@@ -11,7 +11,7 @@ This document defines:
 
 ## The Canonical Invariant
 
-**All agent tools on a host SHOULD share a single skills plane using the `.agents/skills` convention.**
+**All agent tools on a host SHOULD share a single shared skills plane using the `.agents/skills` convention.**
 
 ```
 ~/.agents/skills/<skill-name> -> ~/agent-skills/<category>/<skill-name> (symlinks)
@@ -23,17 +23,23 @@ This invariant ensures:
 3. **Single source of truth**: Skills are managed in one place (`~/agent-skills`)
 4. **Git integration**: Skills are version-controlled and can be updated via git
 
-## Codex Skills Location (Official)
+## Codex Skills Location
 
-Codex discovers skills from `.agents/skills` at repo + user scopes (and supports symlinked skill folders).
+The canonical shared plane is still `~/.agents/skills`, but Codex desktop/CLI may read user-scope skills from `~/.codex/skills` in practice.
 
-To make `~/agent-skills/*/*/SKILL.md` available to Codex (user scope), install (symlink) into `~/.agents/skills/`:
+To mirror `~/agent-skills/*/*/SKILL.md` into Codex's user plane, run:
 
 ```bash
-~/agent-skills/scripts/dx-agents-skills-install.sh --apply
+~/agent-skills/scripts/dx-codex-skills-install.sh --apply
 ```
 
-If Codex doesn’t pick up changes, restart Codex.
+To keep both the shared plane and the Codex plane healthy together, run:
+
+```bash
+~/agent-skills/scripts/ensure_agent_skills_mount.sh
+```
+
+If Codex doesn’t pick up changes after the mirror is repaired, restart Codex.
 
 ## Legacy Mount (Compatibility)
 
@@ -61,7 +67,7 @@ Contains:
 - Shared documentation and helper scripts
 - Git-tracked for versioning and updates
 
-### 2. User Skills Plane: `~/.agents/skills`
+### 2. Shared Skills Plane: `~/.agents/skills`
 
 The canonical user-scope skills directory:
 
@@ -72,12 +78,23 @@ mkdir -p ~/.agents/skills
 
 This creates symlinks per-skill into `~/.agents/skills/`.
 
+### 3. Codex User Skills Plane: `~/.codex/skills`
+
+Mirror the shared canonical skills into Codex's user plane:
+
+```bash
+mkdir -p ~/.codex/skills
+~/agent-skills/scripts/dx-codex-skills-install.sh --apply
+```
+
+This creates symlinks per-skill into `~/.codex/skills/` without changing Codex system skills under `~/.codex/skills/.system/`.
+
 ## Discovery Precedence
 
 When an agent tool looks for skills, the discovery order is:
 
 1. **Repo skills** (`$REPO_ROOT/.agents/skills`)
-2. **User skills** (`$HOME/.agents/skills`)
+2. **User skills** (`$HOME/.agents/skills` or tool-specific user mirrors such as `$HOME/.codex/skills`)
 3. **System/admin skills** (machine-managed)
 
 2. **Repo-specific skills** (`.claude/`, `.skills/`, etc.)
@@ -104,6 +121,7 @@ Or use the helper script:
 
 ```bash
 ~/agent-skills/scripts/dx-agents-skills-install.sh --apply
+~/agent-skills/scripts/dx-codex-skills-install.sh --apply
 ```
 
 Or use the helper script (auto-creates symlink):
@@ -116,11 +134,13 @@ Or use the helper script (auto-creates symlink):
 
 ```bash
 ls -la ~/.agents/skills
+ls -la ~/.codex/skills
 ```
 
 Expected output:
 ```
 ✅ ~/.agents/skills/<skill-name> -> ~/agent-skills/<category>/<skill-name>
+✅ ~/.codex/skills/<skill-name> -> ~/agent-skills/<category>/<skill-name>
 ```
 
 ## Shared Profiles (bd-3871.5)
