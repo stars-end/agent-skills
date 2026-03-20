@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: e249c9ff973ad8958c2b3980b64c5f9ee134b4a8 -->
-<!-- Last updated: 2026-03-20 10:40:04 UTC -->
+<!-- Source SHA: 3ac2c1c84cbd63ae2792e042c7d2d0879783791a -->
+<!-- Last updated: 2026-03-20 10:41:55 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -266,6 +266,16 @@ dx-railway-run.sh -- <command>
 - Location: `/tmp/agents/.dx-context/<beads-id>/<repo>/railway-context.env`
 - Contains: `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT`, `RAILWAY_SERVICE`
 - Used by: `dx-railway-run.sh` to provide Railway context in worktrees
+
+### 5.3) Blocking Skill Contracts Are Binding
+
+If a named skill contains an explicit `BLOCKED` contract:
+- agents MUST return that contract verbatim once the blocker is reached
+- agents MUST NOT continue speculative retries after that point
+- agents MUST NOT substitute interactive CLI discovery, guessed service names, or ad hoc runtime mutation for the documented blocker response
+- `No such file or directory` for a requested binary means the binary/runtime is missing unless the skill explicitly says otherwise
+- when Railway execution is required, agents must use explicit non-interactive context (`-p/-e/-s`) or a verified repo-native wrapper
+- ambient Railway link state from another repo/project is not sufficient evidence of correct target context
 
 ## 6) Parallel Agent Orchestration (V8.4)
 
@@ -568,7 +578,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 
 
 ---
-**Discovery**: Skills auto-load from `~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md`  
-**Details**: Each skill's SKILL.md contains full documentation  
-**Specification**: https://agentskills.io/specification  
+**Discovery**: Skills auto-load from `~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md`
+**Details**: Each skill's SKILL.md contains full documentation
+**Specification**: https://agentskills.io/specification
 **Source**: Generated from agent-skills commit shown in header

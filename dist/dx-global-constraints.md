@@ -130,6 +130,16 @@ dx-railway-run.sh -- <command>
 - Contains: `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT`, `RAILWAY_SERVICE`
 - Used by: `dx-railway-run.sh` to provide Railway context in worktrees
 
+### 5.3) Blocking Skill Contracts Are Binding
+
+If a named skill contains an explicit `BLOCKED` contract:
+- agents MUST return that contract verbatim once the blocker is reached
+- agents MUST NOT continue speculative retries after that point
+- agents MUST NOT substitute interactive CLI discovery, guessed service names, or ad hoc runtime mutation for the documented blocker response
+- `No such file or directory` for a requested binary means the binary/runtime is missing unless the skill explicitly says otherwise
+- when Railway execution is required, agents must use explicit non-interactive context (`-p/-e/-s`) or a verified repo-native wrapper
+- ambient Railway link state from another repo/project is not sufficient evidence of correct target context
+
 ## 6) Parallel Agent Orchestration (V8.4)
 
 ### Pattern: Plan-First, Batch-Second, Commit-Only
