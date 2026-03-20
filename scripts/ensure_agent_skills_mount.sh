@@ -4,7 +4,8 @@ set -euo pipefail
 # ensure_agent_skills_mount.sh
 # Ensures ~/agent-skills exists and:
 #   - legacy mount: ~/.agent/skills -> ~/agent-skills (symlink)
-#   - canonical skills plane: ~/.agents/skills populated with symlinks to individual skills
+#   - shared skills plane: ~/.agents/skills populated with symlinks to individual skills
+#   - Codex user plane: ~/.codex/skills populated with canonical shared skills
 # Prints only paths/status, never secrets
 
 # Colors for output
@@ -28,6 +29,7 @@ log_error() {
 AGENT_SKILLS_DIR="$HOME/agent-skills"
 SKILLS_MOUNT="$HOME/.agent/skills"
 AGENTS_SKILLS_DIR="$HOME/.agents/skills"
+CODEX_SKILLS_DIR="$HOME/.codex/skills"
 
 echo "🔧 Ensuring agent-skills mount..."
 echo ""
@@ -142,6 +144,20 @@ if [[ -x "$INSTALLER" ]]; then
   fi
 fi
 
+# Ensure ~/.codex/skills exists + install links for Codex desktop/CLI discovery.
+echo "  ~/.codex/skills: $CODEX_SKILLS_DIR"
+mkdir -p "$CODEX_SKILLS_DIR"
+
+CODEX_INSTALLER="$AGENT_SKILLS_DIR/scripts/dx-codex-skills-install.sh"
+if [[ -x "$CODEX_INSTALLER" ]]; then
+  if ! "$CODEX_INSTALLER" --doctor >/dev/null 2>&1; then
+    log_warn "Codex skills plane has issues, running repair..."
+    "$CODEX_INSTALLER" --repair >/dev/null 2>&1 || true
+  else
+    log_info "Codex skills plane is healthy"
+  fi
+fi
+
 # 5. Quick health check
 echo ""
 if [[ -d "$AGENT_SKILLS_DIR" ]] && [[ -e "$SKILLS_MOUNT" ]]; then
@@ -152,7 +168,8 @@ if [[ -d "$AGENT_SKILLS_DIR" ]] && [[ -e "$SKILLS_MOUNT" ]]; then
     echo "Next steps:"
     echo "  1. Verify MCP configuration: ~/agent-skills/health/mcp-doctor/check.sh"
     echo "  2. See: ~/agent-skills/SKILLS_PLANE.md for full documentation"
-    echo "  3. For Codex skills: ls -la ~/.agents/skills"
+    echo "  3. For shared skills: ls -la ~/.agents/skills"
+    echo "  4. For Codex skills: ls -la ~/.codex/skills"
     exit 0
   fi
 fi

@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Spark Prompt Writer"
+  short_description: "Write Spark-optimized batch prompts for overnight implementation and verification"
+  default_prompt: "Use $spark-prompt-writer to produce gpt-5.3-codex-spark prompts for large overnight fix batches and a short integrated verification pass."

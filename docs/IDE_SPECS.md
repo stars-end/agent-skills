@@ -57,11 +57,12 @@ Installed targets:
 - **Slack MCP**: Supported via `~/agent-skills/scripts/setup-slack-mcp.sh codex-cli`
 - **Known Issues**: None (Slack MCP configuration now supported)
 
-**Skills install note**: Codex discovers skills via the `.agents/skills` convention (repo + user scopes).
-To expose `~/agent-skills/*/*/SKILL.md` to Codex (user scope), run:
+**Skills install note**: In this environment, Codex desktop/CLI user-scope discovery reads `~/.codex/skills`.
+Keep canonical shared skills mirrored into that plane by running:
 ```bash
-~/agent-skills/scripts/dx-agents-skills-install.sh --apply
+~/agent-skills/scripts/dx-codex-skills-install.sh --apply
 ```
+The shared cross-tool plane remains `~/.agents/skills`; use `~/agent-skills/scripts/ensure_agent_skills_mount.sh` to repair both.
 
 ### 4. opencode
 - **agentskills.io**: ✅ Native support

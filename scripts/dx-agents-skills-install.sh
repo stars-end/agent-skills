@@ -3,8 +3,7 @@ set -euo pipefail
 
 # dx-agents-skills-install.sh
 #
-# Populate $HOME/.agents/skills/ with symlinks to skills from ~/agent-skills so
-# Codex (and any agent that follows the .agents/skills convention) can discover them.
+# Populate a target skills directory with symlinks to skills from ~/agent-skills.
 #
 # IMPORTANT: This script ALWAYS uses the CANONICAL ~/agent-skills path for symlinks,
 # never the current working directory. This ensures skills remain accessible even
@@ -16,6 +15,10 @@ set -euo pipefail
 #   dx-agents-skills-install.sh --apply --force
 #   dx-agents-skills-install.sh --repair  (alias for --apply --force)
 #
+# Destination:
+#   - defaults to $HOME/.agents/skills
+#   - may be overridden with DEST_DIR=/path/to/skills
+#
 # Notes:
 #   - This script only links; it does not copy secrets or modify other dotfiles.
 #   - Skills are sourced from: ~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md
@@ -25,7 +28,7 @@ usage() {
   cat >&2 <<'EOF'
 dx-agents-skills-install.sh
 
-Populate $HOME/.agents/skills/ with symlinks to skills from ~/agent-skills.
+Populate a target skills directory with symlinks to skills from ~/agent-skills.
 
 Usage:
   dx-agents-skills-install.sh --check       # Check current state
@@ -36,6 +39,7 @@ Usage:
 
 Notes:
   - Skills are ALWAYS linked from ~/agent-skills (canonical), never /tmp/agents/
+  - Default destination is ~/.agents/skills; override with DEST_DIR=/path
   - Run --doctor to find broken symlinks or links pointing to ephemeral paths
 EOF
 }
@@ -229,4 +233,3 @@ if [[ $fail -eq 0 ]]; then
 fi
 echo "❌ FAILED ($MODE)"
 exit 1
-
