@@ -1316,6 +1316,173 @@ def test_adopt_does_not_adopt_exited_jobs(tmp_path):
     print("✓ Exited jobs are not adopted")
 
 
+def test_dispatch_fanout_capped_at_max_parallel(tmp_path, capsys):
+    """Dispatch should not exceed max_parallel even when more tasks are ready."""
+    wave_id = "wave-fanout-cap"
+    loop = DxLoop(
+        wave_id,
+        config={"cadence_seconds": 0, "max_parallel": 2},
+    )
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        f"bd-task-{i}": BeadsTask(
+            beads_id=f"bd-task-{i}",
+            title=f"Task {i}",
+            dependencies=[],
+        )
+        for i in range(5)
+    }
+    loop.beads_manager.layers = [[f"bd-task-{i}" for i in range(5)]]
+
+    worktree = tmp_path / "agents" / "bd-task-0" / "agent-skills"
+    worktree.mkdir(parents=True)
+    for i in range(5):
+        loop.beads_manager.tasks[f"bd-task-{i}"].repo = "agent-skills"
+
+    dispatch_count = 0
+
+    def fake_start(*args, **kwargs):
+        nonlocal dispatch_count
+        dispatch_count += 1
+        return RunnerStartResult(
+            ok=True,
+            returncode=0,
+            stdout="started",
+            command=["dx-runner", "start"],
+        )
+
+    loop._ensure_worktree = lambda beads_id: worktree
+    loop.implement_runner.start = fake_start
+    loop.review_runner.start = fake_start
+
+    loop.run_loop(max_iterations=1)
+
+    assert dispatch_count == 2, (
+        f"Expected 2 dispatches (max_parallel=2), got {dispatch_count}"
+    )
+    assert loop.scheduler.state.dispatch_count == 2
+
+    print("✓ Dispatch fanout capped at max_parallel")
+
+
+def test_capacity_blocked_stops_dispatch_in_same_cycle(tmp_path, capsys):
+    """A provider-capacity block should stop further dispatch attempts in the cycle."""
+    wave_id = "wave-capacity-stop"
+    loop = DxLoop(
+        wave_id,
+        config={"cadence_seconds": 0, "max_parallel": 3},
+    )
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        f"bd-task-{i}": BeadsTask(
+            beads_id=f"bd-task-{i}",
+            title=f"Task {i}",
+            dependencies=[],
+        )
+        for i in range(3)
+    }
+    loop.beads_manager.layers = [[f"bd-task-{i}" for i in range(3)]]
+
+    worktree = tmp_path / "agents" / "bd-task-0" / "agent-skills"
+    worktree.mkdir(parents=True)
+    for i in range(3):
+        loop.beads_manager.tasks[f"bd-task-{i}"].repo = "agent-skills"
+
+    dispatch_order = []
+
+    def fake_start(*args, **kwargs):
+        dispatch_order.append("attempted")
+        return RunnerStartResult(
+            ok=False,
+            returncode=26,
+            reason_code="dx_runner_provider_capacity_blocked",
+            detail="opencode concurrency cap exceeded (2/2)",
+            command=["dx-runner", "start"],
+        )
+
+    loop._ensure_worktree = lambda beads_id: worktree
+    loop.implement_runner.start = fake_start
+    loop.review_runner.start = fake_start
+
+    loop.run_loop(max_iterations=1)
+
+    assert len(dispatch_order) == 1, (
+        f"Expected 1 dispatch attempt (stopped after capacity block), got {len(dispatch_order)}"
+    )
+    assert loop.wave_status["state"] == "run_blocked"
+    assert loop.wave_status["blocker_code"] == "run_blocked"
+    assert "Provider at capacity" in loop.wave_status["reason"]
+
+    captured = capsys.readouterr()
+    assert "Provider at capacity, stopping dispatch" in captured.err
+
+    print("✓ Capacity block stops dispatch in same cycle")
+
+
+def test_no_false_healthy_state_during_capacity_block(tmp_path):
+    """Wave status must not claim healthy when all dispatches hit capacity."""
+    wave_id = "wave-no-fake-healthy"
+    loop = DxLoop(
+        wave_id,
+        config={"cadence_seconds": 0, "max_parallel": 2},
+    )
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-a": BeadsTask(
+            beads_id="bd-a",
+            title="Task A",
+            dependencies=[],
+        ),
+        "bd-b": BeadsTask(
+            beads_id="bd-b",
+            title="Task B",
+            dependencies=[],
+        ),
+    }
+    loop.beads_manager.layers = [["bd-a", "bd-b"]]
+
+    worktree = tmp_path / "agents" / "bd-a" / "agent-skills"
+    worktree.mkdir(parents=True)
+    loop.beads_manager.tasks["bd-a"].repo = "agent-skills"
+    loop.beads_manager.tasks["bd-b"].repo = "agent-skills"
+
+    first_call = {"done": False}
+
+    def fake_start(*args, **kwargs):
+        if not first_call["done"]:
+            first_call["done"] = True
+            return RunnerStartResult(
+                ok=False,
+                returncode=26,
+                reason_code="dx_runner_provider_capacity_blocked",
+                detail="opencode concurrency cap exceeded (2/2)",
+                command=["dx-runner", "start"],
+            )
+        return RunnerStartResult(
+            ok=True,
+            returncode=0,
+            stdout="started",
+            command=["dx-runner", "start"],
+        )
+
+    loop._ensure_worktree = lambda beads_id: worktree
+    loop.implement_runner.start = fake_start
+    loop.review_runner.start = fake_start
+
+    loop.run_loop(max_iterations=1)
+
+    state = json.loads(loop.state_file.read_text())
+    assert state["wave_status"]["state"] != "in_progress_healthy", (
+        "Wave must not claim healthy when dispatch hit capacity block"
+    )
+    assert state["wave_status"]["state"] in ("run_blocked", "kickoff_env_blocked")
+
+    print("✓ No false healthy state during capacity block")
+
+
 if __name__ == "__main__":
     test_no_duplicate_dispatch()
     test_notification_first_occurrence()
@@ -1323,4 +1490,7 @@ if __name__ == "__main__":
     test_scheduler_state_persistence()
     test_restart_suppresses_unchanged_blocker_notifications()
     test_describe_wave_readiness_reports_dependency_blockers()
+    test_dispatch_fanout_capped_at_max_parallel()
+    test_capacity_blocked_stops_dispatch_in_same_cycle()
+    test_no_false_healthy_state_during_capacity_block()
     print("\nAll v1.1 fix tests passed!")

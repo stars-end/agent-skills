@@ -285,13 +285,44 @@ class DxLoop:
                             dispatchable.append((tid, expected_phase))
 
                 if dispatchable:
-                    print(f"Dispatching {len(dispatchable)} task(s)")
+                    max_parallel = self.config.get("max_parallel", 2)
+                    active_count = len(self.scheduler.state.active_beads_ids)
+                    dispatch_capacity = max(0, max_parallel - active_count)
+                    capped = dispatchable[:dispatch_capacity]
+                    capacity_blocked = False
                     successful_dispatches = []
-                    for beads_id, phase in dispatchable:
+                    print(
+                        f"Dispatching {len(capped)}/{len(dispatchable)} task(s) "
+                        f"(active={active_count}, max_parallel={max_parallel})"
+                    )
+                    for beads_id, phase in capped:
                         if self._dispatch_task(beads_id, phase):
                             self.scheduler.state.mark_dispatched(beads_id, phase)
                             successful_dispatches.append(beads_id)
-                    if successful_dispatches:
+                        elif self.wave_status.get("blocker_code") == "run_blocked":
+                            details = self.wave_status.get("blocked_details", [])
+                            reason_codes = {
+                                d.get("reason_code")
+                                for d in details
+                                if d.get("beads_id") == beads_id
+                            }
+                            if "dx_runner_provider_capacity_blocked" in reason_codes:
+                                capacity_blocked = True
+                                print(
+                                    "Provider at capacity, stopping dispatch "
+                                    "for this cycle",
+                                    file=sys.stderr,
+                                )
+                                break
+                    if capacity_blocked:
+                        self._set_wave_status(
+                            LoopState.RUN_BLOCKED,
+                            BlockerCode.RUN_BLOCKED,
+                            f"Provider at capacity after {len(successful_dispatches)} dispatch(es); "
+                            f"remaining tasks deferred to next cadence",
+                            blocked_details=self.wave_status.get("blocked_details", []),
+                        )
+                    elif successful_dispatches:
                         self._set_wave_status(
                             LoopState.IN_PROGRESS_HEALTHY,
                             None,
