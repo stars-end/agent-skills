@@ -80,8 +80,10 @@ class Notification:
     def format_cli(self) -> str:
         lines = [f"[{self.notification_type.upper()}] {self.message}"]
         if self.beads_id:
-            label = self.task_title or self.beads_id
-            lines.append(f"  Task: {label}")
+            if self.task_title:
+                lines.append(f"  Task: {self.task_title} ({self.beads_id})")
+            else:
+                lines.append(f"  Task: {self.beads_id}")
         if self.notification_type == "merge_ready":
             if self.pr_url:
                 lines.append(f"  PR: {self.pr_url}")
