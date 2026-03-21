@@ -33,7 +33,7 @@ class RunnerTaskState:
     
     def is_complete(self) -> bool:
         """Check if task is complete (exited or blocked)"""
-        return self.state in ("exited_ok", "exited_err", "blocked")
+        return self.state in ("exited_ok", "exited_err", "blocked", "no_op_success")
     
     def is_running(self) -> bool:
         """Check if task is still running"""
