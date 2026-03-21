@@ -43,6 +43,7 @@ class LoopState(str, Enum):
     MERGE_READY = "merge_ready"
     COMPLETED = "completed"
     FAILED = "failed"
+    MANUAL_TAKEOVER = "manual_takeover"
 
 
 @dataclass
@@ -242,6 +243,7 @@ class LoopStateMachine:
             LoopState.MERGE_READY,
             LoopState.COMPLETED,
             LoopState.FAILED,
+            LoopState.MANUAL_TAKEOVER,
         ],
         LoopState.DETERMINISTIC_REDISPATCH_NEEDED: [
             LoopState.IN_PROGRESS_HEALTHY,
@@ -250,11 +252,13 @@ class LoopStateMachine:
         LoopState.KICKOFF_ENV_BLOCKED: [
             LoopState.PENDING,
             LoopState.NEEDS_DECISION,
+            LoopState.MANUAL_TAKEOVER,
         ],
         LoopState.RUN_BLOCKED: [
             LoopState.IN_PROGRESS_HEALTHY,
             LoopState.DETERMINISTIC_REDISPATCH_NEEDED,
             LoopState.NEEDS_DECISION,
+            LoopState.MANUAL_TAKEOVER,
         ],
         LoopState.REVIEW_BLOCKED: [
             LoopState.IN_PROGRESS_HEALTHY,
@@ -267,6 +271,13 @@ class LoopStateMachine:
         ],
         LoopState.MERGE_READY: [
             LoopState.COMPLETED,
+        ],
+        LoopState.MANUAL_TAKEOVER: [
+            LoopState.IN_PROGRESS_HEALTHY,
+            LoopState.DETERMINISTIC_REDISPATCH_NEEDED,
+            LoopState.NEEDS_DECISION,
+            LoopState.COMPLETED,
+            LoopState.FAILED,
         ],
         LoopState.COMPLETED: [],
         LoopState.FAILED: [],

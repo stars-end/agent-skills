@@ -95,6 +95,9 @@ class BlockerClassifier:
         "auth_resolution_failed": BlockerCode.KICKOFF_ENV_BLOCKED,
         "railway_auth_missing": BlockerCode.KICKOFF_ENV_BLOCKED,
         "railway_cli_missing": BlockerCode.KICKOFF_ENV_BLOCKED,
+        # Runner lifecycle defects (not task failures)
+        "monitor_no_rc_file": BlockerCode.KICKOFF_ENV_BLOCKED,
+        "late_finalize_no_rc": BlockerCode.KICKOFF_ENV_BLOCKED,
         # Run blocked (not stalled)
         "provider_concurrency_cap_exceeded": BlockerCode.RUN_BLOCKED,
         "opencode_rate_limited": BlockerCode.RUN_BLOCKED,
@@ -103,7 +106,6 @@ class BlockerClassifier:
         # Deterministic redispatch (stalled/timeout)
         "stalled_no_progress": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
         "no_op": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
-        "monitor_no_rc_file": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
         "process_timeout": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
         # Needs decision
         "max_attempts_exceeded": BlockerCode.NEEDS_DECISION,

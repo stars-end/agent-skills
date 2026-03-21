@@ -6,8 +6,10 @@ max_revisions: 3
 max_parallel: 2
 cadence_seconds: 600  # 10 minutes
 
-# Provider configuration
+# Provider configuration (phase-aware routing)
 provider: opencode
+implement_provider: null  # defaults to provider if not set
+review_provider: null     # defaults to provider if not set
 require_review: true
 
 # Notification settings
