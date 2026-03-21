@@ -135,6 +135,11 @@ At session end, agents may include:
 - Founder commitments reminded: [yes/no]
 ```
 
+### Writing Style (Strunk & White)
+- Omit needless words. Be concise.
+- Use active voice. Prefer concrete, specific language.
+- One idea per sentence. Clear over clever.
+
 ## 1) Canonical Repository Rules
 **Canonical repositories** (read-mostly clones):
 - \`~/agent-skills\`
