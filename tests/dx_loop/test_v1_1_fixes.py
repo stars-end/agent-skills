@@ -1252,6 +1252,40 @@ def test_normal_retryable_failure_still_enters_redispatch(tmp_path):
     print("✓ Normal retryable failures still enter redispatch state")
 
 
+def test_no_op_success_clears_active_and_enters_redispatch(tmp_path):
+    """no_op_success should be treated as terminal and retriable, not still active."""
+    wave_id = "wave-no-op-success"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-no-op": BeadsTask(
+            beads_id="bd-no-op",
+            title="No-op task",
+            dependencies=[],
+        )
+    }
+
+    loop.baton_manager.start_implement("bd-no-op", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-no-op", "implement")
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="no_op_success",
+        reason_code="exit_zero_no_mutations",
+    )
+    loop.implement_runner.extract_agent_output = lambda beads_id: ""
+    loop.implement_runner.extract_pr_artifacts = lambda beads_id: None
+
+    loop._check_implement_progress("bd-no-op")
+
+    assert not loop.scheduler.state.is_active("bd-no-op", "implement")
+    assert loop.scheduler.state.is_blocked("bd-no-op")
+    assert loop.wave_status["state"] == "deterministic_redispatch_needed"
+    assert loop.wave_status["blocker_code"] == "deterministic_redispatch_needed"
+
+    print("✓ no_op_success is terminal and retriable, not left active")
+
+
 def test_adopt_and_no_double_dispatch(tmp_path):
     """After adoption, run_loop should not double-dispatch adopted tasks."""
     wave_id = "wave-adopt-no-double"
