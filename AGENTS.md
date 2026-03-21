@@ -135,6 +135,13 @@ At session end, agents may include:
 - Founder commitments reminded: [yes/no]
 ```
 
+### Coding Principles
+- **Fail-fast over silent fallbacks every time** — crash loudly, log clearly, surface errors immediately
+- Prefer explicit error handling over try-catch with empty blocks
+- Validate inputs at boundaries, not deep in call stacks
+- Return errors, don't swallow them
+- Assertions are for invariants, not control flow
+
 ## 1) Canonical Repository Rules
 **Canonical repositories** (read-mostly clones):
 - \`~/agent-skills\`
