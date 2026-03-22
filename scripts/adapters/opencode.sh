@@ -47,6 +47,26 @@ adapter_run_with_timeout() {
     shift
     if command -v timeout >/dev/null 2>&1; then
         timeout "$seconds" "$@"
+        local rc=$?
+        if [[ "$rc" -ne 127 ]]; then
+            return "$rc"
+        fi
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - "$seconds" "$@" <<'PY'
+import subprocess
+import sys
+
+seconds = float(sys.argv[1])
+cmd = sys.argv[2:]
+
+try:
+    completed = subprocess.run(cmd, timeout=seconds)
+except subprocess.TimeoutExpired:
+    sys.exit(124)
+
+sys.exit(completed.returncode)
+PY
         return $?
     fi
     "$@"
@@ -191,8 +211,9 @@ adapter_preflight() {
             warnings=$((warnings + 1))
         fi
     else
-        local probe_output
-        probe_output="$(adapter_run_with_timeout 30 "$opencode_bin" run --model "$probe_model" --format json "Say READY" 2>&1)" || true
+        local probe_timeout probe_output
+        probe_timeout="${OPENCODE_PROBE_TIMEOUT_SEC:-15}"
+        probe_output="$(adapter_run_with_timeout "$probe_timeout" "$opencode_bin" run --model "$probe_model" --format json "Say READY" 2>&1)" || true
         if echo "$probe_output" | grep -qi "READY"; then
             echo "OK ($probe_model)"
         elif echo "$probe_output" | grep -qiE "unauthorized|forbidden|insufficient.*balance|quota|rate.?limit|429"; then
@@ -510,11 +531,31 @@ EOF
     if command -v setsid >/dev/null 2>&1; then
         launch_mode="${launch_mode}+setsid"
         setsid "$launcher" >/dev/null 2>&1 < /dev/null &
+        local pid="$!"
+    elif command -v python3 >/dev/null 2>&1; then
+        launch_mode="${launch_mode}+python-detach"
+        local pid
+        pid="$(
+            python3 - "$launcher" <<'PY'
+import subprocess
+import sys
+
+launcher = sys.argv[1]
+proc = subprocess.Popen(
+    [launcher],
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    start_new_session=True,
+)
+print(proc.pid)
+PY
+        )"
     else
         launch_mode="${launch_mode}+nohup"
         nohup "$launcher" >/dev/null 2>&1 < /dev/null &
+        local pid="$!"
     fi
-    local pid="$!"
     printf 'pid=%s\n' "$pid"
     printf 'selected_model=%s\n' "$model"
     printf 'fallback_reason=%s\n' "${fallback_reason:-none}"

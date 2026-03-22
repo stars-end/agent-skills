@@ -1551,6 +1551,142 @@ EOF
 }
 
 # ============================================================================
+# Test: OpenCode Preflight Timeout Fallback
+# ============================================================================
+
+test_opencode_preflight_timeout_fallback() {
+    echo "=== Testing OpenCode Preflight Timeout Fallback ==="
+
+    local tmp_bin fake_op fake_timeout models_file out rc
+    tmp_bin="$(mktemp -d)"
+    fake_op="$tmp_bin/opencode"
+    fake_timeout="$tmp_bin/timeout"
+    models_file="$(mktemp)"
+    echo "zhipuai-coding-plan/glm-5" > "$models_file"
+
+    cat > "$fake_timeout" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+    chmod +x "$fake_timeout"
+
+    cat > "$fake_op" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "models" ]]; then
+  cat "${FAKE_MODELS_FILE}"
+  exit 0
+fi
+if [[ "$1" == "run" ]]; then
+  sleep 3
+  echo '{"type":"assistant","content":"READY"}'
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$fake_op"
+
+    profile_get_preflight_policy() {
+        local _reason="$1"
+        local default_policy="$2"
+        echo "$default_policy"
+    }
+
+    set +e
+    (
+        export PATH="$tmp_bin:/opt/homebrew/bin:/usr/bin:/bin"
+        export FAKE_MODELS_FILE="$models_file"
+        export OPENCODE_MODELS_CACHE_TTL_SEC=0
+        export OPENCODE_PROBE_TIMEOUT_SEC=1
+        # shellcheck disable=SC1091
+        source "$ADAPTERS_DIR/opencode.sh"
+        adapter_preflight
+    ) >/tmp/opencode-preflight-timeout-test.out 2>&1
+    rc=$?
+    set -e
+    out="$(cat /tmp/opencode-preflight-timeout-test.out)"
+
+    if [[ "$rc" -eq 0 ]] && echo "$out" | grep -q "canonical model probe: TIMEOUT"; then
+        pass "opencode preflight falls back to python timeout and returns promptly"
+    else
+        fail "expected bounded opencode preflight timeout fallback (rc=$rc): $out"
+    fi
+
+    rm -rf "$tmp_bin"
+    rm -f "$models_file"
+    rm -f /tmp/dx-runner/opencode/.models_cache
+    rm -f /tmp/opencode-preflight-timeout-test.out
+}
+
+# ============================================================================
+# Test: OpenCode Detached Launcher Writes RC File
+# ============================================================================
+
+test_opencode_detached_launcher_writes_rc_file() {
+    echo "=== Testing OpenCode Detached Launcher RC Capture ==="
+
+    local tmp_bin fake_op models_file prompt_file worktree log_file out rc_file pid
+    tmp_bin="$(mktemp -d)"
+    fake_op="$tmp_bin/opencode"
+    models_file="$(mktemp)"
+    prompt_file="$(mktemp)"
+    worktree="$(mktemp -d)"
+    log_file="$(mktemp)"
+    echo "zhipuai-coding-plan/glm-5" > "$models_file"
+    echo "READY" > "$prompt_file"
+
+    cat > "$fake_op" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "models" ]]; then
+  cat "${FAKE_MODELS_FILE}"
+  exit 0
+fi
+if [[ "$1" == "run" ]]; then
+  sleep 1
+  echo '{"type":"assistant","content":"READY"}'
+  exit 0
+fi
+exit 1
+EOF
+    chmod +x "$fake_op"
+
+    set +e
+    out="$(
+        (
+            export PATH="$tmp_bin:/opt/homebrew/bin:/usr/bin:/bin"
+            export FAKE_MODELS_FILE="$models_file"
+            export OPENCODE_MODELS_CACHE_TTL_SEC=0
+            # shellcheck disable=SC1091
+            source "$ADAPTERS_DIR/opencode.sh"
+            adapter_start "test-opencode-rc-$$" "$prompt_file" "$worktree" "$log_file"
+        ) 2>&1
+    )"
+    rc=$?
+    set -e
+
+    pid="$(printf '%s\n' "$out" | awk -F= '/^pid=/{print $2}')"
+    rc_file="$(printf '%s\n' "$out" | awk -F= '/^rc_file=/{print $2}')"
+
+    if [[ "$rc" -ne 0 || -z "$pid" || -z "$rc_file" ]]; then
+        fail "adapter_start did not return pid/rc_file cleanly (rc=$rc out=$out)"
+    else
+        local deadline=$((SECONDS + 10))
+        while [[ ! -f "$rc_file" && $SECONDS -lt $deadline ]]; do
+            sleep 0.2
+        done
+        if [[ -f "$rc_file" ]] && [[ "$(cat "$rc_file")" == "0" ]]; then
+            pass "detached launcher writes rc file for monitor consumption"
+        else
+            fail "rc file was not written by detached launcher (out=$out)"
+        fi
+    fi
+
+    [[ -n "${pid:-}" ]] && kill "$pid" 2>/dev/null || true
+    rm -rf "$tmp_bin" "$worktree"
+    rm -f "$models_file" "$prompt_file" "$log_file" "${rc_file:-}"
+    rm -f /tmp/dx-runner/opencode/.models_cache
+}
+
+# ============================================================================
 # Test: Completion Monitor Cleanup (No Orphan)
 # ============================================================================
 
@@ -2438,6 +2574,8 @@ run_all_tests() {
     test_awaiting_finalize_taxonomy
     test_railway_auth_preflight_requirement
     test_opencode_attach_mode_failfast
+    test_opencode_preflight_timeout_fallback
+    test_opencode_detached_launcher_writes_rc_file
     test_completion_monitor_cleanup
     test_provider_concurrency_guardrail
     test_feature_key_validation
