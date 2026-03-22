@@ -130,6 +130,85 @@ PR_HEAD_SHA: <40-char-sha>
 
 Missing PR artifacts means incomplete, not success.
 
+## Wave 0 Pilot: Operator Notification Contract
+
+The Wave 0 pilot established the actionable notification contract and proved MVP viability through two acceptance tests.
+
+### Actionable Notification States
+
+dx-loop interrupts operators **only** for actionable states:
+
+| State | Interrupt? | Reason |
+|-------|------------|--------|
+| `merge_ready` | YES | PR ready for human merge |
+| `blocked` (kickoff_env, run, review) | YES | Intervention required |
+| `needs_decision` | YES | Human decision required |
+| `waiting_on_dependency` | NO | Automatic resolution when upstream completes |
+| `deterministic_redispatch_needed` | NO | Auto-retry handles it |
+| `healthy/pending` | NO | No intervention needed |
+
+**Suppression**: Unchanged blocker repeats are suppressed. Only first occurrence emits.
+
+### CLI Notification Format
+
+Notifications include the exact Beads ID for takeover/resume commands:
+
+```
+[BLOCKED] Worktree missing for task
+  Task: Implement OAuth flow (bd-abc123)
+  Next: Fix bootstrap environment
+```
+
+Format rules:
+- When `task_title` is present: `Task: <title> (<beads_id>)`
+- When no title: `Task: <beads_id>`
+
+The Beads ID is always visible for operators to use with `takeover`/`resume`.
+
+### Human Takeover / Resume
+
+When automation stalls, operators can take over and resume later:
+
+```bash
+# Take over a stalled task (stops automation for that task)
+dx-loop takeover --wave-id wave-2026-03-08T12-00-00Z --beads-id bd-abc123 --note "Fixing manually"
+
+# Resume automation after manual fix
+dx-loop resume --wave-id wave-2026-03-08T12-00-00Z --beads-id bd-abc123
+```
+
+**What happens on takeover**:
+- Task enters `manual_takeover` phase
+- Scheduler clears active/blocked state for that task
+- Loop skips dispatch and progress checks for takeover tasks
+- Operator can work in the worktree without loop interference
+
+**What happens on resume**:
+- Task restores to previous phase (`implement` or `review`)
+- Scheduler state cleared for clean redispatch
+- Loop resumes normal dispatch cycle
+
+### MVP Acceptance Tests
+
+**Test A: Unattended Default-Path Wave** — *PASSED*
+
+A 2-task stacked wave where Task B depends on Task A:
+1. Task A: Implemented by OpenCode, reviewed by cc-glm → merge-ready
+2. Task B: Implemented off Task A's PR branch, reviewed → merge-ready
+3. Wave exited gracefully without operator babysitting
+
+**Proved**: The unattended automation gap is closed for nominal execution paths.
+
+**Test B: Human Takeover / Resume Path** — *PASSED*
+
+A single task designed to stall:
+1. Task A implemented but operator intervenes during revision
+2. Operator uses `dx-loop takeover` to pause automation
+3. Operator fixes manually and runs `dx-loop resume`
+4. Loop adopts the resolution and exits cleanly
+
+**Proved**: The glass-box escape hatch works — operators never feel trapped by the loop.
+
 ## Configuration
 
 Default: `configs/dx-loop/default_config.yaml`
