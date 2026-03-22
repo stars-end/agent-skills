@@ -15,6 +15,7 @@ import platform
 import subprocess
 import json
 import shutil
+import re
 from json import JSONDecoder, JSONDecodeError
 
 
@@ -241,6 +242,75 @@ class RunnerAdapter:
                 return parsed
         return None
 
+    def _log_candidates(self, beads_id: str) -> List[Path]:
+        """Return current plus rotated log candidates in freshness order."""
+        log_dir = Path(f"/tmp/dx-runner/{self.provider}")
+        current = log_dir / f"{beads_id}.log"
+        rotated = sorted(
+            log_dir.glob(f"{beads_id}.log.*"),
+            key=lambda path: int(path.suffix[1:]) if path.suffix[1:].isdigit() else -1,
+            reverse=True,
+        )
+
+        candidates: List[Path] = []
+        if current.exists():
+            candidates.append(current)
+        candidates.extend(path for path in rotated if path.exists())
+        return candidates
+
+    @staticmethod
+    def _extract_jsonl_text(log_text: str) -> Optional[str]:
+        """Parse JSONL text events from a dx-runner log."""
+        text_parts: List[str] = []
+        for raw_line in log_text.splitlines():
+            raw_line = raw_line.strip()
+            if not raw_line or not raw_line.startswith("{"):
+                continue
+            try:
+                event = json.loads(raw_line)
+            except JSONDecodeError:
+                continue
+            if event.get("type") != "text":
+                continue
+            part = event.get("part", {})
+            text = part.get("text")
+            if text:
+                text_parts.append(str(text))
+
+        if not text_parts:
+            return None
+        return "\n\n".join(text_parts)
+
+    @staticmethod
+    def _extract_plaintext_implementation_return(log_text: str) -> Optional[str]:
+        """Recover plaintext implementation-return blocks from provider logs."""
+        markers = (
+            "## Tech Lead Review (Implementation Return)",
+            "MODE: implementation_return",
+        )
+        start = max(log_text.rfind(marker) for marker in markers)
+        if start == -1:
+            return None
+        return log_text[start:].strip() or None
+
+    @staticmethod
+    def _extract_pr_artifacts_from_text(text: str) -> Optional[tuple[str, str]]:
+        """Extract PR artifacts from transcript text."""
+        if not text:
+            return None
+
+        pr_url_matches = re.findall(
+            r"(?im)^\s*-?\s*PR_URL:\s*(https://github\.com/[^\s]+/pull/\d+(?:/[^\s]*)?)\s*$",
+            text,
+        )
+        pr_head_sha_matches = re.findall(
+            r"(?im)^\s*-?\s*PR_HEAD_SHA:\s*([a-f0-9]{40})\s*$",
+            text,
+        )
+        if pr_url_matches and pr_head_sha_matches:
+            return pr_url_matches[-1], pr_head_sha_matches[-1]
+        return None
+
     def start(
         self,
         beads_id: str,
@@ -331,9 +401,7 @@ class RunnerAdapter:
         
         Returns (pr_url, pr_head_sha) if found, None otherwise.
         """
-        report_data = self.report(beads_id)
-        if not report_data:
-            return None
+        report_data = self.report(beads_id) or {}
         
         # Check if report has PR artifacts
         pr_url = report_data.get("pr_url")
@@ -344,16 +412,7 @@ class RunnerAdapter:
         
         transcript = self.extract_agent_output(beads_id)
         if transcript:
-            pr_url = None
-            pr_head_sha = None
-            for line in reversed(transcript.splitlines()):
-                line = line.strip()
-                if line.startswith("PR_URL:"):
-                    pr_url = line.split(":", 1)[1].strip()
-                elif line.startswith("PR_HEAD_SHA:"):
-                    pr_head_sha = line.split(":", 1)[1].strip()
-                if pr_url and pr_head_sha:
-                    return (pr_url, pr_head_sha)
+            return self._extract_pr_artifacts_from_text(transcript)
 
         return None
 
@@ -361,42 +420,30 @@ class RunnerAdapter:
         """
         Recover agent-authored text from the dx-runner JSONL log stream.
         """
-        log_path = Path(f"/tmp/dx-runner/{self.provider}/{beads_id}.log")
-        if not log_path.exists():
-            return None
+        for log_path in self._log_candidates(beads_id):
+            try:
+                log_text = log_path.read_text()
+            except OSError:
+                continue
 
-        text_parts: List[str] = []
-        try:
-            for raw_line in log_path.read_text().splitlines():
-                raw_line = raw_line.strip()
-                if not raw_line or not raw_line.startswith("{"):
-                    continue
-                try:
-                    event = json.loads(raw_line)
-                except JSONDecodeError:
-                    continue
-                if event.get("type") != "text":
-                    continue
-                part = event.get("part", {})
-                text = part.get("text")
-                if text:
-                    text_parts.append(str(text))
-        except OSError:
-            return None
+            transcript = self._extract_jsonl_text(log_text)
+            if transcript:
+                return transcript
 
-        if not text_parts:
-            return None
-        return "\n\n".join(text_parts)
+            plaintext = self._extract_plaintext_implementation_return(log_text)
+            if plaintext and self._extract_pr_artifacts_from_text(plaintext):
+                return plaintext
+
+        return None
 
     def _read_raw_log(self, beads_id: str) -> Optional[str]:
         """Fallback raw log reader for legacy/plaintext log fixtures."""
-        log_path = Path(f"/tmp/dx-runner/{self.provider}/{beads_id}.log")
-        if not log_path.exists():
-            return None
-        try:
-            return log_path.read_text()
-        except OSError:
-            return None
+        for log_path in self._log_candidates(beads_id):
+            try:
+                return log_path.read_text()
+            except OSError:
+                continue
+        return None
 
     def extract_review_verdict(self, beads_id: str) -> Optional[str]:
         """

@@ -736,6 +736,123 @@ def test_runner_adapter_extracts_review_verdict_from_log(tmp_path):
     print("✓ RunnerAdapter extracts review verdicts from logs")
 
 
+def test_runner_adapter_extracts_plaintext_implementation_return_from_cc_glm_log():
+    """cc-glm plaintext logs should still yield implementation-return text."""
+    adapter = RunnerAdapter(provider="cc-glm")
+    log_dir = Path("/tmp/dx-runner/cc-glm")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "bd-plain.log"
+    log_path.write_text(
+        "launch noise\n"
+        "## Tech Lead Review (Implementation Return)\n"
+        "- MODE: implementation_return\n"
+        "- PR_URL: https://github.com/stars-end/agent-skills/pull/381\n"
+        "- PR_HEAD_SHA: 9e0ae9f13dd33abc8d5986d150d924f2ef3115d8\n"
+    )
+
+    try:
+        transcript = adapter.extract_agent_output("bd-plain")
+    finally:
+        log_path.unlink(missing_ok=True)
+
+    assert transcript is not None
+    assert "MODE: implementation_return" in transcript
+    assert "PR_URL" in transcript
+    assert "PR_HEAD_SHA" in transcript
+
+    print("✓ RunnerAdapter extracts plaintext implementation returns from cc-glm logs")
+
+
+def test_runner_adapter_extracts_pr_artifacts_from_plaintext_cc_glm_log(monkeypatch):
+    """PR artifacts should be recoverable from plaintext implement logs."""
+    adapter = RunnerAdapter(provider="cc-glm")
+    log_dir = Path("/tmp/dx-runner/cc-glm")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "bd-artifacts.log"
+    log_path.write_text(
+        "provider banner\n"
+        "## Tech Lead Review (Implementation Return)\n"
+        "- MODE: implementation_return\n"
+        "- PR_URL: https://github.com/stars-end/agent-skills/pull/381\n"
+        "- PR_HEAD_SHA: 9e0ae9f13dd33abc8d5986d150d924f2ef3115d8\n"
+    )
+    monkeypatch.setattr(adapter, "report", lambda beads_id: {})
+
+    try:
+        artifacts = adapter.extract_pr_artifacts("bd-artifacts")
+    finally:
+        log_path.unlink(missing_ok=True)
+
+    assert artifacts == (
+        "https://github.com/stars-end/agent-skills/pull/381",
+        "9e0ae9f13dd33abc8d5986d150d924f2ef3115d8",
+    )
+
+    print("✓ RunnerAdapter extracts PR artifacts from plaintext cc-glm logs")
+
+
+def test_runner_adapter_prefers_newest_rotated_plaintext_cc_glm_log(monkeypatch):
+    """Newest rotated cc-glm log should win when current log has no artifacts."""
+    adapter = RunnerAdapter(provider="cc-glm")
+    log_dir = Path("/tmp/dx-runner/cc-glm")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    current = log_dir / "bd-rotated.log"
+    older = log_dir / "bd-rotated.log.4"
+    newer = log_dir / "bd-rotated.log.5"
+    current.write_text("launch noise only\n")
+    older.write_text(
+        "## Tech Lead Review (Implementation Return)\n"
+        "- MODE: implementation_return\n"
+        "- PR_URL: https://github.com/stars-end/agent-skills/pull/380\n"
+        "- PR_HEAD_SHA: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+    )
+    newer.write_text(
+        "## Tech Lead Review (Implementation Return)\n"
+        "- MODE: implementation_return\n"
+        "- PR_URL: https://github.com/stars-end/agent-skills/pull/381\n"
+        "- PR_HEAD_SHA: 9e0ae9f13dd33abc8d5986d150d924f2ef3115d8\n"
+    )
+    monkeypatch.setattr(adapter, "report", lambda beads_id: {})
+
+    try:
+        artifacts = adapter.extract_pr_artifacts("bd-rotated")
+    finally:
+        current.unlink(missing_ok=True)
+        older.unlink(missing_ok=True)
+        newer.unlink(missing_ok=True)
+
+    assert artifacts == (
+        "https://github.com/stars-end/agent-skills/pull/381",
+        "9e0ae9f13dd33abc8d5986d150d924f2ef3115d8",
+    )
+
+    print("✓ RunnerAdapter prefers newest rotated plaintext cc-glm logs")
+
+
+def test_runner_adapter_ignores_plaintext_log_without_marker(monkeypatch):
+    """Plaintext logs without implementation-return markers should not count as artifacts."""
+    adapter = RunnerAdapter(provider="cc-glm")
+    log_dir = Path("/tmp/dx-runner/cc-glm")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "bd-no-marker.log"
+    log_path.write_text(
+        "- PR_URL: https://github.com/stars-end/agent-skills/pull/381\n"
+        "- PR_HEAD_SHA: 9e0ae9f13dd33abc8d5986d150d924f2ef3115d8\n"
+    )
+    monkeypatch.setattr(adapter, "report", lambda beads_id: {})
+
+    try:
+        transcript = adapter.extract_agent_output("bd-no-marker")
+        artifacts = adapter.extract_pr_artifacts("bd-no-marker")
+    finally:
+        log_path.unlink(missing_ok=True)
+
+    assert transcript is None
+    assert artifacts is None
+
+    print("✓ RunnerAdapter ignores plaintext logs without implementation-return markers")
+
+
 def test_start_implement_marks_kickoff_env_blocked(tmp_path):
     """Failed starts before any run exists should not leave the wave healthy."""
     wave_id = "wave-start-failure"
@@ -1284,6 +1401,85 @@ def test_no_op_success_clears_active_and_enters_redispatch(tmp_path):
     assert loop.wave_status["blocker_code"] == "deterministic_redispatch_needed"
 
     print("✓ no_op_success is terminal and retriable, not left active")
+
+
+def test_process_exit_with_rc_persists_needs_decision_wave_status(tmp_path):
+    """Non-deterministic terminal implement failures should persist needs_decision."""
+    wave_id = "wave-process-exit-needs-decision"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-fail": BeadsTask(
+            beads_id="bd-fail",
+            title="Failure task",
+            dependencies=[],
+        )
+    }
+
+    loop.baton_manager.start_implement("bd-fail", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-fail", "implement")
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_ok",
+        reason_code="process_exit_with_rc",
+    )
+    loop.implement_runner.extract_agent_output = lambda beads_id: ""
+    loop.implement_runner.extract_pr_artifacts = lambda beads_id: None
+
+    loop._check_implement_progress("bd-fail")
+
+    assert loop.wave_status["state"] == "needs_decision"
+    assert loop.wave_status["blocker_code"] == "needs_decision"
+    assert loop.wave_status["blocked_details"][0]["reason_code"] == "process_exit_with_rc"
+    assert loop.scheduler.state.is_blocked("bd-fail")
+
+    print("✓ process_exit_with_rc persists needs_decision wave state")
+
+
+def test_terminal_needs_decision_does_not_redispatch_same_cycle(tmp_path):
+    """A task that just hit needs_decision should not become dispatchable in the same cycle."""
+    wave_id = "wave-no-same-cycle-redispatch"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0, "max_parallel": 1})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-fail": BeadsTask(
+            beads_id="bd-fail",
+            title="Failure task",
+            dependencies=[],
+        )
+    }
+    loop.beads_manager.layers = [["bd-fail"]]
+    loop.beads_manager.describe_wave_readiness = lambda: SimpleNamespace(
+        ready=["bd-fail"],
+        waiting_on_dependencies=[],
+    )
+
+    loop.baton_manager.start_implement("bd-fail", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-fail", "implement")
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_ok",
+        reason_code="process_exit_with_rc",
+    )
+    loop.implement_runner.extract_agent_output = lambda beads_id: ""
+    loop.implement_runner.extract_pr_artifacts = lambda beads_id: None
+
+    dispatch_calls = []
+
+    def fake_dispatch(beads_id, phase):
+        dispatch_calls.append((beads_id, phase))
+        return True
+
+    loop._dispatch_task = fake_dispatch
+    loop.run_loop(max_iterations=1)
+
+    assert dispatch_calls == []
+    assert loop.wave_status["state"] == "needs_decision"
+    assert loop.scheduler.state.is_blocked("bd-fail")
+
+    print("✓ needs_decision tasks are not redispatched in the same cycle")
 
 
 def test_adopt_and_no_double_dispatch(tmp_path):
