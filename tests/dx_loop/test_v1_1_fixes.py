@@ -853,6 +853,95 @@ def test_runner_adapter_ignores_plaintext_log_without_marker(monkeypatch):
     print("✓ RunnerAdapter ignores plaintext logs without implementation-return markers")
 
 
+def test_runner_adapter_recovers_sha_from_clean_worktree_when_transcript_sha_is_malformed(monkeypatch, tmp_path):
+    """A malformed PR_HEAD_SHA line should still be recoverable from a clean task worktree."""
+    adapter = RunnerAdapter(provider="cc-glm")
+    log_dir = Path("/tmp/dx-runner/cc-glm")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    worktree = tmp_path / "agent-skills"
+    worktree.mkdir(parents=True)
+
+    meta_path = log_dir / "bd-worktree.meta"
+    log_path = log_dir / "bd-worktree.log"
+    meta_path.write_text(f"worktree={worktree}\n")
+    log_path.write_text(
+        "## Tech Lead Review (Implementation Return)\n"
+        "- MODE: implementation_return\n"
+        "- PR_URL: https://github.com/stars-end/agent-skills/pull/384\n"
+        "- PR_HEAD_SHA: malformedsha1234567890abcdef1234567890abcdef1234\n"
+    )
+
+    def fake_run(cmd, capture_output=True, text=True, timeout=10):
+        if cmd[-2:] == ["status", "--porcelain"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[-2:] == ["rev-parse", "HEAD"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="b49d17e2ea0e61ac8927ad7b698f619a20dd13df\n",
+                stderr="",
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(adapter, "report", lambda beads_id: {})
+
+    try:
+        artifacts = adapter.extract_pr_artifacts("bd-worktree")
+    finally:
+        meta_path.unlink(missing_ok=True)
+        log_path.unlink(missing_ok=True)
+
+    assert artifacts == (
+        "https://github.com/stars-end/agent-skills/pull/384",
+        "b49d17e2ea0e61ac8927ad7b698f619a20dd13df",
+    )
+
+    print("✓ RunnerAdapter recovers SHA from clean worktree when transcript SHA is malformed")
+
+
+def test_implement_progress_transitions_with_artifacts_even_without_valid_implementation_return(tmp_path):
+    """Recovered artifacts alone should be enough to transition implement -> review."""
+    wave_id = "wave-artifacts-without-implementation-return"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-artifacts-only": BeadsTask(
+            beads_id="bd-artifacts-only",
+            title="Artifacts-only task",
+            dependencies=[],
+        )
+    }
+
+    loop.baton_manager.start_implement("bd-artifacts-only", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-artifacts-only", "implement")
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_ok",
+        reason_code="process_exit_with_rc",
+    )
+    loop.implement_runner.extract_agent_output = lambda beads_id: (
+        "## Tech Lead Review (Implementation Return)\n"
+        "- MODE: implementation_return\n"
+        "- PR_URL: https://github.com/stars-end/agent-skills/pull/384\n"
+        "- PR_HEAD_SHA: malformed\n"
+    )
+    loop.implement_runner.extract_pr_artifacts = lambda beads_id: (
+        "https://github.com/stars-end/agent-skills/pull/384",
+        "b49d17e2ea0e61ac8927ad7b698f619a20dd13df",
+    )
+
+    loop._check_implement_progress("bd-artifacts-only")
+
+    baton_state = loop.baton_manager.get_state("bd-artifacts-only")
+    assert baton_state is not None
+    assert baton_state.phase == BatonPhase.REVIEW
+    assert baton_state.pr_url == "https://github.com/stars-end/agent-skills/pull/384"
+    assert baton_state.pr_head_sha == "b49d17e2ea0e61ac8927ad7b698f619a20dd13df"
+
+    print("✓ Implement progress can transition using recovered artifacts only")
+
+
 def test_start_implement_marks_kickoff_env_blocked(tmp_path):
     """Failed starts before any run exists should not leave the wave healthy."""
     wave_id = "wave-start-failure"

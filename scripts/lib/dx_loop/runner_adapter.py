@@ -311,6 +311,59 @@ class RunnerAdapter:
             return pr_url_matches[-1], pr_head_sha_matches[-1]
         return None
 
+    @staticmethod
+    def _extract_pr_url_from_text(text: str) -> Optional[str]:
+        """Extract just the PR URL from transcript text."""
+        matches = re.findall(
+            r"(?im)^\s*-?\s*PR_URL:\s*(https://github\.com/[^\s]+/pull/\d+(?:/[^\s]*)?)\s*$",
+            text,
+        )
+        return matches[-1] if matches else None
+
+    def _worktree_head_sha(self, beads_id: str) -> Optional[str]:
+        """Recover HEAD SHA from the task worktree recorded in dx-runner meta."""
+        meta_path = Path(f"/tmp/dx-runner/{self.provider}/{beads_id}.meta")
+        if not meta_path.exists():
+            return None
+
+        worktree = None
+        try:
+            for line in meta_path.read_text().splitlines():
+                if line.startswith("worktree="):
+                    worktree = line.split("=", 1)[1].strip()
+                    break
+        except OSError:
+            return None
+
+        if not worktree:
+            return None
+
+        try:
+            status = subprocess.run(
+                ["git", "-C", worktree, "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if status.returncode != 0 or status.stdout.strip():
+                return None
+
+            head = subprocess.run(
+                ["git", "-C", worktree, "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if head.returncode != 0:
+                return None
+            sha = head.stdout.strip()
+            if re.fullmatch(r"[a-f0-9]{40}", sha):
+                return sha
+        except (subprocess.SubprocessError, OSError):
+            return None
+
+        return None
+
     def start(
         self,
         beads_id: str,
@@ -412,7 +465,14 @@ class RunnerAdapter:
         
         transcript = self.extract_agent_output(beads_id)
         if transcript:
-            return self._extract_pr_artifacts_from_text(transcript)
+            artifacts = self._extract_pr_artifacts_from_text(transcript)
+            if artifacts:
+                return artifacts
+
+            pr_url = self._extract_pr_url_from_text(transcript)
+            pr_head_sha = self._worktree_head_sha(beads_id)
+            if pr_url and pr_head_sha:
+                return pr_url, pr_head_sha
 
         return None
 
@@ -431,7 +491,7 @@ class RunnerAdapter:
                 return transcript
 
             plaintext = self._extract_plaintext_implementation_return(log_text)
-            if plaintext and self._extract_pr_artifacts_from_text(plaintext):
+            if plaintext:
                 return plaintext
 
         return None

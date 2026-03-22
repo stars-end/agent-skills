@@ -725,7 +725,7 @@ class DxLoop:
                     implementation_return.pr_head_sha,
                 )
 
-            if artifacts and implementation_return:
+            if artifacts:
                 pr_url, pr_head_sha = artifacts
                 # Register artifact and transition to review
                 self.pr_enforcer.register_artifact(beads_id, pr_url, pr_head_sha)
