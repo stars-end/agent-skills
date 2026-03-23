@@ -106,6 +106,7 @@ class BlockerClassifier:
         # Deterministic redispatch (stalled/timeout)
         "stalled_no_progress": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
         "no_op": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
+        "exit_zero_no_mutations": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
         "process_timeout": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
         # Needs decision
         "max_attempts_exceeded": BlockerCode.NEEDS_DECISION,

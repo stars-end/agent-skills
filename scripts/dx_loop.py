@@ -266,7 +266,6 @@ class DxLoop:
                     )
                     print("No ready tasks, waiting for next cadence...")
             else:
-                self.scheduler.state.blocked_beads_ids.clear()
                 # FILTER OUT ALREADY ACTIVE TASKS (P0 fix with phase-awareness)
                 dispatchable = []
                 for tid in ready:
@@ -341,13 +340,21 @@ class DxLoop:
                         self._save_state()
                         return False
                 else:
-                    self._set_wave_status(
-                        LoopState.IN_PROGRESS_HEALTHY,
-                        None,
-                        "All ready tasks already active, waiting for progress",
-                        dispatchable_tasks=ready,
-                    )
-                    print(f"All ready tasks already active, waiting...")
+                    blocked_ready = [
+                        tid for tid in ready if self.scheduler.state.is_blocked(tid)
+                    ]
+                    if blocked_ready:
+                        print(
+                            f"{len(blocked_ready)} ready task(s) are blocked, waiting for next cadence..."
+                        )
+                    else:
+                        self._set_wave_status(
+                            LoopState.IN_PROGRESS_HEALTHY,
+                            None,
+                            "All ready tasks already active, waiting for progress",
+                            dispatchable_tasks=ready,
+                        )
+                        print(f"All ready tasks already active, waiting...")
 
             # Save state after each iteration
             self._save_state()
@@ -718,7 +725,7 @@ class DxLoop:
                     implementation_return.pr_head_sha,
                 )
 
-            if artifacts and implementation_return:
+            if artifacts:
                 pr_url, pr_head_sha = artifacts
                 # Register artifact and transition to review
                 self.pr_enforcer.register_artifact(beads_id, pr_url, pr_head_sha)
@@ -849,6 +856,21 @@ class DxLoop:
                                     }
                                 ],
                             )
+                    else:
+                        self._set_wave_status(
+                            LoopState(blocker.code.value),
+                            blocker.code,
+                            blocker.message,
+                            blocked_details=[
+                                {
+                                    "beads_id": beads_id,
+                                    "phase": "implement",
+                                    "reason_code": task_state.reason_code,
+                                    "attempt": baton.attempt if baton else None,
+                                    "max_attempts": baton.max_attempts if baton else None,
+                                }
+                            ],
+                        )
 
     def _check_review_progress(self, beads_id: str):
         """Check review phase progress"""
