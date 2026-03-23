@@ -1319,12 +1319,19 @@ def cmd_start(args):
     config = load_config_file(getattr(args, "config", None))
     loop = DxLoop(wave_id, config=config)
 
-    if not loop.bootstrap_epic(epic_id):
+    is_restart = loop._load_state()
+
+    if is_restart and not loop.beads_manager.tasks:
+        print(
+            f"Restart state for {wave_id} is missing task graph; rebuilding from {epic_id}"
+        )
+        if not loop.bootstrap_epic(epic_id):
+            return 1
+    elif not is_restart and not loop.bootstrap_epic(epic_id):
         return 1
 
     print(f"\nStarting dx-loop wave {wave_id} for epic {epic_id}")
 
-    is_restart = loop._load_state()
     if is_restart:
         adopted = loop.adopt_running_jobs()
         if adopted:

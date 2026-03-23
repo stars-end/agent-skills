@@ -1151,6 +1151,115 @@ def test_cmd_start_loads_config(tmp_path, capsys, monkeypatch):
     print("✓ cmd_start passes merged config to DxLoop")
 
 
+def test_cmd_start_restart_skips_bootstrap_when_state_exists(tmp_path, monkeypatch):
+    """Restarting the same wave_id should load state before bootstrap writes fresh state."""
+    dx_loop_main = importlib.util.spec_from_file_location(
+        "dx_loop_main_restart", REPO_ROOT / "scripts" / "dx_loop.py"
+    )
+    mod = importlib.util.module_from_spec(dx_loop_main)
+    assert dx_loop_main.loader is not None
+    dx_loop_main.loader.exec_module(mod)
+
+    args = SimpleNamespace(
+        epic="bd-test-epic",
+        wave_id="wave-restart-test",
+        config=None,
+    )
+
+    events = []
+
+    class FakeDxLoop:
+        def __init__(self, wave_id, config=None):
+            self.wave_id = wave_id
+            self.config = config or {}
+            self.state_file = tmp_path / "loop_state.json"
+            self.beads_manager = SimpleNamespace(tasks={"bd-live": object()})
+
+        def bootstrap_epic(self, epic_id):
+            events.append(("bootstrap", epic_id))
+            return True
+
+        def _load_state(self):
+            events.append(("load", self.wave_id))
+            return True
+
+        def adopt_running_jobs(self):
+            events.append(("adopt", self.wave_id))
+            return ["bd-live"]
+
+        def _save_state(self):
+            events.append(("save", self.wave_id))
+
+        def run_loop(self, max_iterations=100):
+            events.append(("run", max_iterations))
+            return True
+
+    monkeypatch.setattr(mod, "DxLoop", FakeDxLoop)
+
+    rc = mod.cmd_start(args)
+
+    assert rc == 0
+    assert ("bootstrap", "bd-test-epic") not in events
+    assert events[:2] == [("load", "wave-restart-test"), ("adopt", "wave-restart-test")]
+
+    print("✓ cmd_start restart loads persisted state before bootstrap")
+
+
+def test_cmd_start_restart_bootstraps_when_state_missing_task_graph(tmp_path, monkeypatch):
+    """Restart should rebuild from Beads if persisted state lacks the task graph."""
+    dx_loop_main = importlib.util.spec_from_file_location(
+        "dx_loop_main_restart_empty", REPO_ROOT / "scripts" / "dx_loop.py"
+    )
+    mod = importlib.util.module_from_spec(dx_loop_main)
+    assert dx_loop_main.loader is not None
+    dx_loop_main.loader.exec_module(mod)
+
+    args = SimpleNamespace(
+        epic="bd-test-epic",
+        wave_id="wave-restart-empty",
+        config=None,
+    )
+
+    events = []
+
+    class FakeDxLoop:
+        def __init__(self, wave_id, config=None):
+            self.wave_id = wave_id
+            self.config = config or {}
+            self.state_file = tmp_path / "loop_state.json"
+            self.beads_manager = SimpleNamespace(tasks={})
+
+        def bootstrap_epic(self, epic_id):
+            events.append(("bootstrap", epic_id))
+            self.beads_manager.tasks = {"bd-live": object()}
+            return True
+
+        def _load_state(self):
+            events.append(("load", self.wave_id))
+            return True
+
+        def adopt_running_jobs(self):
+            events.append(("adopt", self.wave_id))
+            return []
+
+        def _save_state(self):
+            events.append(("save", self.wave_id))
+
+        def run_loop(self, max_iterations=100):
+            events.append(("run", max_iterations))
+            return True
+
+    monkeypatch.setattr(mod, "DxLoop", FakeDxLoop)
+
+    rc = mod.cmd_start(args)
+
+    assert rc == 0
+    assert ("bootstrap", "bd-test-epic") in events
+    assert events[0] == ("load", "wave-restart-empty")
+
+    print("✓ cmd_start can rebuild restart state when task graph is missing")
+
+
 def test_bootstrap_state_persisted_before_run_loop(tmp_path, monkeypatch):
     """Bootstrap state should be saved to disk before run_loop starts (bd-5w5o.19)."""
     wave_id = "wave-bootstrap-vis"
