@@ -527,12 +527,13 @@ class RunnerAdapter:
         try:
             for line in reversed(transcript.splitlines()):
                 line = line.strip()
-                if line.startswith("APPROVED:"):
-                    return line
-                if line.startswith("REVISION_REQUIRED:"):
-                    return line
-                if line.startswith("BLOCKED:"):
-                    return line
+                match = re.search(
+                    r"(APPROVED|REVISION_REQUIRED|BLOCKED):\s*(.+)",
+                    line,
+                )
+                if match:
+                    verdict_body = match.group(2).strip().strip("*_` ")
+                    return f"{match.group(1)}: {verdict_body}"
         except OSError:
             return None
 

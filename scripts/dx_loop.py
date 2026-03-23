@@ -929,6 +929,32 @@ class DxLoop:
                     )
                 else:
                     print(f"Review verdict for {beads_id}: {verdict.value}")
+            else:
+                self.scheduler.state.clear_phase(beads_id, "review")
+                self.scheduler.state.mark_blocked(beads_id)
+                self._set_wave_status(
+                    LoopState.NEEDS_DECISION,
+                    BlockerCode.NEEDS_DECISION,
+                    (
+                        f"Review completed for {beads_id} without a machine-readable "
+                        f"verdict ({task_state.reason_code or 'unknown reason'})"
+                    ),
+                    blocked_details=[
+                        {
+                            "beads_id": beads_id,
+                            "phase": "review",
+                            "reason_code": task_state.reason_code,
+                            "detail": (
+                                "Terminal review run produced no APPROVED / "
+                                "REVISION_REQUIRED / BLOCKED verdict"
+                            ),
+                        }
+                    ],
+                )
+                print(
+                    f"Review for {beads_id} ended without a parseable verdict; "
+                    "manual inspection required"
+                )
 
     def _parse_review_verdict(
         self,
