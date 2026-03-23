@@ -491,7 +491,7 @@ adapter_start() {
     fi
 
     local launcher
-    launcher="$(mktemp "/tmp/opencode-launcher-${beads}.XXXXXX.sh")"
+    launcher="$(mktemp "/tmp/opencode-launcher-${beads}.XXXXXX")"
     chmod +x "$launcher"
 
     local worktree_cmd=""
