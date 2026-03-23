@@ -177,7 +177,9 @@ def test_needs_decision_payload_with_attempt_context():
     assert "3/3" in cli
     assert "Fix auth lane" in cli
     assert "bd-test-5" in cli, "CLI should show beads_id for takeover/resume"
-    print("[needs-decision-payload] needs_decision includes attempt context with beads_id")
+    print(
+        "[needs-decision-payload] needs_decision includes attempt context with beads_id"
+    )
 
 
 def test_merge_ready_handoff_includes_pr_artifacts():
@@ -209,7 +211,9 @@ def test_merge_ready_handoff_includes_pr_artifacts():
     assert "bd-test-6" in cli, "CLI should show beads_id for takeover/resume"
     assert "pull/123" in cli
     assert "Next:" in cli
-    print("[merge-ready-handoff] merge_ready includes PR URL, SHA, task title, and beads_id")
+    print(
+        "[merge-ready-handoff] merge_ready includes PR URL, SHA, task title, and beads_id"
+    )
 
 
 def test_merge_ready_operator_payload_is_complete():
@@ -617,26 +621,4 @@ if __name__ == "__main__":
     test_blocked_actionable_next_action()
     test_merge_ready_sha_rendering()
     test_merge_ready_pr_url_rendering()
-    print("\nAll notification policy tests passed!")
-
-    test_healthy_state_does_not_notify()
-    test_pending_state_does_not_notify()
-    test_waiting_on_dependency_does_not_notify()
-    test_deterministic_redispatch_does_not_notify()
-    test_merge_ready_always_notifies()
-    test_blocked_first_occurrence_emits()
-    test_blocked_unchanged_suppressed()
-    test_different_blocker_emits_after_suppression()
-    test_needs_decision_emits()
-    test_needs_decision_payload_with_attempt_context()
-    test_merge_ready_handoff_includes_pr_artifacts()
-    test_merge_ready_operator_payload_is_complete()
-    test_blocked_cli_shows_attempt_progress()
-    test_review_blocked_emits()
-    test_suppression_survives_restart()
-    test_tracker_last_emitted_blocker_persists()
-    test_healthy_and_pending_never_create_notification()
-    test_needs_decision_next_action_describes_exhaustion()
-    test_cli_shows_beads_id_alongside_task_title()
-    test_cli_shows_beads_id_when_no_title()
     print("\nAll notification policy tests passed!")
