@@ -177,7 +177,9 @@ def test_needs_decision_payload_with_attempt_context():
     assert "3/3" in cli
     assert "Fix auth lane" in cli
     assert "bd-test-5" in cli, "CLI should show beads_id for takeover/resume"
-    print("[needs-decision-payload] needs_decision includes attempt context with beads_id")
+    print(
+        "[needs-decision-payload] needs_decision includes attempt context with beads_id"
+    )
 
 
 def test_merge_ready_handoff_includes_pr_artifacts():
@@ -209,7 +211,9 @@ def test_merge_ready_handoff_includes_pr_artifacts():
     assert "bd-test-6" in cli, "CLI should show beads_id for takeover/resume"
     assert "pull/123" in cli
     assert "Next:" in cli
-    print("[merge-ready-handoff] merge_ready includes PR URL, SHA, task title, and beads_id")
+    print(
+        "[merge-ready-handoff] merge_ready includes PR URL, SHA, task title, and beads_id"
+    )
 
 
 def test_merge_ready_operator_payload_is_complete():
@@ -429,6 +433,167 @@ def test_cli_shows_beads_id_when_no_title():
     print("[cli-beads-id-no-title] CLI shows beads_id when no title")
 
 
+# ============================================================
+# Regression guard: actionable operator handoff CLI contract (bd-5w5o.30.3)
+# ============================================================
+
+
+def test_cli_format_actionable_fields():
+    """
+    CLI format must expose all actionable fields for operator handoff.
+    Validates: task title, beads_id, next_action, PR URL, SHA
+    """
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "worktree_missing",
+        beads_id="bd-regression-1",
+        wave_id="wave-regression",
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Fix worktree bootstrap",
+        pr_url="https://github.com/stars-end/agent-skills/pull/999",
+        pr_head_sha="a1b2c3d4e5f6789012345678901234567890abcdef",
+    )
+    assert notification is not None
+
+    cli = notification.format_cli()
+
+    # Actionable fields must be present
+    assert "Fix worktree bootstrap" in cli
+    assert "bd-regression-1" in cli
+    assert "Next:" in cli
+    # PR URL is NOT shown for non-merge_ready types
+    assert "pull/999" not in cli
+    print("[cli-format-actionable-fields] CLI format has actionable fields")
+
+
+def test_merge_ready_actionable_fields():
+    """
+    merge_ready CLI must show all actionable fields for operator takeover.
+    Validates: task title + beads_id, PR URL, SHA, next_action
+    """
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        None,
+        beads_id="bd-regression-2",
+        wave_id="wave-regression",
+        has_pr_artifacts=True,
+        checks_passing=True,
+    )
+    notification = manager.create_notification(
+        blocker,
+        pr_url="https://github.com/stars-end/agent-skills/pull/1000",
+        pr_head_sha="aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjkkkk",
+        task_title="Add regression guard",
+    )
+    assert notification is not None
+    assert notification.notification_type == "merge_ready"
+
+    cli = notification.format_cli()
+
+    # All actionable fields must be present
+    assert "MERGE_READY" in cli
+    assert "Add regression guard" in cli, "Task title must be visible"
+    assert "bd-regression-2" in cli, "Beads ID must be visible for takeover"
+    assert "pull/1000" in cli, "PR URL must be visible for quick access"
+    assert "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjkkkk" in cli, "SHA must be visible"
+    assert "Next:" in cli, "Next action must be visible"
+    assert "Review and merge PR via GitHub UI" in cli
+    print("[merge-ready-actionable-fields] merge_ready CLI has all actionable fields")
+
+
+def test_blocked_actionable_next_action():
+    """
+    blocked notifications must have actionable next_action field.
+    Ensures operators can immediately see what to do.
+    """
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "worktree_missing",
+        beads_id="bd-regression-3",
+        wave_id="wave-regression",
+    )
+    notification = manager.create_notification(blocker)
+    assert notification is not None
+
+    cli = notification.format_cli()
+
+    # Next action must be present and actionable
+    assert "Next:" in cli
+    assert notification.next_action
+    assert len(notification.next_action) > 10, "Next action should be descriptive"
+    # Should mention bootstrap/worktree for kickoff_env_blocked
+    assert "bootstrap" in cli.lower() or "worktree" in cli.lower()
+    print("[blocked-actionable-next-action] blocked CLI has actionable next_action")
+
+
+def test_merge_ready_sha_rendering():
+    """
+    merge_ready must show PR head SHA for verification.
+    SHA is critical for git checkout and verification.
+    """
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        None,
+        beads_id="bd-regression-4",
+        wave_id="wave-regression",
+        has_pr_artifacts=True,
+        checks_passing=True,
+    )
+    notification = manager.create_notification(
+        blocker,
+        pr_url="https://github.com/stars-end/agent-skills/pull/1111",
+        pr_head_sha="1234567890abcdef1234567890abcdef12345678",
+        task_title="Verify SHA rendering",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+
+    # SHA must be on its own line with "SHA:" prefix
+    assert "SHA:" in cli
+    assert "1234567890abcdef1234567890abcdef12345678" in cli
+    print("[merge-ready-sha-rendering] merge_ready shows SHA correctly")
+
+
+def test_merge_ready_pr_url_rendering():
+    """
+    merge_ready must show PR URL for quick operator access.
+    PR URL enables one-click access to the PR for review/merge.
+    """
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        None,
+        beads_id="bd-regression-5",
+        wave_id="wave-regression",
+        has_pr_artifacts=True,
+        checks_passing=True,
+    )
+    notification = manager.create_notification(
+        blocker,
+        pr_url="https://github.com/stars-end/agent-skills/pull/2222",
+        pr_head_sha="abcdef1234567890abcdef1234567890abcdef",
+        task_title="Verify PR URL rendering",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+
+    # PR URL must be on its own line with "PR:" prefix
+    assert "PR:" in cli
+    assert "https://github.com/stars-end/agent-skills/pull/2222" in cli
+    print("[merge-ready-pr-url-rendering] merge_ready shows PR URL correctly")
+
+
 if __name__ == "__main__":
     test_healthy_state_does_not_notify()
     test_pending_state_does_not_notify()
@@ -450,4 +615,10 @@ if __name__ == "__main__":
     test_needs_decision_next_action_describes_exhaustion()
     test_cli_shows_beads_id_alongside_task_title()
     test_cli_shows_beads_id_when_no_title()
+    # Regression guard tests
+    test_cli_format_actionable_fields()
+    test_merge_ready_actionable_fields()
+    test_blocked_actionable_next_action()
+    test_merge_ready_sha_rendering()
+    test_merge_ready_pr_url_rendering()
     print("\nAll notification policy tests passed!")
