@@ -1665,6 +1665,77 @@ def test_terminal_review_without_verdict_needs_decision(tmp_path):
     print("✓ Terminal review without verdict does not strand active review state")
 
 
+def test_review_approval_persists_before_immediate_next_dispatch(tmp_path):
+    """
+    Review completion must persist before same-cycle next dispatch observes state.
+    """
+    wave_id = "wave-review-approval-persist"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0, "max_parallel": 1})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-0u1y": BeadsTask(
+            beads_id="bd-0u1y",
+            title="Reviewing task",
+            dependencies=[],
+        ),
+        "bd-xg5a": BeadsTask(
+            beads_id="bd-xg5a",
+            title="Next task",
+            dependencies=[],
+        ),
+    }
+    loop.beads_manager.describe_wave_readiness = lambda: SimpleNamespace(
+        ready=["bd-xg5a"],
+        waiting_on_dependencies=[],
+    )
+
+    pr_url = "https://github.com/stars-end/agent-skills/pull/387"
+    pr_head_sha = "1234567890abcdef1234567890abcdef12345678"
+
+    loop.baton_manager.start_implement("bd-0u1y", run_id="impl-1")
+    loop.baton_manager.complete_implement(
+        "bd-0u1y",
+        pr_url=pr_url,
+        pr_head_sha=pr_head_sha,
+    )
+    loop.baton_manager.start_review("bd-0u1y", run_id="review-1")
+    loop.pr_enforcer.register_artifact("bd-0u1y", pr_url, pr_head_sha)
+    loop.scheduler.state.mark_dispatched("bd-0u1y", "review")
+    loop._save_state()
+
+    loop.review_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_ok",
+        reason_code="process_exit_with_rc",
+    )
+    loop.review_runner.report = lambda beads_id: {"verdict": "APPROVED"}
+    loop.review_runner.extract_review_verdict = lambda beads_id: None
+
+    snapshots_during_dispatch = []
+
+    def fake_dispatch(beads_id, phase):
+        snapshots_during_dispatch.append(json.loads(loop.state_file.read_text()))
+        return True
+
+    loop._dispatch_task = fake_dispatch
+
+    loop.run_loop(max_iterations=1)
+
+    assert len(snapshots_during_dispatch) == 1
+    during_dispatch = snapshots_during_dispatch[0]
+    assert "bd-0u1y:review" not in during_dispatch["scheduler_state"]["active_beads_ids"]
+    assert "bd-0u1y" in during_dispatch["scheduler_state"]["completed_beads_ids"]
+    assert during_dispatch["baton_states"]["bd-0u1y"]["review_completed_at"] is not None
+    assert during_dispatch["wave_status"]["state"] == "merge_ready"
+
+    final_state = json.loads(loop.state_file.read_text())
+    assert "bd-xg5a:implement" in final_state["scheduler_state"]["active_beads_ids"]
+    assert "bd-0u1y:review" not in final_state["scheduler_state"]["active_beads_ids"]
+
+    print("✓ Review completion persists before next same-cycle dispatch")
+
+
 def test_process_exit_with_rc_persists_needs_decision_wave_status(tmp_path):
     """Non-deterministic terminal implement failures should persist needs_decision."""
     wave_id = "wave-process-exit-needs-decision"
