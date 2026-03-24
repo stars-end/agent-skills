@@ -379,7 +379,12 @@ class DxLoop:
                                 blocked_details=exhausted,
                                 dispatchable_tasks=blocked_ready,
                             )
-                        elif self.wave_status.get("blocker_code") != BlockerCode.RUN_BLOCKED.value:
+                        elif self.wave_status.get("blocker_code") not in {
+                            BlockerCode.RUN_BLOCKED.value,
+                            BlockerCode.REVIEW_BLOCKED.value,
+                            BlockerCode.KICKOFF_ENV_BLOCKED.value,
+                            BlockerCode.NEEDS_DECISION.value,
+                        }:
                             self._set_wave_status(
                                 LoopState.RUN_BLOCKED,
                                 BlockerCode.RUN_BLOCKED,

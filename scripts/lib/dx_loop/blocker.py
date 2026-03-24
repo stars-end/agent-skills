@@ -110,6 +110,7 @@ class BlockerClassifier:
         "process_timeout": BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED,
         # Needs decision
         "max_attempts_exceeded": BlockerCode.NEEDS_DECISION,
+        "max_revisions_exceeded": BlockerCode.NEEDS_DECISION,
         "retry_chain_exhausted": BlockerCode.NEEDS_DECISION,
         "manual_stop": BlockerCode.NEEDS_DECISION,
     }

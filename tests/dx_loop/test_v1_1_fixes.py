@@ -496,6 +496,46 @@ def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
     print("✓ Status output explains dependency blockers")
 
 
+def test_blocked_ready_exhaustion_surfaces_needs_decision(tmp_path):
+    """Blocked ready tasks with exhausted review bounds must not look healthy."""
+    wave_id = "wave-review-exhaustion-status"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-review-exhausted": BeadsTask(
+            beads_id="bd-review-exhausted",
+            title="Review exhaustion task",
+            dependencies=[],
+        )
+    }
+    loop.baton_manager.baton_states["bd-review-exhausted"] = BatonState(
+        beads_id="bd-review-exhausted",
+        phase=BatonPhase.FAILED,
+        attempt=3,
+        max_attempts=3,
+        revision_count=2,
+        max_revisions=2,
+        metadata={"failure_reason": "max_revisions_exceeded"},
+    )
+    loop.scheduler.state.mark_blocked("bd-review-exhausted")
+    loop._set_wave_status(
+        LoopState.IN_PROGRESS_HEALTHY,
+        None,
+        "All ready tasks already active, waiting for progress",
+        dispatchable_tasks=["bd-review-exhausted"],
+    )
+
+    loop.run_loop(max_iterations=1)
+
+    assert loop.wave_status["state"] == "needs_decision"
+    assert loop.wave_status["blocker_code"] == "needs_decision"
+    assert "exhausted" in loop.wave_status["reason"]
+    assert loop.wave_status["blocked_details"][0]["reason_code"] == "max_revisions_exceeded"
+
+    print("✓ Exhausted review loops surface needs_decision status truthfully")
+
+
 def test_run_loop_exits_when_initial_frontier_is_fully_blocked(tmp_path):
     """A zero-dispatch blocked start should persist state and exit promptly."""
     wave_id = "wave-blocked-at-start"
