@@ -147,8 +147,6 @@ dx-loop emits notifications only for actionable states requiring operator attent
 **Notification payload fields**:
 - `beads_id`: Task ID (e.g., `bd-5w5o.37.3`)
 - `wave_id`: Wave identifier (e.g., `wave-2026-03-24T12:00:00Z`)
-- `provider`: Execution provider (e.g., `opencode`, `cc-glm`)
-- `phase`: Current phase (`implement`, `review`, `merge`)
 - `pr_url`: PR link (merge_ready only)
 - `pr_head_sha`: Commit SHA (merge_ready only)
 - `next_action`: What operator should do
