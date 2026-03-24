@@ -119,6 +119,61 @@ dx-loop replaces from Ralph:
 | `needs_decision` | Requires human decision | Human intervention required |
 | `merge_ready` | PR artifacts present, checks passing | Human merge approval |
 
+## Notification Output Format
+
+dx-loop emits low-noise operator notifications with provider-aware context. Each notification includes:
+
+### CLI Output
+
+```
+[BLOCKED] dx-runner execution blocked
+  Task: bd-xyz - Implement feature
+  Provider: opencode
+  Phase: implement
+  Attempt: 2/3
+  Next: Wait for capacity or switch provider
+```
+
+### Operator Payload (JSON)
+
+```json
+{
+  "notification_type": "blocked",
+  "blocker_code": "run_blocked",
+  "message": "dx-runner execution blocked",
+  "beads_id": "bd-xyz",
+  "wave_id": "wave-2026-03-24",
+  "timestamp": "2026-03-24T12:00:00Z",
+  "next_action": "Wait for capacity or switch provider",
+  "provider": "opencode",
+  "phase": "implement",
+  "attempt": 2,
+  "max_attempts": 3,
+  "operator_handoff": true
+}
+```
+
+### Provider-Aware Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `provider` | `str?` | Execution provider (opencode, cc-glm, gemini) |
+| `phase` | `str?` | Execution phase (implement, review) |
+
+Provider and phase appear in:
+- CLI output when present (lines prefixed with `Provider:` and `Phase:`)
+- `to_dict()` serialization for JSON export
+- `to_operator_payload()` for machine consumption
+- Slack webhook payload (via `format_cli()`)
+
+### Notification Types
+
+| Type | When Emitted | CLI Prefix |
+|------|--------------|------------|
+| `merge_ready` | PR artifacts present, CI passing | `[MERGE_READY]` |
+| `blocked` | Execution blocked (kickoff, run, review) | `[BLOCKED]` |
+| `needs_decision` | Human decision required | `[NEEDS_DECISION]` |
+
 ## PR Artifact Contract
 
 dx-loop enforces that implementations produce PR artifacts:

@@ -375,6 +375,267 @@ def test_needs_decision_next_action_describes_exhaustion():
     print("[needs-decision-action] needs_decision next action describes exhaustion")
 
 
+def test_notification_includes_provider_phase():
+    """Provider and phase context should appear in actionable notifications."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "opencode_rate_limited",
+        beads_id="bd-provider-test",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(
+        blocker,
+        provider="opencode",
+        phase="implement",
+        task_title="Test provider/phase",
+    )
+    assert notification is not None
+    assert notification.provider == "opencode"
+    assert notification.phase == "implement"
+    print("[provider-phase] notification includes provider and phase fields")
+
+
+def test_notification_cli_shows_provider_phase():
+    """format_cli() should include provider and phase lines when present."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "worktree_missing",
+        beads_id="bd-cli-phase",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(
+        blocker,
+        provider="cc-glm",
+        phase="review",
+        task_title="CLI phase test",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+    assert "Provider: cc-glm" in cli
+    assert "Phase: review" in cli
+    print("[cli-provider-phase] format_cli includes provider and phase lines")
+
+
+def test_notification_operator_payload_includes_provider_phase():
+    """to_operator_payload() should include provider and phase when set."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        None,
+        beads_id="bd-payload-phase",
+        wave_id="wave-prod",
+        has_pr_artifacts=True,
+        checks_passing=True,
+    )
+    notification = manager.create_notification(
+        blocker,
+        pr_url="https://github.com/stars-end/agent-skills/pull/789",
+        pr_head_sha="c" * 40,
+        task_title="Payload phase test",
+        provider="gemini",
+        phase="implement",
+    )
+    assert notification is not None
+    payload = notification.to_operator_payload()
+    assert payload["provider"] == "gemini"
+    assert payload["phase"] == "implement"
+    print("[payload-provider-phase] operator payload includes provider and phase")
+
+
+def test_notification_without_provider_phase_still_works():
+    """Notifications without provider/phase should still function correctly."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "preflight_failed",
+        beads_id="bd-no-phase",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(blocker)
+    assert notification is not None
+    assert notification.provider is None
+    assert notification.phase is None
+    cli = notification.format_cli()
+    assert "Provider:" not in cli
+    assert "Phase:" not in cli
+    print("[no-provider-phase] notifications without provider/phase still work")
+
+
+def test_regression_provider_phase_in_to_dict():
+    """Regression: to_dict() must include provider/phase when present."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "opencode_rate_limited",
+        beads_id="bd-regress-dict",
+        wave_id="wave-regress",
+    )
+    notification = manager.create_notification(
+        blocker,
+        provider="opencode",
+        phase="implement",
+        task_title="Regression test",
+    )
+    assert notification is not None
+
+    d = notification.to_dict()
+    assert d["provider"] == "opencode", "to_dict() must include provider"
+    assert d["phase"] == "implement", "to_dict() must include phase"
+    assert d["notification_type"] == "blocked"
+    assert d["beads_id"] == "bd-regress-dict"
+    print("[regress-to-dict] to_dict includes provider and phase fields")
+
+
+def test_regression_provider_phase_all_notification_types():
+    """Regression: provider/phase work with blocked, needs_decision, merge_ready."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    test_cases = [
+        ("opencode_rate_limited", "blocked", "opencode", "implement"),
+        ("max_attempts_exceeded", "needs_decision", "cc-glm", "review"),
+        (None, "merge_ready", "gemini", "implement"),
+    ]
+
+    for raw_blocker, expected_type, provider, phase in test_cases:
+        if raw_blocker == "max_attempts_exceeded":
+            blocker = classifier.classify(
+                raw_blocker,
+                beads_id=f"bd-{expected_type}",
+                wave_id="wave-test",
+                metadata={"failure_reason": "max_attempts_exceeded"},
+            )
+        elif raw_blocker is None:
+            blocker = classifier.classify(
+                raw_blocker,
+                beads_id=f"bd-{expected_type}",
+                wave_id="wave-test",
+                has_pr_artifacts=True,
+                checks_passing=True,
+            )
+        else:
+            blocker = classifier.classify(
+                raw_blocker,
+                beads_id=f"bd-{expected_type}",
+                wave_id="wave-test",
+            )
+
+        notification = manager.create_notification(
+            blocker,
+            provider=provider,
+            phase=phase,
+            pr_url="https://github.com/test/test/pull/1"
+            if expected_type == "merge_ready"
+            else None,
+            pr_head_sha="a" * 40 if expected_type == "merge_ready" else None,
+        )
+        assert notification is not None, (
+            f"Notification for {expected_type} should not be None"
+        )
+        assert notification.notification_type == expected_type
+        assert notification.provider == provider
+        assert notification.phase == phase
+
+        payload = notification.to_operator_payload()
+        assert payload["provider"] == provider
+        assert payload["phase"] == phase
+
+    print("[regress-all-types] provider/phase work with all notification types")
+
+
+def test_regression_provider_phase_cli_ordering():
+    """Regression: CLI output shows provider/phase in consistent order after Task."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "worktree_missing",
+        beads_id="bd-order-test",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(
+        blocker,
+        provider="opencode",
+        phase="review",
+        task_title="Order test",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+
+    task_idx = cli.index("Task:")
+    provider_idx = cli.index("Provider:")
+    phase_idx = cli.index("Phase:")
+    next_idx = cli.index("Next:")
+
+    assert task_idx < provider_idx, "Task line should come before Provider"
+    assert provider_idx < phase_idx, "Provider line should come before Phase"
+    assert phase_idx < next_idx, "Phase line should come before Next"
+    print("[regress-cli-order] CLI output has consistent provider/phase ordering")
+
+
+def test_regression_empty_string_vs_none_provider_phase():
+    """Regression: empty strings should not appear in output, only None should suppress."""
+    notification = Notification(
+        notification_type="blocked",
+        blocker_code=BlockerCode.RUN_BLOCKED,
+        message="Test",
+        provider="",
+        phase=None,
+    )
+
+    d = notification.to_dict()
+    assert "provider" not in d, "Empty provider should not be in to_dict"
+    assert "phase" not in d, "None phase should not be in to_dict"
+
+    cli = notification.format_cli()
+    assert "Provider:" not in cli
+    assert "Phase:" not in cli
+    print("[regress-empty-none] empty strings and None handled correctly")
+
+
+def test_regression_provider_phase_with_merge_ready():
+    """Regression: merge_ready notifications include provider/phase context."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        None,
+        beads_id="bd-merge-provider",
+        wave_id="wave-prod",
+        has_pr_artifacts=True,
+        checks_passing=True,
+    )
+    notification = manager.create_notification(
+        blocker,
+        pr_url="https://github.com/org/repo/pull/999",
+        pr_head_sha="d" * 40,
+        task_title="Feature with provider context",
+        provider="cc-glm",
+        phase="implement",
+    )
+    assert notification is not None
+    assert notification.notification_type == "merge_ready"
+
+    cli = notification.format_cli()
+    assert "[MERGE_READY]" in cli
+    assert "Provider: cc-glm" in cli
+    assert "Phase: implement" in cli
+    assert "pull/999" in cli
+
+    payload = notification.to_operator_payload()
+    assert payload["provider"] == "cc-glm"
+    assert payload["phase"] == "implement"
+    assert payload["operator_handoff"] is True
+    print("[regress-merge-provider] merge_ready includes provider/phase")
+
+
 if __name__ == "__main__":
     test_healthy_state_does_not_notify()
     test_pending_state_does_not_notify()
@@ -394,4 +655,13 @@ if __name__ == "__main__":
     test_tracker_last_emitted_blocker_persists()
     test_healthy_and_pending_never_create_notification()
     test_needs_decision_next_action_describes_exhaustion()
+    test_notification_includes_provider_phase()
+    test_notification_cli_shows_provider_phase()
+    test_notification_operator_payload_includes_provider_phase()
+    test_notification_without_provider_phase_still_works()
+    test_regression_provider_phase_in_to_dict()
+    test_regression_provider_phase_all_notification_types()
+    test_regression_provider_phase_cli_ordering()
+    test_regression_empty_string_vs_none_provider_phase()
+    test_regression_provider_phase_with_merge_ready()
     print("\nAll notification policy tests passed!")
