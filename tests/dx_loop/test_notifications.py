@@ -375,6 +375,95 @@ def test_needs_decision_next_action_describes_exhaustion():
     print("[needs-decision-action] needs_decision next action describes exhaustion")
 
 
+def test_notification_includes_provider_and_phase():
+    """bd-gyz3: actionable notifications include provider/phase context"""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "opencode_rate_limited",
+        beads_id="bd-provider-test-1",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Rate limited task",
+        provider="opencode",
+        phase="implement",
+    )
+    assert notification is not None
+    assert notification.provider == "opencode"
+    assert notification.phase == "implement"
+    print("[provider-phase] notification includes provider and phase fields")
+
+
+def test_cli_shows_provider_phase_context():
+    """bd-gyz3: CLI output shows provider/phase context line"""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "opencode_rate_limited",
+        beads_id="bd-provider-test-2",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Rate limited task",
+        provider="cc-glm",
+        phase="review",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+    assert "Context:" in cli
+    assert "provider=cc-glm" in cli
+    assert "phase=review" in cli
+    print("[cli-context] CLI shows provider/phase context line")
+
+
+def test_operator_payload_includes_provider_phase():
+    """bd-gyz3: operator payload includes provider/phase for machine consumption"""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "opencode_rate_limited",
+        beads_id="bd-provider-test-3",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Rate limited task",
+        provider="opencode",
+        phase="implement",
+    )
+    assert notification is not None
+    payload = notification.to_operator_payload()
+    assert payload["provider"] == "opencode"
+    assert payload["phase"] == "implement"
+    assert payload["operator_handoff"] is True
+    print("[payload-context] operator payload includes provider/phase")
+
+
+def test_notification_without_provider_phase_is_backwards_compatible():
+    """bd-gyz3: notifications without provider/phase work as before"""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "worktree_missing",
+        beads_id="bd-provider-test-4",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(blocker)
+    assert notification is not None
+    assert notification.provider is None
+    assert notification.phase is None
+    cli = notification.format_cli()
+    assert "Context:" not in cli  # No context line when provider/phase are missing
+    print("[backwards-compat] notifications without provider/phase work")
+
+
 if __name__ == "__main__":
     test_healthy_state_does_not_notify()
     test_pending_state_does_not_notify()
@@ -394,4 +483,8 @@ if __name__ == "__main__":
     test_tracker_last_emitted_blocker_persists()
     test_healthy_and_pending_never_create_notification()
     test_needs_decision_next_action_describes_exhaustion()
+    test_notification_includes_provider_and_phase()
+    test_cli_shows_provider_phase_context()
+    test_operator_payload_includes_provider_phase()
+    test_notification_without_provider_phase_is_backwards_compatible()
     print("\nAll notification policy tests passed!")
