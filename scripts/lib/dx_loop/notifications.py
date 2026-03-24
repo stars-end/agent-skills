@@ -46,6 +46,8 @@ class Notification:
     task_title: Optional[str] = None
     attempt: Optional[int] = None
     max_attempts: Optional[int] = None
+    provider: Optional[str] = None
+    phase: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -69,6 +71,10 @@ class Notification:
             d["max_attempts"] = self.max_attempts
         if self.metadata:
             d["metadata"] = self.metadata
+        if self.provider:
+            d["provider"] = self.provider
+        if self.phase:
+            d["phase"] = self.phase
         return d
 
     def to_operator_payload(self) -> Dict[str, Any]:
@@ -82,6 +88,10 @@ class Notification:
         if self.beads_id:
             label = self.task_title or self.beads_id
             lines.append(f"  Task: {label}")
+        if self.provider:
+            lines.append(f"  Provider: {self.provider}")
+        if self.phase:
+            lines.append(f"  Phase: {self.phase}")
         if self.notification_type == "merge_ready":
             if self.pr_url:
                 lines.append(f"  PR: {self.pr_url}")
@@ -158,6 +168,8 @@ class NotificationManager:
         task_title: Optional[str] = None,
         attempt: Optional[int] = None,
         max_attempts: Optional[int] = None,
+        provider: Optional[str] = None,
+        phase: Optional[str] = None,
     ) -> Optional[Notification]:
         if not self.should_notify(blocker):
             return None
@@ -178,6 +190,8 @@ class NotificationManager:
             task_title=task_title,
             attempt=attempt,
             max_attempts=max_attempts,
+            provider=provider,
+            phase=phase,
         )
 
         if blocker.beads_id:

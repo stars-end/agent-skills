@@ -375,6 +375,98 @@ def test_needs_decision_next_action_describes_exhaustion():
     print("[needs-decision-action] needs_decision next action describes exhaustion")
 
 
+def test_notification_includes_provider_phase():
+    """Provider and phase context should appear in actionable notifications."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "opencode_rate_limited",
+        beads_id="bd-provider-test",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(
+        blocker,
+        provider="opencode",
+        phase="implement",
+        task_title="Test provider/phase",
+    )
+    assert notification is not None
+    assert notification.provider == "opencode"
+    assert notification.phase == "implement"
+    print("[provider-phase] notification includes provider and phase fields")
+
+
+def test_notification_cli_shows_provider_phase():
+    """format_cli() should include provider and phase lines when present."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "worktree_missing",
+        beads_id="bd-cli-phase",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(
+        blocker,
+        provider="cc-glm",
+        phase="review",
+        task_title="CLI phase test",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+    assert "Provider: cc-glm" in cli
+    assert "Phase: review" in cli
+    print("[cli-provider-phase] format_cli includes provider and phase lines")
+
+
+def test_notification_operator_payload_includes_provider_phase():
+    """to_operator_payload() should include provider and phase when set."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        None,
+        beads_id="bd-payload-phase",
+        wave_id="wave-prod",
+        has_pr_artifacts=True,
+        checks_passing=True,
+    )
+    notification = manager.create_notification(
+        blocker,
+        pr_url="https://github.com/stars-end/agent-skills/pull/789",
+        pr_head_sha="c" * 40,
+        task_title="Payload phase test",
+        provider="gemini",
+        phase="implement",
+    )
+    assert notification is not None
+    payload = notification.to_operator_payload()
+    assert payload["provider"] == "gemini"
+    assert payload["phase"] == "implement"
+    print("[payload-provider-phase] operator payload includes provider and phase")
+
+
+def test_notification_without_provider_phase_still_works():
+    """Notifications without provider/phase should still function correctly."""
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "preflight_failed",
+        beads_id="bd-no-phase",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(blocker)
+    assert notification is not None
+    assert notification.provider is None
+    assert notification.phase is None
+    cli = notification.format_cli()
+    assert "Provider:" not in cli
+    assert "Phase:" not in cli
+    print("[no-provider-phase] notifications without provider/phase still work")
+
+
 if __name__ == "__main__":
     test_healthy_state_does_not_notify()
     test_pending_state_does_not_notify()
@@ -394,4 +486,8 @@ if __name__ == "__main__":
     test_tracker_last_emitted_blocker_persists()
     test_healthy_and_pending_never_create_notification()
     test_needs_decision_next_action_describes_exhaustion()
+    test_notification_includes_provider_phase()
+    test_notification_cli_shows_provider_phase()
+    test_notification_operator_payload_includes_provider_phase()
+    test_notification_without_provider_phase_still_works()
     print("\nAll notification policy tests passed!")
