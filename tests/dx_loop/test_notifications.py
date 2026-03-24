@@ -257,6 +257,8 @@ def test_merge_ready_operator_payload_is_complete():
         pr_url="https://github.com/stars-end/agent-skills/pull/456",
         pr_head_sha="b" * 40,
         task_title="Harden notification policy",
+        provider="opencode",
+        phase="merge",
     )
     assert notification is not None
 
@@ -268,6 +270,8 @@ def test_merge_ready_operator_payload_is_complete():
     assert payload["pr_url"] == "https://github.com/stars-end/agent-skills/pull/456"
     assert payload["pr_head_sha"] == "b" * 40
     assert payload["task_title"] == "Harden notification policy"
+    assert payload["provider"] == "opencode"
+    assert payload["phase"] == "merge"
     assert "next_action" in payload
     print("[operator-payload] structured operator payload is complete")
 
@@ -284,6 +288,8 @@ def test_blocked_cli_shows_attempt_progress():
     notification = manager.create_notification(
         blocker,
         task_title="Retry task",
+        provider="cc-glm",
+        phase="implement",
         attempt=2,
         max_attempts=3,
     )
@@ -291,6 +297,8 @@ def test_blocked_cli_shows_attempt_progress():
     cli = notification.format_cli()
     assert "2/3" in cli
     assert "BLOCKED" in cli
+    assert "Provider: cc-glm" in cli
+    assert "Phase: implement" in cli
     print("[blocked-attempt] blocked CLI shows attempt progress")
 
 

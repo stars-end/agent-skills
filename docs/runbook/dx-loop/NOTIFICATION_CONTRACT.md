@@ -37,6 +37,8 @@ Every emitted notification includes these fields:
   "beads_id": "bd-5w5o.37.3",
   "wave_id": "wave-2026-03-24T12:00:00Z",
   "timestamp": "2026-03-24T12:34:56Z",
+  "provider": "opencode|cc-glm|gemini",
+  "phase": "implement|review|merge",
   "next_action": "What the operator should do"
 }
 ```
@@ -96,6 +98,8 @@ Notifications are rendered for terminal consumption:
 ```
 [MERGE_READY] PR artifacts present and checks passing
   Task: Fix notification policy (bd-5w5o.37.3)
+  Provider: opencode
+  Phase: merge
   PR: https://github.com/stars-end/agent-skills/pull/393
   SHA: 6ce38c01b1e50d380a7068d2d94d8666471c7b7c
   Next: Review and merge PR via GitHub UI
@@ -104,6 +108,8 @@ Notifications are rendered for terminal consumption:
 ```
 [BLOCKED] Runner reason: opencode_rate_limited
   Task: Implement feature X (bd-abc1)
+  Provider: opencode
+  Phase: implement
   Attempt: 2/3
   Next: Wait for capacity or switch provider
 ```
@@ -111,6 +117,8 @@ Notifications are rendered for terminal consumption:
 ```
 [NEEDS_DECISION] All retries exhausted
   Task: Complex refactor (bd-xyz9)
+  Provider: cc-glm
+  Phase: implement
   Next: All retries exhausted - inspect logs and decide: retry, skip, or takeover
 ```
 
@@ -127,6 +135,8 @@ For machine consumption (e.g., Slack webhooks, monitoring systems), use
   "beads_id": "bd-5w5o.37.3",
   "wave_id": "wave-2026-03-24T12:00:00Z",
   "timestamp": "2026-03-24T12:34:56Z",
+  "provider": "opencode",
+  "phase": "merge",
   "next_action": "Review and merge PR via GitHub UI",
   "pr_url": "https://github.com/stars-end/agent-skills/pull/393",
   "pr_head_sha": "6ce38c01b1e50d380a7068d2d94d8666471c7b7c",
