@@ -176,7 +176,8 @@ def test_needs_decision_payload_with_attempt_context():
     cli = notification.format_cli()
     assert "3/3" in cli
     assert "Fix auth lane" in cli
-    print("[needs-decision-payload] needs_decision includes attempt context")
+    assert "bd-test-5" in cli, "CLI should show beads_id for takeover/resume"
+    print("[needs-decision-payload] needs_decision includes attempt context with beads_id")
 
 
 def test_merge_ready_handoff_includes_pr_artifacts():
@@ -205,9 +206,10 @@ def test_merge_ready_handoff_includes_pr_artifacts():
     cli = notification.format_cli()
     assert "MERGE_READY" in cli
     assert "Implement feature X" in cli
+    assert "bd-test-6" in cli, "CLI should show beads_id for takeover/resume"
     assert "pull/123" in cli
     assert "Next:" in cli
-    print("[merge-ready-handoff] merge_ready includes PR URL, SHA, task title")
+    print("[merge-ready-handoff] merge_ready includes PR URL, SHA, task title, and beads_id")
 
 
 def test_merge_ready_operator_payload_is_complete():
@@ -375,6 +377,58 @@ def test_needs_decision_next_action_describes_exhaustion():
     print("[needs-decision-action] needs_decision next action describes exhaustion")
 
 
+def test_cli_shows_beads_id_alongside_task_title():
+    """
+    bd-5w5o.30.1: When task_title is present, CLI should show both
+    the friendly title AND the exact Beads id for takeover/resume.
+    """
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "worktree_missing",
+        beads_id="bd-abc123",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Implement OAuth flow",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+
+    # Both title and beads_id must be visible
+    assert "Implement OAuth flow" in cli, "CLI should show friendly task title"
+    assert "bd-abc123" in cli, "CLI must show exact beads_id for takeover/resume"
+
+    # Verify format: "Task: <title> (<beads_id>)"
+    assert "Task: Implement OAuth flow (bd-abc123)" in cli, (
+        "CLI should format as 'Task: <title> (<beads_id>)'"
+    )
+    print("[cli-beads-id-visible] CLI shows title and beads_id together")
+
+
+def test_cli_shows_beads_id_when_no_title():
+    """
+    When no task_title, CLI should still show beads_id.
+    """
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "worktree_missing",
+        beads_id="bd-xyz789",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(blocker)
+    assert notification is not None
+    cli = notification.format_cli()
+
+    assert "bd-xyz789" in cli, "CLI must show beads_id when no title"
+    assert "Task: bd-xyz789" in cli
+    print("[cli-beads-id-no-title] CLI shows beads_id when no title")
+
+
 if __name__ == "__main__":
     test_healthy_state_does_not_notify()
     test_pending_state_does_not_notify()
@@ -394,4 +448,6 @@ if __name__ == "__main__":
     test_tracker_last_emitted_blocker_persists()
     test_healthy_and_pending_never_create_notification()
     test_needs_decision_next_action_describes_exhaustion()
+    test_cli_shows_beads_id_alongside_task_title()
+    test_cli_shows_beads_id_when_no_title()
     print("\nAll notification policy tests passed!")
