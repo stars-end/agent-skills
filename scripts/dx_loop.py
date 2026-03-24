@@ -297,6 +297,8 @@ class DxLoop:
                     for beads_id, phase in capped:
                         if self._dispatch_task(beads_id, phase):
                             self.scheduler.state.mark_dispatched(beads_id, phase)
+                            # Persist immediately so status surfaces reflect the new active task.
+                            self._save_state()
                             successful_dispatches.append(beads_id)
                         elif self.wave_status.get("blocker_code") == "run_blocked":
                             details = self.wave_status.get("blocked_details", [])
@@ -901,6 +903,14 @@ class DxLoop:
                 if baton_state.phase == BatonPhase.COMPLETE:
                     self.beads_manager.mark_completed(beads_id)
                     self.scheduler.state.mark_completed(beads_id)
+                    self._set_wave_status(
+                        LoopState.MERGE_READY,
+                        BlockerCode.MERGE_READY,
+                        f"Review APPROVED for {beads_id}, task complete",
+                        dispatchable_tasks=[beads_id],
+                    )
+                    # Persist completion immediately so status is truthful between poll and dispatch.
+                    self._save_state()
                     print(f"Review APPROVED for {beads_id}, task complete")
 
                     # Emit merge_ready notification with handoff context
@@ -924,10 +934,12 @@ class DxLoop:
                 elif baton_state.phase == BatonPhase.IMPLEMENT:
                     # P0 FIX: Clear "review" phase to allow revision implement dispatch
                     self.scheduler.state.clear_phase(beads_id, "review")
+                    self._save_state()
                     print(
                         f"Review REVISION_REQUIRED for {beads_id}, returning to implement"
                     )
                 else:
+                    self._save_state()
                     print(f"Review verdict for {beads_id}: {verdict.value}")
             else:
                 self.scheduler.state.clear_phase(beads_id, "review")
@@ -951,6 +963,7 @@ class DxLoop:
                         }
                     ],
                 )
+                self._save_state()
                 print(
                     f"Review for {beads_id} ended without a parseable verdict; "
                     "manual inspection required"
