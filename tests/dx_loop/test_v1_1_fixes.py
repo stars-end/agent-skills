@@ -496,6 +496,46 @@ def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
     print("✓ Status output explains dependency blockers")
 
 
+def test_blocked_ready_exhaustion_surfaces_needs_decision(tmp_path):
+    """Blocked ready tasks with exhausted review bounds must not look healthy."""
+    wave_id = "wave-review-exhaustion-status"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-review-exhausted": BeadsTask(
+            beads_id="bd-review-exhausted",
+            title="Review exhaustion task",
+            dependencies=[],
+        )
+    }
+    loop.baton_manager.baton_states["bd-review-exhausted"] = BatonState(
+        beads_id="bd-review-exhausted",
+        phase=BatonPhase.FAILED,
+        attempt=3,
+        max_attempts=3,
+        revision_count=2,
+        max_revisions=2,
+        metadata={"failure_reason": "max_revisions_exceeded"},
+    )
+    loop.scheduler.state.mark_blocked("bd-review-exhausted")
+    loop._set_wave_status(
+        LoopState.IN_PROGRESS_HEALTHY,
+        None,
+        "All ready tasks already active, waiting for progress",
+        dispatchable_tasks=["bd-review-exhausted"],
+    )
+
+    loop.run_loop(max_iterations=1)
+
+    assert loop.wave_status["state"] == "needs_decision"
+    assert loop.wave_status["blocker_code"] == "needs_decision"
+    assert "exhausted" in loop.wave_status["reason"]
+    assert loop.wave_status["blocked_details"][0]["reason_code"] == "max_revisions_exceeded"
+
+    print("✓ Exhausted review loops surface needs_decision status truthfully")
+
+
 def test_run_loop_exits_when_initial_frontier_is_fully_blocked(tmp_path):
     """A zero-dispatch blocked start should persist state and exit promptly."""
     wave_id = "wave-blocked-at-start"
@@ -1663,6 +1703,57 @@ def test_terminal_review_without_verdict_needs_decision(tmp_path):
     assert loop.wave_status["blocker_code"] == "needs_decision"
 
     print("✓ Terminal review without verdict does not strand active review state")
+
+
+def test_final_review_revision_required_surfaces_needs_decision(tmp_path):
+    """Final review exhaustion should surface blocked/needs_decision truthfully."""
+    wave_id = "wave-review-exhausted"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-exhausted": BeadsTask(
+            beads_id="bd-exhausted",
+            title="Exhausted review task",
+            dependencies=[],
+        )
+    }
+
+    loop.baton_manager.start_implement("bd-exhausted", run_id="impl-1")
+    loop.baton_manager.complete_implement(
+        "bd-exhausted",
+        pr_url="https://github.com/stars-end/agent-skills/pull/395",
+        pr_head_sha="24fd508fb12176b3bcc51c44356fb731e98d62c1",
+    )
+    loop.baton_manager.start_review("bd-exhausted", run_id="review-1")
+    baton = loop.baton_manager.get_state("bd-exhausted")
+    baton.attempt = baton.max_attempts
+    baton.revision_count = baton.max_revisions - 1
+    loop.scheduler.state.mark_dispatched("bd-exhausted", "review")
+
+    loop.review_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="no_op_success",
+        reason_code="exit_zero_no_mutations",
+    )
+    loop.review_runner.report = lambda beads_id: {"verdict": "REVISION_REQUIRED"}
+    loop.review_runner.extract_review_verdict = lambda beads_id: None
+
+    loop._check_review_progress("bd-exhausted")
+
+    baton = loop.baton_manager.get_state("bd-exhausted")
+    assert baton.phase == BatonPhase.FAILED
+    assert baton.metadata["failure_reason"] == "max_revisions_exceeded"
+    assert not loop.scheduler.state.is_active("bd-exhausted", "review")
+    assert loop.scheduler.state.is_blocked("bd-exhausted")
+    assert loop.wave_status["state"] == "needs_decision"
+    assert loop.wave_status["blocker_code"] == "needs_decision"
+    assert (
+        loop.wave_status["blocked_details"][0]["reason_code"]
+        == "max_revisions_exceeded"
+    )
+
+    print("✓ Final review exhaustion surfaces needs_decision instead of healthy waiting")
 
 
 def test_review_approval_persists_before_immediate_next_dispatch(tmp_path):
