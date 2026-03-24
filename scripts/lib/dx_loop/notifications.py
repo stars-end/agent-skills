@@ -84,6 +84,12 @@ class Notification:
                 lines.append(f"  Task: {self.task_title} ({self.beads_id})")
             else:
                 lines.append(f"  Task: {self.beads_id}")
+        provider = self.metadata.get("provider") if self.metadata else None
+        phase = self.metadata.get("phase") if self.metadata else None
+        if provider:
+            lines.append(f"  Provider: {provider}")
+        if phase:
+            lines.append(f"  Phase: {phase}")
         if self.notification_type == "merge_ready":
             if self.pr_url:
                 lines.append(f"  PR: {self.pr_url}")
