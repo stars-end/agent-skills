@@ -10,7 +10,7 @@ Check if tools are installed and executable.
 |------|---------|----------|
 | `cass-memory` | `cm --version` | Version string (e.g., `0.2.3`) |
 | `llm-tldr` | `tldr-mcp --version \|\| llm-tldr --version` | Version string (e.g., `1.5.2`) |
-| `context-plus` | `npx -y contextplus --help \| head -1` | Help output |
+| `context-plus` | `test -f ~/.local/share/contextplus-patched/build/index.js` | Patched local build present |
 | `serena` | `serena --help \| head -1` | Help output |
 
 ## Layer 2: Config Convergence
@@ -48,7 +48,7 @@ Verify MCP tools are visible to IDE clients.
 | Claude Code | ✓ All tools connected | `VERIFIED` | `~/.claude.json` |
 | Gemini CLI | ✓ All tools connected | `VERIFIED` | `~/.gemini/settings.json` |
 | Codex CLI | ✓ All tools listed and enabled | `VERIFIED` | `~/.codex/config.toml` |
-| Antigravity | ✓ Inherits from Gemini | `INFERRED` | `~/.gemini/settings.json` |
+| Antigravity | ✓ Config present (no native list command) | `INFERRED` | `~/.gemini/antigravity/mcp_config.json` |
 | OpenCode | ✓ All tools connected | `VERIFIED` | `~/.config/opencode/opencode.jsonc` |
 
 ### Claude Code
@@ -84,4 +84,5 @@ For full Fleet Sync GO, required host/client cells must pass the pre-merge matri
 Current contract:
 - `claude`, `gemini`, `opencode` are required on all 4 canonical hosts.
 - `codex` is required on `macmini` and optional on Linux hosts.
-- `antigravity` remains `INFERRED` via Gemini runtime/config.
+- `antigravity` remains `INFERRED` via dedicated config file checks.
+- `context-plus` on `gemini` + `antigravity` must use wrapped launcher: `bash -lc 'exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null'`.

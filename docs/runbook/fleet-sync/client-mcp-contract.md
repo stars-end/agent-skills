@@ -9,7 +9,7 @@ This document defines the authoritative configuration and registration contract 
 |--------|-------------|--------|---------------------|----------------------|--------|
 | `claude-code` | `~/.claude.json` | JSON | File Patch | `claude mcp list` | `VERIFIED` |
 | `gemini-cli` | `~/.gemini/settings.json` | JSON | File Patch | `gemini mcp list` | `VERIFIED` |
-| `antigravity` | `~/.gemini/settings.json` | JSON | Same as gemini-cli | (via gemini-cli) | `INFERRED` |
+| `antigravity` | `~/.gemini/antigravity/mcp_config.json` | JSON | File Patch | (no native list command) | `INFERRED` |
 | `codex-cli` | `~/.codex/config.toml` | TOML | File Patch | `codex mcp list` | `VERIFIED` |
 | `opencode` | `~/.config/opencode/opencode.jsonc` | JSONC | File Patch | `opencode mcp list` | `VERIFIED` |
 
@@ -23,9 +23,15 @@ This document defines the authoritative configuration and registration contract 
 
 ### Gemini CLI (`gemini-cli` / `antigravity`)
 - **Upstream Docs**: [Gemini CLI MCP Documentation](https://geminicli.com/docs/core/mcp)
-- **Source of Truth**: `~/.gemini/settings.json` (JSON)
-- **Durable Registration**: Add entries to the `mcpServers` object in `~/.gemini/settings.json`.
-- **Note**: `antigravity` (the desktop IDE) shares these settings at runtime for its integrated agent. Verification is indirect via `gemini mcp list`.
+- **Source of Truth**:
+  - `gemini-cli`: `~/.gemini/settings.json`
+  - `antigravity`: `~/.gemini/antigravity/mcp_config.json`
+- **Durable Registration**: Add/maintain `mcpServers` entries in both files.
+- **Context-plus launcher nuance**:
+  - `gemini-cli` and `antigravity` must use:
+    - `command: "bash"`
+    - `args: ["-lc", "exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null"]`
+  - stale `npx -y contextplus` and plain `node .../contextplus-patched/build/index.js` are treated as drift for Google surfaces.
 
 ### Codex CLI (`codex-cli`)
 - **Upstream Docs**: [Codex CLI MCP Support](https://developers.openai.com/codex/mcp/)

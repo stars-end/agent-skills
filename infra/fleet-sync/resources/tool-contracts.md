@@ -8,7 +8,7 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 |------|-------|-------------------|------------------|-------------------------|
 | `cass-memory` | `cli` | `npm install -g Dicklesworthstone/cass_memory_system` | `cm --version`, `cm quickstart --json` | Host runtime only; not rendered to IDE configs |
 | `llm-tldr` | `mcp` | `uv tool install "llm-tldr==1.5.2"` | `tldr-mcp --version \|\| llm-tldr --version` | `codex`, `claude`, `gemini`, `opencode` where configured |
-| `context-plus` | `mcp` | `npx -y contextplus` | `npx -y contextplus --help \| head -1` | `codex`, `claude`, `gemini`, `opencode` where configured |
+| `context-plus` | `mcp` | `scripts/install-contextplus-patched.sh` | `test -f ~/.local/share/contextplus-patched/build/index.js` | `codex`, `claude`, `gemini`, `antigravity`, `opencode` where configured |
 | `serena` | `mcp` | `uv tool install git+https://github.com/oraios/serena.git` | `serena --help \| head -1` | `codex`, `claude`, `gemini`, `opencode` where configured |
 
 ## Canonical Rules
@@ -20,7 +20,7 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 - Google surfaces:
   - `antigravity`
   - `gemini-cli`
-  share one MCP config root.
+  require separate config files with converged `context-plus` launcher entries.
 
 ## Current Status (V2.2)
 
@@ -42,4 +42,5 @@ Full platform GO achieved for verified Layer 4 visibility.
 
 - `cass-memory` is CLI-native and should NOT appear in IDE MCP configs. If manually added, it will show as "Failed to connect" in `claude mcp list`.
 - `serena` PyPI has package collision with an unrelated AMQP client - must install from GitHub.
-- `context-plus` package name is `contextplus` (not `@forloopcodes/contextplus`).
+- `context-plus` uses a patched local build at `~/.local/share/contextplus-patched/build/index.js`.
+- `gemini-cli` + `antigravity` require wrapped launcher form: `bash -lc 'exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null'`.

@@ -397,6 +397,7 @@ for name, spec in enabled_tools:
     # Only MCP tools need target_ides and mcp config blocks
     target_ides = [str(i) for i in spec.get("target_ides", [])] if integration_mode == "mcp" else []
     mcp = spec.get("mcp", {}) if isinstance(spec.get("mcp", {}), dict) and integration_mode == "mcp" else {}
+    per_ide = mcp.get("per_ide", {}) if isinstance(mcp.get("per_ide", {}), dict) else {}
     mcp_env = mcp.get("env", {})
     env_from_parent = mcp.get("env_from_parent", [])
     entry = {
@@ -458,7 +459,31 @@ for name, spec in enabled_tools:
     if integration_mode == "mcp":
         for ide in target_ides:
             servers_by_ide.setdefault(ide, {})
-            servers_by_ide[ide][name] = entry
+            ide_entry = {
+                "type": str(entry.get("type", "stdio")),
+                "command": str(entry.get("command", "")),
+                "args": [str(a) for a in entry.get("args", [])],
+            }
+            if isinstance(entry.get("env", {}), dict) and entry.get("env", {}):
+                ide_entry["env"] = {str(k): str(v) for k, v in entry.get("env", {}).items()}
+
+            ide_override = per_ide.get(ide, {})
+            if isinstance(ide_override, dict):
+                if "type" in ide_override:
+                    ide_entry["type"] = str(ide_override.get("type", ide_entry["type"]))
+                if "command" in ide_override:
+                    ide_entry["command"] = str(ide_override.get("command", ide_entry["command"]))
+                if "args" in ide_override and isinstance(ide_override.get("args"), list):
+                    ide_entry["args"] = [str(a) for a in ide_override.get("args", [])]
+                if "env" in ide_override and isinstance(ide_override.get("env"), dict):
+                    merged_env = {}
+                    if isinstance(ide_entry.get("env", {}), dict):
+                        merged_env.update(ide_entry.get("env", {}))
+                    merged_env.update({str(k): str(v) for k, v in ide_override.get("env", {}).items()})
+                    if merged_env:
+                        ide_entry["env"] = merged_env
+
+            servers_by_ide[ide][name] = ide_entry
 
 file_rows = []
 for ide, path_raw in sorted(write_paths.items()):

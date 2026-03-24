@@ -84,6 +84,17 @@ tools:
       command: "node"
       args:
         - "~/.local/share/contextplus-patched/build/index.js"
+      per_ide:
+        gemini-cli:
+          command: "bash"
+          args:
+            - "-lc"
+            - "exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null"
+        antigravity:
+          command: "bash"
+          args:
+            - "-lc"
+            - "exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null"
       env:
         OPENROUTER_EMBED_MODEL: "openai/text-embedding-3-small"
         CONTEXTPLUS_EMBED_PROVIDER: "auto"
