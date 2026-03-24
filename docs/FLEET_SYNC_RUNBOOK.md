@@ -171,7 +171,7 @@ Fleet Sync operates with two tool classes:
 |------|------|--------|----------------|
 | `llm-tldr` | mcp | Enabled | `tldr-mcp --version` |
 | `cass-memory` | cli | Enabled | `cm --version` |
-| `context-plus` | mcp | Enabled | `npx -y contextplus --help` |
+| `context-plus` | mcp | Enabled | `test -f ~/.local/share/contextplus-patched/build/index.js` |
 | `serena` | mcp | Enabled | `serena --help` |
 
 **Current Status: FULL_GO**
