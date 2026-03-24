@@ -346,6 +346,60 @@ class DxLoop:
                         tid for tid in ready if self.scheduler.state.is_blocked(tid)
                     ]
                     if blocked_ready:
+                        exhausted = []
+                        for blocked_id in blocked_ready:
+                            blocked_state = self.baton_manager.get_state(blocked_id)
+                            if not blocked_state:
+                                continue
+                            failure_reason = blocked_state.metadata.get("failure_reason")
+                            if failure_reason in {
+                                "max_revisions_exceeded",
+                                "max_attempts_exceeded",
+                            }:
+                                exhausted.append(
+                                    {
+                                        "beads_id": blocked_id,
+                                        "phase": blocked_state.phase.value,
+                                        "reason_code": failure_reason,
+                                        "attempt": blocked_state.attempt,
+                                        "max_attempts": blocked_state.max_attempts,
+                                        "revision_count": blocked_state.revision_count,
+                                        "max_revisions": blocked_state.max_revisions,
+                                    }
+                                )
+
+                        if exhausted:
+                            self._set_wave_status(
+                                LoopState.NEEDS_DECISION,
+                                BlockerCode.NEEDS_DECISION,
+                                (
+                                    f"{len(exhausted)} ready task(s) exhausted review/attempt "
+                                    "bounds; operator decision required"
+                                ),
+                                blocked_details=exhausted,
+                                dispatchable_tasks=blocked_ready,
+                            )
+                        elif self.wave_status.get("blocker_code") != BlockerCode.RUN_BLOCKED.value:
+                            self._set_wave_status(
+                                LoopState.RUN_BLOCKED,
+                                BlockerCode.RUN_BLOCKED,
+                                (
+                                    f"{len(blocked_ready)} ready task(s) are blocked, "
+                                    "waiting for next cadence"
+                                ),
+                                blocked_details=[
+                                    {
+                                        "beads_id": blocked_id,
+                                        "phase": (
+                                            self.baton_manager.get_state(blocked_id).phase.value
+                                            if self.baton_manager.get_state(blocked_id)
+                                            else "unknown"
+                                        ),
+                                    }
+                                    for blocked_id in blocked_ready
+                                ],
+                                dispatchable_tasks=blocked_ready,
+                            )
                         print(
                             f"{len(blocked_ready)} ready task(s) are blocked, waiting for next cadence..."
                         )
@@ -938,6 +992,34 @@ class DxLoop:
                     print(
                         f"Review REVISION_REQUIRED for {beads_id}, returning to implement"
                     )
+                elif baton_state.phase == BatonPhase.FAILED:
+                    self.scheduler.state.clear_phase(beads_id, "review")
+                    self.scheduler.state.mark_blocked(beads_id)
+                    failure_reason = baton_state.metadata.get(
+                        "failure_reason", "review_exhausted"
+                    )
+                    self._set_wave_status(
+                        LoopState.NEEDS_DECISION,
+                        BlockerCode.NEEDS_DECISION,
+                        (
+                            f"Review exhausted for {beads_id} after "
+                            f"{failure_reason.replace('_', ' ')}"
+                        ),
+                        blocked_details=[
+                            {
+                                "beads_id": beads_id,
+                                "phase": "review",
+                                "reason_code": failure_reason,
+                                "attempt": baton_state.attempt,
+                                "max_attempts": baton_state.max_attempts,
+                                "revision_count": baton_state.revision_count,
+                                "max_revisions": baton_state.max_revisions,
+                                "verdict": verdict.value,
+                            }
+                        ],
+                    )
+                    self._save_state()
+                    print(f"Review verdict for {beads_id}: {verdict.value}")
                 else:
                     self._save_state()
                     print(f"Review verdict for {beads_id}: {verdict.value}")
