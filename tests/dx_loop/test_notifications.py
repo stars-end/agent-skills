@@ -375,6 +375,66 @@ def test_needs_decision_next_action_describes_exhaustion():
     print("[needs-decision-action] needs_decision next action describes exhaustion")
 
 
+def test_notification_includes_provider_and_phase():
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "opencode_rate_limited",
+        beads_id="bd-provider-1",
+        wave_id="wave-test",
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Test task",
+        provider="opencode",
+        phase="implement",
+    )
+    assert notification is not None
+    assert notification.provider == "opencode"
+    assert notification.phase == "implement"
+
+    payload = notification.to_dict()
+    assert payload["provider"] == "opencode"
+    assert payload["phase"] == "implement"
+
+    cli = notification.format_cli()
+    assert "provider=opencode" in cli
+    assert "phase=implement" in cli
+    print("[provider-phase] notification includes provider and phase context")
+
+
+def test_merge_ready_includes_provider_and_phase():
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        None,
+        beads_id="bd-provider-2",
+        wave_id="wave-prod",
+        has_pr_artifacts=True,
+        checks_passing=True,
+    )
+    notification = manager.create_notification(
+        blocker,
+        pr_url="https://github.com/stars-end/agent-skills/pull/789",
+        pr_head_sha="c" * 40,
+        task_title="Add provider-phase lines",
+        provider="opencode",
+        phase="complete",
+    )
+    assert notification is not None
+
+    payload = notification.to_operator_payload()
+    assert payload["provider"] == "opencode"
+    assert payload["phase"] == "complete"
+
+    cli = notification.format_cli()
+    assert "provider=opencode" in cli
+    assert "phase=complete" in cli
+    print("[merge-ready-provider-phase] merge_ready includes provider and phase")
+
+
 if __name__ == "__main__":
     test_healthy_state_does_not_notify()
     test_pending_state_does_not_notify()
@@ -394,4 +454,6 @@ if __name__ == "__main__":
     test_tracker_last_emitted_blocker_persists()
     test_healthy_and_pending_never_create_notification()
     test_needs_decision_next_action_describes_exhaustion()
+    test_notification_includes_provider_and_phase()
+    test_merge_ready_includes_provider_and_phase()
     print("\nAll notification policy tests passed!")

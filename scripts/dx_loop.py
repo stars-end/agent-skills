@@ -769,6 +769,7 @@ class DxLoop:
                         ],
                     )
                     self.scheduler.state.mark_blocked(beads_id)
+                    baton = self.baton_manager.get_state(beads_id)
                     notification = self.notification_manager.create_notification(
                         self.blocker_classifier.classify(
                             reason,
@@ -776,7 +777,9 @@ class DxLoop:
                             wave_id=self.wave_id,
                             metadata={"runner_lifecycle_defect": True},
                             has_pr_artifacts=False,
-                        )
+                        ),
+                        provider=self.config.get("provider"),
+                        phase=baton.phase.value if baton else "implement",
                     )
                     if notification:
                         print(notification.format_cli())
@@ -800,6 +803,8 @@ class DxLoop:
                         task_title=task.title if task else None,
                         attempt=baton.attempt if baton else None,
                         max_attempts=baton.max_attempts if baton else None,
+                        provider=self.config.get("provider"),
+                        phase=baton.phase.value if baton else None,
                     )
                     if notification:
                         print(notification.format_cli())
@@ -896,6 +901,8 @@ class DxLoop:
                         pr_url=artifact.pr_url if artifact else None,
                         pr_head_sha=artifact.pr_head_sha if artifact else None,
                         task_title=task.title if task else None,
+                        provider=self.config.get("provider"),
+                        phase="complete",
                     )
                     if notification:
                         print(notification.format_cli())
