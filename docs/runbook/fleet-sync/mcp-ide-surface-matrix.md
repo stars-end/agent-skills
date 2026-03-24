@@ -7,7 +7,7 @@ This matrix tracks the configuration paths, formats, and current integration sta
 
 | IDE | Config Path | Format | Patch Method | OS Differences | Status |
 |-----|-------------|--------|--------------|----------------|--------|
-| `antigravity` | `~/.gemini/settings.json` | JSON | jq/patch | Same as gemini-cli | `INFERRED` |
+| `antigravity` | `~/.gemini/antigravity/mcp_config.json` | JSON | jq/patch | Separate Google surface | `INFERRED` |
 | `claude-code` | `~/.claude.json` | JSON | jq/patch | None | `VERIFIED` |
 | `codex-cli` | `~/.codex/config.toml` | TOML | toml-cli/sed | None | `VERIFIED` |
 | `opencode` | `~/.config/opencode/opencode.jsonc` | JSONC | File Patch | None | `VERIFIED` |
@@ -24,5 +24,5 @@ This matrix tracks the configuration paths, formats, and current integration sta
 
 ## Key Research Observations
 - `opencode` requires the `mcp` key and an array-style command format.
-- `gemini-cli` and `antigravity` share the same configuration root at `~/.gemini/settings.json`.
+- `gemini-cli` and `antigravity` use separate configuration files and must stay converged for `context-plus`.
 - `codex-cli` requires the underscored `mcp_servers` key in TOML.

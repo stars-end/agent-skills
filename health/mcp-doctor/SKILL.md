@@ -37,7 +37,12 @@ Current verified per-client sources of truth:
 - **Gemini CLI**: `~/.gemini/settings.json` (uses `mcpServers` object)
 - **Codex CLI**: `~/.codex/config.toml` (uses `[mcp_servers]` table, required on `macmini`, optional on Linux hosts)
 - **OpenCode**: `~/.config/opencode/opencode.jsonc` (uses `mcp` object)
-- **Antigravity**: Inherits from `~/.gemini/settings.json` (uses `mcpServers` object)
+- **Antigravity**: `~/.gemini/antigravity/mcp_config.json` (uses `mcpServers` object)
+
+`context-plus` launcher contract:
+- **OpenCode/Claude/Codex**: direct launcher is valid (`node ~/.local/share/contextplus-patched/build/index.js`)
+- **Gemini CLI/Antigravity**: required launcher is wrapped (`bash -lc 'exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null'`)
+- Doctor warns on stale `npx -y contextplus`, plain `node` launcher in Google surfaces, and drift between Gemini/Antigravity `context-plus` entries.
 
 ## Status Semantics
 - `VERIFIED`: Proven via client CLI output.

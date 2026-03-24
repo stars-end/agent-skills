@@ -17,7 +17,7 @@ Managed CLI-only tools:
 1. Layer 1 host runtime:
 - `cm --version`
 - `tldr-mcp --version`
-- `npx -y contextplus --help`
+- `test -f ~/.local/share/contextplus-patched/build/index.js`
 - `serena --help`
 
 2. Layer 2 config convergence:

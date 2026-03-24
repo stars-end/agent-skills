@@ -70,7 +70,10 @@ Use this skill when the user asks to:
   - host runtime health
   - rendered config correctness
   - client-visible MCP availability
-- `antigravity` and `gemini-cli` share one Google MCP config surface.
+- `antigravity` and `gemini-cli` use separate Google MCP config files that must stay converged for `context-plus`.
+- For `context-plus`, keep launcher truth:
+  - `gemini-cli` + `antigravity`: `bash -lc 'exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null'`
+  - `codex-cli` + `claude-code` + `opencode`: direct `node ~/.local/share/contextplus-patched/build/index.js`
 - Do not claim full GO while `serena` remains unresolved unless the contract explicitly excludes it.
 
 ## Validation Order
