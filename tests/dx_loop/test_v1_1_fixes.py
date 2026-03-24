@@ -736,6 +736,27 @@ def test_runner_adapter_extracts_review_verdict_from_log(tmp_path):
     print("✓ RunnerAdapter extracts review verdicts from logs")
 
 
+def test_runner_adapter_extracts_markdown_wrapped_review_verdict(tmp_path):
+    """Markdown-wrapped verdict lines should still be machine-readable."""
+    adapter = RunnerAdapter(provider="opencode")
+    log_dir = Path("/tmp/dx-runner/opencode")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "bd-test-review.log"
+    log_path.write_text(
+        "## Review Findings\n\n"
+        "**APPROVED: Validation and scope both look correct**\n"
+    )
+
+    try:
+        verdict = adapter.extract_review_verdict("bd-test-review")
+    finally:
+        log_path.unlink(missing_ok=True)
+
+    assert verdict == "APPROVED: Validation and scope both look correct"
+
+    print("✓ RunnerAdapter extracts markdown-wrapped review verdicts")
+
+
 def test_runner_adapter_extracts_plaintext_implementation_return_from_cc_glm_log():
     """cc-glm plaintext logs should still yield implementation-return text."""
     adapter = RunnerAdapter(provider="cc-glm")
@@ -1599,6 +1620,49 @@ def test_no_op_success_clears_active_and_enters_redispatch(tmp_path):
     assert loop.wave_status["blocker_code"] == "deterministic_redispatch_needed"
 
     print("✓ no_op_success is terminal and retriable, not left active")
+
+
+def test_terminal_review_without_verdict_needs_decision(tmp_path):
+    """Terminal review exits without a verdict should not strand active review state."""
+    wave_id = "wave-review-no-verdict"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-review": BeadsTask(
+            beads_id="bd-review",
+            title="Review task",
+            dependencies=[],
+        )
+    }
+
+    loop.baton_manager.start_implement("bd-review", run_id="impl-1")
+    loop.baton_manager.complete_implement(
+        "bd-review",
+        pr_url="https://github.com/stars-end/agent-skills/pull/999",
+        pr_head_sha="abcdef1234567890abcdef1234567890abcdef12",
+    )
+    loop.baton_manager.start_review("bd-review", run_id="review-1")
+    loop.scheduler.state.mark_dispatched("bd-review", "review")
+    loop.review_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="no_op_success",
+        reason_code="exit_zero_no_mutations",
+    )
+    loop.review_runner.report = lambda beads_id: {
+        "state": "no_op_success",
+        "reason_code": "exit_zero_no_mutations",
+    }
+    loop.review_runner.extract_review_verdict = lambda beads_id: None
+
+    loop._check_review_progress("bd-review")
+
+    assert not loop.scheduler.state.is_active("bd-review", "review")
+    assert loop.scheduler.state.is_blocked("bd-review")
+    assert loop.wave_status["state"] == "needs_decision"
+    assert loop.wave_status["blocker_code"] == "needs_decision"
+
+    print("✓ Terminal review without verdict does not strand active review state")
 
 
 def test_process_exit_with_rc_persists_needs_decision_wave_status(tmp_path):
