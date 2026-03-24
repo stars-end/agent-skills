@@ -205,9 +205,40 @@ def test_merge_ready_handoff_includes_pr_artifacts():
     cli = notification.format_cli()
     assert "MERGE_READY" in cli
     assert "Implement feature X" in cli
+    assert "bd-test-6" in cli
     assert "pull/123" in cli
     assert "Next:" in cli
-    print("[merge-ready-handoff] merge_ready includes PR URL, SHA, task title")
+    print(
+        "[merge-ready-handoff] merge_ready includes PR URL, SHA, task title, beads_id"
+    )
+
+
+def test_cli_shows_beads_id_alongside_task_title():
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        None,
+        beads_id="bd-5w5o.37.1",
+        wave_id="wave-test",
+        has_pr_artifacts=True,
+        checks_passing=True,
+    )
+    notification = manager.create_notification(
+        blocker,
+        pr_url="https://github.com/stars-end/agent-skills/pull/999",
+        pr_head_sha="c" * 40,
+        task_title="Fix notification CLI handoff",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+    assert "bd-5w5o.37.1" in cli, "beads_id must be visible in CLI output"
+    assert "Fix notification CLI handoff" in cli, (
+        "task_title must be visible in CLI output"
+    )
+    print(
+        "[beads-id-visibility] CLI shows beads_id alongside task_title for dx-loop takeover/resume"
+    )
 
 
 def test_merge_ready_operator_payload_is_complete():
@@ -387,6 +418,7 @@ if __name__ == "__main__":
     test_needs_decision_emits()
     test_needs_decision_payload_with_attempt_context()
     test_merge_ready_handoff_includes_pr_artifacts()
+    test_cli_shows_beads_id_alongside_task_title()
     test_merge_ready_operator_payload_is_complete()
     test_blocked_cli_shows_attempt_progress()
     test_review_blocked_emits()
