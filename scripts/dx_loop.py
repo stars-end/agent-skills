@@ -194,6 +194,13 @@ class DxLoop:
         # Load previous state if exists
         self._load_state()
 
+        # Trunk hardening: early exit if wave is already completed
+        # Restarting a completed wave must not regress to in_progress_healthy
+        if self.wave_status.get("state") == LoopState.COMPLETED.value:
+            if not self.beads_manager.has_pending_tasks():
+                print("Wave already completed - no pending tasks on restart")
+                return True
+
         iteration = 0
 
         while iteration < max_iterations:

@@ -1010,7 +1010,9 @@ def test_cmd_start_restart_skips_bootstrap_when_state_exists(tmp_path, monkeypat
     print("✓ cmd_start restart loads persisted state before bootstrap")
 
 
-def test_cmd_start_restart_bootstraps_when_state_missing_task_graph(tmp_path, monkeypatch):
+def test_cmd_start_restart_bootstraps_when_state_missing_task_graph(
+    tmp_path, monkeypatch
+):
     """Restart should rebuild from Beads if persisted state lacks the task graph."""
     dx_loop_main = importlib.util.spec_from_file_location(
         "dx_loop_main_restart_empty", REPO_ROOT / "scripts" / "dx_loop.py"
@@ -1644,6 +1646,114 @@ def test_no_false_healthy_state_during_capacity_block(tmp_path):
     print("✓ No false healthy state during capacity block")
 
 
+def test_completed_wave_restart_preserves_status(tmp_path):
+    """Restarting a completed wave must not regress to in_progress_healthy (bd-5w5o.40.1)."""
+    wave_id = "wave-completed-restart"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-done-1": BeadsTask(
+            beads_id="bd-done-1",
+            title="Completed task 1",
+            dependencies=[],
+        ),
+        "bd-done-2": BeadsTask(
+            beads_id="bd-done-2",
+            title="Completed task 2",
+            dependencies=["bd-done-1"],
+        ),
+    }
+    loop.beads_manager.layers = [["bd-done-1"], ["bd-done-2"]]
+    loop.beads_manager.completed = {"bd-done-1", "bd-done-2"}
+    loop.scheduler.state.mark_completed("bd-done-1")
+    loop.scheduler.state.mark_completed("bd-done-2")
+    loop.baton_manager.baton_states["bd-done-1"] = BatonState(
+        beads_id="bd-done-1",
+        phase=BatonPhase.COMPLETE,
+        implement_run_id="run-1",
+        pr_url="https://github.com/test/repo/pull/1",
+        pr_head_sha="a" * 40,
+    )
+    loop.baton_manager.baton_states["bd-done-2"] = BatonState(
+        beads_id="bd-done-2",
+        phase=BatonPhase.COMPLETE,
+        implement_run_id="run-2",
+        pr_url="https://github.com/test/repo/pull/2",
+        pr_head_sha="b" * 40,
+    )
+    loop._set_wave_status(
+        LoopState.COMPLETED,
+        None,
+        "Wave complete - no pending tasks",
+    )
+    loop._save_state()
+
+    loop2 = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop2.wave_dir = tmp_path / "waves" / wave_id
+    loop2.state_file = loop2.wave_dir / "loop_state.json"
+
+    result = loop2.run_loop(max_iterations=1)
+
+    assert result is True
+    assert loop2.wave_status["state"] == "completed"
+    assert not loop2.beads_manager.has_pending_tasks()
+
+    state = json.loads(loop2.state_file.read_text())
+    assert state["wave_status"]["state"] == "completed"
+
+    print("✓ Completed wave restart preserves status without regression")
+
+
+def test_completed_wave_restart_no_in_progress_healthy_regression(tmp_path):
+    """Restart with partially completed state must not regress when checking progress."""
+    wave_id = "wave-partial-completed-restart"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-task": BeadsTask(
+            beads_id="bd-task",
+            title="Single task",
+            dependencies=[],
+        ),
+    }
+    loop.beads_manager.layers = [["bd-task"]]
+    loop.beads_manager.completed = {"bd-task"}
+    loop.scheduler.state.mark_completed("bd-task")
+    loop.baton_manager.baton_states["bd-task"] = BatonState(
+        beads_id="bd-task",
+        phase=BatonPhase.COMPLETE,
+        implement_run_id="run-1",
+        pr_url="https://github.com/test/repo/pull/1",
+        pr_head_sha="a" * 40,
+    )
+    loop._set_wave_status(
+        LoopState.COMPLETED,
+        None,
+        "Wave complete - no pending tasks",
+    )
+    loop._save_state()
+
+    loop2 = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop2.wave_dir = tmp_path / "waves" / wave_id
+    loop2.state_file = loop2.wave_dir / "loop_state.json"
+    loop2.runner_adapter.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_ok",
+        reason_code="process_exit_with_rc",
+    )
+
+    result = loop2.run_loop(max_iterations=1)
+
+    assert result is True
+    assert loop2.wave_status["state"] == "completed", (
+        f"Expected 'completed', got '{loop2.wave_status['state']}'"
+    )
+
+    print("✓ Completed wave restart does not regress to in_progress_healthy")
+
+
 if __name__ == "__main__":
     test_no_duplicate_dispatch()
     test_notification_first_occurrence()
@@ -1654,4 +1764,6 @@ if __name__ == "__main__":
     test_dispatch_fanout_capped_at_max_parallel()
     test_capacity_blocked_stops_dispatch_in_same_cycle()
     test_no_false_healthy_state_during_capacity_block()
+    test_completed_wave_restart_preserves_status()
+    test_completed_wave_restart_no_in_progress_healthy_regression()
     print("\nAll v1.1 fix tests passed!")
