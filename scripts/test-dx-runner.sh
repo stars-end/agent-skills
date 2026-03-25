@@ -1136,7 +1136,7 @@ EOF
     fi
 
     local check_json
-    check_json="$("$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
+    check_json="$(cd /Users/fengning/bd && "$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
     if echo "$check_json" | jq -e '.provider=="opencode"' >/dev/null 2>&1; then
         pass "check resolves to latest provider instance after switch"
     else
@@ -1353,6 +1353,58 @@ EOF
     fi
 
     kill "$mpid" >/dev/null 2>&1 || true
+    rm -f "$dir/${beads}".*
+}
+
+# ============================================================================
+# Test: Outcome Precedence Over Lingering PID
+# ============================================================================
+
+test_outcome_precedence_over_lingering_pid() {
+    echo "=== Testing Outcome Precedence Over Lingering PID ==="
+
+    local provider="mock-outcome-precedence"
+    local beads="test-outcome-precedence-$$"
+    local dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+
+    (sleep 30) >/dev/null 2>&1 &
+    local pid="$!"
+    echo "$pid" > "$dir/${beads}.pid"
+
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+EOF
+
+    cat > "$dir/${beads}.outcome" <<EOF
+beads=$beads
+provider=$provider
+run_id=test
+exit_code=129
+state=failed
+reason_code=opencode_rate_limited
+completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+duration_sec=12
+mutations=4
+log_bytes=42
+cpu_time_sec=0
+pid_age_sec=12
+EOF
+
+    echo "recent output" > "$dir/${beads}.log"
+
+    local check_json check_rc=0
+    check_json="$(cd /Users/fengning/bd && "$DX_RUNNER" check --beads "$beads" --json 2>/dev/null)" || check_rc=$?
+    if echo "$check_json" | jq -e '.state=="exited_err" and .reason_code=="opencode_rate_limited"' >/dev/null 2>&1; then
+        pass "outcome file wins over lingering pid/log freshness"
+    else
+        fail "outcome precedence missing (rc=$check_rc): $check_json"
+    fi
+
+    kill "$pid" >/dev/null 2>&1 || true
     rm -f "$dir/${beads}".*
 }
 
@@ -2436,6 +2488,7 @@ run_all_tests() {
     test_commit_required_contract
     test_check_metrics_telemetry
     test_awaiting_finalize_taxonomy
+    test_outcome_precedence_over_lingering_pid
     test_railway_auth_preflight_requirement
     test_opencode_attach_mode_failfast
     test_completion_monitor_cleanup

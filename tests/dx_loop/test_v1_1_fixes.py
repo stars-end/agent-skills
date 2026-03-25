@@ -691,6 +691,17 @@ Use worktrees.
     print("✓ RunnerAdapter parses JSON payloads after banner text")
 
 
+def test_runner_task_state_treats_terminal_variants_as_complete():
+    """dx-loop should not strand on terminal runner states beyond exited_ok/exited_err."""
+    assert RunnerTaskState(beads_id="bd-test", state="stopped").is_complete() is True
+    assert (
+        RunnerTaskState(beads_id="bd-test", state="no_op_success").is_complete()
+        is True
+    )
+
+    print("✓ RunnerTaskState treats stopped/no_op_success as terminal")
+
+
 def test_runner_adapter_uses_canonical_bd_cwd(monkeypatch, tmp_path):
     """All dx-runner subprocesses should run from the canonical Beads repo cwd."""
     adapter = RunnerAdapter(provider="opencode", beads_repo_path=tmp_path / "bd")
@@ -1359,6 +1370,47 @@ def test_normal_retryable_failure_still_enters_redispatch(tmp_path):
     assert loop.wave_status["blocker_code"] == "deterministic_redispatch_needed"
 
     print("✓ Normal retryable failures still enter redispatch state")
+
+
+def test_terminal_provider_failure_updates_wave_status_to_run_blocked(tmp_path):
+    """Terminal provider failures should not leave the wave falsely healthy."""
+    wave_id = "wave-provider-blocked"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-provider-blocked": BeadsTask(
+            beads_id="bd-provider-blocked",
+            title="Provider blocked task",
+            dependencies=[],
+        )
+    }
+
+    loop.baton_manager.start_implement("bd-provider-blocked", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-provider-blocked", "implement")
+    loop.wave_status = {
+        "state": "in_progress_healthy",
+        "blocker_code": None,
+        "reason": "All ready tasks already active, waiting for progress",
+        "blocked_details": [],
+        "dispatchable_tasks": ["bd-provider-blocked"],
+    }
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="stopped",
+        reason_code="opencode_rate_limited",
+    )
+    loop.implement_runner.extract_agent_output = lambda beads_id: ""
+    loop.implement_runner.extract_pr_artifacts = lambda beads_id: None
+
+    loop._check_implement_progress("bd-provider-blocked")
+
+    assert loop.wave_status["state"] == "run_blocked"
+    assert loop.wave_status["blocker_code"] == "run_blocked"
+    assert loop.scheduler.state.is_blocked("bd-provider-blocked")
+    assert not loop.scheduler.state.is_active("bd-provider-blocked", "implement")
+
+    print("✓ Terminal provider failures now update wave status to run_blocked")
 
 
 def test_adopt_and_no_double_dispatch(tmp_path):
