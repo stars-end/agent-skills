@@ -44,6 +44,8 @@ class Notification:
     pr_url: Optional[str] = None
     pr_head_sha: Optional[str] = None
     task_title: Optional[str] = None
+    provider: Optional[str] = None
+    phase: Optional[str] = None
     attempt: Optional[int] = None
     max_attempts: Optional[int] = None
 
@@ -63,6 +65,10 @@ class Notification:
             d["pr_head_sha"] = self.pr_head_sha
         if self.task_title:
             d["task_title"] = self.task_title
+        if self.provider:
+            d["provider"] = self.provider
+        if self.phase:
+            d["phase"] = self.phase
         if self.attempt is not None:
             d["attempt"] = self.attempt
         if self.max_attempts is not None:
@@ -84,12 +90,10 @@ class Notification:
                 lines.append(f"  Task: {self.task_title} ({self.beads_id})")
             else:
                 lines.append(f"  Task: {self.beads_id}")
-        provider = self.metadata.get("provider") if self.metadata else None
-        phase = self.metadata.get("phase") if self.metadata else None
-        if provider:
-            lines.append(f"  Provider: {provider}")
-        if phase:
-            lines.append(f"  Phase: {phase}")
+        if self.provider:
+            lines.append(f"  Provider: {self.provider}")
+        if self.phase:
+            lines.append(f"  Phase: {self.phase}")
         if self.notification_type == "merge_ready":
             if self.pr_url:
                 lines.append(f"  PR: {self.pr_url}")
@@ -164,6 +168,8 @@ class NotificationManager:
         pr_url: Optional[str] = None,
         pr_head_sha: Optional[str] = None,
         task_title: Optional[str] = None,
+        provider: Optional[str] = None,
+        phase: Optional[str] = None,
         attempt: Optional[int] = None,
         max_attempts: Optional[int] = None,
     ) -> Optional[Notification]:
@@ -184,6 +190,8 @@ class NotificationManager:
             pr_url=pr_url,
             pr_head_sha=pr_head_sha,
             task_title=task_title,
+            provider=provider,
+            phase=phase,
             attempt=attempt,
             max_attempts=max_attempts,
         )

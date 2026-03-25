@@ -776,7 +776,9 @@ class DxLoop:
                             wave_id=self.wave_id,
                             metadata={"runner_lifecycle_defect": True},
                             has_pr_artifacts=False,
-                        )
+                        ),
+                        provider=self.config.get("implement_provider"),
+                        phase="implement",
                     )
                     if notification:
                         print(notification.format_cli())
@@ -798,6 +800,8 @@ class DxLoop:
                     notification = self.notification_manager.create_notification(
                         blocker,
                         task_title=task.title if task else None,
+                        provider=self.config.get("implement_provider"),
+                        phase="implement",
                         attempt=baton.attempt if baton else None,
                         max_attempts=baton.max_attempts if baton else None,
                     )
@@ -896,6 +900,8 @@ class DxLoop:
                         pr_url=artifact.pr_url if artifact else None,
                         pr_head_sha=artifact.pr_head_sha if artifact else None,
                         task_title=task.title if task else None,
+                        provider=self.config.get("review_provider"),
+                        phase="merge",
                     )
                     if notification:
                         print(notification.format_cli())

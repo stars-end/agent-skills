@@ -130,6 +130,31 @@ PR_HEAD_SHA: <40-char-sha>
 
 Missing PR artifacts means incomplete, not success.
 
+## Actionable Notification Contract
+
+dx-loop emits notifications only for actionable states requiring operator attention.
+
+**Emitted**:
+- `merge_ready`: PR artifacts present, CI passing → Review and merge
+- `blocked`: kickoff_env, run, review blocked → Fix environment or wait
+- `needs_decision`: Human intervention required → Inspect logs
+
+**Suppressed**:
+- `waiting_on_dependency`: Automatic - upstream work in progress
+- `deterministic_redispatch_needed`: Automatic retry in progress
+- Unchanged blockers: Same state as last notification
+
+**Notification payload fields**:
+- `beads_id`: Task ID (e.g., `bd-5w5o.37.3`)
+- `wave_id`: Wave identifier (e.g., `wave-2026-03-24T12:00:00Z`)
+- `provider`: Execution provider (e.g., `opencode`, `cc-glm`)
+- `phase`: Current phase (`implement`, `review`, `merge`)
+- `pr_url`: PR link (merge_ready only)
+- `pr_head_sha`: Commit SHA (merge_ready only)
+- `next_action`: What operator should do
+
+**Full documentation**: `docs/runbook/dx-loop/NOTIFICATION_CONTRACT.md`
+
 ## Configuration
 
 Default: `configs/dx-loop/default_config.yaml`
@@ -152,6 +177,7 @@ Override with `--config` flag or environment variables.
 - ADR: docs/adr/ADR-DX-LOOP-V1.md
 - Ralph: scripts/ralph/beads-parallel.sh
 - dx-runner: extended/dx-runner/SKILL.md
+- Notification Contract: docs/runbook/dx-loop/NOTIFICATION_CONTRACT.md
 - Epic: bd-5w5o
 
 Base directory for this skill: file:///home/fengning/.agents/skills/dx-loop
