@@ -178,6 +178,8 @@ class NotificationManager:
 
         notification_type = self._get_notification_type(blocker.code)
         next_action = self._get_next_action(blocker.code, blocker.metadata)
+        provider = provider or blocker.metadata.get("provider")
+        phase = phase or blocker.metadata.get("phase")
 
         notification = Notification(
             notification_type=notification_type,
