@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tests for bd-5w5o.10: operator handoff and low-noise notification policy.
+Tests for notification policy (bd-5w5o.10, bd-5w5o.37).
 
 Covers:
 - emit on first blocked occurrence
@@ -10,6 +10,8 @@ Covers:
 - needs_decision emission with triage context
 - unchanged blocked state suppression
 - operator payload structure
+- provider/phase context in CLI output (bd-5w5o.37.2)
+- exact beads_id with task title (bd-5w5o.37.2)
 """
 
 import sys
