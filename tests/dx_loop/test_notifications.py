@@ -406,6 +406,176 @@ def test_needs_decision_next_action_describes_exhaustion():
     print("[needs-decision-action] needs_decision next action describes exhaustion")
 
 
+def test_blocked_shows_exact_beads_id_with_task_title():
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "opencode_rate_limited",
+        beads_id="bd-regression-1",
+        wave_id="wave-regression",
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Fix rate limit handling",
+    )
+    assert notification is not None
+    assert notification.notification_type == "blocked"
+    cli = notification.format_cli()
+    assert "bd-regression-1" in cli, "blocked notification must show exact beads_id"
+    assert "Fix rate limit handling" in cli, "blocked notification must show task_title"
+    assert "BLOCKED" in cli
+    print(
+        "[regression-blocked-beads] blocked notification shows exact beads_id with task title"
+    )
+
+
+def test_needs_decision_shows_exact_beads_id_with_task_title():
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "max_attempts_exceeded",
+        beads_id="bd-regression-2",
+        wave_id="wave-regression",
+        metadata={"failure_reason": "max_attempts_exceeded"},
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Resolve auth failure",
+        attempt=3,
+        max_attempts=3,
+    )
+    assert notification is not None
+    assert notification.notification_type == "needs_decision"
+    cli = notification.format_cli()
+    assert "bd-regression-2" in cli, (
+        "needs_decision notification must show exact beads_id"
+    )
+    assert "Resolve auth failure" in cli, (
+        "needs_decision notification must show task_title"
+    )
+    assert "NEEDS_DECISION" in cli
+    print(
+        "[regression-needs-decision-beads] needs_decision notification shows exact beads_id with task title"
+    )
+
+
+def test_blocked_shows_provider_phase_context():
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "opencode_rate_limited",
+        beads_id="bd-regression-3",
+        wave_id="wave-regression",
+        metadata={"provider": "opencode", "phase": "implementation"},
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Rate limited task",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+    assert "bd-regression-3" in cli
+    assert "Rate limited task" in cli
+    assert "Provider: opencode" in cli, (
+        "blocked notification must show provider context"
+    )
+    assert "Phase: implementation" in cli, (
+        "blocked notification must show phase context"
+    )
+    print(
+        "[regression-blocked-provider-phase] blocked notification shows provider/phase context"
+    )
+
+
+def test_needs_decision_shows_provider_phase_context():
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "retry_chain_exhausted",
+        beads_id="bd-regression-4",
+        wave_id="wave-regression",
+        metadata={
+            "failure_reason": "retry_chain_exhausted",
+            "provider": "gemini",
+            "phase": "review",
+        },
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Review chain exhausted",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+    assert "bd-regression-4" in cli
+    assert "Review chain exhausted" in cli
+    assert "Provider: gemini" in cli, (
+        "needs_decision notification must show provider context"
+    )
+    assert "Phase: review" in cli, "needs_decision notification must show phase context"
+    print(
+        "[regression-needs-decision-provider-phase] needs_decision notification shows provider/phase context"
+    )
+
+
+def test_merge_ready_shows_provider_phase_context():
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        None,
+        beads_id="bd-regression-5",
+        wave_id="wave-regression",
+        has_pr_artifacts=True,
+        checks_passing=True,
+        metadata={"provider": "opencode", "phase": "complete"},
+    )
+    notification = manager.create_notification(
+        blocker,
+        pr_url="https://github.com/stars-end/agent-skills/pull/999",
+        pr_head_sha="a" * 40,
+        task_title="Feature complete",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+    assert "bd-regression-5" in cli
+    assert "Feature complete" in cli
+    assert "Provider: opencode" in cli, (
+        "merge_ready notification must show provider context"
+    )
+    assert "Phase: complete" in cli, "merge_ready notification must show phase context"
+    print(
+        "[regression-merge-ready-provider-phase] merge_ready notification shows provider/phase context"
+    )
+
+
+def test_notification_without_provider_phase_is_clean():
+    classifier = BlockerClassifier()
+    manager = NotificationManager()
+
+    blocker = classifier.classify(
+        "worktree_missing",
+        beads_id="bd-regression-6",
+        wave_id="wave-regression",
+    )
+    notification = manager.create_notification(
+        blocker,
+        task_title="Bootstrap failure",
+    )
+    assert notification is not None
+    cli = notification.format_cli()
+    assert "bd-regression-6" in cli
+    assert "Bootstrap failure" in cli
+    assert "Provider:" not in cli, (
+        "notification without provider should not show Provider line"
+    )
+    assert "Phase:" not in cli, "notification without phase should not show Phase line"
+    print("[regression-no-provider-phase] notification without provider/phase is clean")
+
+
 if __name__ == "__main__":
     test_healthy_state_does_not_notify()
     test_pending_state_does_not_notify()
@@ -426,4 +596,10 @@ if __name__ == "__main__":
     test_tracker_last_emitted_blocker_persists()
     test_healthy_and_pending_never_create_notification()
     test_needs_decision_next_action_describes_exhaustion()
+    test_blocked_shows_exact_beads_id_with_task_title()
+    test_needs_decision_shows_exact_beads_id_with_task_title()
+    test_blocked_shows_provider_phase_context()
+    test_needs_decision_shows_provider_phase_context()
+    test_merge_ready_shows_provider_phase_context()
+    test_notification_without_provider_phase_is_clean()
     print("\nAll notification policy tests passed!")
