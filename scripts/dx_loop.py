@@ -810,7 +810,39 @@ class DxLoop:
 
                     self.scheduler.state.mark_blocked(beads_id)
 
-                    if blocker.code == BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED:
+                    if blocker.code == BlockerCode.RUN_BLOCKED:
+                        self._set_wave_status(
+                            LoopState.RUN_BLOCKED,
+                            BlockerCode.RUN_BLOCKED,
+                            (
+                                f"Implement blocked for {beads_id} with "
+                                f"{task_state.reason_code or 'unknown failure'}"
+                            ),
+                            blocked_details=[
+                                {
+                                    "beads_id": beads_id,
+                                    "phase": "implement",
+                                    "reason_code": task_state.reason_code,
+                                }
+                            ],
+                        )
+                    elif blocker.code == BlockerCode.NEEDS_DECISION:
+                        self._set_wave_status(
+                            LoopState.NEEDS_DECISION,
+                            BlockerCode.NEEDS_DECISION,
+                            (
+                                f"Implement requires decision for {beads_id} with "
+                                f"{task_state.reason_code or 'unknown failure'}"
+                            ),
+                            blocked_details=[
+                                {
+                                    "beads_id": beads_id,
+                                    "phase": "implement",
+                                    "reason_code": task_state.reason_code,
+                                }
+                            ],
+                        )
+                    elif blocker.code == BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED:
                         baton_state = self.baton_manager.record_implement_retry(
                             beads_id, task_state.reason_code
                         )
