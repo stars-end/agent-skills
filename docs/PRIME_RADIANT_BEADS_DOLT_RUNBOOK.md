@@ -201,6 +201,27 @@ fi
   - Spokes: `BEADS_DOLT_SERVER_HOST` resolves to epyc12 Tailscale IP
 - Compare `beads-dolt status --json | jq -c '.summary'` output
 
+### D) `beads.role not configured` (local host config drift)
+
+**Signature:** Mutating `bd` commands (create, update, close, dep) warn `beads.role not configured` or appear to hang. Meanwhile `bd --version` is healthy and `beads-dolt dolt test --json` passes.
+
+**Classification:** Local host config drift. NOT a Dolt hub failure, NOT a service outage.
+
+**Deterministic fix:**
+
+```bash
+bd config set beads.role maintainer
+```
+
+**Retry after fix:**
+
+```bash
+beads-dolt dolt test --json    # confirm hub still healthy
+bd create --title "test" --type task --dry-run  # confirm mutation path works
+```
+
+**Rule:** If `beads-dolt dolt test --json` shows `"connection_ok": true`, the hub is healthy. The `beads.role` warning is a local-only blocker. Self-fix before escalating to hub/service diagnostics.
+
 ```bash
 ssh epyc12 "ss -ltnp | grep ':3307' || true"
 ssh homedesktop-wsl "ss -ltnp | grep ':3307' || true"

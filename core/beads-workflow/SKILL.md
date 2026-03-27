@@ -532,6 +532,18 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 - Restart managed service (`systemctl --user restart beads-dolt.service` on Linux)
 - Re-check with `beads-dolt dolt test --json`
 
+**`beads.role not configured` warning or hung mutations:**
+- This is local host config drift, not a hub/service outage.
+- If `beads-dolt dolt test --json` succeeds, the Beads hub is healthy.
+- Deterministic fix:
+
+```bash
+bd config set beads.role maintainer
+```
+
+- Retry the mutation after setting the role. Do not escalate to hub diagnostics if the Dolt connection test passes.
+- Agents performing mutating `bd` commands (create, update, close, dep) should self-heal this before declaring Beads broken.
+
 ---
 
 **Last Updated:** 2025-02-09

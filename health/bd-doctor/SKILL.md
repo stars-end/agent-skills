@@ -45,6 +45,7 @@ beads-dolt ready --limit 5 --json
 Fail-fast signatures (treat as misconfiguration, not recovery path):
 - `sqlite3: unable to open database file`
 - `unknown command "dolt" for "bd"`
+- `beads.role not configured` — local config drift, not a hub outage
 
 Immediate response:
 
@@ -124,7 +125,28 @@ fi
 5. Compare summaries on all hosts
 6. Use this only when service-level failover or backup restore is unavoidable.
 
-### 4) Spoke connectivity from non-hub host
+### 4) `beads.role` not configured (local config drift)
+
+**Signature:** `bd` commands warn `beads.role not configured` or appear to hang on mutations (e.g., `bd create`), while `bd --version` and `beads-dolt dolt test --json` succeed.
+
+**Root cause:** Local `beads.role` is unset. The Beads CLI requires this config to determine mutation permissions. This is host-local config drift, not a Dolt hub or service outage.
+
+**Deterministic fix:**
+
+```bash
+bd config set beads.role maintainer
+```
+
+**Verify after fix:**
+
+```bash
+beads-dolt dolt test --json   # should still pass
+bd create --title "test" --type task --dry-run  # should proceed without role warning
+```
+
+**Rule:** Retry `bd config set beads.role maintainer` before escalating to hub/service diagnostics. If `beads-dolt dolt test --json` passes, the hub is healthy — the blocker is local.
+
+### 5) Spoke connectivity from non-hub host
 
 ```bash
 export BEADS_DOLT_SERVER_HOST="<epyc12 tailscale ip>"
@@ -134,7 +156,7 @@ nc -z "$BEADS_DOLT_SERVER_HOST" "$BEADS_DOLT_SERVER_PORT"
 beads-dolt dolt test --json
 ```
 
-### 5) Bad/corrupt data dir
+### 6) Bad/corrupt data dir
 
 ```bash
 # Linux example
