@@ -39,8 +39,15 @@ export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
 
 beads-dolt dolt test --json
 beads-dolt status --json
-beads-dolt ready --limit 5 --json
 ```
+
+For interactive health checks on `macmini`, prefer targeted probes over broad readiness queries:
+
+```bash
+bd show <known-beads-id> --json
+```
+
+`bd ready --json` can be too slow on `macmini` for tight orchestration loops. Treat slow readiness queries as a responsiveness issue, not immediate evidence that the hub is down.
 
 Fail-fast signatures (treat as misconfiguration, not recovery path):
 - `sqlite3: unable to open database file`
@@ -146,7 +153,22 @@ bd create --title "test" --type task --dry-run  # should proceed without role wa
 
 **Rule:** Retry `bd config set beads.role maintainer` before escalating to hub/service diagnostics. If `beads-dolt dolt test --json` passes, the hub is healthy — the blocker is local.
 
-### 5) Spoke connectivity from non-hub host
+### 5) `bd ready --json` slow or timing out on `macmini`
+
+**Signature:** `bd show <known-id> --json` succeeds and `beads-dolt dolt test --json` passes, but broader commands like `bd ready --json` feel hung or exceed orchestration timeouts.
+
+**Classification:** Query responsiveness degradation on the local host. Not a hub outage.
+
+**Response:**
+
+```bash
+beads-dolt dolt test --json
+bd show <known-beads-id> --json
+```
+
+**Rule:** On `macmini`, do not use `bd ready --json` as a health probe in tight loops. Use targeted `bd show <known-beads-id> --json` for responsiveness checks, and run broad queue inspection manually or from the hub host when needed.
+
+### 6) Spoke connectivity from non-hub host
 
 ```bash
 export BEADS_DOLT_SERVER_HOST="<epyc12 tailscale ip>"
@@ -156,7 +178,7 @@ nc -z "$BEADS_DOLT_SERVER_HOST" "$BEADS_DOLT_SERVER_PORT"
 beads-dolt dolt test --json
 ```
 
-### 6) Bad/corrupt data dir
+### 7) Bad/corrupt data dir
 
 ```bash
 # Linux example
