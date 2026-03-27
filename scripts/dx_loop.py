@@ -51,6 +51,8 @@ DEFAULT_CONFIG = {
     "provider": "opencode",
     "implement_provider": None,  # defaults to provider if not set (Pillar C)
     "review_provider": None,  # defaults to provider if not set (Pillar C)
+    "implement_model": None,  # model override for implement phase
+    "review_model": None,  # model override for review phase
     "require_review": True,
     "exit_on_zero_dispatch_start": True,
     "worktree_base": "/tmp/agents",  # Base dir for worktrees
@@ -135,10 +137,16 @@ class DxLoop:
         self.review_provider = (
             self.config.get("review_provider") or self.config["provider"]
         )
+        self.implement_model = self.config.get("implement_model")
+        self.review_model = self.config.get("review_model")
         self.implement_runner = RunnerAdapter(
             provider=self.implement_provider,
             beads_repo_path=self.beads_manager.beads_repo_path,
         )
+        # Phase-specific model selection
+        self.implement_model = self.config.get("implement_model")
+        self.review_model = self.config.get("review_model")
+
         self.review_runner = RunnerAdapter(
             provider=self.review_provider,
             beads_repo_path=self.beads_manager.beads_repo_path,
@@ -592,7 +600,10 @@ class DxLoop:
 
         run_id = f"{beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
 
-        result = self.implement_runner.start(beads_id, prompt_file, worktree=worktree)
+        result = self.implement_runner.start(
+            beads_id, prompt_file, worktree=worktree,
+            model=self.implement_model,
+        )
 
         if result.ok:
             self.baton_manager.start_implement(beads_id, run_id=run_id)
@@ -625,9 +636,7 @@ class DxLoop:
         review_beads_id = f"{beads_id}-review"
         run_id = f"{review_beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
 
-        result = self.review_runner.start(
-            review_beads_id, prompt_file, worktree=worktree
-        )
+        result = self.review_runner.start(review_beads_id, prompt_file, worktree=worktree)
 
         if result.ok:
             self.baton_manager.start_review(beads_id, run_id=run_id)
