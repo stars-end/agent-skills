@@ -135,7 +135,8 @@ export BEADS_DOLT_SERVER_PORT=3307
 
 beads-dolt dolt test --json
 beads-dolt status --json
-bd show <known-beads-id> --json
+# Optional responsiveness probe when you already have a current work item or probe ID
+beads-dolt show <known-beads-id> --json
 ```
 
 On `macmini`, avoid using `bd ready --json` as an interactive health probe. Broad readiness queries can be slow enough to trip orchestration timeouts even when the hub and targeted issue reads are healthy.
@@ -235,7 +236,7 @@ bd create --title "test" --type task --dry-run  # confirm mutation path works
 
 ```bash
 beads-dolt dolt test --json
-bd show <known-beads-id> --json
+beads-dolt show <known-beads-id> --json
 ```
 
 **Rule:** Do not use `bd ready --json` as a macmini health probe. Keep readiness browsing manual, or run it from the hub host when broad queue inspection is actually needed.

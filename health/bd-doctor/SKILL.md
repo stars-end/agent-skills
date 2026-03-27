@@ -44,7 +44,7 @@ beads-dolt status --json
 For interactive health checks on `macmini`, prefer targeted probes over broad readiness queries:
 
 ```bash
-bd show <known-beads-id> --json
+beads-dolt show <known-beads-id> --json
 ```
 
 `bd ready --json` can be too slow on `macmini` for tight orchestration loops. Treat slow readiness queries as a responsiveness issue, not immediate evidence that the hub is down.
@@ -163,7 +163,7 @@ bd create --title "test" --type task --dry-run  # should proceed without role wa
 
 ```bash
 beads-dolt dolt test --json
-bd show <known-beads-id> --json
+beads-dolt show <known-beads-id> --json
 ```
 
 **Rule:** On `macmini`, do not use `bd ready --json` as a health probe in tight loops. Use targeted `bd show <known-beads-id> --json` for responsiveness checks, and run broad queue inspection manually or from the hub host when needed.

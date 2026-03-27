@@ -49,7 +49,7 @@ beads-dolt status --json
 On `macmini`, do not use `bd ready --json` as a tight-loop health probe. If you need to confirm CLI responsiveness, prefer:
 
 ```bash
-bd show <known-beads-id> --json
+beads-dolt show <known-beads-id> --json
 ```
 
 Broad readiness queries can be slow enough on `macmini` to look hung even when the Beads hub is healthy.
