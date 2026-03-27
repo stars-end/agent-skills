@@ -1767,11 +1767,11 @@ def test_runner_adapter_appends_model_flag():
             )
 
     adapter = FakeAdapter(provider="opencode", beads_repo_path="/tmp/bd")
-    adapter.start("bd-test", Path("/tmp/prompt"), model="zai-coding-plan/glm-5-turbo")
+    adapter.start("bd-test", Path("/tmp/prompt"), model="zai-coding-plan/glm-5")
 
     assert "--model" in captured_args
     idx = captured_args.index("--model")
-    assert captured_args[idx + 1] == "zai-coding-plan/glm-5-turbo"
+    assert captured_args[idx + 1] == "zai-coding-plan/glm-5"
 
 
 def test_runner_adapter_no_model_flag_when_null():

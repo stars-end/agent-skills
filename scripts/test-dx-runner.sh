@@ -464,23 +464,23 @@ EOF
     source "$ADAPTERS_DIR/opencode.sh"
 
     cat > "$models_file" <<'EOF'
-zai-coding-plan/glm-5-turbo
-zhipuai-coding-plan/glm-5-turbo
+zai-coding-plan/glm-5
+zhipuai-coding-plan/glm-5
 opencode/glm-5-free
 EOF
     export FAKE_MODELS_FILE="$models_file"
     local r1
-    r1="$(adapter_resolve_model "zai-coding-plan/glm-5-turbo" "epyc12")"
-    [[ "$r1" == zai-coding-plan/glm-5-turbo* ]] && pass "model resolution accepts canonical zai-coding-plan model" || fail "canonical resolution failed: $r1"
+    r1="$(adapter_resolve_model "zai-coding-plan/glm-5" "epyc12")"
+    [[ "$r1" == zai-coding-plan/glm-5* ]] && pass "model resolution accepts canonical zai-coding-plan model" || fail "canonical resolution failed: $r1"
 
     cat > "$models_file" <<'EOF'
-zhipuai-coding-plan/glm-5-turbo
+zhipuai-coding-plan/glm-5
 opencode/glm-5-free
 EOF
     local r2
     rm -f /tmp/dx-runner/opencode/.models_cache
-    r2="$(adapter_resolve_model "zai-coding-plan/glm-5-turbo" "epyc12" || true)"
-    [[ "$r2" == "zhipuai-coding-plan/glm-5-turbo|canonical_alias|"* ]] && pass "model resolution accepts canonical alias when provider renamed the model" || fail "expected canonical alias resolution: $r2"
+    r2="$(adapter_resolve_model "zai-coding-plan/glm-5" "epyc12" || true)"
+    [[ "$r2" == "zhipuai-coding-plan/glm-5|canonical_alias|"* ]] && pass "model resolution accepts canonical alias when provider renamed the model" || fail "expected canonical alias resolution: $r2"
 
     local r3
     r3="$(adapter_resolve_model "opencode/glm-5-free" "epyc12" || true)"
@@ -495,9 +495,9 @@ EOF
     worktree="$(mktemp -d)"
     set +e
     rm -f /tmp/dx-runner/opencode/.models_cache
-    start_out="$(OPENCODE_MODEL="zai-coding-plan/glm-5-turbo" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "$worktree" "$log_file" 2>/dev/null)"
+    start_out="$(OPENCODE_MODEL="zai-coding-plan/glm-5" adapter_start "test-opencode-model-missing-$$" "$prompt_file" "$worktree" "$log_file" 2>/dev/null)"
     rc=$?
-    if [[ "$rc" -eq 0 ]] && echo "$start_out" | grep -q "selected_model=zhipuai-coding-plan/glm-5-turbo"; then
+    if [[ "$rc" -eq 0 ]] && echo "$start_out" | grep -q "selected_model=zhipuai-coding-plan/glm-5"; then
         pass "opencode start uses canonical alias when provider renamed the model"
     else
         fail "expected alias-backed start success (rc=$rc, out=$start_out)"
@@ -527,7 +527,7 @@ if [[ "$1" == "run" ]]; then
   exit 0
 fi
 if [[ "$1" == "models" ]]; then
-  echo "zai-coding-plan/glm-5-turbo"
+  echo "zai-coding-plan/glm-5"
   exit 0
 fi
 exit 0
@@ -535,8 +535,8 @@ EOF
     chmod +x "$fake_op"
 
     export FAKE_ARGS_LOG="$args_log"
-    PATH="$tmp_bin:$PATH" "$DX_RUNNER" probe --provider opencode --model zai-coding-plan/glm-5-turbo >/dev/null 2>&1 || true
-    if grep -q -- "--model zai-coding-plan/glm-5-turbo" "$args_log"; then
+    PATH="$tmp_bin:$PATH" "$DX_RUNNER" probe --provider opencode --model zai-coding-plan/glm-5 >/dev/null 2>&1 || true
+    if grep -q -- "--model zai-coding-plan/glm-5" "$args_log"; then
         pass "probe uses --model flag correctly"
     else
         fail "probe did not pass --model correctly"
@@ -1118,7 +1118,7 @@ reason_code=process_exit_with_rc
 completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 duration_sec=5
 retries=0
-selected_model=zai-coding-plan/glm-5-turbo
+selected_model=zai-coding-plan/glm-5
 fallback_reason=none
 run_instance=new-run
 host=new-host
@@ -1559,7 +1559,7 @@ test_opencode_attach_mode_failfast() {
     prompt="$(mktemp)"
     repo_dir="$(mktemp -d /tmp/agents/test-attach-mode-XXXXXX)"
     beads="test-opencode-attach-$$"
-    echo "zai-coding-plan/glm-5-turbo" > "$models_file"
+    echo "zai-coding-plan/glm-5" > "$models_file"
     echo "READY" > "$prompt"
     git -C "$repo_dir" init --quiet
     git -C "$repo_dir" config user.email "test@example.com"
@@ -1871,7 +1871,7 @@ test_worktree_resolution_guard() {
     prompt="$(mktemp)"
     beads="test-worktree-guard-$$"
     run_dir="$(mktemp -d)"
-    echo "zai-coding-plan/glm-5-turbo" > "$models_file"
+    echo "zai-coding-plan/glm-5" > "$models_file"
     echo "READY" > "$prompt"
 
     cat > "$fake_op" <<'EOF'
@@ -2144,7 +2144,7 @@ test_model_override_blocking() {
     repo_dir="$(mktemp -d /tmp/agents/test-override-XXXXXX)"
     beads="test-override-$$"
     
-    echo "zai-coding-plan/glm-5-turbo" > "$models_file"
+    echo "zai-coding-plan/glm-5" > "$models_file"
     echo "READY" > "$prompt"
     git -C "$repo_dir" init --quiet
     git -C "$repo_dir" config user.email "test@example.com"

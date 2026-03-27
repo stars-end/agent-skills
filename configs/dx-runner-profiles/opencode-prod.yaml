@@ -8,7 +8,7 @@ profile:
 
 provider:
   name: opencode
-  model: zai-coding-plan/glm-5-turbo
+  model: zai-coding-plan/glm-5
   allow_model_override: false
   execution_mode: run
   fallback_provider: cc-glm
