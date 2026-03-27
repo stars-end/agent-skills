@@ -19,7 +19,7 @@ Usage:
 Examples:
   beads-dolt dolt test --json
   beads-dolt status --json
-  beads-dolt ready --limit 5 --json
+  beads-dolt show <known-beads-id> --json
 USAGE
 }
 
