@@ -4,13 +4,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/dx-auth.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/dx-railway.sh"
 
 ENV_NAME="${DX_RAILWAY_ENV:-dev}"
 PROJECT_ID="${DX_RAILWAY_PROJECT_ID:-}"
 BACKEND_SERVICE="${DX_RAILWAY_BACKEND_SERVICE:-backend}"
 POSTGRES_SERVICE="${DX_RAILWAY_POSTGRES_SERVICE:-Postgres}"
 REPO_ROOT="$(pwd -P)"
-CONTEXT_FILE=""
+CONTEXT_FILE="$(dx_railway_resolve_context_file)"
 
 usage() {
   cat <<'USAGE'
@@ -56,48 +58,6 @@ blocked() {
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
-
-resolve_context_file() {
-  local explicit local_file worktree_base context_base cwd rel beads_id repo_name candidate
-  local worktree_base_real
-
-  explicit="${DX_RAILWAY_CONTEXT_FILE:-}"
-  if [[ -n "$explicit" ]]; then
-    printf '%s\n' "$explicit"
-    return 0
-  fi
-
-  worktree_base="${DX_WORKTREE_BASE:-/tmp/agents}"
-  context_base="${DX_WORKTREE_CONTEXT_BASE:-$worktree_base/.dx-context}"
-  cwd="$(pwd -P)"
-  worktree_base_real="$(cd "$worktree_base" 2>/dev/null && pwd -P || true)"
-
-  if [[ "$cwd" == "$worktree_base/"* ]]; then
-    rel="${cwd#"$worktree_base/"}"
-  elif [[ -n "$worktree_base_real" && "$cwd" == "$worktree_base_real/"* ]]; then
-    rel="${cwd#"$worktree_base_real/"}"
-  else
-    rel=""
-  fi
-
-  if [[ -n "$rel" && "$rel" == */* ]]; then
-    beads_id="${rel%%/*}"
-    rel="${rel#*/}"
-    repo_name="${rel%%/*}"
-    if [[ -n "$beads_id" && -n "$repo_name" ]]; then
-      candidate="$context_base/$beads_id/$repo_name/railway-context.env"
-      if [[ -f "$candidate" ]]; then
-        printf '%s\n' "$candidate"
-        return 0
-      fi
-    fi
-  fi
-
-  local_file=".dx/railway-context.env"
-  printf '%s\n' "$local_file"
-}
-
-CONTEXT_FILE="$(resolve_context_file)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -159,41 +119,22 @@ PROJECT_ID="${PROJECT_ID:-${RAILWAY_PROJECT_ID:-}}"
 ENV_NAME="${ENV_NAME:-${RAILWAY_ENVIRONMENT:-dev}}"
 
 normalize_auth() {
-  if [[ -z "${RAILWAY_API_TOKEN:-}" && -n "${RAILWAY_TOKEN:-}" ]]; then
-    export RAILWAY_API_TOKEN="$RAILWAY_TOKEN"
-  fi
-
-  if [[ -z "${RAILWAY_ENVIRONMENT:-}" && -z "${RAILWAY_API_TOKEN:-}" ]]; then
-    dx_auth_load_railway_api_token >/dev/null 2>&1 || blocked \
+  if [[ -z "${RAILWAY_API_TOKEN:-}" && -z "${RAILWAY_ENVIRONMENT:-}" ]]; then
+    dx_railway_normalize_auth || blocked \
       "missing_railway_api_token" \
       "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN access in the same invocation"
   fi
-}
-
-railway_exec() {
-  local service_name="$1"
-  shift
-
-  if [[ -n "$PROJECT_ID" ]]; then
-    railway run -p "$PROJECT_ID" -e "$ENV_NAME" -s "$service_name" -- "$@"
-    return 0
-  fi
-
-  if railway status >/dev/null 2>&1; then
-    railway run -s "$service_name" -- "$@"
-    return 0
-  fi
-
-  blocked \
-    "missing_railway_context" \
-    "explicit --project-id/--env or a seeded worktree Railway context"
 }
 
 fetch_service_env() {
   local service_name="$1"
   local output_file="$2"
 
-  railway_exec "$service_name" bash -lc 'env' > "$output_file"
+  if ! dx_railway_exec "$PROJECT_ID" "$ENV_NAME" "$service_name" bash -lc 'env' > "$output_file" 2>/dev/null; then
+    blocked \
+      "missing_railway_context" \
+      "explicit --project-id/--env or a seeded worktree Railway context"
+  fi
 }
 
 get_env_value() {
