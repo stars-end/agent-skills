@@ -43,7 +43,7 @@ from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState, RunnerStartRe
 
 VERSION = "1.3.0"
 ARTIFACT_BASE = Path("/tmp/dx-loop")
-OPENCODE_IMPLEMENT_MODEL = "zai-coding-plan/glm-5-turbo"
+OPENCODE_IMPLEMENT_MODEL = "zai-coding-plan/glm-5"
 OPENCODE_REVIEW_MODEL = "zai-coding-plan/glm-5.1"
 DEFAULT_CONFIG = {
     "max_attempts": 3,

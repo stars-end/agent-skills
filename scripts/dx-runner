@@ -84,12 +84,12 @@ LOG_DIR="/tmp/dx-runner"
 # Provider configuration
 declare -A PROVIDER_DEFAULT_MODEL=(
     ["cc-glm"]="glm-5"
-    ["opencode"]="zai-coding-plan/glm-5-turbo"
+    ["opencode"]="zai-coding-plan/glm-5"
     ["gemini"]="gemini-3-flash-preview"
 )
 
 declare -A PROVIDER_FALLBACK_CHAIN=(
-    ["opencode"]="zai-coding-plan/glm-5-turbo"
+    ["opencode"]="zai-coding-plan/glm-5"
 )
 
 # bd-8wdg.10: Startup-aware health thresholds

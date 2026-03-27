@@ -24,7 +24,7 @@
 #   25 - Model unavailable (canonical model not found)
 #   28 - Model override blocked (drift protection)
 
-CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zai-coding-plan/glm-5-turbo}"
+CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zai-coding-plan/glm-5}"
 OPENCODE_EXECUTION_MODE="${OPENCODE_EXECUTION_MODE:-run}"
 
 # bd-8wdg.2: Model override policy
@@ -41,6 +41,9 @@ adapter_canonical_model_aliases() {
             ;;
         zhipuai-coding-plan/glm-5-turbo)
             printf '%s\n' "zai-coding-plan/glm-5-turbo"
+            ;;
+        zai-coding-plan/glm-5)
+            printf '%s\n' "zhipuai-coding-plan/glm-5"
             ;;
         zai-coding-plan/glm-5.1)
             printf '%s\n' "zhipuai-coding-plan/glm-5.1"
