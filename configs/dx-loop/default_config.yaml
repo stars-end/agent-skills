@@ -10,8 +10,13 @@ cadence_seconds: 600  # 10 minutes
 provider: opencode
 implement_provider: null  # defaults to provider if not set
 review_provider: null     # defaults to provider if not set
-implement_model: null   # model for implement phase (defaults to provider canonical)
-review_model: null      # model for review phase (defaults to provider canonical)
+# Phase-specific model selection (bd-5w5o.41):
+#   When null, the opencode adapter resolves the canonical default per phase.
+#   Canonical implement model: zai-coding-plan/glm-5-turbo
+#   Canonical review model:    zai-coding-plan/glm-5.1
+#   Override here only when deviating from the canonical phase defaults.
+implement_model: null
+review_model: null
 require_review: true
 
 # Notification settings

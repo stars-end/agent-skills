@@ -528,7 +528,7 @@ def test_null_provider_falls_back_to_default(tmp_path):
 
 
 def test_start_implement_uses_implement_runner(tmp_path):
-    """_start_implement should dispatch via the implement runner."""
+    """_start_implement should dispatch via the implement runner with model."""
     wave_id = "wave-impl-provider"
     loop = DxLoop(
         wave_id,
@@ -536,6 +536,7 @@ def test_start_implement_uses_implement_runner(tmp_path):
             "cadence_seconds": 0,
             "implement_provider": "opencode",
             "review_provider": "cc-glm",
+            "implement_model": "zai-coding-plan/glm-5-turbo",
         },
     )
     loop.wave_dir = tmp_path / "waves" / wave_id
@@ -566,13 +567,13 @@ def test_start_implement_uses_implement_runner(tmp_path):
 
     assert loop._start_implement("bd-test") is True
     assert dispatched_provider["provider"] == "opencode"
-    assert dispatched_provider["model"] is None
+    assert dispatched_provider["model"] == "zai-coding-plan/glm-5-turbo"
 
-    print("Pillar C: _start_implement uses implement runner")
+    print("Pillar C: _start_implement uses implement runner with model")
 
 
 def test_start_review_uses_review_runner(tmp_path):
-    """_start_review should dispatch via the review runner."""
+    """_start_review should dispatch via the review runner with model."""
     wave_id = "wave-rev-provider"
     loop = DxLoop(
         wave_id,
@@ -580,6 +581,7 @@ def test_start_review_uses_review_runner(tmp_path):
             "cadence_seconds": 0,
             "implement_provider": "opencode",
             "review_provider": "cc-glm",
+            "review_model": "zai-coding-plan/glm-5.1",
         },
     )
     loop.wave_dir = tmp_path / "waves" / wave_id
@@ -616,9 +618,9 @@ def test_start_review_uses_review_runner(tmp_path):
 
     assert loop._start_review("bd-test") is True
     assert dispatched_provider["provider"] == "cc-glm"
-    assert dispatched_provider["model"] is None
+    assert dispatched_provider["model"] == "zai-coding-plan/glm-5.1"
 
-    print("Pillar C: _start_review uses review runner")
+    print("Pillar C: _start_review uses review runner with model")
 
 
 # ---------------------------------------------------------------------------

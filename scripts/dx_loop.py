@@ -143,9 +143,6 @@ class DxLoop:
             provider=self.implement_provider,
             beads_repo_path=self.beads_manager.beads_repo_path,
         )
-        # Phase-specific model selection
-        self.implement_model = self.config.get("implement_model")
-        self.review_model = self.config.get("review_model")
 
         self.review_runner = RunnerAdapter(
             provider=self.review_provider,
@@ -601,7 +598,9 @@ class DxLoop:
         run_id = f"{beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
 
         result = self.implement_runner.start(
-            beads_id, prompt_file, worktree=worktree,
+            beads_id,
+            prompt_file,
+            worktree=worktree,
             model=self.implement_model,
         )
 
@@ -636,7 +635,12 @@ class DxLoop:
         review_beads_id = f"{beads_id}-review"
         run_id = f"{review_beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
 
-        result = self.review_runner.start(review_beads_id, prompt_file, worktree=worktree)
+        result = self.review_runner.start(
+            review_beads_id,
+            prompt_file,
+            worktree=worktree,
+            model=self.review_model,
+        )
 
         if result.ok:
             self.baton_manager.start_review(beads_id, run_id=run_id)
