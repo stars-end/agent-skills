@@ -252,6 +252,7 @@ class RunnerAdapter:
         beads_id: str,
         prompt_file: Path,
         worktree: Optional[Path] = None,
+        model: Optional[str] = None,
         **kwargs,
     ) -> RunnerStartResult:
         """

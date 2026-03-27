@@ -553,8 +553,9 @@ def test_start_implement_uses_implement_runner(tmp_path):
 
     dispatched_provider = {}
 
-    def fake_start(beads_id, prompt_file, worktree=None):
+    def fake_start(beads_id, prompt_file, worktree=None, model=None):
         dispatched_provider["provider"] = loop.implement_runner.provider
+        dispatched_provider["model"] = model
         return RunnerStartResult(
             ok=True,
             returncode=0,
@@ -565,6 +566,7 @@ def test_start_implement_uses_implement_runner(tmp_path):
 
     assert loop._start_implement("bd-test") is True
     assert dispatched_provider["provider"] == "opencode"
+    assert dispatched_provider["model"] is None
 
     print("Pillar C: _start_implement uses implement runner")
 
@@ -601,8 +603,9 @@ def test_start_review_uses_review_runner(tmp_path):
 
     dispatched_provider = {}
 
-    def fake_start(beads_id, prompt_file, worktree=None):
+    def fake_start(beads_id, prompt_file, worktree=None, model=None):
         dispatched_provider["provider"] = loop.review_runner.provider
+        dispatched_provider["model"] = model
         return RunnerStartResult(
             ok=True,
             returncode=0,
@@ -613,6 +616,7 @@ def test_start_review_uses_review_runner(tmp_path):
 
     assert loop._start_review("bd-test") is True
     assert dispatched_provider["provider"] == "cc-glm"
+    assert dispatched_provider["model"] is None
 
     print("Pillar C: _start_review uses review runner")
 
