@@ -1832,37 +1832,3 @@ if __name__ == "__main__":
     test_runner_adapter_no_model_flag_when_null()
     test_runner_adapter_review_model_propagation()
     print("\nAll v1.1 fix tests passed!")
-
-
-def test_runner_adapter_no_model_flag_when_null():
-    """RunnerAdapter.start() should NOT append --model when model is None."""
-    captured_args = []
-
-    class FakeAdapter(RunnerAdapter):
-        def _run_dx_runner(self, args, timeout=30):
-            captured_args.extend(args)
-            return RunnerStartResult(
-                ok=True,
-                returncode=0,
-                command=["dx-runner"] + args,
-            )
-
-    adapter = FakeAdapter(provider="opencode", beads_repo_path="/tmp/bd")
-    adapter.start("bd-test", Path("/tmp/prompt"), model=None)
-
-    assert "--model" not in captured_args
-
-
-def test_runner_adapter_review_model_propagation():
-    """DxLoop should pass review_model through RunnerAdapter.start()."""
-    wave_id = "wave-review-model"
-    loop = DxLoop(
-        wave_id,
-        config={
-            "cadence_seconds": 0,
-            "implement_provider": "opencode",
-            "review_provider": "opencode",
-            "review_model": "zai-coding-plan/glm-5.1",
-        },
-    )
-    assert loop.review_model == "zai-coding-plan/glm-5.1"

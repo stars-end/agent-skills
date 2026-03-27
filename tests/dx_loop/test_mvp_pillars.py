@@ -527,6 +527,38 @@ def test_null_provider_falls_back_to_default(tmp_path):
     print("Pillar C: null providers fall back to default")
 
 
+def test_opencode_phase_defaults_are_applied_when_models_unset(tmp_path):
+    """Opencode should default to turbo for implement and 5.1 for review."""
+    loop = DxLoop(
+        "wave-opencode-default-models",
+        config={
+            "cadence_seconds": 0,
+            "provider": "opencode",
+            "implement_model": None,
+            "review_model": None,
+        },
+    )
+
+    assert loop.implement_model == "zai-coding-plan/glm-5-turbo"
+    assert loop.review_model == "zai-coding-plan/glm-5.1"
+
+
+def test_non_opencode_phase_defaults_remain_unset(tmp_path):
+    """Non-opencode providers should not inherit opencode phase defaults."""
+    loop = DxLoop(
+        "wave-cc-glm-default-models",
+        config={
+            "cadence_seconds": 0,
+            "provider": "cc-glm",
+            "implement_model": None,
+            "review_model": None,
+        },
+    )
+
+    assert loop.implement_model is None
+    assert loop.review_model is None
+
+
 def test_start_implement_uses_implement_runner(tmp_path):
     """_start_implement should dispatch via the implement runner with model."""
     wave_id = "wave-impl-provider"
