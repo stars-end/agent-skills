@@ -527,8 +527,40 @@ def test_null_provider_falls_back_to_default(tmp_path):
     print("Pillar C: null providers fall back to default")
 
 
+def test_opencode_phase_defaults_are_applied_when_models_unset(tmp_path):
+    """Opencode should default to turbo for implement and 5.1 for review."""
+    loop = DxLoop(
+        "wave-opencode-default-models",
+        config={
+            "cadence_seconds": 0,
+            "provider": "opencode",
+            "implement_model": None,
+            "review_model": None,
+        },
+    )
+
+    assert loop.implement_model == "zai-coding-plan/glm-5-turbo"
+    assert loop.review_model == "zai-coding-plan/glm-5.1"
+
+
+def test_non_opencode_phase_defaults_remain_unset(tmp_path):
+    """Non-opencode providers should not inherit opencode phase defaults."""
+    loop = DxLoop(
+        "wave-cc-glm-default-models",
+        config={
+            "cadence_seconds": 0,
+            "provider": "cc-glm",
+            "implement_model": None,
+            "review_model": None,
+        },
+    )
+
+    assert loop.implement_model is None
+    assert loop.review_model is None
+
+
 def test_start_implement_uses_implement_runner(tmp_path):
-    """_start_implement should dispatch via the implement runner."""
+    """_start_implement should dispatch via the implement runner with model."""
     wave_id = "wave-impl-provider"
     loop = DxLoop(
         wave_id,
@@ -536,6 +568,7 @@ def test_start_implement_uses_implement_runner(tmp_path):
             "cadence_seconds": 0,
             "implement_provider": "opencode",
             "review_provider": "cc-glm",
+            "implement_model": "zai-coding-plan/glm-5-turbo",
         },
     )
     loop.wave_dir = tmp_path / "waves" / wave_id
@@ -566,13 +599,13 @@ def test_start_implement_uses_implement_runner(tmp_path):
 
     assert loop._start_implement("bd-test") is True
     assert dispatched_provider["provider"] == "opencode"
-    assert dispatched_provider["model"] is None
+    assert dispatched_provider["model"] == "zai-coding-plan/glm-5-turbo"
 
-    print("Pillar C: _start_implement uses implement runner")
+    print("Pillar C: _start_implement uses implement runner with model")
 
 
 def test_start_review_uses_review_runner(tmp_path):
-    """_start_review should dispatch via the review runner."""
+    """_start_review should dispatch via the review runner with model."""
     wave_id = "wave-rev-provider"
     loop = DxLoop(
         wave_id,
@@ -580,6 +613,7 @@ def test_start_review_uses_review_runner(tmp_path):
             "cadence_seconds": 0,
             "implement_provider": "opencode",
             "review_provider": "cc-glm",
+            "review_model": "zai-coding-plan/glm-5.1",
         },
     )
     loop.wave_dir = tmp_path / "waves" / wave_id
@@ -616,9 +650,9 @@ def test_start_review_uses_review_runner(tmp_path):
 
     assert loop._start_review("bd-test") is True
     assert dispatched_provider["provider"] == "cc-glm"
-    assert dispatched_provider["model"] is None
+    assert dispatched_provider["model"] == "zai-coding-plan/glm-5.1"
 
-    print("Pillar C: _start_review uses review runner")
+    print("Pillar C: _start_review uses review runner with model")
 
 
 # ---------------------------------------------------------------------------

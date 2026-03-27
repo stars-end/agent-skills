@@ -84,12 +84,12 @@ LOG_DIR="/tmp/dx-runner"
 # Provider configuration
 declare -A PROVIDER_DEFAULT_MODEL=(
     ["cc-glm"]="glm-5"
-    ["opencode"]="zhipuai-coding-plan/glm-5"
+    ["opencode"]="zai-coding-plan/glm-5-turbo"
     ["gemini"]="gemini-3-flash-preview"
 )
 
 declare -A PROVIDER_FALLBACK_CHAIN=(
-    ["opencode"]="zhipuai-coding-plan/glm-5"
+    ["opencode"]="zai-coding-plan/glm-5-turbo"
 )
 
 # bd-8wdg.10: Startup-aware health thresholds
@@ -2576,6 +2576,12 @@ EOF
     
     # Source adapter and run
     source "$adapter"
+    
+    # Pass explicit --model flag to adapter via OPENCODE_MODEL (bd-5w5o.41)
+    if [[ -n "$MODEL_ID" ]]; then
+        export OPENCODE_MODEL="$MODEL_ID"
+        export DX_RUNNER_ALLOW_MODEL_OVERRIDE=1
+    fi
     
     if ! declare -f adapter_start >/dev/null 2>&1; then
         echo "adapter_start not found in $adapter" >&2

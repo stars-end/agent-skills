@@ -21,6 +21,7 @@ from json import JSONDecoder, JSONDecodeError
 @dataclass
 class RunnerTaskState:
     """State of a task in dx-runner"""
+
     beads_id: str
     state: str  # healthy, stalled, exited_ok, exited_err, blocked, missing
     reason_code: Optional[str] = None
@@ -30,7 +31,7 @@ class RunnerTaskState:
     has_pr_artifacts: bool = False
     pr_url: Optional[str] = None
     pr_head_sha: Optional[str] = None
-    
+
     def is_complete(self) -> bool:
         """Check if task is complete (exited or blocked)"""
         return self.state in (
@@ -40,11 +41,11 @@ class RunnerTaskState:
             "stopped",
             "no_op_success",
         )
-    
+
     def is_running(self) -> bool:
         """Check if task is still running"""
         return self.state in ("healthy", "stalled", "launching")
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "beads_id": self.beads_id,
@@ -75,11 +76,11 @@ class RunnerStartResult:
 class RunnerAdapter:
     """
     Governed adapter for dx-runner integration
-    
+
     All execution goes through this adapter, ensuring consistent
     use of dx-runner as the canonical substrate.
     """
-    
+
     def __init__(
         self,
         provider: str = "opencode",
@@ -109,7 +110,9 @@ class RunnerAdapter:
         system bash 3.2 shebang path.
         """
         script_path = self._dx_runner_script_path()
-        dx_runner = str(script_path) if script_path.exists() else shutil.which("dx-runner")
+        dx_runner = (
+            str(script_path) if script_path.exists() else shutil.which("dx-runner")
+        )
 
         if not dx_runner:
             return RunnerStartResult(
@@ -152,7 +155,9 @@ class RunnerAdapter:
         stderr: str,
     ) -> tuple[str, str]:
         """Convert dx-runner launch failures into stable operator-facing reason codes."""
-        detail = stderr.strip() or stdout.strip() or f"dx-runner exited with rc={returncode}"
+        detail = (
+            stderr.strip() or stdout.strip() or f"dx-runner exited with rc={returncode}"
+        )
         combined = f"{stdout}\n{stderr}".lower()
 
         if "requires bash >= 4" in combined:
@@ -262,10 +267,16 @@ class RunnerAdapter:
         """
         args = [
             "start",
-            "--beads", beads_id,
-            "--provider", self.provider,
-            "--prompt-file", str(prompt_file),
+            "--beads",
+            beads_id,
+            "--provider",
+            self.provider,
+            "--prompt-file",
+            str(prompt_file),
         ]
+
+        if model:
+            args.extend(["--model", model])
 
         if worktree:
             args.extend(["--worktree", str(worktree)])
@@ -291,11 +302,11 @@ class RunnerAdapter:
                 )
 
         return result
-    
+
     def check(self, beads_id: str) -> Optional[RunnerTaskState]:
         """
         Check task state via dx-runner
-        
+
         Source of truth is dx-runner check --json
         """
         result = self._run_dx_runner(
@@ -318,11 +329,11 @@ class RunnerAdapter:
             pr_url=data.get("pr_url"),
             pr_head_sha=data.get("pr_head_sha"),
         )
-    
+
     def report(self, beads_id: str) -> Optional[Dict[str, Any]]:
         """
         Get detailed report via dx-runner
-        
+
         Source of truth is dx-runner report --format json
         """
         result = self._run_dx_runner(
@@ -331,24 +342,24 @@ class RunnerAdapter:
         )
 
         return self._extract_json_payload(result.stdout)
-    
+
     def extract_pr_artifacts(self, beads_id: str) -> Optional[tuple[str, str]]:
         """
         Extract PR artifacts from dx-runner logs
-        
+
         Returns (pr_url, pr_head_sha) if found, None otherwise.
         """
         report_data = self.report(beads_id)
         if not report_data:
             return None
-        
+
         # Check if report has PR artifacts
         pr_url = report_data.get("pr_url")
         pr_head_sha = report_data.get("pr_head_sha")
-        
+
         if pr_url and pr_head_sha:
             return (pr_url, pr_head_sha)
-        
+
         transcript = self.extract_agent_output(beads_id)
         if transcript:
             pr_url = None
@@ -437,7 +448,7 @@ class RunnerAdapter:
             return None
 
         return None
-    
+
     def stop(self, beads_id: str) -> bool:
         """Stop task via dx-runner"""
         result = self._run_dx_runner(["stop", "--beads", beads_id], timeout=30)

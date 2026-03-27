@@ -43,6 +43,8 @@ from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState, RunnerStartRe
 
 VERSION = "1.3.0"
 ARTIFACT_BASE = Path("/tmp/dx-loop")
+OPENCODE_IMPLEMENT_MODEL = "zai-coding-plan/glm-5-turbo"
+OPENCODE_REVIEW_MODEL = "zai-coding-plan/glm-5.1"
 DEFAULT_CONFIG = {
     "max_attempts": 3,
     "max_revisions": 3,
@@ -51,8 +53,8 @@ DEFAULT_CONFIG = {
     "provider": "opencode",
     "implement_provider": None,  # defaults to provider if not set (Pillar C)
     "review_provider": None,  # defaults to provider if not set (Pillar C)
-    "implement_model": None,  # model override for implement phase
-    "review_model": None,  # model override for review phase
+    "implement_model": None,  # defaults per provider/phase in __init__
+    "review_model": None,  # defaults per provider/phase in __init__
     "require_review": True,
     "exit_on_zero_dispatch_start": True,
     "worktree_base": "/tmp/agents",  # Base dir for worktrees
@@ -137,15 +139,20 @@ class DxLoop:
         self.review_provider = (
             self.config.get("review_provider") or self.config["provider"]
         )
-        self.implement_model = self.config.get("implement_model")
-        self.review_model = self.config.get("review_model")
+        self.implement_model = self._resolve_phase_model(
+            provider=self.implement_provider,
+            configured_model=self.config.get("implement_model"),
+            phase="implement",
+        )
+        self.review_model = self._resolve_phase_model(
+            provider=self.review_provider,
+            configured_model=self.config.get("review_model"),
+            phase="review",
+        )
         self.implement_runner = RunnerAdapter(
             provider=self.implement_provider,
             beads_repo_path=self.beads_manager.beads_repo_path,
         )
-        # Phase-specific model selection
-        self.implement_model = self.config.get("implement_model")
-        self.review_model = self.config.get("review_model")
 
         self.review_runner = RunnerAdapter(
             provider=self.review_provider,
@@ -166,6 +173,24 @@ class DxLoop:
             "blocked_details": [],
             "dispatchable_tasks": [],
         }
+
+    @staticmethod
+    def _resolve_phase_model(
+        *,
+        provider: str,
+        configured_model: Optional[str],
+        phase: str,
+    ) -> Optional[str]:
+        """Resolve canonical phase defaults only for the opencode lane."""
+        if configured_model:
+            return configured_model
+        if provider != "opencode":
+            return None
+        if phase == "implement":
+            return OPENCODE_IMPLEMENT_MODEL
+        if phase == "review":
+            return OPENCODE_REVIEW_MODEL
+        return None
 
     def bootstrap_epic(self, epic_id: str) -> bool:
         """
@@ -601,7 +626,9 @@ class DxLoop:
         run_id = f"{beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
 
         result = self.implement_runner.start(
-            beads_id, prompt_file, worktree=worktree,
+            beads_id,
+            prompt_file,
+            worktree=worktree,
             model=self.implement_model,
         )
 
@@ -636,7 +663,12 @@ class DxLoop:
         review_beads_id = f"{beads_id}-review"
         run_id = f"{review_beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
 
-        result = self.review_runner.start(review_beads_id, prompt_file, worktree=worktree)
+        result = self.review_runner.start(
+            review_beads_id,
+            prompt_file,
+            worktree=worktree,
+            model=self.review_model,
+        )
 
         if result.ok:
             self.baton_manager.start_review(beads_id, run_id=run_id)

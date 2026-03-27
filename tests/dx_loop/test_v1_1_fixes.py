@@ -695,8 +695,7 @@ def test_runner_task_state_treats_terminal_variants_as_complete():
     """dx-loop should not strand on terminal runner states beyond exited_ok/exited_err."""
     assert RunnerTaskState(beads_id="bd-test", state="stopped").is_complete() is True
     assert (
-        RunnerTaskState(beads_id="bd-test", state="no_op_success").is_complete()
-        is True
+        RunnerTaskState(beads_id="bd-test", state="no_op_success").is_complete() is True
     )
 
     print("✓ RunnerTaskState treats stopped/no_op_success as terminal")
@@ -1754,6 +1753,69 @@ def test_completed_wave_restart_no_in_progress_healthy_regression(tmp_path):
     print("✓ Completed wave restart does not regress to in_progress_healthy")
 
 
+def test_runner_adapter_appends_model_flag():
+    """RunnerAdapter.start() should append --model <id> when model is provided."""
+    captured_args = []
+
+    class FakeAdapter(RunnerAdapter):
+        def _run_dx_runner(self, args, timeout=30):
+            captured_args.extend(args)
+            return RunnerStartResult(
+                ok=True,
+                returncode=0,
+                command=["dx-runner"] + args,
+            )
+
+    adapter = FakeAdapter(provider="opencode", beads_repo_path="/tmp/bd")
+    adapter.start("bd-test", Path("/tmp/prompt"), model="zai-coding-plan/glm-5-turbo")
+
+    assert "--model" in captured_args
+    idx = captured_args.index("--model")
+    assert captured_args[idx + 1] == "zai-coding-plan/glm-5-turbo"
+
+
+def test_runner_adapter_no_model_flag_when_null():
+    """RunnerAdapter.start() should NOT append --model when model is None."""
+    captured_args = []
+
+    class FakeAdapter(RunnerAdapter):
+        def _run_dx_runner(self, args, timeout=30):
+            captured_args.extend(args)
+            return RunnerStartResult(
+                ok=True,
+                returncode=0,
+                command=["dx-runner"] + args,
+            )
+
+    adapter = FakeAdapter(provider="opencode", beads_repo_path="/tmp/bd")
+    adapter.start("bd-test", Path("/tmp/prompt"), model=None)
+
+    assert "--model" not in captured_args
+
+
+def test_runner_adapter_review_model_propagation():
+    """RunnerAdapter.start() should propagate review model to --model flag."""
+    captured_args = []
+
+    class FakeAdapter(RunnerAdapter):
+        def _run_dx_runner(self, args, timeout=30):
+            captured_args.extend(args)
+            return RunnerStartResult(
+                ok=True,
+                returncode=0,
+                command=["dx-runner"] + args,
+            )
+
+    adapter = FakeAdapter(provider="opencode", beads_repo_path="/tmp/bd")
+    adapter.start(
+        "bd-test-review", Path("/tmp/prompt"), model="zai-coding-plan/glm-5.1"
+    )
+
+    assert "--model" in captured_args
+    idx = captured_args.index("--model")
+    assert captured_args[idx + 1] == "zai-coding-plan/glm-5.1"
+
+
 if __name__ == "__main__":
     test_no_duplicate_dispatch()
     test_notification_first_occurrence()
@@ -1766,4 +1828,7 @@ if __name__ == "__main__":
     test_no_false_healthy_state_during_capacity_block()
     test_completed_wave_restart_preserves_status()
     test_completed_wave_restart_no_in_progress_healthy_regression()
+    test_runner_adapter_appends_model_flag()
+    test_runner_adapter_no_model_flag_when_null()
+    test_runner_adapter_review_model_propagation()
     print("\nAll v1.1 fix tests passed!")
