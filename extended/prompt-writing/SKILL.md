@@ -3,7 +3,7 @@ name: prompt-writing
 description: |
   Draft self-contained prompts for delegated agents with cross-VM-safe context.
   MUST BE USED when assigning work to another agent (implementation, QA, rollout, or audit).
-  Enforces: worktree-first, no canonical writes, Beads traceability (epic/subtask/dependencies), and required PR artifacts (PR_URL + PR_HEAD_SHA).
+  Enforces: worktree-first, no canonical writes, Beads traceability (epic/subtask/dependencies), MCP routing expectations, and required PR artifacts (PR_URL + PR_HEAD_SHA).
   Trigger phrases include: "assign to another agent", "write a one-shot prompt", "dispatch this", "prepare autonomous prompt", "QA agent prompt", "parallelize work to cloud", and "assign to jules".
 tags: [workflow, prompts, orchestration, dx, safety]
 allowed-tools:
@@ -90,6 +90,12 @@ Every generated delegation prompt MUST enforce:
   - `PR_URL: https://github.com/<org>/<repo>/pull/<n>`
   - `PR_HEAD_SHA: <40-char sha>`
 - If missing, delegate must return blocker with exact next commands.
+
+6) **Tool routing contract for the delegated task**
+- semantic discovery -> `context-plus`
+- exact static analysis -> `llm-tldr`
+- symbol-aware editing / memory -> `serena`
+- If a delegated agent intentionally skips the expected tool, it must return `Tool routing exception: <reason>`
 
 ## Outcome Enforcement Options
 

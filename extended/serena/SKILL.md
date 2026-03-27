@@ -83,6 +83,16 @@ serena start-mcp-server --project my-project
 - Use via MCP-capable IDE
 - Provides persistent memory and context across sessions
 
+## Required Trigger Contract
+
+Use `serena` first when the task is primarily about symbol-aware editing or assistant continuity:
+- rename/refactor of known symbols
+- insert-before/after-symbol edits
+- retrieving or recording persistent project memory
+- structured symbol lookup before editing a known target
+
+If the task is "edit this exact symbol safely," `serena` is the default first tool.
+
 ## Key Commands
 
 | Command | Description |

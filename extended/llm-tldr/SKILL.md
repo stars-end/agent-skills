@@ -60,6 +60,16 @@ Rendered to IDE configs via Fleet Sync:
 # The tool provides context slicing capabilities
 ```
 
+## Required Trigger Contract
+
+Use `llm-tldr` first when the task needs exact structure instead of semantic discovery:
+- call graph or reverse-call impact
+- CFG/DFG/program slice
+- dead code or architecture layer analysis
+- "trace the exact code path that leads here"
+
+Do not skip directly to repeated `read_file` traversal for these questions unless a documented fallback condition applies.
+
 ### Key Functions
 - `context`: Get token-efficient context starting from entry point
 - `structure`: Get code structure (codemaps)
@@ -113,8 +123,8 @@ Rendered to these IDE configs:
 
 ## Upstream
 
-- **Repo**: https://github.com/simonw/llm-tldr
-- **Docs**: https://github.com/simonw/llm-tldr#readme
+- **Repo**: https://github.com/parcadei/llm-tldr
+- **Docs**: https://github.com/parcadei/llm-tldr#readme
 
 ## Validation
 
