@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 64f04ad63b08e8da3e961c83a5cb5132e2a4cfd4 -->
-<!-- Last updated: 2026-03-20 11:04:58 UTC -->
+<!-- Source SHA: a0b6306202aef20979dfaeec10f036b600a9fca7 -->
+<!-- Last updated: 2026-03-27 13:44:06 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -164,6 +164,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **Backend must be Dolt server mode** for multi-VM/multi-agent reliability.
 - **Legacy macOS \`io.agentskills.ru\` LaunchAgent is disabled by policy** (use cron/systemd schedules only).
 - **Before dispatch**: verify \`bd dolt test --json\` succeeds and Beads service is active on the host.
+- **\`beads.role\` self-heal**: if mutating \`bd\` commands warn \`beads.role not configured\` while \`bd dolt test --json\` passes, run \`bd config set beads.role maintainer\` before escalating. This is local config drift, not a hub outage.
 - **Host service contract**:
   - Linux canonical VMs: \`systemctl --user is-active beads-dolt.service\`
   - macOS canonical host: \`launchctl print gui/\$(id -u)/com.starsend.beads-dolt\`
@@ -276,6 +277,27 @@ If a named skill contains an explicit `BLOCKED` contract:
 - `No such file or directory` for a requested binary means the binary/runtime is missing unless the skill explicitly says otherwise
 - when Railway execution is required, agents must use explicit non-interactive context (`-p/-e/-s`) or a verified repo-native wrapper
 - ambient Railway link state from another repo/project is not sufficient evidence of correct target context
+
+### 5.4) MCP Tool-First Routing Contract (V8.5)
+
+- **Canonical active assistant stack**:
+  - \`context-plus\`: semantic discovery / repo mapping
+  - \`llm-tldr\`: exact static analysis / trace / impact
+  - \`serena\`: symbol-aware edits / persistent assistant memory
+- **Canonical non-default memory surface**:
+  - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
+
+For qualifying tasks, agents MUST route the first discovery action through the matching MCP tool before broad shell search or repeated file traversal:
+- semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`context-plus\`
+- exact call-path, slice, impact, CFG/DFG, dead-code, or structural trace -> \`llm-tldr\`
+- symbol-aware edits, rename/refactor, insertion, project memory, or prior-session continuity -> \`serena\`
+
+Fallback to shell/file reads is allowed only when:
+- the MCP tool is unavailable in the current runtime
+- the MCP tool cannot answer the question after one reasonable attempt
+- the task is trivially faster with direct file access
+
+If the agent does not use the matching MCP tool on a qualifying task, it MUST state \`Tool routing exception: <reason>\` in the final response or handoff.
 
 ## 6) Parallel Agent Orchestration (V8.4)
 
@@ -500,7 +522,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **agent-browser** | Browser automation CLI for AI agents. Use when a CLI agent needs the standard manual browser interface for exploratory verification, navigation, form interaction, screenshots, auth-cookie setup, or app walkthroughs. This is the primary manual browser tool for CLI agents; keep Playwright focused on CI/E2E and assertion-heavy automation. | — | browser, automation, verification, cli, manual, qa |
 | **agent-skills-creator** | Create, update, or deprecate canonical skills in `~/agent-skills` using the current agent-skills method. MUST BE USED when the user wants a new skill, a skill refactor, a deprecation shim, skill metadata updates, or AGENTS baseline regeneration for skill changes. Use for canonical `agent-skills` work, not legacy `.claude/skills` or one-off local skill experiments. | `dx-worktree create <beads-id> agent-skills` | meta, skills, workflow, baseline, agent-skills |
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban views, dependency graphs, and the robot-plan API for auto-selecting next tasks. Keywords: beads, viewer, kanban, dependency graph, robot-plan, task selection, bottleneck | `bd show "$NEXT_TASK"` | workflow, beads, visualization, task-selection |
-| **cass-memory** | CLI-native procedural/episodic memory workflow with opt-in sanitized cross-agent digest sharing. | — |  |
+| **cass-memory** | Pilot-only CLI episodic memory workflow for explicit cross-agent memory experiments. | — |  |
 | **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode |
 | **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
 | **context-plus** | MCP-native structural context analysis for codebase mapping and dependency-aware targeting. | — |  |
@@ -520,7 +542,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **loop-orchestration** | Orchestrate Codex-first implementation loops built around `dx-runner` dispatch, bounded sleep intervals, status checks, review passes, and deterministic re-dispatch. Use when a live session should repeatedly dispatch work, wait, inspect `dx-runner` state, review outcomes, and continue until merge-ready or blocked. Invoke when users mention "poll every 5m", "check this runner repeatedly", "sleep loop", "babysit this PR", "re-dispatch round N", "keep checking until merge-ready", or "build a loop orchestrator". `/loop` is only a prototype model for the desired behavior, not the required runtime surface. | — |  |
 | **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | `dx-runner start --provider opencode --beads bd-xxx --prompt-` | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |
 | **plan-refine** | Iteratively refine implementation plans using the "Convexity" pattern. Simulates a multi-round architectural critique to converge on a secure, robust specification. Use when you have a draft plan that needs deep architectural review or "APR" style optimization. | — | architecture, planning, review, refinement, apr |
-| **prompt-writing** | Draft self-contained prompts for delegated agents with cross-VM-safe context. MUST BE USED when assigning work to another agent (implementation, QA, rollout, or audit). Enforces: worktree-first, no canonical writes, Beads traceability (epic/subtask/dependencies), and required PR artifacts (PR_URL  PR_HEAD_SHA). Trigger phrases include: "assign to another agent", "write a one-shot prompt", "dispatch this", "prepare autonomous prompt", "QA agent prompt", "parallelize work to cloud", and "assign to jules". | — | workflow, prompts, orchestration, dx, safety |
+| **prompt-writing** | Draft self-contained prompts for delegated agents with cross-VM-safe context. MUST BE USED when assigning work to another agent (implementation, QA, rollout, or audit). Enforces: worktree-first, no canonical writes, Beads traceability (epic/subtask/dependencies), MCP routing expectations, and required PR artifacts (PR_URL  PR_HEAD_SHA). Trigger phrases include: "assign to another agent", "write a one-shot prompt", "dispatch this", "prepare autonomous prompt", "QA agent prompt", "parallelize work to cloud", and "assign to jules". | — | workflow, prompts, orchestration, dx, safety |
 | **serena** | MCP-native AI assistant memory for persistent context across sessions. | — |  |
 | **skill-creator** | Deprecated compatibility shim for legacy skill creation requests. Use when the user still says "skill-creator" or asks to create a skill, then route canonical `~/agent-skills` work to `agent-skills-creator`. Route implementation-plan/spec requests with Beads epic+dependencies+subtasks to `implementation-planner`. | — | meta, skill-creation, compatibility, deprecation |
 | **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lightweight locking). Uses direct Slack Web API calls and/or the slack-coordinator systemd service. Does not require MCP. | — | slack, coordination, workflow, optional |
@@ -533,7 +555,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-| **bd-doctor** | Diagnose and repair Beads reliability issues in canonical Dolt server mode (`~/bd`) across hosts. | — | health, beads, dolt, reliability, fleet |
+| **bd-doctor** | Diagnose and repair Beads reliability issues in canonical Dolt server mode (`~/bd`) across hosts. | `bd config set beads.role maintainer` | health, beads, dolt, reliability, fleet |
 | **beads-dolt-fleet** | Fleet-level Beads Dolt operations for canonical hosts (verify, converge, and recover shared `~/bd` state). | — | health, beads, dolt, fleet, vm |
 | **dx-cron** | Monitor and manage dx-* system cron jobs and their logs.  MUST BE USED when user asks "is the cron running", "show me cron logs", or "status of dx jobs". | — | health, auth, audit, cron, monitoring |
 | **lockfile-doctor** | Check and fix lockfile drift across Poetry (Python) and pnpm (Node.js) projects. | — |  |

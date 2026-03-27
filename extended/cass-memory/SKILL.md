@@ -1,6 +1,6 @@
 ---
 name: cass-memory
-description: CLI-native procedural/episodic memory workflow with opt-in sanitized cross-agent digest sharing.
+description: Pilot-only CLI episodic memory workflow for explicit cross-agent memory experiments.
 tags:
   - memory
   - cli
@@ -9,15 +9,22 @@ tags:
   - local-first
 ---
 
-# CASS Memory (Fleet Sync V2.2)
+# CASS Memory (Pilot Only)
 
-CLI-native episodic memory for recurring patterns, decisions, and failure playbooks.
+CLI-native episodic memory for explicit experiments in recurring-pattern capture. This is not part of the canonical default assistant loop.
 
 ## Tool Class
 
 **`integration_mode: cli`**
 
 CASS Memory is a CLI-native tool. It is NOT rendered to IDE MCP configs. It runs as a standalone binary.
+
+## Status
+
+- Default stack status: NOT CANONICAL
+- Fleet status: pilot-only / disabled by default in the manifest
+- Use only when the task explicitly asks for cross-session or cross-agent memory experimentation
+- Do not require this tool in standard repo workflows
 
 ## Installation
 

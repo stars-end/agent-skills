@@ -36,7 +36,19 @@ All four tools are enabled and pass Layer 1-3 checks:
 - Codex CLI: All MCP tools listed and enabled ✓ (via `~/.codex/config.toml` `mcp_servers`)
 - OpenCode: All MCP tools connected ✓ (via `~/.config/opencode/opencode.jsonc` `mcp`)
 
-Full platform GO achieved for verified Layer 4 visibility.
+Layer 4 visibility is necessary but not sufficient.
+
+## Layer 5: Agent Adoption
+
+A tool is not considered healthy in practice unless agents are instructed to use it for the right task class.
+
+Required Layer 5 checks:
+- generated AGENTS baseline contains the MCP Tool-First Routing Contract
+- relevant skill docs contain Required Trigger Contract sections
+- repo-level addenda contain at least repo-specific examples where needed
+- handoffs/prompts can report tool use or a routing exception
+
+Current state: Layer 4 GO does not imply Layer 5 GO.
 
 ## Known Caveats
 

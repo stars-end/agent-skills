@@ -32,15 +32,15 @@ tools:
       command: "tldr-mcp"
       args: []
     runtime: python
-    upstream: "https://github.com/simonw/llm-tldr"
-    docs: "https://github.com/simonw/llm-tldr#readme"
+    upstream: "https://github.com/parcadei/llm-tldr"
+    docs: "https://github.com/parcadei/llm-tldr#readme"
 
   # ============================================================
-  # cass-memory: CLI-native episodic memory (CLI mode)
-  # Not rendered to IDE configs - standalone CLI tool.
+  # cass-memory: pilot-only CLI episodic memory (disabled by default)
+  # Not rendered to IDE configs and not part of the canonical assistant loop.
   # ============================================================
   cass-memory:
-    enabled: true
+    enabled: false
     integration_mode: cli
     version: "git"
     install_cmd: "cm --version 2>/dev/null || npm install -g Dicklesworthstone/cass_memory_system"

@@ -44,6 +44,9 @@ Use this skill when user intent is handoff/review packaging:
 - `BEADS_SUBTASK` (or feature id)
 - `BEADS_DEPENDENCIES` (or `none`)
 - Validation summary (commands + pass/fail)
+- Tool Evidence summary:
+  - tools used: `context-plus`, `llm-tldr`, `serena`
+  - or `Tool routing exception: <reason>`
 - Changed files summary
 - Open blockers / decisions needed
 - How-to-review checklist
@@ -164,6 +167,10 @@ Optional:
 - pnpm --filter frontend build: PASS
 - pnpm --filter frontend type-check: PASS
 
+### Tool Evidence
+- Used: <tool list>
+- Routing exception: none
+
 ### Decisions Needed
 1. Approve shadcn/ui adoption for V2 routes
 2. Confirm AG Grid migration timeline
@@ -192,6 +199,10 @@ Optional:
 - pnpm --filter frontend build: PASS
 - pnpm --filter frontend test: PASS
 - dx-verify-clean.sh: PASS
+
+### Tool Evidence
+- Used: <tool list>
+- Routing exception: none
 
 ### Changed Files Summary
 - frontend/package.json: Added shadcn/ui dependencies

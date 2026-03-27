@@ -23,16 +23,12 @@ Context+ is rendered to IDE MCP configs and provides MCP server functionality.
 
 - Fleet contract: MCP-rendered tool
 - Current state: ✅ ENABLED
-- Install: `npx -y contextplus` or `bunx contextplus`
+- Install: `~/agent-skills/scripts/install-contextplus-patched.sh`
 
 ## Installation
 
 ```bash
-# Option 1: Run directly with npx (recommended)
-npx -y contextplus
-
-# Option 2: Install globally with bun
-bunx contextplus
+~/agent-skills/scripts/install-contextplus-patched.sh
 ```
 
 **NOTE**: The correct package name is `contextplus` (NOT `@forloopcodes/contextplus` which returns 404).
@@ -56,8 +52,8 @@ Rendered to IDE configs via Fleet Sync:
   "mcpServers": {
     "context-plus": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "contextplus"]
+      "command": "node",
+      "args": ["/Users/$USER/.local/share/contextplus-patched/build/index.js"]
     }
   }
 }
@@ -75,6 +71,15 @@ Rendered to IDE configs via Fleet Sync:
 - **Spectral Clustering**: Group semantically related files
 - **RAG Integration**: Combine with Ollama for enhanced retrieval
 - **Wikilink Hubs**: Obsidian-style feature navigation
+
+## Required Trigger Contract
+
+Use `context-plus` first when the task is primarily about semantic discovery:
+- locating the part of the repo responsible for a concept or feature
+- mapping related files/modules before editing
+- answering "where does this live?" or "what else is related to this?"
+
+Do not skip directly to broad grep/file traversal for those questions unless a documented fallback condition applies.
 
 ## Status
 - Fleet contract: MCP-rendered tool

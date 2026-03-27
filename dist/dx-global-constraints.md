@@ -141,6 +141,27 @@ If a named skill contains an explicit `BLOCKED` contract:
 - when Railway execution is required, agents must use explicit non-interactive context (`-p/-e/-s`) or a verified repo-native wrapper
 - ambient Railway link state from another repo/project is not sufficient evidence of correct target context
 
+### 5.4) MCP Tool-First Routing Contract (V8.5)
+
+- **Canonical active assistant stack**:
+  - \`context-plus\`: semantic discovery / repo mapping
+  - \`llm-tldr\`: exact static analysis / trace / impact
+  - \`serena\`: symbol-aware edits / persistent assistant memory
+- **Canonical non-default memory surface**:
+  - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
+
+For qualifying tasks, agents MUST route the first discovery action through the matching MCP tool before broad shell search or repeated file traversal:
+- semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`context-plus\`
+- exact call-path, slice, impact, CFG/DFG, dead-code, or structural trace -> \`llm-tldr\`
+- symbol-aware edits, rename/refactor, insertion, project memory, or prior-session continuity -> \`serena\`
+
+Fallback to shell/file reads is allowed only when:
+- the MCP tool is unavailable in the current runtime
+- the MCP tool cannot answer the question after one reasonable attempt
+- the task is trivially faster with direct file access
+
+If the agent does not use the matching MCP tool on a qualifying task, it MUST state \`Tool routing exception: <reason>\` in the final response or handoff.
+
 ## 6) Parallel Agent Orchestration (V8.4)
 
 ### Pattern: Plan-First, Batch-Second, Commit-Only
