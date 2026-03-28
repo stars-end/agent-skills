@@ -6,6 +6,8 @@
 set -euo pipefail
 
 # Config
+export DX_AUTH_UNATTENDED_OP=1
+
 REPO_ROOT="${REPO_ROOT:-$HOME/prime-radiant-ai}"
 AGENTSKILLS_DIR="${AGENTSKILLS_DIR:-$HOME/agent-skills}"
 VENV_PATH="${VENV_PATH:-$REPO_ROOT/backend/.venv}"

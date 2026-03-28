@@ -34,7 +34,28 @@ dx_auth_read_lines_into_array() {
 dx_auth_op_token_valid() {
   local token="${1:-}"
   [[ -n "$token" ]] || return 1
-  OP_SERVICE_ACCOUNT_TOKEN="$token" op whoami >/dev/null 2>&1
+  OP_SERVICE_ACCOUNT_TOKEN="$token" dx_auth_run_op whoami >/dev/null 2>&1
+}
+
+dx_auth_unattended_op_enabled() {
+  [[ "${DX_AUTH_UNATTENDED_OP:-0}" == "1" ]]
+}
+
+dx_auth_prepare_op_env() {
+  if ! dx_auth_unattended_op_enabled; then
+    return 0
+  fi
+
+  export OP_BIOMETRIC_UNLOCK_ENABLED=false
+  unset OP_SESSION
+}
+
+dx_auth_run_op() {
+  dx_auth_prepare_op_env
+  if dx_auth_unattended_op_enabled && [[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
+    return 1
+  fi
+  op "$@"
 }
 
 dx_auth_secret_cache_dir() {
@@ -149,7 +170,7 @@ dx_auth_refresh_agent_item_cache() {
     return 1
   }
 
-  item_json="$(op item get "Agent-Secrets-Production" --vault dev --format json 2>/dev/null || true)"
+  item_json="$(dx_auth_run_op item get "Agent-Secrets-Production" --vault dev --format json 2>/dev/null || true)"
   if [[ -z "$item_json" ]]; then
     rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
     [[ -f "$cache_file" ]] && return 0
@@ -239,7 +260,7 @@ dx_auth_read_secret_cached() {
     return $?
   fi
 
-  secret="$(op read "$ref" 2>/dev/null || true)"
+  secret="$(dx_auth_run_op read "$ref" 2>/dev/null || true)"
   if [[ -z "$secret" ]]; then
     rm -rf "$lock_dir" >/dev/null 2>&1 || true
     [[ -f "$cache_file" ]] && cat "$cache_file"

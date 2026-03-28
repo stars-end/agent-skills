@@ -13,6 +13,8 @@
 
 set -euo pipefail
 
+export DX_AUTH_UNATTENDED_OP=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
