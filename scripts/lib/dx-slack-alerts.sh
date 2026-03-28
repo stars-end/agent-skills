@@ -186,7 +186,7 @@ agent_coordination_refresh_transport_cache() {
       return 1
     fi
 
-    item_json="$(op item get "Agent-Secrets-Production" --vault dev --format json 2>/dev/null || true)"
+    item_json="$(dx_auth_run_op item get "Agent-Secrets-Production" --vault dev --format json 2>/dev/null || true)"
     if [[ -z "$item_json" ]]; then
       agent_coordination_set_refresh_cooldown
       rm -rf "$lock_dir" "$tmp_file" >/dev/null 2>&1 || true
@@ -252,7 +252,7 @@ agent_coordination_load_op_token() {
   fi
 
   if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
-    if OP_SERVICE_ACCOUNT_TOKEN="${OP_SERVICE_ACCOUNT_TOKEN}" op whoami >/dev/null 2>&1; then
+    if dx_auth_op_token_valid "${OP_SERVICE_ACCOUNT_TOKEN}"; then
       return 0
     fi
   fi
@@ -275,7 +275,7 @@ agent_coordination_load_op_token() {
       local token
       token="$(cat "$candidate" 2>/dev/null || true)"
       if [[ -n "$token" ]]; then
-        if OP_SERVICE_ACCOUNT_TOKEN="$token" op whoami >/dev/null 2>&1; then
+        if dx_auth_op_token_valid "$token"; then
           export OP_SERVICE_ACCOUNT_TOKEN="$token"
           return 0
         fi
@@ -301,7 +301,7 @@ agent_coordination_load_op_token() {
         local decrypted
         decrypted="$(systemd-creds decrypt "$candidate" 2>/dev/null || true)"
         if [[ -n "$decrypted" ]]; then
-          if OP_SERVICE_ACCOUNT_TOKEN="$decrypted" op whoami >/dev/null 2>&1; then
+          if dx_auth_op_token_valid "$decrypted"; then
             export OP_SERVICE_ACCOUNT_TOKEN="$decrypted"
             return 0
           fi
@@ -330,7 +330,7 @@ agent_coordination_resolve_op_ref() {
   if ! command -v op >/dev/null 2>&1; then
     return 1
   fi
-  op read "$value" 2>/dev/null || true
+  dx_auth_run_op read "$value" 2>/dev/null || true
 }
 
 agent_coordination_prepare_transport() {

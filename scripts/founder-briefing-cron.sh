@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+export DX_AUTH_UNATTENDED_OP=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/dx-slack-alerts.sh"
 # shellcheck disable=SC1091
