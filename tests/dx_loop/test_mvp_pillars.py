@@ -655,6 +655,90 @@ def test_start_review_uses_review_runner(tmp_path):
     print("Pillar C: _start_review uses review runner with model")
 
 
+def test_start_implement_prunes_stale_runner_state(tmp_path):
+    """_start_implement should auto-prune stale non-running dx-runner state."""
+    wave_id = "wave-stale-prune"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Affordabot: Test task",
+            dependencies=[],
+        ),
+    }
+    worktree = tmp_path / "agents" / "bd-test" / "affordabot"
+    worktree.mkdir(parents=True)
+    loop._ensure_worktree = lambda beads_id: worktree
+
+    calls = {"prune": [], "start": []}
+
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_err",
+        reason_code="opencode_rate_limited",
+        worktree=str(tmp_path / "agents" / "bd-test" / "agent-skills"),
+    )
+
+    def fake_prune(beads_id):
+        calls["prune"].append(beads_id)
+        return RunnerStartResult(ok=True, returncode=0, stdout='{"checked":1,"pruned":1}')
+
+    def fake_start(beads_id, prompt_file, worktree=None, model=None):
+        calls["start"].append((beads_id, str(worktree)))
+        return RunnerStartResult(
+            ok=True,
+            returncode=0,
+            command=["dx-runner", "start"],
+        )
+
+    loop.implement_runner.prune = fake_prune
+    loop.implement_runner.start = fake_start
+
+    assert loop._start_implement("bd-test") is True
+    assert calls["prune"] == ["bd-test"]
+    assert calls["start"] == [("bd-test", str(worktree))]
+
+    print("Pillar C: stale implement runner state is pruned before redispatch")
+
+
+def test_start_implement_blocks_on_live_runner_worktree_mismatch(tmp_path):
+    """_start_implement must refuse a live run attached to a different worktree."""
+    wave_id = "wave-live-mismatch"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Affordabot: Test task",
+            dependencies=[],
+        ),
+    }
+    worktree = tmp_path / "agents" / "bd-test" / "affordabot"
+    worktree.mkdir(parents=True)
+    loop._ensure_worktree = lambda beads_id: worktree
+
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="healthy",
+        worktree=str(tmp_path / "agents" / "bd-test" / "agent-skills"),
+    )
+
+    def fail_start(*args, **kwargs):
+        raise AssertionError("start should not run when live state points at wrong worktree")
+
+    loop.implement_runner.start = fail_start
+
+    assert loop._start_implement("bd-test") is False
+    assert loop.wave_status["state"] == "run_blocked"
+    assert loop.wave_status["blocker_code"] == "run_blocked"
+    assert "different worktree" in loop.wave_status["reason"] or "points at" in loop.wave_status["reason"]
+
+    print("Pillar C: live implement runner mismatch blocks cleanly")
+
+
 # ---------------------------------------------------------------------------
 # Cross-cutting / version tests
 # ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@ class RunnerTaskState:
     exit_code: Optional[int] = None
     started_at: Optional[str] = None
     duration_sec: Optional[int] = None
+    worktree: Optional[str] = None
     has_pr_artifacts: bool = False
     pr_url: Optional[str] = None
     pr_head_sha: Optional[str] = None
@@ -54,6 +55,7 @@ class RunnerTaskState:
             "exit_code": self.exit_code,
             "started_at": self.started_at,
             "duration_sec": self.duration_sec,
+            "worktree": self.worktree,
             "has_pr_artifacts": self.has_pr_artifacts,
             "pr_url": self.pr_url,
             "pr_head_sha": self.pr_head_sha,
@@ -325,9 +327,17 @@ class RunnerAdapter:
             exit_code=data.get("exit_code"),
             started_at=data.get("started_at"),
             duration_sec=data.get("duration_sec"),
+            worktree=data.get("worktree"),
             has_pr_artifacts=bool(data.get("pr_url") and data.get("pr_head_sha")),
             pr_url=data.get("pr_url"),
             pr_head_sha=data.get("pr_head_sha"),
+        )
+
+    def prune(self, beads_id: str) -> RunnerStartResult:
+        """Prune stale dx-runner state for a beads id from canonical Beads cwd."""
+        return self._run_dx_runner(
+            ["prune", "--beads", beads_id, "--json"],
+            timeout=30,
         )
 
     def report(self, beads_id: str) -> Optional[Dict[str, Any]]:

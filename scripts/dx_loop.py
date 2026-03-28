@@ -607,10 +607,106 @@ class DxLoop:
         )
         return None
 
+    @staticmethod
+    def _same_worktree_path(expected: Path, observed: Optional[str]) -> bool:
+        if not observed:
+            return True
+        try:
+            return Path(observed).expanduser().resolve() == expected.resolve()
+        except OSError:
+            return False
+
+    def _prepare_runner_state(
+        self,
+        *,
+        runner: RunnerAdapter,
+        beads_id: str,
+        worktree: Path,
+        phase: str,
+    ) -> bool:
+        """
+        Clear stale runner state before dispatch and fail loudly on live mismatches.
+
+        This keeps retries on macOS worktree-safe without requiring manual
+        `dx-runner prune` from the canonical Beads shell.
+        """
+        task_state = runner.check(beads_id)
+        if not task_state or task_state.state in {"missing", "unknown"}:
+            return True
+
+        if task_state.is_running():
+            if not self._same_worktree_path(worktree, task_state.worktree):
+                detail = (
+                    f"Live dx-runner state for {beads_id} points at "
+                    f"{task_state.worktree or 'unknown worktree'}, expected {worktree}"
+                )
+                self.scheduler.state.mark_blocked(beads_id)
+                self._set_wave_status(
+                    LoopState.RUN_BLOCKED,
+                    BlockerCode.RUN_BLOCKED,
+                    f"Refusing to start {phase} for {beads_id}: {detail}",
+                    blocked_details=[
+                        {
+                            "beads_id": beads_id,
+                            "phase": phase,
+                            "reason_code": "dx_runner_live_worktree_mismatch",
+                            "detail": detail,
+                        }
+                    ],
+                )
+                return False
+            return True
+
+        prune_reason = None
+        if not self._same_worktree_path(worktree, task_state.worktree):
+            prune_reason = (
+                f"stale runner worktree {task_state.worktree or 'unknown'} "
+                f"!= expected {worktree}"
+            )
+        elif task_state.is_complete():
+            prune_reason = f"stale terminal runner state {task_state.state}"
+
+        if not prune_reason:
+            return True
+
+        prune_result = runner.prune(beads_id)
+        if not prune_result.ok:
+            detail = (
+                prune_result.detail
+                or prune_result.stderr.strip()
+                or prune_result.stdout.strip()
+                or "dx-runner prune failed"
+            )
+            self.scheduler.state.mark_blocked(beads_id)
+            self._set_wave_status(
+                LoopState.KICKOFF_ENV_BLOCKED,
+                BlockerCode.KICKOFF_ENV_BLOCKED,
+                f"Failed to prune stale runner state for {beads_id}: {detail}",
+                blocked_details=[
+                    {
+                        "beads_id": beads_id,
+                        "phase": phase,
+                        "reason_code": "dx_runner_prune_failed",
+                        "detail": detail,
+                    }
+                ],
+            )
+            return False
+
+        print(f"Pruned stale dx-runner state for {beads_id}: {prune_reason}")
+        return True
+
     def _start_implement(self, beads_id: str) -> bool:
         """Start implement phase via RunnerAdapter (P0 fix: explicit worktree)"""
         worktree = self._ensure_worktree(beads_id)
         if not worktree:
+            return False
+        if not self._prepare_runner_state(
+            runner=self.implement_runner,
+            beads_id=beads_id,
+            worktree=worktree,
+            phase="implement",
+        ):
             return False
 
         prompt = self._resolve_prompt(beads_id, "implement", worktree)
@@ -654,13 +750,19 @@ class DxLoop:
         worktree = self._ensure_worktree(beads_id)
         if not worktree:
             return False
+        review_beads_id = f"{beads_id}-review"
+        if not self._prepare_runner_state(
+            runner=self.review_runner,
+            beads_id=review_beads_id,
+            worktree=worktree,
+            phase="review",
+        ):
+            return False
 
         prompt = self._resolve_prompt(beads_id, "review", worktree)
         prompt_file = ARTIFACT_BASE / "prompts" / f"{beads_id}.review.prompt"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(prompt)
-
-        review_beads_id = f"{beads_id}-review"
         run_id = f"{review_beads_id}-{now_utc().replace(':', '-').replace('T', '-')}"
 
         result = self.review_runner.start(
