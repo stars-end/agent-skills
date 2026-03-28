@@ -7,6 +7,7 @@ Tests for dx-loop v1.3 MVP pillars:
 """
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -196,6 +197,57 @@ def test_dispatch_proceeds_when_upstream_has_artifacts(tmp_path):
     assert block is None
 
     print("Pillar A: dispatch proceeds when upstream has artifacts")
+
+
+def test_recover_closed_dependency_artifact_from_close_reason(tmp_path, monkeypatch):
+    """Closed upstream deps should recover PR artifacts from Beads/GitHub metadata."""
+    wave_id = "wave-recover-artifact"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-child": BeadsTask(
+            beads_id="bd-child",
+            title="Child",
+            dependencies=["bd-upstream"],
+        ),
+    }
+    loop.beads_manager.completed = {"bd-upstream"}
+    loop.beads_manager.dependency_status_cache["bd-upstream"] = "closed"
+    loop.beads_manager.dependency_metadata_cache["bd-upstream"] = {
+        "repo": "affordabot",
+        "close_reason": "Closing before merge in PR #342",
+        "title": "Affordabot: Upstream",
+        "status": "closed",
+    }
+
+    def fake_run(cmd, capture_output=None, text=None, timeout=None):
+        assert cmd[:3] == ["gh", "pr", "view"]
+        assert cmd[3] == "342"
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout=json.dumps(
+                {
+                    "url": "https://github.com/stars-end/affordabot/pull/342",
+                    "headRefOid": "a" * 40,
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(dx_loop_mod.subprocess, "run", fake_run)
+
+    block = loop._check_dependency_artifacts("bd-child")
+
+    assert block is None
+    assert loop.pr_enforcer.has_valid_artifact("bd-upstream")
+    artifact = loop.pr_enforcer.get_artifact("bd-upstream")
+    assert artifact is not None
+    assert artifact.pr_url == "https://github.com/stars-end/affordabot/pull/342"
+    assert artifact.pr_head_sha == "a" * 40
+
+    print("Pillar A: closed upstream dependency artifacts are recovered")
 
 
 # ---------------------------------------------------------------------------

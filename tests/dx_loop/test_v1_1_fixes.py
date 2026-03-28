@@ -284,6 +284,30 @@ def test_from_dict_restores_dependency_status_cache():
     print("✓ Dependency status cache persists across resume")
 
 
+def test_from_dict_restores_dependency_metadata_cache():
+    """Cached dependency metadata should survive save/load round trips."""
+    manager1 = BeadsWaveManager()
+    manager1.dependency_metadata_cache = {
+        "bd-upstream": {
+            "repo": "affordabot",
+            "close_reason": "Closing before merge in PR #342",
+            "status": "closed",
+            "title": "Affordabot: Upstream",
+        }
+    }
+
+    manager2 = BeadsWaveManager.from_dict(manager1.to_dict())
+
+    assert manager2.get_dependency_metadata("bd-upstream") == {
+        "repo": "affordabot",
+        "close_reason": "Closing before merge in PR #342",
+        "status": "closed",
+        "title": "Affordabot: Upstream",
+    }
+
+    print("✓ Dependency metadata cache persists across resume")
+
+
 def test_load_task_details_timeout_preserves_skeleton_task(monkeypatch):
     """Timeouts should keep the skeletal task and mark hydration as incomplete."""
     manager = BeadsWaveManager()

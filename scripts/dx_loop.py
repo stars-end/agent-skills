@@ -14,7 +14,7 @@ This version uses:
 """
 
 from __future__ import annotations
-import argparse, json, os, subprocess, sys, time
+import argparse, json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -1128,6 +1128,8 @@ class DxLoop:
         for dep_id in task.dependencies:
             if dep_id not in self.beads_manager.completed:
                 continue
+            if not self.pr_enforcer.has_valid_artifact(dep_id):
+                self._recover_closed_dependency_artifact(dep_id)
             artifact = self.pr_enforcer.get_artifact(dep_id)
             if artifact:
                 artifacts.append(
@@ -1138,6 +1140,55 @@ class DxLoop:
                     }
                 )
         return artifacts
+
+    @staticmethod
+    def _extract_pr_number(close_reason: Optional[str]) -> Optional[int]:
+        """Extract a GitHub PR number from a Beads close reason."""
+        if not close_reason:
+            return None
+        match = re.search(r"\bPR\s*#(\d+)\b", close_reason, flags=re.IGNORECASE)
+        if not match:
+            return None
+        return int(match.group(1))
+
+    def _recover_closed_dependency_artifact(self, dep_id: str) -> bool:
+        """Recover PR artifacts for a closed dependency using cached Beads metadata."""
+        if self.pr_enforcer.has_valid_artifact(dep_id):
+            return True
+
+        metadata = self.beads_manager.get_dependency_metadata(dep_id)
+        pr_number = self._extract_pr_number(metadata.get("close_reason"))
+        repo = metadata.get("repo")
+        if not pr_number or not repo:
+            return False
+
+        try:
+            result = subprocess.run(
+                [
+                    "gh",
+                    "pr",
+                    "view",
+                    str(pr_number),
+                    "--repo",
+                    f"stars-end/{repo}",
+                    "--json",
+                    "url,headRefOid",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                return False
+            data = json.loads(result.stdout or "{}")
+            pr_url = data.get("url")
+            pr_head_sha = data.get("headRefOid")
+            if not pr_url or not pr_head_sha:
+                return False
+            self.pr_enforcer.register_artifact(dep_id, pr_url, pr_head_sha)
+            return True
+        except (subprocess.TimeoutExpired, json.JSONDecodeError):
+            return False
 
     def _format_dependency_context(self, beads_id: str) -> str:
         """Format dependency PR artifacts as a prompt section (Pillar A)."""
@@ -1166,6 +1217,7 @@ class DxLoop:
         missing = []
         for dep_id in task.dependencies:
             if dep_id in self.beads_manager.completed:
+                self._recover_closed_dependency_artifact(dep_id)
                 if not self.pr_enforcer.has_valid_artifact(dep_id):
                     missing.append(dep_id)
             elif dep_id in self.beads_manager.tasks:

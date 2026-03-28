@@ -75,6 +75,7 @@ class BeadsWaveManager:
         self.layers: List[List[str]] = []
         self.completed: Set[str] = set()
         self.dependency_status_cache: Dict[str, str] = {}
+        self.dependency_metadata_cache: Dict[str, Dict[str, Any]] = {}
 
     @staticmethod
     def _is_terminal_dependency_status(status: Optional[str]) -> bool:
@@ -92,6 +93,10 @@ class BeadsWaveManager:
             return self._is_terminal_dependency_status(self.tasks[dep_id].status)
 
         return self._is_terminal_dependency_status(self.dependency_status_cache.get(dep_id))
+
+    def get_dependency_metadata(self, dep_id: str) -> Dict[str, Any]:
+        """Return cached metadata for a dependency if available."""
+        return dict(self.dependency_metadata_cache.get(dep_id, {}))
 
     @staticmethod
     def _infer_repo_from_title(title: str) -> Optional[str]:
@@ -135,11 +140,18 @@ class BeadsWaveManager:
             first_open_child = True
             for dep in epic.get("dependents", []):
                 if dep.get("dependency_type") == "parent-child":
+                    dep_repo = self._infer_repo_from_title(dep.get("title", ""))
+                    self.dependency_metadata_cache[dep["id"]] = {
+                        "title": dep.get("title", ""),
+                        "repo": dep_repo,
+                        "status": dep.get("status", "open"),
+                        "close_reason": dep.get("close_reason"),
+                    }
                     task = BeadsTask(
                         beads_id=dep["id"],
                         title=dep.get("title", ""),
                         description=dep.get("description", ""),
-                        repo=self._infer_repo_from_title(dep.get("title", "")),
+                        repo=dep_repo,
                         status=dep.get("status", "open"),
                         priority=dep.get("priority", 2),
                         details_loaded=False,
@@ -191,6 +203,12 @@ class BeadsWaveManager:
                     continue
                 dep_id = dep["id"]
                 task.dependencies.append(dep_id)
+                self.dependency_metadata_cache[dep_id] = {
+                    "title": dep.get("title", ""),
+                    "repo": self._infer_repo_from_title(dep.get("title", "")),
+                    "status": dep.get("status"),
+                    "close_reason": dep.get("close_reason"),
+                }
                 if "status" in dep:
                     self.dependency_status_cache[dep_id] = dep["status"]
             task.status = task_data.get("status", task.status)
@@ -378,6 +396,7 @@ class BeadsWaveManager:
             "layers": self.layers,
             "completed": list(self.completed),
             "dependency_status_cache": dict(self.dependency_status_cache),
+            "dependency_metadata_cache": dict(self.dependency_metadata_cache),
         }
     
     @classmethod
@@ -416,5 +435,8 @@ class BeadsWaveManager:
 
         if "dependency_status_cache" in data:
             manager.dependency_status_cache = dict(data["dependency_status_cache"])
+
+        if "dependency_metadata_cache" in data:
+            manager.dependency_metadata_cache = dict(data["dependency_metadata_cache"])
         
         return manager
