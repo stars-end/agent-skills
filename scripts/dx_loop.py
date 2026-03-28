@@ -516,30 +516,50 @@ class DxLoop:
             self.scheduler.state.mark_blocked(beads_id)
             return False
 
-    def _get_worktree_path(self, beads_id: str) -> Path:
+    def _resolve_task_repo(self, beads_id: str) -> Optional[str]:
+        """Return the task repo when it is known."""
+        task = self.beads_manager.tasks.get(beads_id)
+        repo = getattr(task, "repo", None) if task else None
+        return repo or None
+
+    def _get_worktree_path(self, beads_id: str) -> Optional[Path]:
         """
         Compute worktree path for a beads_id (P0 fix)
 
         Uses standard /tmp/agents/<beads-id>/<repo> pattern.
-        Falls back to agent-skills only when repo inference is unavailable.
         """
-        task = self.beads_manager.tasks.get(beads_id)
-        repo = "agent-skills"  # Default repo
-
-        if task and getattr(task, "repo", None):
-            repo = task.repo
+        repo = self._resolve_task_repo(beads_id)
+        if not repo:
+            return None
 
         worktree_base = Path(self.config.get("worktree_base", "/tmp/agents"))
         return worktree_base / beads_id / repo
 
     def _ensure_worktree(self, beads_id: str) -> Optional[Path]:
         """Ensure the task worktree exists before dispatch."""
+        repo = self._resolve_task_repo(beads_id)
+        if not repo:
+            self._set_wave_status(
+                LoopState.KICKOFF_ENV_BLOCKED,
+                BlockerCode.KICKOFF_ENV_BLOCKED,
+                f"Cannot dispatch {beads_id}: task repo is unresolved",
+                blocked_details=[
+                    {
+                        "beads_id": beads_id,
+                        "phase": "worktree",
+                        "reason_code": "dx_task_repo_unresolved",
+                        "detail": "Beads metadata did not resolve a unique target repo",
+                    }
+                ],
+            )
+            return None
+
         worktree = self._get_worktree_path(beads_id)
+        if not worktree:
+            return None
         if worktree.is_dir():
             return worktree
 
-        task = self.beads_manager.tasks.get(beads_id)
-        repo = getattr(task, "repo", None) or worktree.name
         try:
             result = subprocess.run(
                 ["dx-worktree", "create", beads_id, repo],

@@ -308,6 +308,30 @@ def test_from_dict_restores_dependency_metadata_cache():
     print("✓ Dependency metadata cache persists across resume")
 
 
+def test_backfill_task_repo_from_unique_dependency_metadata():
+    """Repo-less tasks should inherit a unique repo from dependency metadata."""
+    manager = BeadsWaveManager()
+    task = BeadsTask(
+        beads_id="bd-child",
+        title="Freeze replayable research fixtures",
+        dependencies=["bd-parent"],
+        repo=None,
+    )
+    manager.tasks["bd-child"] = task
+    manager.dependency_metadata_cache["bd-parent"] = {
+        "repo": "affordabot",
+        "close_reason": "Closing before merge in PR #342",
+        "status": "closed",
+        "title": "Affordabot: Curate golden bill matrix",
+    }
+
+    manager._backfill_task_repo(task)
+
+    assert task.repo == "affordabot"
+
+    print("✓ Repo-less tasks inherit a unique repo from dependency metadata")
+
+
 def test_load_task_details_timeout_preserves_skeleton_task(monkeypatch):
     """Timeouts should keep the skeletal task and mark hydration as incomplete."""
     manager = BeadsWaveManager()

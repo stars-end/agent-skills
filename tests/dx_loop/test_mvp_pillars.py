@@ -656,6 +656,30 @@ def test_start_implement_uses_implement_runner(tmp_path):
     print("Pillar C: _start_implement uses implement runner with model")
 
 
+def test_ensure_worktree_blocks_when_repo_unresolved(tmp_path):
+    """Repo-less tasks should block explicitly instead of defaulting to agent-skills."""
+    wave_id = "wave-unresolved-repo"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Freeze replayable research fixtures",
+            dependencies=[],
+            repo=None,
+        ),
+    }
+
+    assert loop._ensure_worktree("bd-test") is None
+    assert loop.wave_status["state"] == "kickoff_env_blocked"
+    assert loop.wave_status["blocker_code"] == "kickoff_env_blocked"
+    assert "repo is unresolved" in loop.wave_status["reason"]
+    assert loop.wave_status["blocked_details"][0]["reason_code"] == "dx_task_repo_unresolved"
+
+    print("Pillar C: unresolved repo blocks before worktree creation")
+
+
 def test_start_review_uses_review_runner(tmp_path):
     """_start_review should dispatch via the review runner with model."""
     wave_id = "wave-rev-provider"

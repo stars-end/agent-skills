@@ -98,6 +98,43 @@ class BeadsWaveManager:
         """Return cached metadata for a dependency if available."""
         return dict(self.dependency_metadata_cache.get(dep_id, {}))
 
+    def _infer_repo_from_dependency_context(self, task: BeadsTask) -> Optional[str]:
+        """Infer a task repo from unique dependency/sibling metadata when possible."""
+        candidates: Set[str] = set()
+
+        for dep_id in task.dependencies:
+            dep_meta = self.dependency_metadata_cache.get(dep_id, {})
+            dep_repo = dep_meta.get("repo")
+            if dep_repo:
+                candidates.add(dep_repo)
+                continue
+
+            dep_task = self.tasks.get(dep_id)
+            if dep_task and dep_task.repo:
+                candidates.add(dep_task.repo)
+
+        if len(candidates) == 1:
+            return next(iter(candidates))
+
+        sibling_repos = {
+            existing.repo
+            for existing in self.tasks.values()
+            if existing.repo and existing.beads_id != task.beads_id
+        }
+        if not candidates and len(sibling_repos) == 1:
+            return next(iter(sibling_repos))
+
+        return None
+
+    def _backfill_task_repo(self, task: BeadsTask) -> BeadsTask:
+        """Fill in a repo only when task context yields a unique answer."""
+        if task.repo:
+            return task
+        inferred = self._infer_repo_from_dependency_context(task)
+        if inferred:
+            task.repo = inferred
+        return task
+
     @staticmethod
     def _infer_repo_from_title(title: str) -> Optional[str]:
         """Infer repo from a conventional task title prefix."""
@@ -167,6 +204,9 @@ class BeadsWaveManager:
                     first_open_child = False
                     tasks.append(task)
                     self.tasks[task.beads_id] = task
+
+            for task in tasks:
+                self._backfill_task_repo(task)
             
             return tasks
         
@@ -214,6 +254,7 @@ class BeadsWaveManager:
             task.status = task_data.get("status", task.status)
             task.details_loaded = True
             task.detail_load_error = None
+            self._backfill_task_repo(task)
             
             return task
         
