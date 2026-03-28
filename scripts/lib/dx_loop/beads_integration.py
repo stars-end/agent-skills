@@ -26,6 +26,8 @@ class BeadsTask:
     dependencies: List[str] = field(default_factory=list)
     dependents: List[str] = field(default_factory=list)
     priority: int = 2
+    details_loaded: bool = True
+    detail_load_error: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -37,6 +39,8 @@ class BeadsTask:
             "dependencies": self.dependencies,
             "dependents": self.dependents,
             "priority": self.priority,
+            "details_loaded": self.details_loaded,
+            "detail_load_error": self.detail_load_error,
         }
 
 
@@ -128,6 +132,7 @@ class BeadsWaveManager:
             epic = data[0]
             tasks = []
             
+            first_open_child = True
             for dep in epic.get("dependents", []):
                 if dep.get("dependency_type") == "parent-child":
                     task = BeadsTask(
@@ -137,9 +142,17 @@ class BeadsWaveManager:
                         repo=self._infer_repo_from_title(dep.get("title", "")),
                         status=dep.get("status", "open"),
                         priority=dep.get("priority", 2),
+                        details_loaded=False,
+                        detail_load_error="not_loaded",
                     )
+                    if self._is_terminal_dependency_status(task.status):
+                        self.completed.add(task.beads_id)
+                        self.dependency_status_cache[task.beads_id] = task.status
+                        continue
                     # Load full task details to get dependencies
-                    task = self._load_task_details(task)
+                    timeout_seconds = 10 if first_open_child else 3
+                    task = self._load_task_details(task, timeout_seconds=timeout_seconds)
+                    first_open_child = False
                     tasks.append(task)
                     self.tasks[task.beads_id] = task
             
@@ -148,7 +161,7 @@ class BeadsWaveManager:
         except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
             return []
     
-    def _load_task_details(self, task: BeadsTask) -> BeadsTask:
+    def _load_task_details(self, task: BeadsTask, timeout_seconds: int = 3) -> BeadsTask:
         """Load full task details including dependencies"""
         try:
             result = subprocess.run(
@@ -156,13 +169,17 @@ class BeadsWaveManager:
                 cwd=str(self.beads_repo_path),
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=timeout_seconds,
             )
             if result.returncode != 0:
+                task.details_loaded = False
+                task.detail_load_error = f"bd_show_failed:{result.returncode}"
                 return task
             
             data = json.loads(result.stdout)
             if not data or not isinstance(data, list):
+                task.details_loaded = False
+                task.detail_load_error = "invalid_payload"
                 return task
             
             task_data = data[0]
@@ -177,11 +194,28 @@ class BeadsWaveManager:
                 if "status" in dep:
                     self.dependency_status_cache[dep_id] = dep["status"]
             task.status = task_data.get("status", task.status)
+            task.details_loaded = True
+            task.detail_load_error = None
             
             return task
         
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
+        except subprocess.TimeoutExpired:
+            task.details_loaded = False
+            task.detail_load_error = "timeout"
             return task
+        except (json.JSONDecodeError, KeyError):
+            task.details_loaded = False
+            task.detail_load_error = "decode_error"
+            return task
+
+    def refresh_unhydrated_tasks(self, timeout_seconds: int = 3):
+        """Retry dependency hydration for tasks whose details were not loaded yet."""
+        for task in self.tasks.values():
+            if task.details_loaded:
+                continue
+            if self._is_terminal_dependency_status(task.status):
+                continue
+            self._load_task_details(task, timeout_seconds=timeout_seconds)
     
     def compute_layers(self, task_ids: Optional[List[str]] = None) -> List[List[str]]:
         """
@@ -252,6 +286,8 @@ class BeadsWaveManager:
             task = self.tasks.get(tid)
             if not task:
                 continue
+            if not task.details_loaded:
+                continue
             
             # Check if all dependencies are completed
             if all(self._is_dependency_satisfied(dep_id) for dep_id in task.dependencies):
@@ -285,12 +321,27 @@ class BeadsWaveManager:
         - completed/no-pending conditions
         """
         readiness = WaveReadiness()
+        self.refresh_unhydrated_tasks()
 
         for task_id, task in self.tasks.items():
             if task_id in self.completed:
                 continue
 
             readiness.pending_tasks.append(task_id)
+
+            if not task.details_loaded:
+                readiness.waiting_on_dependencies.append(
+                    {
+                        "beads_id": task_id,
+                        "title": task.title,
+                        "unmet_dependencies": ["task_metadata_unavailable"],
+                        "dependency_statuses": {
+                            "task_metadata_unavailable": task.detail_load_error
+                            or "unknown"
+                        },
+                    }
+                )
+                continue
 
             unmet = [
                 dep_id for dep_id in task.dependencies if not self._is_dependency_satisfied(dep_id)
@@ -350,6 +401,8 @@ class BeadsWaveManager:
                     dependencies=task_data.get("dependencies", []),
                     dependents=task_data.get("dependents", []),
                     priority=task_data.get("priority", 2),
+                    details_loaded=task_data.get("details_loaded", True),
+                    detail_load_error=task_data.get("detail_load_error"),
                 )
                 manager.tasks[tid] = task
         
