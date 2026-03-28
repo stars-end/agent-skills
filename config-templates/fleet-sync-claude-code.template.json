@@ -1,9 +1,48 @@
 {
   "mcpServers": {
-    "context-plus": {
+    "context-plus-agent-skills": {
       "type": "stdio",
       "command": "node",
-      "args": ["~/.local/share/contextplus-patched/build/index.js"],
+      "args": [
+        "~/.local/share/contextplus-patched/build/index.js",
+        "~/agent-skills"
+      ],
+      "env": {
+        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
+        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
+      }
+    },
+    "context-plus-prime-radiant-ai": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "~/.local/share/contextplus-patched/build/index.js",
+        "~/prime-radiant-ai"
+      ],
+      "env": {
+        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
+        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
+      }
+    },
+    "context-plus-affordabot": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "~/.local/share/contextplus-patched/build/index.js",
+        "~/affordabot"
+      ],
+      "env": {
+        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
+        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
+      }
+    },
+    "context-plus-llm-common": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "~/.local/share/contextplus-patched/build/index.js",
+        "~/llm-common"
+      ],
       "env": {
         "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
         "CONTEXTPLUS_EMBED_PROVIDER": "auto"

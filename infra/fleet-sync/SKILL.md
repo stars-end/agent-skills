@@ -70,10 +70,15 @@ Use this skill when the user asks to:
   - host runtime health
   - rendered config correctness
   - client-visible MCP availability
-- `antigravity` and `gemini-cli` use separate Google MCP config files that must stay converged for `context-plus`.
-- For `context-plus`, keep launcher truth:
-  - `gemini-cli` + `antigravity`: `bash -lc 'exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null'`
-  - `codex-cli` + `claude-code` + `opencode`: direct `node ~/.local/share/contextplus-patched/build/index.js`
+- For `context-plus`, each canonical repo gets a repo-scoped MCP entry
+  (e.g., `context-plus-agent-skills`, `context-plus-prime-radiant-ai`).
+  Each entry launches the same patched build with the repo path as an
+  explicit argument: `node ~/.local/share/contextplus-patched/build/index.js ~/<repo>`.
+  This follows the upstream README contract: `contextplus [path]` starts the
+  MCP server for the specified path.
+- `antigravity` and `gemini-cli` use wrapped launcher form with the repo
+  path inside the exec string.
+- `CONTEXTPLUS_ROOT` env var: escape-hatch only, not the primary contract.
 - Do not claim full GO while `serena` remains unresolved unless the contract explicitly excludes it.
 
 ## Validation Order

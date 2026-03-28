@@ -1,4 +1,4 @@
-# Fleet Sync V2.2 tool manifest
+# Fleet Sync V2.3 tool manifest
 # Primary source for local-first MCP tool distribution and IDE rendering.
 #
 # Tool Classes (integration_mode):
@@ -10,6 +10,11 @@ strategy:
   distribution: git_pull
   execution: local_stdio
   fallback: last_known_good_local
+
+# Shared anchor for context-plus embedding env
+x-cp-env: &cp-env
+  OPENROUTER_EMBED_MODEL: "openai/text-embedding-3-small"
+  CONTEXTPLUS_EMBED_PROVIDER: "auto"
 
 tools:
   # ============================================================
@@ -45,8 +50,6 @@ tools:
     version: "git"
     install_cmd: "cm --version 2>/dev/null || npm install -g Dicklesworthstone/cass_memory_system"
     health_cmd: "cm --version"
-    # No target_ides - CLI tools don't render to IDE configs
-    # No mcp block - CLI tools use direct binary execution
     runtime: node
     binary: "cm"
     controls:
@@ -61,18 +64,45 @@ tools:
   # Install: scripts/install-contextplus-patched.sh
   # Embeddings: OpenRouter (primary) with Ollama fallback
   #
-  # Secret propagation: OPENROUTER_API_KEY is resolved from the
-  # parent process env at render time by dx-mcp-tools-sync.sh.
-  # If the key is not set in the parent env, it is omitted from
-  # the rendered config entirely (auto mode falls back to Ollama).
-  # No literal ${VAR} placeholders are ever written to disk.
+  # Launcher contract: contextplus [path] starts the MCP server
+  # for the specified path (per upstream README). Each canonical
+  # repo gets its own MCP server entry launched with an explicit
+  # repo path argument. This ensures the server indexes the
+  # correct repo regardless of session CWD.
+  #
+  # The context-plus base entry (no path arg, cli mode) is
+  # retained for install/health tracking only — not rendered.
+  #
+  # CONTEXTPLUS_ROOT env var: kept as escape-hatch only. The
+  # primary fleet contract is explicit path args per entry.
   # ============================================================
   context-plus:
     enabled: true
-    integration_mode: mcp
+    integration_mode: cli
     version: "patched"
     install_cmd: "scripts/install-contextplus-patched.sh"
     health_cmd: "test -f ~/.local/share/contextplus-patched/build/index.js"
+    runtime: node
+    env:
+      optional:
+        - OLLAMA_EMBED_MODEL
+        - OLLAMA_CHAT_MODEL
+        - OLLAMA_API_KEY
+        - OPENROUTER_API_KEY
+        - OPENROUTER_EMBED_MODEL
+        - CONTEXTPLUS_EMBED_PROVIDER
+        - CONTEXTPLUS_ROOT
+    upstream: "https://github.com/ForLoopCodes/contextplus"
+    docs: "https://github.com/ForLoopCodes/contextplus#readme"
+
+  # Repo-scoped MCP server entries
+  # Each launches the same patched build with the repo path as arg.
+  # Upstream README: "contextplus [path]" starts the MCP server
+  # for the specified path (defaults to current directory).
+  context-plus-agent-skills:
+    enabled: true
+    integration_mode: mcp
+    version: "patched"
     target_ides:
       - codex-cli
       - claude-code
@@ -84,31 +114,124 @@ tools:
       command: "node"
       args:
         - "~/.local/share/contextplus-patched/build/index.js"
+        - "~/agent-skills"
       per_ide:
         gemini-cli:
           command: "bash"
           args:
             - "-lc"
-            - "exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null"
+            - "exec node ~/.local/share/contextplus-patched/build/index.js ~/agent-skills 2>/dev/null"
         antigravity:
           command: "bash"
           args:
             - "-lc"
-            - "exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null"
-      env:
-        OPENROUTER_EMBED_MODEL: "openai/text-embedding-3-small"
-        CONTEXTPLUS_EMBED_PROVIDER: "auto"
+            - "exec node ~/.local/share/contextplus-patched/build/index.js ~/agent-skills 2>/dev/null"
+      env: *cp-env
       env_from_parent:
         - OPENROUTER_API_KEY
     runtime: node
-    env:
-      optional:
-        - OLLAMA_EMBED_MODEL
-        - OLLAMA_CHAT_MODEL
-        - OLLAMA_API_KEY
+    upstream: "https://github.com/ForLoopCodes/contextplus"
+    docs: "https://github.com/ForLoopCodes/contextplus#readme"
+
+  context-plus-prime-radiant-ai:
+    enabled: true
+    integration_mode: mcp
+    version: "patched"
+    target_ides:
+      - codex-cli
+      - claude-code
+      - antigravity
+      - opencode
+      - gemini-cli
+    mcp:
+      type: stdio
+      command: "node"
+      args:
+        - "~/.local/share/contextplus-patched/build/index.js"
+        - "~/prime-radiant-ai"
+      per_ide:
+        gemini-cli:
+          command: "bash"
+          args:
+            - "-lc"
+            - "exec node ~/.local/share/contextplus-patched/build/index.js ~/prime-radiant-ai 2>/dev/null"
+        antigravity:
+          command: "bash"
+          args:
+            - "-lc"
+            - "exec node ~/.local/share/contextplus-patched/build/index.js ~/prime-radiant-ai 2>/dev/null"
+      env: *cp-env
+      env_from_parent:
         - OPENROUTER_API_KEY
-        - OPENROUTER_EMBED_MODEL
-        - CONTEXTPLUS_EMBED_PROVIDER
+    runtime: node
+    upstream: "https://github.com/ForLoopCodes/contextplus"
+    docs: "https://github.com/ForLoopCodes/contextplus#readme"
+
+  context-plus-affordabot:
+    enabled: true
+    integration_mode: mcp
+    version: "patched"
+    target_ides:
+      - codex-cli
+      - claude-code
+      - antigravity
+      - opencode
+      - gemini-cli
+    mcp:
+      type: stdio
+      command: "node"
+      args:
+        - "~/.local/share/contextplus-patched/build/index.js"
+        - "~/affordabot"
+      per_ide:
+        gemini-cli:
+          command: "bash"
+          args:
+            - "-lc"
+            - "exec node ~/.local/share/contextplus-patched/build/index.js ~/affordabot 2>/dev/null"
+        antigravity:
+          command: "bash"
+          args:
+            - "-lc"
+            - "exec node ~/.local/share/contextplus-patched/build/index.js ~/affordabot 2>/dev/null"
+      env: *cp-env
+      env_from_parent:
+        - OPENROUTER_API_KEY
+    runtime: node
+    upstream: "https://github.com/ForLoopCodes/contextplus"
+    docs: "https://github.com/ForLoopCodes/contextplus#readme"
+
+  context-plus-llm-common:
+    enabled: true
+    integration_mode: mcp
+    version: "patched"
+    target_ides:
+      - codex-cli
+      - claude-code
+      - antigravity
+      - opencode
+      - gemini-cli
+    mcp:
+      type: stdio
+      command: "node"
+      args:
+        - "~/.local/share/contextplus-patched/build/index.js"
+        - "~/llm-common"
+      per_ide:
+        gemini-cli:
+          command: "bash"
+          args:
+            - "-lc"
+            - "exec node ~/.local/share/contextplus-patched/build/index.js ~/llm-common 2>/dev/null"
+        antigravity:
+          command: "bash"
+          args:
+            - "-lc"
+            - "exec node ~/.local/share/contextplus-patched/build/index.js ~/llm-common 2>/dev/null"
+      env: *cp-env
+      env_from_parent:
+        - OPENROUTER_API_KEY
+    runtime: node
     upstream: "https://github.com/ForLoopCodes/contextplus"
     docs: "https://github.com/ForLoopCodes/contextplus#readme"
 

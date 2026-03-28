@@ -1,9 +1,36 @@
-[mcpServers."context-plus"]
+[mcpServers."context-plus-agent-skills"]
 type = "stdio"
 command = "node"
-args = ["~/.local/share/contextplus-patched/build/index.js"]
+args = ["~/.local/share/contextplus-patched/build/index.js", "~/agent-skills"]
 
-[mcpServers."context-plus".env]
+[mcpServers."context-plus-agent-skills".env]
+OPENROUTER_EMBED_MODEL = "openai/text-embedding-3-small"
+CONTEXTPLUS_EMBED_PROVIDER = "auto"
+
+[mcpServers."context-plus-prime-radiant-ai"]
+type = "stdio"
+command = "node"
+args = ["~/.local/share/contextplus-patched/build/index.js", "~/prime-radiant-ai"]
+
+[mcpServers."context-plus-prime-radiant-ai".env]
+OPENROUTER_EMBED_MODEL = "openai/text-embedding-3-small"
+CONTEXTPLUS_EMBED_PROVIDER = "auto"
+
+[mcpServers."context-plus-affordabot"]
+type = "stdio"
+command = "node"
+args = ["~/.local/share/contextplus-patched/build/index.js", "~/affordabot"]
+
+[mcpServers."context-plus-affordabot".env]
+OPENROUTER_EMBED_MODEL = "openai/text-embedding-3-small"
+CONTEXTPLUS_EMBED_PROVIDER = "auto"
+
+[mcpServers."context-plus-llm-common"]
+type = "stdio"
+command = "node"
+args = ["~/.local/share/contextplus-patched/build/index.js", "~/llm-common"]
+
+[mcpServers."context-plus-llm-common".env]
 OPENROUTER_EMBED_MODEL = "openai/text-embedding-3-small"
 CONTEXTPLUS_EMBED_PROVIDER = "auto"
 
