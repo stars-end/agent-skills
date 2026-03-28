@@ -1,8 +1,32 @@
 {
   "mcp": {
-    "context-plus": {
+    "context-plus-agent-skills": {
       "type": "local",
-      "command": ["node", "~/.local/share/contextplus-patched/build/index.js"],
+      "command": ["node", "~/.local/share/contextplus-patched/build/index.js", "~/agent-skills"],
+      "environment": {
+        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
+        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
+      }
+    },
+    "context-plus-prime-radiant-ai": {
+      "type": "local",
+      "command": ["node", "~/.local/share/contextplus-patched/build/index.js", "~/prime-radiant-ai"],
+      "environment": {
+        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
+        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
+      }
+    },
+    "context-plus-affordabot": {
+      "type": "local",
+      "command": ["node", "~/.local/share/contextplus-patched/build/index.js", "~/affordabot"],
+      "environment": {
+        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
+        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
+      }
+    },
+    "context-plus-llm-common": {
+      "type": "local",
+      "command": ["node", "~/.local/share/contextplus-patched/build/index.js", "~/llm-common"],
       "environment": {
         "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
         "CONTEXTPLUS_EMBED_PROVIDER": "auto"
