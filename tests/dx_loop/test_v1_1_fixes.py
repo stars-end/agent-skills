@@ -226,6 +226,43 @@ def test_external_closed_dependency_counts_as_satisfied():
     print("✓ Closed external dependencies unlock ready work")
 
 
+def test_unhydrated_tasks_are_not_dispatchable():
+    """Tasks with missing Beads detail hydration should stay blocked, not dispatch."""
+    manager = BeadsWaveManager()
+    manager.tasks = {
+        "bd-ready": BeadsTask(
+            beads_id="bd-ready",
+            title="Ready task",
+            dependencies=[],
+            details_loaded=True,
+        ),
+        "bd-unhydrated": BeadsTask(
+            beads_id="bd-unhydrated",
+            title="Needs hydration",
+            dependencies=[],
+            details_loaded=False,
+            detail_load_error="timeout",
+        ),
+    }
+    manager.layers = [["bd-ready", "bd-unhydrated"]]
+    manager.refresh_unhydrated_tasks = lambda timeout_seconds=3: None
+
+    readiness = manager.describe_wave_readiness()
+
+    assert readiness.ready == ["bd-ready"]
+    assert readiness.waiting_on_dependencies == [
+        {
+            "beads_id": "bd-unhydrated",
+            "title": "Needs hydration",
+            "unmet_dependencies": ["task_metadata_unavailable"],
+            "dependency_statuses": {"task_metadata_unavailable": "timeout"},
+        }
+    ]
+    assert manager.get_ready_tasks(0) == ["bd-ready"]
+
+    print("✓ Unhydrated tasks stay blocked instead of dispatching")
+
+
 def test_from_dict_restores_dependency_status_cache():
     """Persisted dependency status cache should survive save/load round trips."""
     manager1 = BeadsWaveManager()
@@ -245,6 +282,87 @@ def test_from_dict_restores_dependency_status_cache():
     assert manager2.get_ready_tasks(0) == ["bd-blocked"]
 
     print("✓ Dependency status cache persists across resume")
+
+
+def test_load_task_details_timeout_preserves_skeleton_task(monkeypatch):
+    """Timeouts should keep the skeletal task and mark hydration as incomplete."""
+    manager = BeadsWaveManager()
+    task = BeadsTask(
+        beads_id="bd-slow",
+        title="Slow task",
+        status="open",
+        details_loaded=False,
+        detail_load_error="not_loaded",
+    )
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=kwargs.get("args", args[0]), timeout=3)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    hydrated = manager._load_task_details(task, timeout_seconds=3)
+
+    assert hydrated.beads_id == "bd-slow"
+    assert hydrated.title == "Slow task"
+    assert hydrated.dependencies == []
+    assert hydrated.details_loaded is False
+    assert hydrated.detail_load_error == "timeout"
+
+    print("✓ Detail timeout preserves skeletal task state")
+
+
+def test_load_epic_tasks_skips_closed_children(monkeypatch):
+    """Closed epic children should count as satisfied, not pending dispatch."""
+    manager = BeadsWaveManager()
+
+    def fake_run(cmd, cwd=None, capture_output=None, text=None, timeout=None):
+        beads_id = cmd[2]
+        if beads_id == "bd-epic":
+            payload = [
+                {
+                    "dependents": [
+                        {
+                            "id": "bd-closed",
+                            "title": "Closed task",
+                            "status": "closed",
+                            "dependency_type": "parent-child",
+                        },
+                        {
+                            "id": "bd-open",
+                            "title": "Open task",
+                            "status": "open",
+                            "dependency_type": "parent-child",
+                        },
+                    ]
+                }
+            ]
+        elif beads_id == "bd-open":
+            payload = [
+                {
+                    "title": "Open task",
+                    "status": "open",
+                    "description": "",
+                    "dependencies": [{"id": "bd-closed", "status": "closed", "dependency_type": "blocks"}],
+                }
+            ]
+        else:
+            raise AssertionError(f"unexpected beads id: {beads_id}")
+
+        return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    tasks = manager.load_epic_tasks("bd-epic")
+
+    assert [task.beads_id for task in tasks] == ["bd-open"]
+    assert "bd-open" in manager.tasks
+    assert "bd-closed" not in manager.tasks
+    assert "bd-closed" in manager.completed
+    assert manager.dependency_status_cache["bd-closed"] == "closed"
+    manager.compute_layers()
+    assert manager.get_ready_tasks(0) == ["bd-open"]
+
+    print("✓ Closed epic children are treated as already satisfied")
 
 
 def test_beads_manager_infers_repo_from_title_prefix():
