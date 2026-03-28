@@ -490,10 +490,66 @@ def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
     assert rc == 0
     assert "State: waiting_on_dependency" in captured.out
     assert "Blocker Code: waiting_on_dependency" in captured.out
-    assert "Blocked details:" in captured.out
+    assert "Waiting on dependencies:" in captured.out
     assert "bd-blocked: bd-upstream" in captured.out
 
     print("✓ Status output explains dependency blockers")
+
+
+def test_waiting_on_dependency_ids_tracked_separately_from_blocked(tmp_path):
+    """waiting_on_dependency_ids should be tracked separately from failed/blocked_beads_ids."""
+    from scripts.lib.dx_loop.scheduler import SchedulerState
+
+    state = SchedulerState()
+    assert state.waiting_on_dependency_ids == set()
+
+    state.mark_waiting_on_dependency("bd-dep-1")
+    state.mark_waiting_on_dependency("bd-dep-2")
+    assert "bd-dep-1" in state.waiting_on_dependency_ids
+    assert "bd-dep-2" in state.waiting_on_dependency_ids
+    assert state.is_waiting_on_dependency("bd-dep-1")
+    assert not state.is_waiting_on_dependency("bd-dep-3")
+
+    state.mark_blocked("bd-failed-1")
+    assert "bd-failed-1" in state.blocked_beads_ids
+    assert "bd-failed-1" not in state.waiting_on_dependency_ids
+
+    data = state.to_dict()
+    assert "waiting_on_dependency_ids" in data
+    assert set(data["waiting_on_dependency_ids"]) == {"bd-dep-1", "bd-dep-2"}
+    assert set(data["blocked_beads_ids"]) == {"bd-failed-1"}
+
+    restored = SchedulerState.from_dict(data)
+    assert restored.waiting_on_dependency_ids == {"bd-dep-1", "bd-dep-2"}
+    assert restored.blocked_beads_ids == {"bd-failed-1"}
+
+    state.clear_waiting_on_dependency("bd-dep-1")
+    assert "bd-dep-1" not in state.waiting_on_dependency_ids
+
+    print("✓ waiting_on_dependency_ids tracked separately from blocked_beads_ids")
+
+
+def test_status_shows_waiting_on_deps_count(tmp_path, capsys):
+    """Status output should show 'Waiting on Deps' count when tasks are dependency-blocked."""
+    wave_id = "wave-waiting-deps-count"
+    loop = DxLoop(wave_id)
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.scheduler.state.waiting_on_dependency_ids = {"bd-dep-1", "bd-dep-2"}
+    loop._save_state()
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(SimpleNamespace(wave_id=wave_id, json=False))
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "Waiting on Deps: 2" in captured.out
+
+    print("✓ Status shows Waiting on Deps count")
 
 
 def test_run_loop_exits_when_initial_frontier_is_fully_blocked(tmp_path):

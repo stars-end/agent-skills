@@ -249,6 +249,8 @@ class DxLoop:
 
             # PHASE 1: Wake-up - Check time
             now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            self.scheduler.state.last_poll_time = now
+            self.scheduler.state.poll_count += 1
             print(f"Wake-up at {now}")
 
             # PHASE 2: Poll active task progress
@@ -269,14 +271,14 @@ class DxLoop:
                     self._save_state()
                     return True
                 if readiness.waiting_on_dependencies:
-                    blocked_ids = [
+                    waiting_ids = [
                         item["beads_id"] for item in readiness.waiting_on_dependencies
                     ]
-                    self.scheduler.state.blocked_beads_ids = set(blocked_ids)
-                    blocked_reason = f"No dispatches: waiting on dependencies for {len(blocked_ids)} task(s)"
+                    self.scheduler.state.waiting_on_dependency_ids = set(waiting_ids)
+                    blocked_reason = f"No dispatches: waiting on dependencies for {len(waiting_ids)} task(s)"
                     if self._should_exit_blocked_at_start(iteration):
                         blocked_reason = (
-                            f"Initial frontier blocked with {len(blocked_ids)} task(s); "
+                            f"Initial frontier blocked with {len(waiting_ids)} task(s); "
                             "exiting without resident loop"
                         )
                     self._set_wave_status(
@@ -286,7 +288,7 @@ class DxLoop:
                         blocked_details=readiness.waiting_on_dependencies,
                     )
                     print(
-                        f"No ready tasks: waiting on dependencies for {len(blocked_ids)} task(s)"
+                        f"No ready tasks: waiting on dependencies for {len(waiting_ids)} task(s)"
                     )
                     for item in readiness.waiting_on_dependencies[:3]:
                         deps = ", ".join(item["unmet_dependencies"])
@@ -307,6 +309,7 @@ class DxLoop:
                     print("No ready tasks, waiting for next cadence...")
             else:
                 self.scheduler.state.blocked_beads_ids.clear()
+                self.scheduler.state.waiting_on_dependency_ids.clear()
                 # FILTER OUT ALREADY ACTIVE TASKS (P0 fix with phase-awareness)
                 dispatchable = []
                 for tid in ready:
@@ -1558,29 +1561,57 @@ def cmd_status(args):
             scheduler_state = state.get("scheduler_state", {})
             print(f"Active: {len(scheduler_state.get('active_beads_ids', []))}")
             print(f"Completed: {len(scheduler_state.get('completed_beads_ids', []))}")
-            print(f"Blocked: {len(scheduler_state.get('blocked_beads_ids', []))}")
+            print(
+                f"Blocked (failed): {len(scheduler_state.get('blocked_beads_ids', []))}"
+            )
+            waiting_on_deps = len(scheduler_state.get("waiting_on_dependency_ids", []))
+            if waiting_on_deps > 0:
+                print(f"Waiting on Deps: {waiting_on_deps}")
 
             beads_state = state.get("beads_manager", {})
             print(f"Total tasks: {len(beads_state.get('tasks', {}))}")
 
             blocked_details = wave_status.get("blocked_details", [])
             if blocked_details:
-                print("Blocked details:")
-                for item in blocked_details[:5]:
-                    if item.get("unmet_dependencies"):
-                        deps = ", ".join(item.get("unmet_dependencies", []))
-                        print(f"  {item.get('beads_id')}: {deps}")
-                    else:
-                        phase = item.get("phase")
-                        reason_code = item.get("reason_code")
-                        detail = item.get("detail")
-                        line = item.get("beads_id", "unknown")
-                        if phase:
-                            line = f"{line} [{phase}]"
-                        extras = [value for value in (reason_code, detail) if value]
-                        if extras:
-                            line = f"{line}: {' | '.join(extras)}"
-                        print(f"  {line}")
+                if wave_status.get("state") == "waiting_on_dependency":
+                    print("Waiting on dependencies:")
+                    for item in blocked_details[:5]:
+                        beads_id = item.get("beads_id", "unknown")
+                        unmet = item.get("unmet_dependencies", [])
+                        statuses = item.get("dependency_statuses", {})
+                        if unmet:
+                            deps_str = ", ".join(unmet)
+                            status_hints = []
+                            for dep_id in unmet[:3]:
+                                status = statuses.get(dep_id, "unknown")
+                                if status not in (
+                                    "closed",
+                                    "resolved",
+                                    "completed",
+                                    "done",
+                                ):
+                                    status_hints.append(f"{dep_id}={status}")
+                            hint = (
+                                f" [{', '.join(status_hints)}]" if status_hints else ""
+                            )
+                            print(f"  {beads_id}: {deps_str}{hint}")
+                else:
+                    print("Blocked details:")
+                    for item in blocked_details[:5]:
+                        if item.get("unmet_dependencies"):
+                            deps = ", ".join(item.get("unmet_dependencies", []))
+                            print(f"  {item.get('beads_id')}: {deps}")
+                        else:
+                            phase = item.get("phase")
+                            reason_code = item.get("reason_code")
+                            detail = item.get("detail")
+                            line = item.get("beads_id", "unknown")
+                            if phase:
+                                line = f"{line} [{phase}]"
+                            extras = [value for value in (reason_code, detail) if value]
+                            if extras:
+                                line = f"{line}: {' | '.join(extras)}"
+                            print(f"  {line}")
 
             baton_states = state.get("baton_states", {})
             takeover_tasks = [
