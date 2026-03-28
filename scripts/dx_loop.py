@@ -1487,6 +1487,11 @@ def cmd_start(args):
 
     is_restart = loop._load_state()
 
+    # Persist a minimal wave record immediately so status remains observable
+    # even if bootstrap or startup-adoption takes a long time.
+    if not is_restart:
+        loop._save_state()
+
     if is_restart and not loop.beads_manager.tasks:
         print(
             f"Restart state for {wave_id} is missing task graph; rebuilding from {epic_id}"
@@ -1498,12 +1503,11 @@ def cmd_start(args):
 
     print(f"\nStarting dx-loop wave {wave_id} for epic {epic_id}")
 
-    if is_restart:
-        adopted = loop.adopt_running_jobs()
-        if adopted:
-            print(
-                f"Adopted {len(adopted)} already-running job(s): {', '.join(adopted)}"
-            )
+    adopted = loop.adopt_running_jobs()
+    if adopted:
+        print(
+            f"Adopted {len(adopted)} already-running job(s): {', '.join(adopted)}"
+        )
 
     loop._save_state()
     success = loop.run_loop()
