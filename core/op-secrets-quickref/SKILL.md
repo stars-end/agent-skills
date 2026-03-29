@@ -25,6 +25,17 @@ Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and 
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 ```
 
+## Canonical Fleet Rule
+
+For canonical VM unattended automation:
+
+- `epyc12` is the only canonical VM that should refresh OP-derived caches
+  directly.
+- Other canonical VMs should sync cache artifacts from `epyc12` and run with
+  `DX_AUTH_CACHE_ONLY=1`.
+- If a macOS cron/system job is touching live `op`, treat that as topology
+  drift and fix the job instead of approving repeated privacy prompts.
+
 ## What Lives Where
 
 - **DX/dev workflow secrets** (agent keys, GitHub tokens, Slack tokens): 1Password (`op://...`), resolved at runtime.
@@ -207,6 +218,17 @@ token="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/ZAI_API_K
 ```bash
 # Nightly enrichment (uses cached ZAI_API_KEY)
 0 3 * * * /path/to/agent-skills/scripts/enrichment/enrichment-cron-wrapper.sh >> /tmp/enrichment.log 2>&1
+```
+
+**Canonical VM fleet pattern:**
+
+```bash
+# Refresh hub (epyc12 only)
+*/15 * * * * /home/fengning/agent-skills/scripts/dx-job-wrapper.sh refresh-op-cache -- /home/fengning/agent-skills/scripts/dx-refresh-op-caches.sh
+
+# Consumer host (for example macmini)
+DX_AUTH_CACHE_ONLY=1
+2,17,32,47 * * * * ~/agent-skills/scripts/dx-job-wrapper.sh sync-op-cache -- ~/agent-skills/scripts/dx-sync-op-caches.sh
 ```
 
 **Example — script preamble:**
