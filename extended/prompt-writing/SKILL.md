@@ -97,6 +97,16 @@ Every generated delegation prompt MUST enforce:
 - symbol-aware editing / memory -> `serena`
 - If a delegated agent intentionally skips the expected tool, it must return `Tool routing exception: <reason>`
 
+7) **dx-loop-first contract for chained/non-trivial work**
+- When the task is chained Beads work, multi-step, or expected to need implement/review baton flow, the prompt should make `dx-loop` the primary execution surface.
+- Prompts should tell delegates to use:
+  - `dx-loop status --beads-id <id>` as the default task lookup surface
+  - `dx-loop explain --beads-id <id>` as the default blocker diagnosis surface
+- Prompts should explicitly separate:
+  - `CLASS: product`
+  - `CLASS: dx_loop_control_plane`
+- Direct/manual implementation should be framed as fallback only when `dx-loop` itself is the active blocker or a tiny end-stage repair is clearly justified.
+
 ## Outcome Enforcement Options
 
 Generated prompts should set these options explicitly when relevant:
@@ -119,6 +129,23 @@ When user asks for a delegated prompt, return:
 1) One copy/paste prompt
 2) Optional short "Dispatcher Notes" (only if needed)
 3) Nothing else unless user asks
+
+## dx-loop Prompt Pattern (Use When Applicable)
+
+For `dx-loop`-first product prompts, include language equivalent to:
+
+- `dx-loop` is the primary execution surface for this task
+- use `dx-loop` first because this is chained Beads work with a non-trivial implement/review baton
+- use direct/manual implementation only if `dx-loop` itself is the active blocker or after `dx-loop` has already produced a concrete review verdict that justifies a narrow repair
+- if blocked, check:
+  - `dx-loop status --beads-id <BEADS_SUBTASK>`
+  - `dx-loop explain --beads-id <BEADS_SUBTASK>`
+
+The blocker contract should classify the result as:
+- `CLASS: product`
+- `CLASS: dx_loop_control_plane`
+
+This keeps product bugs separate from orchestration bugs and reduces wave-internals burden on the delegate.
 
 ## Before Emitting (Mandatory)
 

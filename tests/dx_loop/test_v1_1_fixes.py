@@ -35,6 +35,8 @@ assert DX_LOOP_SPEC.loader is not None
 DX_LOOP_SPEC.loader.exec_module(dx_loop_script)
 DxLoop = dx_loop_script.DxLoop
 cmd_status = dx_loop_script.cmd_status
+cmd_explain = dx_loop_script.cmd_explain
+cmd_start = dx_loop_script.cmd_start
 
 
 def test_no_duplicate_dispatch():
@@ -660,6 +662,182 @@ def test_status_outputs_waiting_on_dependency_details(tmp_path, capsys):
     assert "bd-blocked: bd-upstream" in captured.out
 
     print("✓ Status output explains dependency blockers")
+
+
+def test_status_can_resolve_wave_by_beads_id(tmp_path, capsys):
+    """status should not require a wave id when the task id is known."""
+    wave_id = "wave-task-lookup"
+    loop = DxLoop(wave_id)
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-epic"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Agent-facing task",
+            repo="prime-radiant-ai",
+            dependencies=[],
+        )
+    }
+    loop._set_wave_status(
+        LoopState.RUN_BLOCKED,
+        BlockerCode.RUN_BLOCKED,
+        "Provider at capacity",
+        blocked_details=[
+            {
+                "beads_id": "bd-test",
+                "phase": "implement",
+                "reason_code": "provider_at_capacity",
+            }
+        ],
+    )
+    loop._save_state()
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic=None, beads_id="bd-test", json=False)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "Wave: wave-task-lookup" in captured.out
+    assert "Epic: bd-epic" in captured.out
+    assert "Task: bd-test" in captured.out
+    assert "Task Repo: prime-radiant-ai" in captured.out
+
+    print("✓ Status can resolve the newest wave by beads id")
+
+
+def test_explain_classifies_review_blocked_as_product(tmp_path, capsys):
+    """explain should classify review-blocked waves as product work."""
+    wave_id = "wave-explain-product"
+    loop = DxLoop(wave_id)
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-epic"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Needs product revision",
+            dependencies=[],
+        )
+    }
+    loop._set_wave_status(
+        LoopState.REVIEW_BLOCKED,
+        BlockerCode.REVIEW_BLOCKED,
+        "Reviewer requested changes",
+        blocked_details=[
+            {
+                "beads_id": "bd-test",
+                "phase": "review",
+                "reason_code": "revision_required",
+                "detail": "PR needs a narrow repair",
+            }
+        ],
+    )
+    loop._save_state()
+
+    original_artifact_base = cmd_explain.__globals__["ARTIFACT_BASE"]
+    cmd_explain.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_explain(
+            SimpleNamespace(wave_id=None, epic=None, beads_id="bd-test")
+        )
+    finally:
+        cmd_explain.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "Surface: product" in captured.out
+    assert "Next Action: Address review findings" in captured.out
+
+    print("✓ Explain classifies review-blocked waves as product")
+
+
+def test_explain_classifies_run_blocked_as_control_plane(tmp_path, capsys):
+    """explain should classify startup/runner failures as control-plane work."""
+    wave_id = "wave-explain-control"
+    loop = DxLoop(wave_id)
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-epic"
+    loop.beads_manager.tasks = {
+        "bd-test": BeadsTask(
+            beads_id="bd-test",
+            title="Blocked by startup",
+            dependencies=[],
+        )
+    }
+    loop._set_wave_status(
+        LoopState.RUN_BLOCKED,
+        BlockerCode.RUN_BLOCKED,
+        "Provider at capacity",
+        blocked_details=[
+            {
+                "beads_id": "bd-test",
+                "phase": "implement",
+                "reason_code": "provider_at_capacity",
+            }
+        ],
+    )
+    loop._save_state()
+
+    original_artifact_base = cmd_explain.__globals__["ARTIFACT_BASE"]
+    cmd_explain.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_explain(
+            SimpleNamespace(wave_id=None, epic="bd-epic", beads_id="bd-test")
+        )
+    finally:
+        cmd_explain.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "Surface: control_plane" in captured.out
+    assert "Next Action: Inspect dx-loop/dx-runner startup" in captured.out
+
+    print("✓ Explain classifies run-blocked waves as control-plane")
+
+
+def test_start_prints_wave_id_before_bootstrap_failure(monkeypatch, tmp_path, capsys):
+    """Fresh starts should expose the generated wave id before bootstrap returns."""
+    wave_id = "wave-visible-before-bootstrap"
+    original_artifact_base = cmd_start.__globals__["ARTIFACT_BASE"]
+    original_dxloop_init = DxLoop.__init__
+    original_bootstrap_epic = DxLoop.bootstrap_epic
+    original_save_state = DxLoop._save_state
+
+    def fake_init(self, wave_id_arg, config=None):
+        original_dxloop_init(self, wave_id_arg, config=config)
+        self.wave_dir = tmp_path / "waves" / wave_id_arg
+        self.state_file = self.wave_dir / "loop_state.json"
+
+    def fake_bootstrap(self, epic_id):
+        return False
+
+    monkeypatch.setattr(dx_loop_script, "ARTIFACT_BASE", tmp_path)
+    monkeypatch.setattr(DxLoop, "__init__", fake_init)
+    monkeypatch.setattr(DxLoop, "bootstrap_epic", fake_bootstrap)
+
+    try:
+        rc = cmd_start(SimpleNamespace(epic="bd-epic", wave_id=wave_id, config=None))
+    finally:
+        monkeypatch.setattr(DxLoop, "__init__", original_dxloop_init)
+        monkeypatch.setattr(DxLoop, "bootstrap_epic", original_bootstrap_epic)
+        monkeypatch.setattr(DxLoop, "_save_state", original_save_state)
+        cmd_start.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert f"Wave ID: {wave_id}" in captured.out
+    assert f"Inspect with: dx-loop status --wave-id {wave_id}" in captured.out
+    assert (tmp_path / "waves" / wave_id / "loop_state.json").exists()
+
+    print("✓ Fresh starts expose wave id before bootstrap failure")
 
 
 def test_run_loop_exits_when_initial_frontier_is_fully_blocked(tmp_path):
