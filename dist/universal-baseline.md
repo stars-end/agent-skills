@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 5b9125a1baa32e5256bdac7977efe5839498cd48 -->
-<!-- Last updated: 2026-03-29 13:51:32 UTC -->
+<!-- Source SHA: ded49bd3e5603fa2d2ce101b4a62953aed88ac56 -->
+<!-- Last updated: 2026-03-29 13:53:25 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol

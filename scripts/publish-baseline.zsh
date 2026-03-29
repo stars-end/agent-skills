@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export LC_ALL=C
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 OUTFILE="$REPO_ROOT/AGENTS.md"
