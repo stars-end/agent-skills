@@ -78,6 +78,13 @@ Use `--repo <repo>` when:
 This sets a deterministic wave-level default repo for repo-less tasks without
 changing mixed-repo behavior when task metadata is already explicit.
 
+Single-active-wave rule:
+- `dx-loop start` now refuses to create a second live wave for the same epic
+- if an active wave already exists, reuse it with:
+  - `dx-loop status --epic <epic-id>`
+  - `dx-loop explain --epic <epic-id>`
+- start a fresh wave only after the existing wave reaches a replaceable blocked/completed state
+
 ### status
 
 ```bash
