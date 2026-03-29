@@ -58,6 +58,7 @@ DEFAULT_CONFIG = {
     "require_review": True,
     "exit_on_zero_dispatch_start": True,
     "worktree_base": "/tmp/agents",  # Base dir for worktrees
+    "default_repo": None,
 }
 
 RUNNER_LIFECYCLE_DEFECT_REASONS = frozenset(
@@ -259,7 +260,9 @@ class DxLoop:
             max_revisions=self.config["max_revisions"],
         )
         self.pr_enforcer = PRContractEnforcer()
-        self.beads_manager = BeadsWaveManager()
+        self.beads_manager = BeadsWaveManager(
+            default_repo=self.config.get("default_repo"),
+        )
         self.blocker_classifier = BlockerClassifier()
         self.notification_manager = NotificationManager()
 
@@ -1639,6 +1642,7 @@ Do not return a verdict until you have checked whether:
                     state["state_machine"]
                 )
             self.epic_id = state.get("epic_id")
+            self.config = {**self.config, **state.get("config", {})}
 
             # Restore baton states
             if "baton_states" in state:
@@ -1647,7 +1651,10 @@ Do not return a verdict until you have checked whether:
 
             # Restore beads manager
             if "beads_manager" in state:
-                self.beads_manager = BeadsWaveManager.from_dict(state["beads_manager"])
+                self.beads_manager = BeadsWaveManager.from_dict(
+                    state["beads_manager"],
+                    default_repo=self.config.get("default_repo"),
+                )
 
             # Restore scheduler state
             if "scheduler_state" in state:
@@ -1692,6 +1699,8 @@ def cmd_start(args):
     epic_id = args.epic
 
     config = load_config_file(getattr(args, "config", None))
+    if getattr(args, "repo", None):
+        config["default_repo"] = args.repo
     loop = DxLoop(wave_id, config=config)
     print(f"Wave ID: {wave_id}")
 
@@ -2011,6 +2020,10 @@ def main():
     # start
     start_parser = subparsers.add_parser("start", help="Start dx-loop for an epic")
     start_parser.add_argument("--epic", required=True, help="Beads epic ID")
+    start_parser.add_argument(
+        "--repo",
+        help="Default target repo when Beads metadata does not resolve one",
+    )
     start_parser.add_argument(
         "--wave-id", help="Wave ID (auto-generated if not provided)"
     )

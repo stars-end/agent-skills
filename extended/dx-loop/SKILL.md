@@ -41,6 +41,9 @@ dx-ensure-bins.sh
 # Start wave from Beads epic
 dx-loop start --epic bd-5w5o
 
+# If the epic is single-repo but Beads metadata is repo-less, provide an explicit fallback
+dx-loop start --epic bd-jx1t --repo prime-radiant-ai
+
 # Check task-oriented status
 dx-loop status --beads-id bd-5w5o.49
 
@@ -56,7 +59,7 @@ dx-loop status --wave-id <id> --json
 ### start
 
 ```bash
-dx-loop start --epic <epic-id> [--wave-id <id>] [--config <path>]
+dx-loop start --epic <epic-id> [--wave-id <id>] [--config <path>] [--repo <repo>]
 ```
 
 Starts a wave from a Beads epic, loading tasks and computing topological layers.
@@ -67,6 +70,13 @@ Default operator protection:
   implementation progress
 - `dx-loop` prints the wave id immediately and persists a minimal state record
   before bootstrap completes, so startup issues remain queryable
+
+Use `--repo <repo>` when:
+- the epic is known to target one repo
+- but Beads task metadata does not currently resolve a unique repo
+
+This sets a deterministic wave-level default repo for repo-less tasks without
+changing mixed-repo behavior when task metadata is already explicit.
 
 ### status
 

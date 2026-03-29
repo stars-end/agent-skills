@@ -69,8 +69,13 @@ class BeadsWaveManager:
     but integrates with dx-runner substrate instead of curl sessions.
     """
     
-    def __init__(self, beads_repo_path: Optional[Path] = None):
+    def __init__(
+        self,
+        beads_repo_path: Optional[Path] = None,
+        default_repo: Optional[str] = None,
+    ):
         self.beads_repo_path = beads_repo_path or Path.home() / "bd"
+        self.default_repo = default_repo
         self.tasks: Dict[str, BeadsTask] = {}
         self.layers: List[List[str]] = []
         self.completed: Set[str] = set()
@@ -133,6 +138,8 @@ class BeadsWaveManager:
         inferred = self._infer_repo_from_dependency_context(task)
         if inferred:
             task.repo = inferred
+        elif self.default_repo:
+            task.repo = self.default_repo
         return task
 
     @staticmethod
@@ -433,6 +440,7 @@ class BeadsWaveManager:
     
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "default_repo": self.default_repo,
             "tasks": {tid: task.to_dict() for tid, task in self.tasks.items()},
             "layers": self.layers,
             "completed": list(self.completed),
@@ -441,13 +449,21 @@ class BeadsWaveManager:
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], beads_repo_path: Optional[Path] = None) -> "BeadsWaveManager":
+    def from_dict(
+        cls,
+        data: Dict[str, Any],
+        beads_repo_path: Optional[Path] = None,
+        default_repo: Optional[str] = None,
+    ) -> "BeadsWaveManager":
         """
         Restore BeadsWaveManager from serialized state
         
         FIX for P1: Symmetric save/load for unattended restart/resume.
         """
-        manager = cls(beads_repo_path=beads_repo_path)
+        manager = cls(
+            beads_repo_path=beads_repo_path,
+            default_repo=default_repo or data.get("default_repo"),
+        )
         
         # Restore tasks
         if "tasks" in data:
