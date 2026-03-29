@@ -18,7 +18,10 @@ x-cp-env: &cp-env
 
 tools:
   # ============================================================
-  # llm-tldr: Static analysis context slicing (MCP mode)
+  # llm-tldr: Semantic discovery + static analysis (MCP mode)
+  # V8.6: Canonical default for semantic discovery AND exact
+  # static analysis. Replaces context-plus as the primary routing
+  # target for "where does X live?" questions.
   # ============================================================
   llm-tldr:
     enabled: true
@@ -60,6 +63,11 @@ tools:
 
   # ============================================================
   # context-plus: Structural context analysis (MCP mode)
+  # V8.6: EXPERIMENTAL / OPTIONAL — not the canonical routing
+  # default. Retained for backward compatibility and opt-in use.
+  # Demoted because of structural worktree blindness, single-root
+  # binding, and O(n) per-repo config surface.
+  #
   # LOCAL PATCHED BUILD — not from npm
   # Install: scripts/install-contextplus-patched.sh
   # Embeddings: OpenRouter (primary) with Ollama fallback
@@ -78,6 +86,7 @@ tools:
   # ============================================================
   context-plus:
     enabled: true
+    experimental: true
     integration_mode: cli
     version: "patched"
     install_cmd: "scripts/install-contextplus-patched.sh"
@@ -95,12 +104,10 @@ tools:
     upstream: "https://github.com/ForLoopCodes/contextplus"
     docs: "https://github.com/ForLoopCodes/contextplus#readme"
 
-  # Repo-scoped MCP server entries
-  # Each launches the same patched build with the repo path as arg.
-  # Upstream README: "contextplus [path]" starts the MCP server
-  # for the specified path (defaults to current directory).
+  # Repo-scoped MCP server entries (experimental/optional as of V8.6)
   context-plus-agent-skills:
     enabled: true
+    experimental: true
     integration_mode: mcp
     version: "patched"
     target_ides:
@@ -135,6 +142,7 @@ tools:
 
   context-plus-prime-radiant-ai:
     enabled: true
+    experimental: true
     integration_mode: mcp
     version: "patched"
     target_ides:
@@ -169,6 +177,7 @@ tools:
 
   context-plus-affordabot:
     enabled: true
+    experimental: true
     integration_mode: mcp
     version: "patched"
     target_ides:
@@ -203,6 +212,7 @@ tools:
 
   context-plus-llm-common:
     enabled: true
+    experimental: true
     integration_mode: mcp
     version: "patched"
     target_ides:

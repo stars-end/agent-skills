@@ -4,12 +4,12 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 
 ## Tool Classes
 
-| Tool | Class | Canonical Install | Canonical Health | Expected Client Surface |
-|------|-------|-------------------|------------------|-------------------------|
-| `cass-memory` | `cli` | `npm install -g Dicklesworthstone/cass_memory_system` | `cm --version`, `cm quickstart --json` | Host runtime only; not rendered to IDE configs |
-| `llm-tldr` | `mcp` | `uv tool install "llm-tldr==1.5.2"` | `tldr-mcp --version \|\| llm-tldr --version` | `codex`, `claude`, `gemini`, `opencode` where configured |
-| `context-plus` | `mcp` | `scripts/install-contextplus-patched.sh` | `test -f ~/.local/share/contextplus-patched/build/index.js` | `codex`, `claude`, `gemini`, `antigravity`, `opencode` where configured |
-| `serena` | `mcp` | `uv tool install git+https://github.com/oraios/serena.git` | `serena --help \| head -1` | `codex`, `claude`, `gemini`, `opencode` where configured |
+| Tool | Class | Canonical Install | Canonical Health | Routing (V8.6) |
+|------|-------|-------------------|------------------|-----------------|
+| `cass-memory` | `cli` | `npm install -g Dicklesworthstone/cass_memory_system` | `cm --version`, `cm quickstart --json` | N/A (disabled) |
+| `llm-tldr` | `mcp` | `uv tool install "llm-tldr==1.5.2"` | `tldr-mcp --version \|\| llm-tldr --version` | **Canonical default** (semantic + structural) |
+| `context-plus` | `mcp` | `scripts/install-contextplus-patched.sh` | `test -f ~/.local/share/contextplus-patched/build/index.js` | Experimental/optional |
+| `serena` | `mcp` | `uv tool install git+https://github.com/oraios/serena.git` | `serena --help \| head -1` | Canonical default (edits + memory) |
 
 ## Canonical Rules
 
@@ -20,21 +20,35 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 - Google surfaces:
   - `antigravity`
   - `gemini-cli`
-  require separate config files with converged `context-plus` launcher entries.
+  require separate config files with converged MCP launcher entries.
 
-## Current Status (V2.2)
+## Routing Contract (V8.6)
 
-All four tools are enabled and pass Layer 1-3 checks:
-- `cass-memory`: CLI-native episodic memory
-- `llm-tldr`: MCP static analysis context slicing
-- `context-plus`: MCP structural context analysis
-- `serena`: MCP AI assistant memory
+| Task Shape | Canonical First Tool | Reason |
+|------------|---------------------|--------|
+| Semantic discovery ("where does X live?") | `llm-tldr` | FAISS + bge-large semantic search |
+| Exact structural analysis (CFG/DFG/slice/impact) | `llm-tldr` | Precise static analysis |
+| Context from entry point | `llm-tldr` | 95% token savings |
+| Test targeting for changed files | `llm-tldr` | change_impact tool |
+| Symbol-aware edits / rename / refactor | `serena` | LSP-backed surgical editing |
+| Persistent project memory / session continuity | `serena` | File-based memory |
+
+`context-plus` is NOT the default for any task class. Use only for explicit opt-in scenarios (spectral clustering, memory graph).
+
+## Current Status (V2.3)
+
+| Tool | Layer 1-3 | Layer 4 | Layer 5 | Notes |
+|------|-----------|---------|---------|-------|
+| `cass-memory` | Disabled | N/A | N/A | Pilot-only |
+| `llm-tldr` | Pass | Pass | Active (V8.6) | Canonical default for semantic + structural |
+| `context-plus` | Pass | Pass | Experimental (V8.6) | Opt-in only; worktree blindness |
+| `serena` | Pass | Pass | Active | Canonical default for edits + memory |
 
 **Layer 4 Client Visibility (observed 2026-03-10):**
-- Claude Code: All MCP tools connected ✓
-- Gemini CLI: All MCP tools connected ✓ (via `~/.gemini/settings.json`)
-- Codex CLI: All MCP tools listed and enabled ✓ (via `~/.codex/config.toml` `mcp_servers`)
-- OpenCode: All MCP tools connected ✓ (via `~/.config/opencode/opencode.jsonc` `mcp`)
+- Claude Code: All MCP tools connected
+- Gemini CLI: All MCP tools connected (via `~/.gemini/settings.json`)
+- Codex CLI: All MCP tools listed and enabled (via `~/.codex/config.toml` `mcp_servers`)
+- OpenCode: All MCP tools connected (via `~/.config/opencode/opencode.jsonc` `mcp`)
 
 Layer 4 visibility is necessary but not sufficient.
 
@@ -59,7 +73,11 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
   each launched with an explicit path argument per the upstream README contract:
   `contextplus [path]` starts the MCP server for the specified path.
   The `context-plus` base entry (cli mode) is for install/health tracking only.
+- `context-plus` is experimental/optional as of V8.6. Not the canonical routing default.
+  Structural limitations: worktree blindness (single-root binding), O(n) config surface.
 - `gemini-cli` + `antigravity` use wrapped launcher form with the repo path
   inside the exec string.
 - `CONTEXTPLUS_ROOT` env var is an escape-hatch; the primary fleet contract
   is explicit path args per entry. V1 caches are auto-migrated to V2 on first load.
+- `llm-tldr` semantic search requires `tldr warm <project>` before first use.
+  Every MCP tool call accepts a `project` parameter for worktree-safe operation.
