@@ -431,6 +431,86 @@ def test_beads_manager_infers_repo_from_title_prefix():
     print("✓ Repo inference works from task title prefixes")
 
 
+def test_beads_manager_uses_default_repo_for_repo_less_tasks():
+    """An explicit default repo should backfill repo-less tasks deterministically."""
+    manager = BeadsWaveManager(default_repo="prime-radiant-ai")
+    task = BeadsTask(
+        beads_id="bd-jx1t.1",
+        title="Harden Railway dev build freshness contract",
+        dependencies=[],
+        repo=None,
+    )
+
+    manager._backfill_task_repo(task)
+
+    assert task.repo == "prime-radiant-ai"
+
+    print("✓ Explicit default repo backfills repo-less tasks")
+
+
+def test_cmd_start_accepts_repo_override(monkeypatch):
+    """dx-loop start should pass an explicit repo override into the wave manager."""
+    observed = {}
+
+    def fake_load_state(self):
+        return False
+
+    def fake_save_state(self):
+        return None
+
+    def fake_bootstrap(self, epic_id):
+        observed["epic_id"] = epic_id
+        observed["default_repo"] = self.beads_manager.default_repo
+        return True
+
+    monkeypatch.setattr(DxLoop, "_load_state", fake_load_state)
+    monkeypatch.setattr(DxLoop, "_save_state", fake_save_state)
+    monkeypatch.setattr(DxLoop, "bootstrap_epic", fake_bootstrap)
+    monkeypatch.setattr(DxLoop, "adopt_running_jobs", lambda self: [])
+    monkeypatch.setattr(DxLoop, "run_loop", lambda self: True)
+
+    args = SimpleNamespace(
+        epic="bd-jx1t",
+        wave_id="wave-test-repo-override",
+        config=None,
+        repo="prime-radiant-ai",
+    )
+
+    assert cmd_start(args) == 0
+    assert observed == {
+        "epic_id": "bd-jx1t",
+        "default_repo": "prime-radiant-ai",
+    }
+
+    print("✓ dx-loop start accepts explicit repo override")
+
+
+def test_load_state_restores_default_repo_config(tmp_path):
+    """Persisted wave config should restore the default repo on restart."""
+    wave_id = "wave-default-repo"
+    original = DxLoop(wave_id, config={"default_repo": "prime-radiant-ai"})
+    original.wave_dir = tmp_path / "waves" / wave_id
+    original.state_file = original.wave_dir / "loop_state.json"
+    original.beads_manager.tasks = {
+        "bd-jx1t.1": BeadsTask(
+            beads_id="bd-jx1t.1",
+            title="Harden Railway dev build freshness contract",
+            repo="prime-radiant-ai",
+        )
+    }
+    original._save_state()
+
+    restored = DxLoop(wave_id)
+    restored.wave_dir = original.wave_dir
+    restored.state_file = original.state_file
+
+    assert restored._load_state() is True
+    assert restored.config["default_repo"] == "prime-radiant-ai"
+    assert restored.beads_manager.default_repo == "prime-radiant-ai"
+
+    print("✓ Restart restores persisted default repo config")
+
+
 def test_extract_implementation_return_from_agent_output():
     """Implementation returns should parse structured tech-lead-handoff blocks."""
     enforcer = PRContractEnforcer()
