@@ -55,10 +55,12 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
 - `cass-memory` is CLI-native and should NOT appear in IDE MCP configs. If manually added, it will show as "Failed to connect" in `claude mcp list`.
 - `serena` PyPI has package collision with an unrelated AMQP client - must install from GitHub.
 - `context-plus` uses a patched local build at `~/.local/share/contextplus-patched/build/index.js`.
-- `context-plus` is deployed as repo-scoped MCP entries (one per canonical repo),
-  each launched with an explicit path argument per the upstream README contract:
-  `contextplus [path]` starts the MCP server for the specified path.
-  The `context-plus` base entry (cli mode) is for install/health tracking only.
+- `context-plus` uses a split contract. In Codex, render a single visible
+  workspace-local alias named `context-plus` to reduce MCP-list ambiguity.
+  In other IDEs, deploy repo-scoped `context-plus-*` MCP entries (one per
+  canonical repo), each launched with an explicit path argument per the
+  upstream README contract: `contextplus [path]` starts the MCP server for
+  the specified path.
 - `gemini-cli` + `antigravity` use wrapped launcher form with the repo path
   inside the exec string.
 - `CONTEXTPLUS_ROOT` env var is an escape-hatch; the primary fleet contract

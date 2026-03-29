@@ -70,12 +70,11 @@ Use this skill when the user asks to:
   - host runtime health
   - rendered config correctness
   - client-visible MCP availability
-- For `context-plus`, each canonical repo gets a repo-scoped MCP entry
-  (e.g., `context-plus-agent-skills`, `context-plus-prime-radiant-ai`).
-  Each entry launches the same patched build with the repo path as an
-  explicit argument: `node ~/.local/share/contextplus-patched/build/index.js ~/<repo>`.
-  This follows the upstream README contract: `contextplus [path]` starts the
-  MCP server for the specified path.
+- For `context-plus`, keep a split presentation model. Codex gets one
+  visible workspace-local alias named `context-plus` to reduce MCP-list
+  ambiguity. Other IDEs keep repo-scoped MCP entries (e.g.,
+  `context-plus-agent-skills`, `context-plus-prime-radiant-ai`) launched with
+  explicit repo-path arguments per the upstream README contract.
 - `antigravity` and `gemini-cli` use wrapped launcher form with the repo
   path inside the exec string.
 - `CONTEXTPLUS_ROOT` env var: escape-hatch only, not the primary contract.

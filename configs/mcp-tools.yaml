@@ -70,18 +70,30 @@ tools:
   # repo path argument. This ensures the server indexes the
   # correct repo regardless of session CWD.
   #
-  # The context-plus base entry (no path arg, cli mode) is
-  # retained for install/health tracking only — not rendered.
+  # Codex-specific presentation: render one visible workspace-local
+  # alias named `context-plus` for codex-cli only. This keeps the
+  # Codex MCP list uncluttered while other IDEs continue using the
+  # repo-scoped entries below.
   #
   # CONTEXTPLUS_ROOT env var: kept as escape-hatch only. The
   # primary fleet contract is explicit path args per entry.
   # ============================================================
   context-plus:
     enabled: true
-    integration_mode: cli
+    integration_mode: mcp
     version: "patched"
     install_cmd: "scripts/install-contextplus-patched.sh"
     health_cmd: "test -f ~/.local/share/contextplus-patched/build/index.js"
+    target_ides:
+      - codex-cli
+    mcp:
+      type: stdio
+      command: "node"
+      args:
+        - "~/.local/share/contextplus-patched/build/index.js"
+      env: *cp-env
+      env_from_parent:
+        - OPENROUTER_API_KEY
     runtime: node
     env:
       optional:
@@ -104,7 +116,6 @@ tools:
     integration_mode: mcp
     version: "patched"
     target_ides:
-      - codex-cli
       - claude-code
       - antigravity
       - opencode
@@ -138,7 +149,6 @@ tools:
     integration_mode: mcp
     version: "patched"
     target_ides:
-      - codex-cli
       - claude-code
       - antigravity
       - opencode
@@ -172,7 +182,6 @@ tools:
     integration_mode: mcp
     version: "patched"
     target_ides:
-      - codex-cli
       - claude-code
       - antigravity
       - opencode
@@ -206,7 +215,6 @@ tools:
     integration_mode: mcp
     version: "patched"
     target_ides:
-      - codex-cli
       - claude-code
       - antigravity
       - opencode
