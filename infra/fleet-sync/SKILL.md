@@ -45,14 +45,14 @@ Keep Fleet Sync honest and executable:
 - `cli`: host-level tool, verified by runtime health, not required in IDE MCP configs
 - `mcp`: rendered into supported client config surfaces and verified by both file-level convergence and client-visible CLI checks
 
-### Current Tool Roster (V2.2)
+### Current Tool Roster (V2.3)
 
-| Tool | Class | Status | Notes |
-|------|-------|--------|-------|
-| `cass-memory` | `cli` | Enabled | CLI-native, not rendered to IDE configs |
-| `llm-tldr` | `mcp` | Enabled | Static analysis context slicing |
-| `context-plus` | `mcp` | Enabled | Structural context analysis |
-| `serena` | `mcp` | Enabled | AI assistant memory |
+| Tool | Class | Status | Routing (V8.6) | Notes |
+|------|-------|--------|-----------------|-------|
+| `cass-memory` | `cli` | Disabled | N/A | Pilot-only CLI, not rendered to IDE configs |
+| `llm-tldr` | `mcp` | Enabled | **Canonical default** | Semantic discovery + exact static analysis |
+| `context-plus` | `mcp` | Enabled (opt-in) | Experimental/optional | Worktree blindness, single-root binding |
+| `serena` | `mcp` | Enabled | Canonical default | Symbol-aware edits + persistent memory |
 
 ## When To Use
 
@@ -76,6 +76,11 @@ Use this skill when the user asks to:
   explicit argument: `node ~/.local/share/contextplus-patched/build/index.js ~/<repo>`.
   This follows the upstream README contract: `contextplus [path]` starts the
   MCP server for the specified path.
+  **V8.6**: context-plus is experimental/optional. Not the canonical routing
+  default. llm-tldr is now the canonical default for semantic discovery.
+- For `llm-tldr`, semantic search requires `tldr warm <project>` before
+  first use. Every MCP tool call accepts a `project` parameter for
+  worktree-safe operation (daemon per resolved path).
 - `antigravity` and `gemini-cli` use wrapped launcher form with the repo
   path inside the exec string.
 - `CONTEXTPLUS_ROOT` env var: escape-hatch only, not the primary contract.

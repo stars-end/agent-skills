@@ -1,28 +1,44 @@
 ---
 name: context-plus
-description: MCP-native structural context analysis for codebase mapping and dependency-aware targeting.
+description: |
+  MCP-native structural context analysis (experimental/optional as of V8.6).
+  Available for opt-in use only; not part of the canonical routing contract.
 tags:
   - mcp
   - context
   - structure
   - fleet-sync
   - local-first
+  - experimental
+  - optional
 ---
 
-# Context+ (Fleet Sync V2.2)
+# Context+ (Fleet Sync V2.3 — Experimental)
 
-MCP-native structural context analysis for higher-fidelity codebase mapping before edits.
+MCP-native structural context analysis. Available for opt-in use only.
 
 ## Tool Class
 
-**`integration_mode: mcp`**
+**`integration_mode: mcp`** (retained for backward compatibility)
 
-Context+ is rendered to IDE MCP configs and provides MCP server functionality.
+Context+ is rendered to IDE MCP configs but is no longer the canonical default for any routing lane.
+
+## Routing Status
+
+**Experimental / optional** as of V8.6 routing contract.
+
+Context+ has been demoted from the canonical routing contract because of structural limitations:
+- **Worktree blindness**: `ROOT_DIR` is set once at server startup. Agents working in worktrees get stale results from the untouched canonical clone.
+- **Single-root binding**: Each MCP instance is bound to exactly one repo. No dynamic root selection.
+- **Cross-repo overhead**: Requires O(n) per-repo MCP entries for n repos, each with per-IDE overrides.
+- **Unused capabilities**: Spectral clustering, memory graph, and feature hub navigation have near-zero observed agent usage.
+
+llm-tldr is now the canonical default for both semantic discovery and exact static analysis.
 
 ## Current Fleet Status
 
-- Fleet contract: MCP-rendered tool
-- Current state: ✅ ENABLED
+- Fleet contract: MCP-rendered tool (retained for backward compatibility)
+- Current state: ENABLED (opt-in)
 - Install: `~/agent-skills/scripts/install-contextplus-patched.sh`
 
 ## Installation
@@ -31,122 +47,109 @@ Context+ is rendered to IDE MCP configs and provides MCP server functionality.
 ~/agent-skills/scripts/install-contextplus-patched.sh
 ```
 
-**NOTE**: The correct package name is `contextplus` (NOT `@forloopcodes/contextplus` which returns 404).
-
 ## Health Commands
 
 ```bash
-# Version check
-npx -y contextplus --version
-
-# Help
-npx -y contextplus --help
+test -f ~/.local/share/contextplus-patched/build/index.js && echo "OK"
 ```
 
 ## MCP Configuration
 
-Rendered to IDE configs via Fleet Sync:
+Rendered to IDE configs via Fleet Sync (per-repo scoped entries):
 
 ```json
 {
   "mcpServers": {
-    "context-plus": {
+    "context-plus-agent-skills": {
       "type": "stdio",
       "command": "node",
-      "args": ["/Users/$USER/.local/share/contextplus-patched/build/index.js"]
+      "args": ["~/.local/share/contextplus-patched/build/index.js", "~/agent-skills"]
     }
   }
 }
 ```
 
-## Usage Patterns
-
-### Via MCP Client
-- Use via MCP-capable IDE (Claude Code, Cursor, VS Code, Windsurf, OpenCode)
-- The tool provides structural analysis capabilities
-
-### Key Functions
-- **Semantic Code Search**: Find code by meaning, not just keywords
-- **AST-based Analysis**: Tree-sitter powered structural understanding
-- **Spectral Clustering**: Group semantically related files
-- **RAG Integration**: Combine with Ollama for enhanced retrieval
-- **Wikilink Hubs**: Obsidian-style feature navigation
-
 ## Required Trigger Contract
 
-Use `context-plus` first when the task is primarily about semantic discovery:
-- locating the part of the repo responsible for a concept or feature
-- mapping related files/modules before editing
-- answering "where does this live?" or "what else is related to this?"
+**V8.6 routing contract does NOT route any task class to context-plus by default.**
 
-Do not skip directly to broad grep/file traversal for those questions unless a documented fallback condition applies.
+Use context-plus only when:
+- explicitly requested by the operator for a specific capability (spectral clustering, memory graph)
+- llm-tldr is unavailable and the task requires embedding-based semantic search
+- a documented opt-in scenario applies
+
+Do NOT use context-plus as the first tool for:
+- semantic repo discovery (use llm-tldr)
+- exact static analysis (use llm-tldr)
+- symbol-aware edits (use serena)
+
+If context-plus is used on a qualifying task instead of the canonical tool, the response must include `Tool routing exception: context-plus opt-in for <reason>`.
+
+## Key Functions (retained for reference)
+
+- **Semantic Code Search**: Find code by meaning via embeddings
+- **Spectral Clustering**: Group semantically related files
+- **Memory Graph**: Cross-session concept recall with decay-scored edges
+- **Feature Hub**: Obsidian-style wikilink navigation
+
+## Unique Capabilities vs llm-tldr
+
+| Capability | context-plus | llm-tldr | Notes |
+|-----------|-------------|----------|-------|
+| Semantic search (by meaning) | Via embeddings | Via FAISS + bge-large | Both work |
+| Spectral clustering | Yes | No | Near-zero usage |
+| Memory graph with decay | Yes (6 tools) | No | Overlaps with serena memory |
+| Feature hub / wikilinks | Yes | No | Near-zero usage |
+| Worktree support | Broken (single root) | Works (project per call) | Structural gap |
+| CFG/DFG/slice | No | Yes | llm-tldr unique |
+| Dead code detection | No | Yes | llm-tldr unique |
+| Context from entry point | No | Yes (95% savings) | llm-tldr unique |
 
 ## Status
-- Fleet contract: MCP-rendered tool
-- Expected package: `contextplus`
-- Expected runtime: Node.js
-- Canonical health checks:
-  - `npx -y contextplus --version`
-  - client MCP visibility checks such as `claude mcp list`, `codex mcp list`, `gemini mcp list`, `opencode mcp list`
 
-## Upstream Docs
-- GitHub: `https://github.com/ForLoopCodes/contextplus`
-- npm package: `https://www.npmjs.com/package/contextplus`
-
-## Contract
-
-1. **Local-first**: Execute locally via stdio MCP
-2. **No central gateway**: Never a mandatory central gateway dependency
-3. **Repository-local**: Prefer repository-local indexes and embeddings
-4. **Fail open**: Fail open to normal local navigation if unavailable
-
-## Expected Output
-
-- Ranked target files/modules
-- Dependency or cluster hints for safer edits
-- Semantic code clusters
-
-## Runtime Requirements
-
-- Node.js 20+ (or Bun)
-- Ollama (optional, for embeddings)
-
-## Optional Environment Variables
-
-| Env Var | Purpose |
-|---------|---------|
-| `OLLAMA_EMBED_MODEL` | Ollama embedding model (default: nomic-embed-text) |
-| `OLLAMA_CHAT_MODEL` | Ollama chat model (default: gemma2:27b) |
-| `OLLAMA_API_KEY` | Ollama API key (for cloud) |
-
-## Fleet Sync Integration
-
-```bash
-# Check health via Fleet Sync
-~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json | jq '.tools[] | select(.tool=="context-plus")'
-
-# Install via Fleet Sync
-~/agent-skills/scripts/dx-mcp-tools-sync.sh --apply --json
-```
-
-## IDE Targets
-
-Rendered to these IDE configs:
-- `codex-cli`: `~/.codex/config.toml`
-- `claude-code`: `~/.claude.json`
-- `antigravity`: `~/.gemini/antigravity/mcp_config.json`
-- `opencode`: `~/.opencode/config.json`
+- Default stack status: NOT CANONICAL (experimental/optional)
+- Fleet status: enabled for backward compatibility
+- Use only when explicitly opted in
+- Do not require this tool in standard repo workflows
 
 ## Upstream
 
 - **Repo**: https://github.com/ForLoopCodes/contextplus
 - **Docs**: https://github.com/ForLoopCodes/contextplus#readme
 
+## Contract
+
+1. **Local-first**: Execute locally via stdio MCP
+2. **No central gateway**: Never a mandatory central gateway dependency
+3. **Repository-local**: Prefer repository-local indexes and embeddings
+4. **Opt-in only**: Not the canonical routing default (V8.6)
+5. **Fail open**: Fail open to llm-tldr or normal local navigation if unavailable
+
+## Runtime Requirements
+
+- Node.js 20+ (or Bun)
+- OpenRouter API key (for embeddings)
+
+## Fleet Sync Integration
+
+```bash
+~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json | jq '.tools[] | select(.tool=="context-plus")'
+```
+
+## IDE Targets
+
+Rendered to these IDE configs (per-repo scoped entries):
+- `codex-cli`: `~/.codex/config.toml`
+- `claude-code`: `~/.claude.json`
+- `antigravity`: `~/.gemini/antigravity/mcp_config.json`
+- `opencode`: `~/.config/opencode/opencode.jsonc`
+- `gemini-cli`: `~/.gemini/settings.json`
+
 ## Validation
 
 ### Layer 1 (Host Runtime)
 ```bash
-npx -y contextplus --version
+test -f ~/.local/share/contextplus-patched/build/index.js && echo "OK"
 ```
 
 ### Layer 2 (Config Convergence)
@@ -154,26 +157,9 @@ npx -y contextplus --version
 ~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json
 ```
 
-### Layer 4 (Client Visibility)
-```bash
-codex mcp list    # Should show context-plus
-claude mcp list   # Should show context-plus
-opencode mcp list # Should show context-plus
-```
-
-## Troubleshooting
-
-### Package Not Found (404)
-If you see `@forloopcodes/contextplus not found`, use the correct package name:
-```bash
-npx -y contextplus
-```
-
-### Version Issues
-The historical manifest version `0.0.7` may not be available. Use `latest` or run without version specifier.
-
 ## Related
 
 - `fleet-sync`: Fleet Sync orchestrator
-- `llm-tldr`: MCP static analysis
-- `cass-memory`: CLI-native memory
+- `llm-tldr`: Canonical default for semantic + structural analysis (V8.6)
+- `serena`: Symbol-aware edits and persistent memory
+- `cass-memory`: Pilot-only CLI memory

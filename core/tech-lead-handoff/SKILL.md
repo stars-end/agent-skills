@@ -45,8 +45,8 @@ Use this skill when user intent is handoff/review packaging:
 - `BEADS_DEPENDENCIES` (or `none`)
 - Validation summary (commands + pass/fail)
 - Tool Evidence summary:
-  - tools used: `context-plus`, `llm-tldr`, `serena`
-  - or `Tool routing exception: <reason>`
+  - tools used: `llm-tldr`, `serena`
+  - or `Tool routing exception: <reason>` (include if context-plus was used for opt-in)
 - Changed files summary
 - Open blockers / decisions needed
 - How-to-review checklist
