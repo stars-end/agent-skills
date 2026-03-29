@@ -10,7 +10,6 @@ Check if tools are installed and executable.
 |------|---------|----------|
 | `cass-memory` | `cm --version` | Version string (e.g., `0.2.3`) |
 | `llm-tldr` | `tldr-mcp --version \|\| llm-tldr --version` | Version string (e.g., `1.5.2`) |
-| `context-plus` | `test -f ~/.local/share/contextplus-patched/build/index.js` | Patched local build present |
 | `serena` | `serena --help \| head -1` | Help output |
 
 ## Layer 2: Config Convergence
@@ -85,4 +84,3 @@ Current contract:
 - `claude`, `gemini`, `opencode` are required on all 4 canonical hosts.
 - `codex` is required on `macmini` and optional on Linux hosts.
 - `antigravity` remains `INFERRED` via dedicated config file checks.
-- `context-plus` on `gemini` + `antigravity` must use wrapped launcher: `bash -lc 'exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null'`.

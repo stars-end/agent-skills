@@ -169,4 +169,3 @@ uv tool install git+https://github.com/oraios/serena.git
 - `fleet-sync`: Fleet Sync orchestrator
 - `llm-tldr`: Canonical default for semantic + structural analysis (V8.6)
 - `cass-memory`: Pilot-only CLI memory
-- `context-plus`: Experimental/optional only (V8.6)
