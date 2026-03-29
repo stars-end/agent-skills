@@ -26,6 +26,29 @@
 - Redesign Beads, Serena memory layout, or repository-specific engineering workflows outside tool routing.
 
 ## Active Contract
+
+**SUPERSEDED by V8.6 routing contract (bd-rb0c.7).** The routing matrix below reflects the original V8.5 contract. See the V8.6 changes in `publish-baseline.zsh` section 5.4 for the current canonical routing.
+
+### V8.6 Routing (Current)
+
+- Canonical default assistant stack:
+  - `llm-tldr`: semantic discovery + exact static analysis / trace / impact
+  - `serena`: symbol-aware edits / persistent assistant memory
+- Experimental / optional:
+  - `context-plus`: available for opt-in use only; not part of the canonical routing contract
+- Canonical non-default memory surface:
+  - `cass-memory`: pilot-only CLI tool; not part of the default assistant loop
+
+| Task shape | Canonical first tool | Reason |
+|------------|---------------------|--------|
+| Semantic discovery ("where does X live?", "what code is related to X?") | `llm-tldr` | FAISS + bge-large semantic search |
+| Exact structural analysis (call paths, CFG/DFG, slice, impact, dead code, arch) | `llm-tldr` | Precise structural analysis |
+| "Understand this function and its dependencies" | `llm-tldr` (context tool) | 95% token savings |
+| "What tests need to run" | `llm-tldr` (change_impact) | Test targeting |
+| Symbol-aware edits, rename/refactor, project memory, session continuity | `serena` | Persistent context + structured edits |
+
+### V8.5 Routing (Original — superseded)
+
 - Canonical default assistant stack:
   - `context-plus`: semantic discovery and repo mapping
   - `llm-tldr`: exact static analysis and structural tracing
@@ -43,9 +66,12 @@
 ## Architecture / Design
 
 ### Routing Matrix
+
+**SUPERSEDED by V8.6 (see Active Contract above).** Retained for historical reference.
+
 | Task shape | Required first tool | Reason |
 |------------|---------------------|--------|
-| "Where does this feature live?", "what code is related to X?", repo mapping before edits | `context-plus` | semantic discovery |
+| "Where does this feature live?", "what code is related to X?", repo mapping before edits | `llm-tldr` (V8.6) | semantic discovery via FAISS |
 | call paths, impact analysis, slice/CFG/DFG/dead code, exact trace before edits | `llm-tldr` | precise structural analysis |
 | symbol-aware edits, rename/refactor, insert-before/after, project memory, session continuity | `serena` | persistent context + structured edits |
 
