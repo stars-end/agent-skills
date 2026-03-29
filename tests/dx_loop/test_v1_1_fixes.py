@@ -468,6 +468,7 @@ def test_cmd_start_accepts_repo_override(monkeypatch):
     monkeypatch.setattr(DxLoop, "bootstrap_epic", fake_bootstrap)
     monkeypatch.setattr(DxLoop, "adopt_running_jobs", lambda self: [])
     monkeypatch.setattr(DxLoop, "run_loop", lambda self: True)
+    monkeypatch.setattr(dx_loop_script, "_select_wave_state", lambda **kwargs: None)
 
     args = SimpleNamespace(
         epic="bd-jx1t",
@@ -792,6 +793,68 @@ def test_status_can_resolve_wave_by_beads_id(tmp_path, capsys):
     print("✓ Status can resolve the newest wave by beads id")
 
 
+def test_status_prefers_registered_active_wave_for_beads_id(tmp_path, capsys):
+    """Task-oriented status should follow the canonical active wave registry."""
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        canonical = DxLoop("wave-canonical")
+        canonical.wave_dir = tmp_path / "waves" / "wave-canonical"
+        canonical.state_file = canonical.wave_dir / "loop_state.json"
+        canonical.epic_id = "bd-epic"
+        canonical.beads_manager.tasks = {
+            "bd-test": BeadsTask(
+                beads_id="bd-test",
+                title="Canonical task",
+                repo="prime-radiant-ai",
+                dependencies=[],
+            )
+        }
+        canonical._set_wave_status(
+            LoopState.IN_PROGRESS_HEALTHY,
+            None,
+            "Canonical wave owns this task",
+        )
+        canonical._save_state()
+
+        newer = DxLoop("wave-newer")
+        newer.wave_dir = tmp_path / "waves" / "wave-newer"
+        newer.state_file = newer.wave_dir / "loop_state.json"
+        newer.epic_id = "bd-epic"
+        newer.beads_manager.tasks = {
+            "bd-test": BeadsTask(
+                beads_id="bd-test",
+                title="Competing task",
+                repo="prime-radiant-ai",
+                dependencies=[],
+            )
+        }
+        newer._set_wave_status(
+            LoopState.IN_PROGRESS_HEALTHY,
+            None,
+            "Competing wave also claims the task",
+        )
+        newer._save_state()
+
+        dx_loop_script._write_active_epic_registry(
+            "bd-epic",
+            "wave-canonical",
+            artifact_base=tmp_path,
+        )
+
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic=None, beads_id="bd-test", json=False)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "Wave: wave-canonical" in captured.out
+
+    print("✓ Status prefers the registered canonical active wave")
+
+
 def test_explain_classifies_review_blocked_as_product(tmp_path, capsys):
     """explain should classify review-blocked waves as product work."""
     wave_id = "wave-explain-product"
@@ -881,6 +944,48 @@ def test_explain_classifies_run_blocked_as_control_plane(tmp_path, capsys):
     assert "Next Action: Inspect dx-loop/dx-runner startup" in captured.out
 
     print("✓ Explain classifies run-blocked waves as control-plane")
+
+
+def test_cmd_start_refuses_second_active_wave_for_same_epic(tmp_path, capsys):
+    """Starting a second live wave for the same epic should fail fast."""
+    original_artifact_base = cmd_start.__globals__["ARTIFACT_BASE"]
+    cmd_start.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        existing = DxLoop("wave-existing")
+        existing.wave_dir = tmp_path / "waves" / "wave-existing"
+        existing.state_file = existing.wave_dir / "loop_state.json"
+        existing.epic_id = "bd-jx1t"
+        existing.beads_manager.tasks = {
+            "bd-jx1t.1": BeadsTask(
+                beads_id="bd-jx1t.1",
+                title="Existing active task",
+                repo="prime-radiant-ai",
+                dependencies=[],
+            )
+        }
+        existing._set_wave_status(
+            LoopState.IN_PROGRESS_HEALTHY,
+            None,
+            "Existing active wave",
+        )
+        existing._save_state()
+
+        rc = cmd_start(
+            SimpleNamespace(
+                epic="bd-jx1t",
+                wave_id="wave-duplicate",
+                config=None,
+                repo="prime-radiant-ai",
+            )
+        )
+    finally:
+        cmd_start.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Active wave already exists for epic bd-jx1t: wave-existing" in captured.err
+
+    print("✓ cmd_start refuses a second active wave for the same epic")
 
 
 def test_start_prints_wave_id_before_bootstrap_failure(monkeypatch, tmp_path, capsys):

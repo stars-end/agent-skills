@@ -43,6 +43,7 @@ from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState, RunnerStartRe
 
 VERSION = "1.3.0"
 ARTIFACT_BASE = Path("/tmp/dx-loop")
+ACTIVE_EPIC_DIR = ARTIFACT_BASE / "active-epics"
 OPENCODE_IMPLEMENT_MODEL = "zai-coding-plan/glm-5"
 OPENCODE_REVIEW_MODEL = "zai-coding-plan/glm-5.1"
 DEFAULT_CONFIG = {
@@ -65,6 +66,14 @@ RUNNER_LIFECYCLE_DEFECT_REASONS = frozenset(
     {
         "monitor_no_rc_file",
         "late_finalize_no_rc",
+    }
+)
+
+REPLACEABLE_WAVE_STATES = frozenset(
+    {
+        LoopState.COMPLETED.value,
+        LoopState.KICKOFF_ENV_BLOCKED.value,
+        LoopState.RUN_BLOCKED.value,
     }
 )
 
@@ -132,6 +141,47 @@ def _iter_wave_states(artifact_base: Path) -> List[Tuple[str, Path, Dict[str, An
     return states
 
 
+def _active_epic_registry_path(epic_id: str, artifact_base: Path = ARTIFACT_BASE) -> Path:
+    return artifact_base / "active-epics" / f"{epic_id}.json"
+
+
+def _read_active_epic_registry(
+    epic_id: str,
+    artifact_base: Path = ARTIFACT_BASE,
+) -> Optional[Dict[str, Any]]:
+    path = _active_epic_registry_path(epic_id, artifact_base=artifact_base)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _write_active_epic_registry(
+    epic_id: str,
+    wave_id: str,
+    *,
+    artifact_base: Path = ARTIFACT_BASE,
+) -> None:
+    path = _active_epic_registry_path(epic_id, artifact_base=artifact_base)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "epic_id": epic_id,
+        "wave_id": wave_id,
+        "pid": os.getpid(),
+        "updated_at": now_utc(),
+    }
+    tmp_path = path.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2))
+    tmp_path.rename(path)
+
+
+def _wave_is_replaceable(state: Dict[str, Any]) -> bool:
+    wave_state = state.get("wave_status", {}).get("state")
+    return wave_state in REPLACEABLE_WAVE_STATES
+
+
 def _wave_matches(
     state: Dict[str, Any],
     *,
@@ -174,6 +224,20 @@ def _select_wave_state(
     ]
     if not matches:
         return None
+
+    registry_epic_id = epic_id
+    if not registry_epic_id and beads_id:
+        epic_ids = {item[2].get("epic_id") for item in matches if item[2].get("epic_id")}
+        if len(epic_ids) == 1:
+            registry_epic_id = next(iter(epic_ids))
+
+    if registry_epic_id:
+        registry = _read_active_epic_registry(registry_epic_id, artifact_base=artifact_base)
+        if registry:
+            registry_wave_id = registry.get("wave_id")
+            for item in matches:
+                if item[0] == registry_wave_id:
+                    return item
 
     matches.sort(key=lambda item: item[2].get("updated_at", ""), reverse=True)
     return matches[0]
@@ -1623,6 +1687,12 @@ Do not return a verdict until you have checked whether:
         tmp_file = self.state_file.with_suffix(".tmp")
         tmp_file.write_text(json.dumps(state, indent=2))
         tmp_file.rename(self.state_file)
+        if self.epic_id:
+            _write_active_epic_registry(
+                self.epic_id,
+                self.wave_id,
+                artifact_base=ARTIFACT_BASE,
+            )
 
     def _load_state(self) -> bool:
         """
@@ -1701,6 +1771,25 @@ def cmd_start(args):
     config = load_config_file(getattr(args, "config", None))
     if getattr(args, "repo", None):
         config["default_repo"] = args.repo
+
+    existing = _select_wave_state(
+        epic_id=epic_id,
+        artifact_base=ARTIFACT_BASE,
+    )
+    if existing:
+        existing_wave_id, _existing_state_file, existing_state = existing
+        if existing_wave_id != wave_id and not _wave_is_replaceable(existing_state):
+            print(
+                f"Active wave already exists for epic {epic_id}: {existing_wave_id}",
+                file=sys.stderr,
+            )
+            print(
+                "Reuse the existing wave via `dx-loop status --epic "
+                f"{epic_id}` or `dx-loop explain --epic {epic_id}`.",
+                file=sys.stderr,
+            )
+            return 1
+
     loop = DxLoop(wave_id, config=config)
     print(f"Wave ID: {wave_id}")
 
