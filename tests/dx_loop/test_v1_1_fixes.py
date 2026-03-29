@@ -1367,6 +1367,27 @@ def test_runner_adapter_extracts_review_verdict_from_log(tmp_path):
     print("✓ RunnerAdapter extracts review verdicts from logs")
 
 
+def test_runner_adapter_extracts_markdown_wrapped_review_verdict(tmp_path):
+    """Review verdict extraction should tolerate markdown-wrapped verdict lines."""
+    adapter = RunnerAdapter(provider="opencode")
+    log_dir = Path("/tmp/dx-runner/opencode")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "bd-test-review.log"
+    log_path.write_text(
+        "## Review Findings\n\n"
+        "`REVISION_REQUIRED`: tighten the fixture coverage claim\n"
+    )
+
+    try:
+        verdict = adapter.extract_review_verdict("bd-test-review")
+    finally:
+        log_path.unlink(missing_ok=True)
+
+    assert verdict == "REVISION_REQUIRED: tighten the fixture coverage claim"
+
+    print("✓ RunnerAdapter extracts markdown-wrapped review verdicts")
+
+
 def test_start_implement_marks_kickoff_env_blocked(tmp_path):
     """Failed starts before any run exists should not leave the wave healthy."""
     wave_id = "wave-start-failure"
