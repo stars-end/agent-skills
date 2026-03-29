@@ -73,7 +73,8 @@ cd /tmp/agents/bd-xxxx/repo-name
 ## 4) Delegation Rule (V8.4 - Batch by Outcome)
 - **Primary rule**: batch by outcome, not by file. One agent per coherent change set.
 - **Default parallelism**: 2 agents, scale to 3-4 only when independent and stable.
-- **Dispatch threshold**: implement directly for scoped work estimated under 60 minutes; dispatch only for >=60 minute, clearly parallelizable outcomes.
+- **Default orchestration rule**: for chained Beads work, multi-step outcomes, or tasks expected to need implement/review baton flow, use \`dx-loop\` as the default execution surface.
+- **Direct/manual fallback**: implement directly only for isolated single-task work or when \`dx-loop\` itself is the active blocker.
 - **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
 - **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
 - **See Section 6** for detailed parallel orchestration patterns.

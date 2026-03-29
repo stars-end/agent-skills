@@ -4,7 +4,20 @@
 
 ## Overview
 
-`dx-loop` is a PR-aware orchestration surface that reuses Ralph's proven patterns (baton, topological dependencies, checkpoint/resume) while replacing the control plane with governed `dx-runner` dispatch and enforcing PR artifact contracts.
+`dx-loop` is the default execution surface for chained Beads work, multi-step outcomes, and implement/review baton flows. It is a PR-aware orchestration surface that reuses Ralph's proven patterns (baton, topological dependencies, checkpoint/resume) while replacing the control plane with governed `dx-runner` dispatch and enforcing PR artifact contracts.
+
+## Default Execution Policy
+
+Use `dx-loop` as the default execution surface for:
+- chained Beads work
+- multi-step outcomes
+- tasks expected to need implement -> review baton flow
+
+Use direct/manual implementation only when:
+- the task is an isolated single-task change with no meaningful baton benefit
+- `dx-loop` itself is the active blocker
+
+When `dx-loop` is the blocker, stop with a truthful blocker report and track the control-plane issue separately from the product epic.
 
 Current baton contract:
 - implement prompts are shaped using the `prompt-writing` outbound structure
@@ -13,6 +26,7 @@ Current baton contract:
 
 ## When To Use
 
+- Default lane for chained and non-trivial Beads execution
 - Running multi-wave Beads execution with PR artifact requirements
 - Orchestrating implementer/reviewer cycles with governed dispatch
 - Automating wave advancement with noise-suppressed notifications
