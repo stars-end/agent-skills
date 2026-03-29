@@ -448,12 +448,15 @@ class RunnerAdapter:
         try:
             for line in reversed(transcript.splitlines()):
                 line = line.strip()
-                if line.startswith("APPROVED:"):
-                    return line
-                if line.startswith("REVISION_REQUIRED:"):
-                    return line
-                if line.startswith("BLOCKED:"):
-                    return line
+                normalized = (
+                    line.lstrip("-*0123456789.> ").strip().replace("`", "").replace("*", "")
+                )
+                if normalized.startswith("APPROVED:"):
+                    return normalized
+                if normalized.startswith("REVISION_REQUIRED:"):
+                    return normalized
+                if normalized.startswith("BLOCKED:"):
+                    return normalized
         except OSError:
             return None
 
