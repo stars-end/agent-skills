@@ -41,8 +41,11 @@ dx-ensure-bins.sh
 # Start wave from Beads epic
 dx-loop start --epic bd-5w5o
 
-# Check wave status
-dx-loop status --wave-id wave-2026-03-08T12-00-00Z
+# Check task-oriented status
+dx-loop status --beads-id bd-5w5o.49
+
+# Explain why a task is blocked or what to do next
+dx-loop explain --beads-id bd-5w5o.49
 
 # Get JSON output
 dx-loop status --wave-id <id> --json
@@ -62,14 +65,23 @@ Default operator protection:
 - if the initial frontier has zero dispatchable tasks, `dx-loop` persists the
   blocked state and exits instead of sitting resident for hours with no
   implementation progress
+- `dx-loop` prints the wave id immediately and persists a minimal state record
+  before bootstrap completes, so startup issues remain queryable
 
 ### status
 
 ```bash
-dx-loop status [--wave-id <id>] [--json]
+dx-loop status [--wave-id <id> | --epic <id> | --beads-id <id>] [--json]
 ```
 
-Shows wave status or lists all waves if no `--wave-id` provided.
+Shows wave status or lists all waves if no selector is provided.
+
+Use:
+- `--wave-id` when you already know the wave
+- `--epic` to resolve the newest persisted wave for an epic
+- `--beads-id` to resolve the newest persisted wave containing that task
+
+When `--beads-id` is provided, status also surfaces the task title, repo, and baton phase so agents do not need to inspect raw state files.
 
 For zero-dispatch waves, status now distinguishes generic pending from
 dependency-blocked frontiers. When no task is dispatchable because upstream
@@ -84,6 +96,23 @@ automation.
 
 When this happens on the very first frontier, the reason text explains that the
 loop exited without becoming a resident unattended process.
+
+### explain
+
+```bash
+dx-loop explain --beads-id <id>
+dx-loop explain --epic <id>
+dx-loop explain --wave-id <id>
+```
+
+Provides an agent-native explanation of the current state:
+- wave id and epic id
+- task-local title and phase when a task is selected
+- blocker code
+- surface classification: `product`, `control_plane`, `dependency`, or `none`
+- next-action guidance
+
+Use this as the first blocker diagnosis command before inspecting raw wave JSON or runner internals.
 
 ## Ralph Reuse
 
