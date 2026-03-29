@@ -27,7 +27,7 @@
 
 ## Active Contract
 
-**SUPERSDED by V8.6 routing contract (bd-rb0c.7).** The routing matrix below reflects the original V8.5 contract. See the V8.6 changes in `publish-baseline.zsh` section 5.4 for the current canonical routing.
+**SUPERSEDED by V8.6 routing contract (bd-rb0c.7).** The routing matrix below reflects the original V8.5 contract. See the V8.6 changes in `publish-baseline.zsh` section 5.4 for the current canonical routing.
 
 ### V8.6 Routing (Current)
 
