@@ -644,6 +644,98 @@ def test_generated_review_prompt_consumes_implementation_return():
     print("✓ Review prompt consumes implementation return")
 
 
+def test_reconcile_finished_jobs_advances_stale_implement_baton():
+    """Restart recovery should ingest a finished implement artifact and move to review."""
+    loop = DxLoop("wave-reconcile-finished")
+    loop.beads_manager.tasks["bd-test-reconcile"] = BeadsTask(
+        beads_id="bd-test-reconcile",
+        title="Prime Radiant: recover finished implement outcome",
+        repo="prime-radiant-ai",
+        dependencies=[],
+    )
+    loop.baton_manager.start_implement("bd-test-reconcile", run_id="run-123")
+    loop.scheduler.state.mark_dispatched("bd-test-reconcile", "implement")
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_ok",
+        exit_code=0,
+    )
+    loop.implement_runner.extract_pr_artifacts = lambda beads_id: None
+    loop.implement_runner.extract_agent_output = lambda beads_id: """
+## Tech Lead Review (Implementation Return)
+- MODE: implementation_return
+- PR_URL: https://github.com/stars-end/prime-radiant-ai/pull/1030
+- PR_HEAD_SHA: f4aaa8f48913e6f2e93311767e3ac99669d4e031
+- BEADS_EPIC: bd-jx1t
+- BEADS_SUBTASK: bd-test-reconcile
+- BEADS_DEPENDENCIES: none
+"""
+
+    reconciled = loop.reconcile_finished_jobs()
+
+    baton = loop.baton_manager.get_state("bd-test-reconcile")
+    assert reconciled == ["bd-test-reconcile"]
+    assert baton is not None
+    assert baton.phase == BatonPhase.REVIEW
+    assert baton.pr_url == "https://github.com/stars-end/prime-radiant-ai/pull/1030"
+    assert (
+        baton.pr_head_sha == "f4aaa8f48913e6f2e93311767e3ac99669d4e031"
+    )
+    assert loop.pr_enforcer.has_valid_artifact("bd-test-reconcile")
+    assert not loop.scheduler.state.is_active("bd-test-reconcile", "implement")
+
+    print("✓ Restart recovery advances stale implement batons to review")
+
+
+def test_cmd_start_reuses_existing_active_wave_without_explicit_wave_id(
+    tmp_path, monkeypatch, capsys
+):
+    """start --epic should resume the canonical active wave by default."""
+    original_artifact_base = cmd_start.__globals__["ARTIFACT_BASE"]
+    cmd_start.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        existing = DxLoop("wave-existing")
+        existing.wave_dir = tmp_path / "waves" / "wave-existing"
+        existing.state_file = existing.wave_dir / "loop_state.json"
+        existing.epic_id = "bd-epic"
+        existing.beads_manager.tasks = {
+            "bd-test": BeadsTask(
+                beads_id="bd-test",
+                title="Prime Radiant: existing wave",
+                repo="prime-radiant-ai",
+                dependencies=[],
+            )
+        }
+        existing._set_wave_status(
+            LoopState.IN_PROGRESS_HEALTHY,
+            None,
+            "Existing active wave",
+        )
+        existing._save_state()
+
+        monkeypatch.setattr(DxLoop, "adopt_running_jobs", lambda self: [])
+        monkeypatch.setattr(DxLoop, "reconcile_finished_jobs", lambda self: [])
+        monkeypatch.setattr(DxLoop, "run_loop", lambda self: True)
+
+        rc = cmd_start(
+            SimpleNamespace(
+                epic="bd-epic",
+                wave_id=None,
+                config=None,
+                repo="prime-radiant-ai",
+            )
+        )
+    finally:
+        cmd_start.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "Resuming existing active wave for epic bd-epic: wave-existing" in captured.out
+    assert "Wave ID: wave-existing" in captured.out
+
+    print("✓ start --epic resumes the existing active wave by default")
+
+
 def test_deterministic_implement_failure_transitions_to_retry_state(tmp_path):
     """Quick-fail implement runs should trigger bounded redispatch, not fake healthy state."""
     wave_id = "wave-retry-test"
