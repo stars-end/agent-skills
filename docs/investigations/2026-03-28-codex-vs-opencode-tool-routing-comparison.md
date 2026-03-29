@@ -1,105 +1,73 @@
-# Codex vs OpenCode MCP Tool-First Routing Comparison (Round 2 Retest)
+# Codex vs OpenCode MCP Tool-First Routing Comparison (Post-PR-419 Rerun)
 
-**Date**: 2026-03-28  
+**Date**: 2026-03-29  
 **Runtime checked**: Codex CLI (`codex exec --json`)  
 **Epic**: bd-rb0c  
 **Subtask**: bd-e5z8  
 **Mode**: qa_pass
 
-## Why PR #413 Was Invalid/Incomplete
+## Why Pre-PR-419 Codex Result Was Stale/Incomplete
 
-PR #413 did not fully control for the retest integrity conditions requested for this comparison:
-- it did not explicitly enforce and document the fresh-retry rule for LT1/LT2 after first-call cancellation
-- it did not explicitly document controlled semantic-case session root checks for `prime-radiant-ai`
-- it mixed strong conclusions with incomplete runtime controls
+The prior blocker state was stale at client level: this VM now exposes repo-scoped MCP entries in `codex mcp list`:
+- `context-plus-agent-skills`
+- `context-plus-prime-radiant-ai`
+- `context-plus-affordabot`
+- `context-plus-llm-common`
+- `llm-tldr`
+- `serena`
 
-This round re-runs the suite with those controls applied.
+So pre-PR-419 assumptions about missing repo-scoped entries are no longer valid for this client session.
 
-## Controlled Conditions In This Retest
+## What Changed After PR #419
 
-- Semantic-case execution root controlled via `codex exec -C /Users/fengning/prime-radiant-ai`
-- Pre-suite target SHA verified in `prime-radiant-ai`: `e1320248370ac4db9e810e22096d9beef26c9bbb`
-- First-tool evidence taken from JSONL events only (no inference from prose)
-- LT1/LT2 rerun once in a fresh attempt after first-call cancellation
-- No Workflow B work (`bd-4a8e`) performed: no context-plus/runtime config changes, no repair lane work
+PR #419 merged the repo-scoped Context+ launcher contract on trunk (`origin/master` at `bf8d5836e804f9bc2fb19207ecaa4feea35e9bda`), including explicit path-arg MCP entries in:
+- `configs/mcp-tools.yaml`
+- `config-templates/fleet-sync-codex-cli.template.toml`
 
-## Source Revisions Used
+This rerun was executed after confirming that merged state.
 
-| Repo | Revision | Source |
-|------|----------|--------|
-| agent-skills | `db970b87dc99ec932336f57381b9aefee32d2710` | [PR #410](https://github.com/stars-end/agent-skills/pull/410) |
-| prime-radiant-ai | `e1320248370ac4db9e810e22096d9beef26c9bbb` | [PR #1027](https://github.com/stars-end/prime-radiant-ai/pull/1027) |
-| OpenCode pilot baseline | `8a49765ebbb35b53efe9e10255ecb8041bf96857` | [PR #411](https://github.com/stars-end/agent-skills/pull/411) |
+## Preflight + Baselines
 
-## Commands Run
+- `prime-radiant-ai` HEAD used: `e1320248370ac4db9e810e22096d9beef26c9bbb`
+- OpenCode baseline memo read from PR #411
+- Codex comparison branch updated on PR #413
 
-```bash
-# Step 0 PR artifacts
-cd ~/agent-skills
-git fetch origin pull/413/head:pr-413
-git fetch origin pull/411/head:pr-411
-git checkout pr-413
-# read PR #413 memo on branch
-# read PR #411 memo via git show pr-411:...
-
-git fetch origin
-git checkout db970b87dc99ec932336f57381b9aefee32d2710
-
-cd ~/prime-radiant-ai
-git fetch origin
-git checkout e1320248370ac4db9e810e22096d9beef26c9bbb
-
-# validation
-cd ~/prime-radiant-ai
-codex mcp list
-git rev-parse HEAD
-
-# worktree
-cd ~/agent-skills
-dx-worktree create bd-e5z8 agent-skills
-
-# suite (all from prime-radiant-ai context)
-codex exec --json --sandbox read-only -C /Users/fengning/prime-radiant-ai "<CP1 prompt>" > /tmp/bd-e5z8-r2-CP1.jsonl
-codex exec --json --sandbox read-only -C /Users/fengning/prime-radiant-ai "<CP2 prompt>" > /tmp/bd-e5z8-r2-CP2.jsonl
-codex exec --json --sandbox read-only -C /Users/fengning/prime-radiant-ai "<LT1 prompt>" > /tmp/bd-e5z8-r2-LT1-a1.jsonl
-codex exec --json --sandbox read-only -C /Users/fengning/prime-radiant-ai "<LT2 prompt>" > /tmp/bd-e5z8-r2-LT2-a1.jsonl
-codex exec --json --sandbox read-only -C /Users/fengning/prime-radiant-ai "<SE1 prompt>" > /tmp/bd-e5z8-r2-SE1.jsonl
-codex exec --json --sandbox read-only -C /Users/fengning/prime-radiant-ai "<SE2 prompt>" > /tmp/bd-e5z8-r2-SE2.jsonl
-
-# required fresh retries after canceled first-call for LT cases
-codex exec --json --sandbox read-only -C /Users/fengning/prime-radiant-ai "<LT1 prompt>" > /tmp/bd-e5z8-r2-LT1-a2.jsonl
-codex exec --json --sandbox read-only -C /Users/fengning/prime-radiant-ai "<LT2 prompt>" > /tmp/bd-e5z8-r2-LT2-a2.jsonl
-```
-
-## Codex Results
+## Rerun Results
 
 | Case | Expected | First Tool Used | Verdict | Note | Vs OpenCode |
 |------|----------|-----------------|---------|------|-------------|
-| CP1 | context-plus | llm-tldr (`tree`) | SOFT PASS | expected tool skipped; valid `Tool routing exception` returned; response paths stayed in `prime-radiant-ai` | different failure mode |
-| CP2 | context-plus | llm-tldr (`semantic`) | SOFT PASS | expected tool skipped; valid `Tool routing exception` returned | worse |
-| LT1 | llm-tldr | llm-tldr (`extract`) | RUNTIME FAIL | first call canceled in attempt 1 and fresh retry attempt 2 (same failure) | worse |
-| LT2 | llm-tldr | llm-tldr (`impact`) | RUNTIME FAIL | first call canceled in attempt 1 and fresh retry attempt 2 (same failure) | worse |
+| CP1 | context-plus-prime-radiant-ai | codex::list_mcp_resources | SOFT PASS | expected tool skipped; valid `Tool routing exception` returned in retry run | different failure mode |
+| CP2 | context-plus-prime-radiant-ai | llm-tldr (`semantic`) | SOFT PASS | expected tool skipped; valid `Tool routing exception` returned in retry run | worse |
+| LT1 | llm-tldr | llm-tldr (`extract`) | RUNTIME FAIL | first MCP call canceled in attempt 1 and retry attempt 2 (`user cancelled MCP tool call`) | worse |
+| LT2 | llm-tldr | llm-tldr (`impact`) | RUNTIME FAIL | first MCP call canceled in attempt 1 and retry attempt 2 (`user cancelled MCP tool call`) | worse |
 | SE1 | serena | serena (`activate_project`) | PASS | expected tool selected first and succeeded | same |
-| SE2 | serena | serena (`initial_instructions`) | PASS | expected tool selected first and succeeded | same |
+| SE2 | serena | serena (`activate_project`) | PASS | expected tool selected first and succeeded | same |
 
 ## Comparison Against OpenCode PR #411
 
-- OpenCode CP2/LT1/LT2 were PASS; Codex remained below that in this controlled rerun.
-- OpenCode CP1 was a context-plus-first runtime failure; Codex CP1 remained a skip-with-exception path (different failure mode).
-- Serena behavior remained aligned (SE1/SE2 PASS in both runtimes).
+- OpenCode CP2/LT1/LT2 were PASS; Codex rerun remains below that baseline.
+- OpenCode CP1 was `context-plus`-first with runtime timeout; Codex CP1 remains skip-with-exception (different failure mode).
+- Serena alignment remains stable (SE1/SE2 PASS in both lanes).
 
-## Summary
+## Metrics
 
-- routing compliance: **4/6** (expected tool first in LT1, LT2, SE1, SE2)
-- runtime success: **4/6** (non-runtime-fail cases)
-- `Tool routing exception` uses: **4** (CP1, CP2, LT1, LT2)
+- routing compliance: **4/6**
+- runtime success: **4/6**
+- `Tool routing exception` count: **4**
+
+## Did PR #419 Materially Fix Prior Codex Semantic-Routing Problem?
+
+**Partially at configuration visibility level, not at execution behavior level in this lane.**
+
+- Fixed: repo-scoped context-plus entries are now visible in preflight on this VM.
+- Not fixed in this rerun: CP1/CP2 still did not select `context-plus-prime-radiant-ai` as first discovery tool.
+
+Residual classification:
+- CP1/CP2: **routing behavior / client limitation in `codex exec` lane**
+- LT1/LT2: **runtime reliability (MCP cancellation noise)**
 
 ## Recommendation
 
 **fix/re-test required**
 
-Codex still does not select `context-plus` first for semantic cases and still exhibits repeat `llm-tldr` first-call cancellation in LT1/LT2 even after the required clean retry. This is not yet at the OpenCode baseline quality level.
-
-## Workflow Separation
-
-If follow-up is needed, treat it as **separate Workflow B (`bd-4a8e`)** for runtime/config repair. No Workflow B changes were made in this QA run.
+Reason: post-PR-419 rerun still misses required first-tool selection for semantic cases and still shows repeat llm-tldr runtime cancellation after one clean retry.
