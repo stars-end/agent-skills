@@ -15,12 +15,12 @@ With the transition to a fleet-synced MCP map, we encountered routing and presen
 ### Option 1: Dynamic Workspace API (Tool-Level Paths)
 Modify the `contextplus` patched build to accept an optional `cwd` or `repository_path` argument on its internal tool calls (e.g., `search_memory_graph`, `get_context_tree`).
 - **Pros:** A single `context-plus` MCP entry satisfies Codex without presentation confusion. Agents can dynamically switch roots by providing the worktree path directly inside tool calls, perfectly supporting `/tmp/agents/bd-xxxx/` worktrees across any repository boundary.
-- **Cons:** Requires upstream patching to the Node.js contextplus backend logic. Also depends on agents reliably injecting the `repository_path` parameter.
+- **Cons:** Requires a tool-schema contract change and reliable caller behavior so agents actually pass the `repository_path` on semantic calls, not just a backend patching change.
 
 ### Option 2: Agent-Lifecycle Injection (Hot-Reload)
 When `dx-worktree` creates a new environment, a script dynamically overwrites `~/.codex/config.toml` (and other local IDE configs) to point the `context-plus` MCP argument directly at the new worktree path. A `SIGHUP` or restart signal is then sent to hard-reload the IDE's MCP servers mid-session.
 - **Pros:** Requires zero upstream changes to the `contextplus` tool logic. Guarantees the MCP server strictly indexes the active worktree path.
-- **Cons:** Flaky implementation surface. Not all IDEs (notably `claude-code` or `codex-cli`) support seamless headless MCP hot-reloading mid-session without dropping conversational context.
+- **Cons:** Rewriting `~/.codex/config.toml` or other shared home-scoped config from `dx-worktree` is shared-state mutation. Shared home-scoped config is unsafe for concurrent agents unless session-local. On a multi-agent VM, one agent can stomp another agent's active root, making it fundamentally unsafe. Furthermore, not all IDEs support seamless headless MCP hot-reloading mid-session without dropping conversational context.
 
 ### Option 3: Virtual Workspace Symlinking
 Introduce a stable, fleet-wide symlink (e.g., `~/.active-dx-worktree`) that is automatically updated by `dx-worktree` commands to point to the most recently created or active worktree. The `context-plus` MCP config is anchored centrally to this symlink.
@@ -34,6 +34,8 @@ Deploy a persistent background `contextplus-daemon` that recursively indexes all
 
 ## Evaluation & Recommendation
 
-**Option 1 (Dynamic Workspace API)** is the most robust and architecturally sound long-term solution. It natively aligns with how agents operate (passing specific paths to semantic tools) and solves both the Codex flat-list issue and the `dx-worktree` isolation issue.
+**Immediate Recommendation**
+Keep the Codex single-alias presentation and finish the re-test. This provides an immediate validation step without structural risk.
 
-For immediate stabilization (if upstream fixes to `contextplus` are unfeasible over the short-term), modifying `dx-worktree` to generate local `.mcp-tools` config overlays and bouncing the agent process (**Option 2**) may be an acceptable tactical workaround, provided the IDE CLI supports resuming conversation state.
+**Long-Term Recommendation**
+Pursue upstream dynamic root selection / workspace API (**Option 1**). This is the cleanest architecture because it dynamically resolves at call time. It requires product-shape/upstream changes but solves the `dx-worktree` isolation limitation without relying on brittle, shared-state mutation tactics.
