@@ -21,11 +21,6 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck disable=SC1091
 source "${REPO_ROOT}/scripts/lib/dx-auth.sh"
 
-if ! dx_auth_load_op_service_account_token; then
-  echo "[enrichment] BLOCKED: missing OP service account token — cannot resolve ZAI_API_KEY" >&2
-  exit 1
-fi
-
 if ! dx_auth_load_zai_api_key; then
   echo "[enrichment] BLOCKED: failed to resolve ZAI_API_KEY from cache or 1Password" >&2
   exit 1

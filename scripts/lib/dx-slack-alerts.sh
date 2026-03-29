@@ -152,6 +152,10 @@ agent_coordination_refresh_transport_cache() {
   cache_file="$(agent_coordination_cache_file)"
   lock_dir="${cache_file}.lock"
 
+  if command -v dx_auth_cache_only_enabled >/dev/null 2>&1 && dx_auth_cache_only_enabled; then
+    return 1
+  fi
+
   if agent_coordination_refresh_on_cooldown; then
     return 1
   fi
@@ -345,20 +349,26 @@ agent_coordination_prepare_transport() {
     return 0
   fi
 
-  # 3) Refresh cache in a single OP API call (with cooldown on failures), then load.
+  # 3) In cache-only mode, accept stale cache and stop before any op access.
+  if command -v dx_auth_cache_only_enabled >/dev/null 2>&1 && dx_auth_cache_only_enabled; then
+    agent_coordination_load_transport_cache 0 >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  # 4) Refresh cache in a single OP API call (with cooldown on failures), then load.
   agent_coordination_refresh_transport_cache >/dev/null 2>&1 || true
   agent_coordination_load_transport_cache 1 >/dev/null 2>&1 || true
   if agent_coordination_transport_values_present; then
     return 0
   fi
 
-  # 4) Fallback to stale cache if refresh failed (e.g., rate-limited).
+  # 5) Fallback to stale cache if refresh failed (e.g., rate-limited).
   agent_coordination_load_transport_cache 0 >/dev/null 2>&1 || true
   if agent_coordination_transport_values_present; then
     return 0
   fi
 
-  # 5) Last-resort legacy per-ref lookup (used if custom refs are configured).
+  # 6) Last-resort legacy per-ref lookup (used if custom refs are configured).
   agent_coordination_load_op_token >/dev/null 2>&1 || true
   if [[ -z "${SLACK_BOT_TOKEN:-}" ]]; then
     local resolved_bot

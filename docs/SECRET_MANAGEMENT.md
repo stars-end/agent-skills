@@ -189,6 +189,56 @@ This provides access to `Agent-Secrets-Production` for all agent and service wor
 4. Edit vault permissions (Read-only, no Write/Delete)
 5. Save
 
+## Canonical VM Cache Topology
+
+For the canonical dev/staging VM fleet, unattended `op` access is centralized on
+`epyc12`.
+
+### Topology
+
+- `epyc12` is the only canonical VM allowed to run unattended cache refreshes
+  from 1Password.
+- Other canonical VMs consume synced cache artifacts in cache-only mode and
+  must not invoke `op` from cron.
+- Current cache artifacts:
+  - `~/.cache/dx/op-secrets/agent_secrets_production.json`
+  - `~/.cache/dx/alerts-transport.env`
+  - `~/.cache/dx/op-cache-refresh.env`
+
+### Why
+
+This avoids repeated macOS privacy prompts such as:
+
+- `“op” would like to access data from other apps.`
+
+and gives the fleet a single unattended refresh surface to debug.
+
+### Canonical scripts
+
+- Refresh on `epyc12`:
+  - `~/agent-skills/scripts/dx-refresh-op-caches.sh`
+- Sync on consumer hosts:
+  - `~/agent-skills/scripts/dx-sync-op-caches.sh`
+
+### Required host behavior
+
+- `epyc12`
+  - may run `dx-refresh-op-caches.sh` from cron
+  - must have a valid `OP_SERVICE_ACCOUNT_TOKEN_FILE`
+- consumer hosts (`macmini`, `homedesktop-wsl`, `epyc6`, future additions)
+  - must set `DX_AUTH_CACHE_ONLY=1` for unattended cron paths
+  - may run `dx-sync-op-caches.sh`
+  - must not run unattended `op read`, `op item get`, or cache refresh helpers
+
+### Security boundary
+
+- 1Password remains the source of truth.
+- `epyc12` is the unattended refresh hub, not a general-purpose secrets broker.
+- Sync only the minimal cache artifacts required by consumers.
+- Consumers should fail closed or operate from existing cache if the refresh
+  source is unavailable; do not silently fall back to live `op` access on
+  macOS cron paths.
+
 ## Verification
 
 ### Check for Secrets in Shell History

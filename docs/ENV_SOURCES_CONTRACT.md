@@ -35,6 +35,15 @@ op run --env-file=.env -- command-that-needs-secrets
 - ❌ Forbidden: `op run -- --no-masking` (triggers op-guardrail.sh)
 - ❌ Forbidden: guessing app runtime secrets as ad hoc `op://dev/<random-item>/<FIELD>` paths
 
+### Canonical unattended cache rule
+
+For canonical VM cron jobs, "op-only" does not mean every host may run `op`
+directly.
+
+- `epyc12` is the canonical unattended refresh hub for OP-derived cache files.
+- Other canonical VMs must consume synced cache artifacts in cache-only mode.
+- macOS unattended cron paths must not invoke live `op` refreshes.
+
 ### 2. Railway CLI Login (Authenticated Session)
 **Definition**: Railway access via interactive CLI authentication session
 **Scope**: Manual deployment operations, developer-initiated workflows
@@ -160,6 +169,15 @@ op run --env-file=.env -- python3 script.py
 # WRONG: Hardcoded (triggers secret-scan.sh)
 ANTHROPIC_AUTH_TOKEN="your-hardcoded-token-here"  # NEVER DO THIS
 ```
+
+### Rule 4: Unattended host topology
+
+For canonical VM fleet automation:
+
+- unattended cache refreshes belong on `epyc12`
+- consumer hosts use synced cache files plus `DX_AUTH_CACHE_ONLY=1`
+- adding a new unattended cron path on a consumer host must not introduce live
+  `op` access
 
 ## Verification
 
