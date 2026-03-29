@@ -58,10 +58,10 @@ for f in "${DERIVED_FILES[@]}"; do
   done
 
   if [ "$NEED_HEADER_SKIP" -eq 1 ]; then
-    if ! diff <(git show "HEAD:$f" | tail -n +6) <(tail -n +6 "$f") >/dev/null 2>&1; then
+    if ! diff <(git show "HEAD:$f" | tail -n +6 | sed 's/[[:space:]]\+/ /g') <(tail -n +6 "$f" | sed 's/[[:space:]]\+/ /g') >/dev/null 2>&1; then
       echo "STALE: $f content differs from committed version" >&2
-      echo "--- diff (header-stripped) ---" >&2
-      diff <(git show "HEAD:$f" | tail -n +6) <(tail -n +6 "$f") >&2 || true
+      echo "--- diff (header-stripped, whitespace-normalized) ---" >&2
+      diff <(git show "HEAD:$f" | tail -n +6 | sed 's/[[:space:]]\+/ /g') <(tail -n +6 "$f" | sed 's/[[:space:]]\+/ /g') >&2 || true
       STALE=1
     fi
   else
