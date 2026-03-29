@@ -203,15 +203,117 @@ If this recommendation is accepted, the existing patched build can remain instal
 
 ---
 
+## 11. Are We Maximally Using llm-tldr Today?
+
+**No.** There are significant gaps between llm-tldr's actual capabilities and how we deploy/use it.
+
+### 11.1 Fleet Config Gap: No `--project` Flag
+
+The fleet manifest (`mcp-tools.yaml`) launches `tldr-mcp` with **zero args**:
+```yaml
+mcp:
+  type: stdio
+  command: "tldr-mcp"
+  args: []
+```
+
+This means `--project` defaults to `"."`, which resolves to the IDE's CWD. The MCP server then sets `TLDR_PROJECT` to that resolved path. This is fine for single-repo sessions where the IDE opens in the repo root, but:
+
+- **In Claude Code worktrees**, CWD is the worktree path — this actually works correctly (unlike context-plus)
+- **In Codex**, CWD depends on session init — may or may not be the right repo
+- **For multi-repo work**, the agent must pass the correct `project` path in each tool call
+
+**Key difference from context-plus**: llm-tldr's MCP tools accept a `project` parameter on *every call*. The daemon is spawned per-project-path (socket hash is per resolved path). So an agent can call `semantic(project="/tmp/agents/bd-xxx/agent-skills", query="...")` and get a daemon for that specific worktree. This is fundamentally different from context-plus where `ROOT_DIR` is locked at server startup.
+
+**However**, we are not exploiting this. The fleet config should probably pass `--project` explicitly for the default case, and the SKILL.md should document the per-call `project` parameter as the worktree escape hatch.
+
+### 11.2 Semantic Search: Installed but Not Warmed
+
+llm-tldr's semantic search (`tldr semantic`) requires a one-time `tldr warm <project>` to build the FAISS index. The daemon auto-spawns and indexes structural data (AST, call graph), but the semantic index (embeddings) must be built explicitly.
+
+**Current state**: We have no automation to run `tldr warm` on canonical repos or worktrees. This means `semantic` MCP calls likely fail with `FileNotFoundError: Semantic index not found`. The semantic lane exists in the code but is **not operationally active** in our fleet.
+
+**To actually use llm-tldr for semantic discovery**, we need:
+1. A one-time `tldr warm` for each canonical repo
+2. A `dx-worktree` hook or post-creation step that runs `tldr warm` on new worktrees
+3. Or: rely on the daemon's auto-reindex after 20 file changes (but this requires an initial warm)
+
+### 11.3 Capabilities We Don't Route To
+
+The SKILL.md lists these tools but the routing contract only sends "exact structural" work to llm-tldr:
+
+| llm-tldr Capability | Currently Routed? | Notes |
+|---------------------|-------------------|-------|
+| `semantic` (search by meaning) | **No** — routed to context-plus | The whole point of this reevaluation |
+| `tree` / `structure` | Partially — agents use Glob/Grep instead | llm-tldr's version respects .tldrignore and shows symbols |
+| `context` (entry-point summary) | **No** | 95% token savings for function exploration — unused |
+| `cfg` / `dfg` / `slice` | Rarely | Routed but agents default to reading files |
+| `impact` | Rarely | Routed but often bypassed for grep |
+| `dead` | **No** | Useful for refactoring but never triggered |
+| `arch` | **No** | Architectural layer detection — never triggered |
+| `change_impact` | **No** | Test targeting for changed files — never triggered |
+| `diagnostics` | **No** | Type check + lint — agents use Bash instead |
+
+**At least 6 of 16 MCP tools are effectively unused.**
+
+### 11.4 The `context` Tool: Biggest Missed Opportunity
+
+The `context(project, entry, depth, language)` tool follows the call graph from an entry point and returns a 95%-token-reduced summary. This is the *raison d'être* of llm-tldr — and we never route to it. Agents read full files instead.
+
+If we want "understand this function and its dependencies" to be a first-tool-routed task, `context` is the tool. It's more useful than `semantic` for many agent tasks.
+
+### 11.5 Product Gaps vs context-plus (Honest Assessment)
+
+| Feature | context-plus | llm-tldr | Gap Severity |
+|---------|-------------|----------|-------------|
+| Semantic search (by meaning) | `semantic_code_search` — works today with OpenRouter | `semantic` — **requires `tldr warm` first** | Medium — operational, not architectural |
+| Identifier-level semantic search | `semantic_identifier_search` — fine-grained | No direct equivalent (semantic search is function/class level) | Low — rarely needed at identifier level |
+| Spectral clustering | `semantic_navigate` | None | Low — never used in practice |
+| Memory graph (cross-session concepts) | 6 memory tools with decay | None | Low-Medium — overlaps with serena memory + Claude auto-memory |
+| Feature hub / wikilinks | `get_feature_hub` | None | Low — never used |
+| Blast radius (symbol usage) | `get_blast_radius` (text grep) | `impact` (call-graph based, more precise) | **llm-tldr is better** |
+| Context from entry point | None | `context` (95% token savings) | **llm-tldr unique strength** |
+| Call graph / impact | Basic text search | Full call graph with layers | **llm-tldr is better** |
+| CFG/DFG/slice | None | Full support (Layers 3-5) | **llm-tldr unique strength** |
+| Dead code detection | None | `dead` command | **llm-tldr unique strength** |
+| Worktree support | Broken (single root at startup) | Works (project param per call, daemon per path) | **llm-tldr is better** |
+
+**Bottom line**: The "product gaps" that originally justified keeping both tools have largely closed or were never exercised. The remaining gaps (spectral clustering, memory graph, identifier search) have near-zero usage. The areas where llm-tldr is *better* (call graph, CFG/DFG/slice, dead code, context, worktree support) are significant and underused.
+
+### 11.6 What Would "Maximally Using llm-tldr" Look Like?
+
+1. **Run `tldr warm` on all 4 canonical repos** (one-time, ~2 min each)
+2. **Add `--project` to fleet MCP config** or document per-call project parameter
+3. **Route semantic discovery to `semantic` tool** (with warm-gating)
+4. **Route "understand this function" to `context` tool** (new routing rule)
+5. **Route "what tests need to run" to `change_impact`** (new routing rule)
+6. **Add `tldr warm` to `dx-worktree` post-creation** (optional, for semantic in worktrees)
+7. **Expand SKILL.md trigger contract** to cover semantic, context, and change_impact
+
+---
+
 ## Immediate Recommendation
 
-**Demote context-plus from the canonical routing contract.** Change the MCP Tool-First Routing Contract (§5.4) so that semantic discovery routes to `llm-tldr` by default, not `context-plus`. Keep context-plus installed but mark it as experimental/optional in the manifest.
+Two concurrent actions:
+
+**A. Demote context-plus from the canonical routing contract.** Change the MCP Tool-First Routing Contract (§5.4) so that semantic discovery routes to `llm-tldr` by default, not `context-plus`. Keep context-plus installed but mark it as experimental/optional in the manifest.
 
 Concrete changes:
 1. Update routing contract: `semantic repo discovery → llm-tldr` (not context-plus)
 2. Mark all `context-plus-*` entries in `mcp-tools.yaml` as `enabled: false` or add `experimental: true`
 3. Stop further Codex patching for context-plus
 4. Keep the `context-plus` base entry for opt-in use
+
+**B. Operationalize llm-tldr's underused capabilities.** The tool has the features but we haven't wired them up.
+
+Concrete changes:
+1. Run `tldr warm` on all 4 canonical repos (one-time bootstrap)
+2. Add `--project` flag or document per-call `project` parameter in SKILL.md
+3. Expand the llm-tldr trigger contract to include:
+   - semantic discovery → `semantic` tool (requires warm index)
+   - "understand this function" → `context` tool
+   - "what tests need to run" → `change_impact` tool
+4. Add `tldr warm` guidance for worktree workflows (optional post-creation step)
 
 ## Long-Term Recommendation
 
@@ -221,14 +323,16 @@ If upstream contextplus adds dynamic root selection (PR #423 Option 1), reassess
 
 ## Decision
 
-**Demote to experimental.** This is functionally equivalent to "replace with llm-tldr for the default lane" because the routing contract change is the same. The only difference is we don't delete the install — we preserve optionality.
+**Demote context-plus to experimental + operationalize llm-tldr.** The routing contract change and the operational bootstrap are both needed — changing the routing without warming the semantic index just moves the failure point.
 
 ## Migration Consequence
 
 - Routing contract change in `publish-baseline.zsh` and CLAUDE.md: one text edit
 - `mcp-tools.yaml`: mark `context-plus-*` entries as experimental or disabled
+- Expand llm-tldr SKILL.md trigger contract
+- Run `tldr warm` on 4 canonical repos (~8 min total, one-time)
 - No code changes to any app repo
 - No agent retraining — the routing contract is injected via generated baselines
-- Reversible: re-enable entries and restore routing text
+- Reversible: re-enable context-plus entries and restore routing text
 
-This is a low-risk, high-clarity change. The main consequence is acknowledging that the prior decision was made before llm-tldr had semantic search and before worktree-first development was the standard workflow.
+This is a low-risk, high-clarity change. The main consequence is acknowledging that the prior decision was made before llm-tldr had semantic search and before worktree-first development was the standard workflow. The secondary consequence is that we need to actually bootstrap the capabilities we're routing to.
