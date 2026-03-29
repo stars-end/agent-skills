@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse, json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
@@ -103,6 +103,139 @@ def now_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _read_wave_state(state_file: Path) -> Optional[Dict[str, Any]]:
+    """Read a persisted wave state file."""
+    try:
+        return json.loads(state_file.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _iter_wave_states(artifact_base: Path) -> List[Tuple[str, Path, Dict[str, Any]]]:
+    """Return all readable wave states under the artifact base."""
+    waves_dir = artifact_base / "waves"
+    if not waves_dir.exists():
+        return []
+
+    states: List[Tuple[str, Path, Dict[str, Any]]] = []
+    for wave_dir in waves_dir.iterdir():
+        if not wave_dir.is_dir():
+            continue
+        state_file = wave_dir / "loop_state.json"
+        if not state_file.exists():
+            continue
+        state = _read_wave_state(state_file)
+        if state is None:
+            continue
+        states.append((wave_dir.name, state_file, state))
+    return states
+
+
+def _wave_matches(
+    state: Dict[str, Any],
+    *,
+    epic_id: Optional[str] = None,
+    beads_id: Optional[str] = None,
+) -> bool:
+    """Return True when persisted state matches the provided epic/task filter."""
+    if epic_id and state.get("epic_id") != epic_id:
+        return False
+
+    if beads_id:
+        tasks = state.get("beads_manager", {}).get("tasks", {})
+        if beads_id not in tasks:
+            return False
+
+    return True
+
+
+def _select_wave_state(
+    *,
+    wave_id: Optional[str] = None,
+    epic_id: Optional[str] = None,
+    beads_id: Optional[str] = None,
+    artifact_base: Path = ARTIFACT_BASE,
+) -> Optional[Tuple[str, Path, Dict[str, Any]]]:
+    """Resolve one persisted wave by id, epic, or task, preferring the newest match."""
+    if wave_id:
+        state_file = artifact_base / "waves" / wave_id / "loop_state.json"
+        if not state_file.exists():
+            return None
+        state = _read_wave_state(state_file)
+        if state is None:
+            return None
+        return wave_id, state_file, state
+
+    matches = [
+        item
+        for item in _iter_wave_states(artifact_base)
+        if _wave_matches(item[2], epic_id=epic_id, beads_id=beads_id)
+    ]
+    if not matches:
+        return None
+
+    matches.sort(key=lambda item: item[2].get("updated_at", ""), reverse=True)
+    return matches[0]
+
+
+def _classify_wave_surface(
+    state: Dict[str, Any], *, beads_id: Optional[str] = None
+) -> str:
+    """Classify whether the current problem is product, control-plane, dependency, or none."""
+    wave_status = state.get("wave_status", {})
+    blocker_code = wave_status.get("blocker_code")
+    if blocker_code in {"kickoff_env_blocked", "run_blocked", "deterministic_redispatch_needed"}:
+        return "control_plane"
+    if blocker_code == "waiting_on_dependency":
+        return "dependency"
+    if blocker_code == "review_blocked":
+        return "product"
+    if blocker_code == "merge_ready":
+        return "none"
+
+    if blocker_code == "needs_decision":
+        blocked_details = wave_status.get("blocked_details", [])
+        for detail in blocked_details:
+            if beads_id and detail.get("beads_id") not in {beads_id, None}:
+                continue
+            phase = detail.get("phase")
+            if phase == "review":
+                return "product"
+        return "control_plane"
+
+    return "none"
+
+
+def _next_action_for_state(state: Dict[str, Any], *, surface: str) -> str:
+    """Return a compact next action string for explain/status surfaces."""
+    wave_status = state.get("wave_status", {})
+    blocker_code = wave_status.get("blocker_code")
+    if surface == "product":
+        return "Address review findings or make a narrow manual repair, then resume the loop."
+    if surface == "control_plane":
+        return "Inspect dx-loop/dx-runner startup or runner state and repair the control plane before redispatch."
+    if surface == "dependency":
+        return "Wait for or complete upstream dependencies before retrying this task."
+    if blocker_code == "merge_ready":
+        return "Review the PR and merge if clean."
+    return "Continue monitoring; no blocking action is currently required."
+
+
+def _summarize_task_state(state: Dict[str, Any], beads_id: str) -> Dict[str, Any]:
+    """Extract task-local context from persisted wave state."""
+    tasks = state.get("beads_manager", {}).get("tasks", {})
+    baton_states = state.get("baton_states", {})
+    task = tasks.get(beads_id, {})
+    baton = baton_states.get(beads_id, {})
+    return {
+        "title": task.get("title"),
+        "repo": task.get("repo"),
+        "status": task.get("status"),
+        "phase": baton.get("phase"),
+        "metadata": baton.get("metadata", {}),
+    }
+
+
 class DxLoop:
     """
     Main dx-loop orchestration class - v1.1 with fixes
@@ -116,6 +249,7 @@ class DxLoop:
 
     def __init__(self, wave_id: str, config: Optional[Dict[str, Any]] = None):
         self.wave_id = wave_id
+        self.epic_id: Optional[str] = None
         self.config = {**DEFAULT_CONFIG, **(config or {})}
 
         # Initialize components
@@ -198,6 +332,7 @@ class DxLoop:
 
         Loads epic tasks and computes topological layers.
         """
+        self.epic_id = epic_id
         print(f"Loading epic {epic_id} from Beads...")
         tasks = self.beads_manager.load_epic_tasks(epic_id)
 
@@ -1457,6 +1592,7 @@ Do not return a verdict until you have checked whether:
 
         state = {
             "wave_id": self.wave_id,
+            "epic_id": self.epic_id,
             "config": self.config,
             "version": VERSION,
             "updated_at": now_utc(),
@@ -1502,6 +1638,7 @@ Do not return a verdict until you have checked whether:
                 self.state_machine.tracker = LoopStateTracker.from_dict(
                     state["state_machine"]
                 )
+            self.epic_id = state.get("epic_id")
 
             # Restore baton states
             if "baton_states" in state:
@@ -1556,13 +1693,17 @@ def cmd_start(args):
 
     config = load_config_file(getattr(args, "config", None))
     loop = DxLoop(wave_id, config=config)
+    print(f"Wave ID: {wave_id}")
 
     is_restart = loop._load_state()
 
     # Persist a minimal wave record immediately so status remains observable
     # even if bootstrap or startup-adoption takes a long time.
     if not is_restart:
+        loop.epic_id = epic_id
         loop._save_state()
+        print(f"Wave state initialized for epic {epic_id}")
+        print(f"Inspect with: dx-loop status --wave-id {wave_id}")
 
     if is_restart and not loop.beads_manager.tasks:
         print(
@@ -1589,9 +1730,11 @@ def cmd_start(args):
 
 def cmd_status(args):
     """Show dx-loop status"""
-    wave_id = args.wave_id
+    wave_id = getattr(args, "wave_id", None)
+    epic_id = getattr(args, "epic", None)
+    beads_id = getattr(args, "beads_id", None)
 
-    if not wave_id:
+    if not wave_id and not epic_id and not beads_id:
         # List all waves
         waves_dir = ARTIFACT_BASE / "waves"
         if not waves_dir.exists():
@@ -1608,19 +1751,34 @@ def cmd_status(args):
             print(f"  {wid}")
         return 0
 
-    # Show specific wave
-    state_file = ARTIFACT_BASE / "waves" / wave_id / "loop_state.json"
-    if not state_file.exists():
-        print(f"Wave {wave_id} not found", file=sys.stderr)
+    resolved = _select_wave_state(
+        wave_id=wave_id,
+        epic_id=epic_id,
+        beads_id=beads_id,
+        artifact_base=ARTIFACT_BASE,
+    )
+    if not resolved:
+        target = wave_id or epic_id or beads_id or "<unknown>"
+        print(f"Wave state not found for {target}", file=sys.stderr)
         return 1
+    wave_id, state_file, state = resolved
 
     try:
-        state = json.loads(state_file.read_text())
-
         if args.json:
             print(json.dumps(state, indent=2))
         else:
             print(f"Wave: {wave_id}")
+            if state.get("epic_id"):
+                print(f"Epic: {state.get('epic_id')}")
+            if beads_id:
+                task_summary = _summarize_task_state(state, beads_id)
+                print(f"Task: {beads_id}")
+                if task_summary.get("title"):
+                    print(f"Task Title: {task_summary['title']}")
+                if task_summary.get("phase"):
+                    print(f"Task Phase: {task_summary['phase']}")
+                if task_summary.get("repo"):
+                    print(f"Task Repo: {task_summary['repo']}")
             print(f"Version: {state.get('version', 'unknown')}")
             print(f"Updated: {state.get('updated_at', 'unknown')}")
 
@@ -1672,6 +1830,74 @@ def cmd_status(args):
     except (json.JSONDecodeError, KeyError):
         print(f"ERROR: Invalid state file for {wave_id}", file=sys.stderr)
         return 1
+
+
+def cmd_explain(args):
+    """Explain the current blocker/state in agent-native terms."""
+    resolved = _select_wave_state(
+        wave_id=getattr(args, "wave_id", None),
+        epic_id=getattr(args, "epic", None),
+        beads_id=getattr(args, "beads_id", None),
+        artifact_base=ARTIFACT_BASE,
+    )
+    if not resolved:
+        target = (
+            getattr(args, "wave_id", None)
+            or getattr(args, "epic", None)
+            or getattr(args, "beads_id", None)
+            or "<unknown>"
+        )
+        print(f"Wave state not found for {target}", file=sys.stderr)
+        return 1
+
+    wave_id, _state_file, state = resolved
+    beads_id = getattr(args, "beads_id", None)
+    wave_status = state.get("wave_status", {})
+    surface = _classify_wave_surface(state, beads_id=beads_id)
+    next_action = _next_action_for_state(state, surface=surface)
+
+    print(f"Wave: {wave_id}")
+    if state.get("epic_id"):
+        print(f"Epic: {state.get('epic_id')}")
+    if beads_id:
+        task_summary = _summarize_task_state(state, beads_id)
+        print(f"Task: {beads_id}")
+        if task_summary.get("title"):
+            print(f"Task Title: {task_summary['title']}")
+        if task_summary.get("phase"):
+            print(f"Task Phase: {task_summary['phase']}")
+    print(f"State: {wave_status.get('state', 'unknown')}")
+    print(f"Blocker Code: {wave_status.get('blocker_code') or 'none'}")
+    print(f"Surface: {surface}")
+    print(f"Reason: {wave_status.get('reason', 'unknown')}")
+    print(f"Next Action: {next_action}")
+
+    blocked_details = wave_status.get("blocked_details", [])
+    if beads_id:
+        blocked_details = [
+            detail for detail in blocked_details if detail.get("beads_id") == beads_id
+        ] or blocked_details
+    if blocked_details:
+        print("Details:")
+        for detail in blocked_details[:5]:
+            line = detail.get("beads_id", "unknown")
+            if detail.get("phase"):
+                line = f"{line} [{detail['phase']}]"
+            extras = [
+                value
+                for value in (
+                    detail.get("reason_code"),
+                    detail.get("detail"),
+                    ", ".join(detail.get("unmet_dependencies", []))
+                    if detail.get("unmet_dependencies")
+                    else None,
+                )
+                if value
+            ]
+            if extras:
+                line = f"{line}: {' | '.join(extras)}"
+            print(f"  {line}")
+    return 0
 
 
 def cmd_takeover(args):
@@ -1794,8 +2020,22 @@ def main():
     # status
     status_parser = subparsers.add_parser("status", help="Show dx-loop status")
     status_parser.add_argument("--wave-id", help="Wave ID")
+    status_parser.add_argument("--epic", help="Resolve the newest wave for an epic")
+    status_parser.add_argument(
+        "--beads-id", help="Resolve the newest wave containing a Beads task"
+    )
     status_parser.add_argument("--json", action="store_true", help="JSON output")
     status_parser.set_defaults(func=cmd_status)
+
+    explain_parser = subparsers.add_parser(
+        "explain", help="Explain current blocker/state in agent-native terms"
+    )
+    explain_parser.add_argument("--wave-id", help="Wave ID")
+    explain_parser.add_argument("--epic", help="Resolve the newest wave for an epic")
+    explain_parser.add_argument(
+        "--beads-id", help="Resolve the newest wave containing a Beads task"
+    )
+    explain_parser.set_defaults(func=cmd_explain)
 
     # takeover (Pillar B)
     takeover_parser = subparsers.add_parser(
