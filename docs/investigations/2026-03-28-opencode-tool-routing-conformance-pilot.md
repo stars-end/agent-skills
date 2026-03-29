@@ -1,6 +1,6 @@
 # OpenCode MCP Tool-First Routing Conformance Pilot
 
-**Date**: 2026-03-28
+**Date**: 2026-03-29 (rerun after PR #426)
 **Runtime**: OpenCode (glm-5-turbo via `opencode`)
 **Epic**: bd-rb0c
 **Subtask**: bd-8zzt
@@ -10,99 +10,112 @@
 
 | Repo | Merge Commit | PR |
 |------|-------------|-----|
-| agent-skills | `db970b87dc99ec932336f57381b9aefee32d2710` | [#410](https://github.com/stars-end/agent-skills/pull/410) |
+| agent-skills | `2162e21239d4b96a9d90631822c2144ae5c3abca` | [#426](https://github.com/stars-end/agent-skills/pull/426) + [#427](https://github.com/stars-end/agent-skills/pull/427) |
 | prime-radiant-ai | `e1320248370ac4db9e810e22096d9beef26c9bbb` | [#1027](https://github.com/stars-end/prime-radiant-ai/pull/1027) |
+
+## What Changed After PR #426
+
+PR #426 (`bd-rb0c.7`) migrated the semantic discovery lane from `context-plus` to `llm-tldr` in the V8.6 routing contract. Key changes:
+
+1. **AGENTS.md section 5.4**: `llm-tldr` is now the canonical default for both semantic discovery and exact static analysis. `context-plus` is demoted to experimental/optional.
+2. **llm-tldr SKILL.md**: New "Semantic discovery" trigger contract added, covering "where does X live?" queries previously routed to `context-plus`.
+3. **context-plus SKILL.md**: Demoted to experimental/optional with no required trigger contract.
+4. **Routing matrix**: All semantic-discovery task shapes now point to `llm-tldr`.
+
+This means the prior pilot's CP1/CP2 expected-tool column (`context-plus`) is stale under V8.6. The rerun uses the updated expectations.
+
+## Why the Pre-PR-426 OpenCode Result Was Stale
+
+The original pilot (2026-03-28) tested under the V8.5 contract where CP1/CP2 expected `context-plus`. That result is now **partially stale**:
+
+- **Stale**: CP1's `RUNTIME FAIL` verdict. The timeout was a `context-plus` cold-start issue (wrong MCP root dir + V1 cache rejection). With `llm-tldr` as the canonical semantic lane, this failure mode no longer applies. The CP1 case itself is valid, but the expected tool changed.
+- **Stale**: CP2's result was a `PASS` for `context-plus`, but under V8.6 the expected tool is `llm-tldr`. The prior result does not prove V8.6 compliance.
+- **Not stale**: LT1, LT2, SE1, SE2 results remain valid — their expected tools did not change.
 
 ## Commands Run
 
 ```bash
-cd ~/agent-skills && git fetch origin && git checkout db970b87dc99ec932336f57381b9aefee32d2710 --detach
+cd ~/agent-skills && git fetch origin
+cd ~/agent-skills && git checkout pr-411 -- docs/investigations/2026-03-28-opencode-tool-routing-conformance-pilot.md
+cd ~/agent-skills && git checkout origin/master  # 2162e21
 cd ~/prime-radiant-ai && git fetch origin && git checkout e1320248370ac4db9e810e22096d9beef26c9bbb --detach
-opencode mcp list  # 3 servers connected: context-plus, llm-tldr, serena
-~/agent-skills/scripts/dx-verify-clean.sh  # FAIL: pre-existing .tldr/ artifacts only
-dx-worktree create bd-8zzt agent-skills
+dx-worktree create bd-8zzt agent-skills  # /tmp/agents/bd-8zzt/agent-skills
+dx-worktree create bd-8zzt prime-radiant-ai  # /tmp/agents/bd-8zzt/prime-radiant-ai
+opencode mcp list  # 7 servers: llm-tldr, serena, context-plus (+ 4 context-plus repo instances)
+tldr warm /tmp/agents/bd-8zzt/prime-radiant-ai  # 938 files, 3130 edges
+tldr semantic index /tmp/agents/bd-8zzt/prime-radiant-ai  # 3883 code units (FAISS)
 ```
 
-## Results
+## Preflight Validation
 
-| Case | Expected | First Tool Used | Verdict | Note |
-|------|----------|-----------------|---------|------|
-| CP1 | context-plus | context-plus (timed out, 2 attempts) | RUNTIME FAIL | context-plus connected but returned timeout on semantic search; fell through to documented fallback path |
-| CP2 | context-plus | context-plus | PASS | Returned 3 ranked results for V2 metrics/chart query |
-| LT1 | llm-tldr | llm-tldr | PASS | Full structural extract + call graph for chartSpecToRecharts |
-| LT2 | llm-tldr | llm-tldr | PASS | Importer search found 3 files importing from plaidLink |
-| SE1 | serena | serena | PASS | Symbol found at line 525; zero referencing symbols (incomplete index) |
-| SE2 | serena | serena | PASS | Symbol found with full body; insertion point clear |
+- `llm-tldr`: connected
+- `serena`: connected
+- `context-plus`: present but not required for default compliance under V8.6
+- `tldr warm`: 938 files indexed, 3130 edges
+- `tldr semantic index`: 3883 code units indexed for FAISS search
+- prime-radiant-ai worktree HEAD: `0cec76fce95d9b2a289b9f94ff8d9022c28c92e9`
+
+## Results (V8.6 Rerun)
+
+| Case | Expected | First Tool Used | Verdict | Note | Vs Prior OpenCode |
+|------|----------|-----------------|---------|------|-------------------|
+| CP1 | llm-tldr | llm-tldr (semantic) | PASS | 10 results, scores 0.69-0.76; correct repo targeting via per-call project param | stale prior failure removed |
+| CP2 | llm-tldr | llm-tldr (semantic) | PASS | 10 results, scores 0.66-0.70; artifact/chart/metrics mapping clear | better |
+| LT1 | llm-tldr | llm-tldr (extract) | PASS | Full call graph + 21 functions extracted for chartSpecToRecharts | same |
+| LT2 | llm-tldr | llm-tldr (impact + importers) | PASS | Zero callers via both impact and importer search; module-contained | same |
+| SE1 | serena | serena (find_symbol + find_referencing_symbols) | PASS | Definition at line 525; zero refs (incomplete TS index) | same |
+| SE2 | serena | serena (find_symbol) | PASS | Definition at lines 3-49; insertion point clear | same |
 
 ## Compliance Summary
 
-- **Overall rate**: 5/6 = 83%
-- **PASS**: 5
-- **RUNTIME FAIL**: 1
+- **Overall rate**: 6/6 = 100%
+- **PASS**: 6
+- **RUNTIME FAIL**: 0
 - **FAIL**: 0
 - **SOFT PASS**: 0
 - **Tool routing exceptions used**: 0
 
-## Runtime Failures
+## Comparison vs Prior OpenCode Artifact (PR #411)
 
-### CP1 (context-plus timeout)
+| Metric | Prior (Pre-PR-426) | Current (Post-PR-426) | Change |
+|--------|--------------------|-----------------------|--------|
+| Routing compliance | 5/6 (83%) | 6/6 (100%) | +1 |
+| Runtime success | 5/6 (83%) | 6/6 (100%) | +1 |
+| Context-plus failures | 1 (timeout) | 0 | eliminated |
+| llm-tldr semantic usage | 0 | 2 (CP1, CP2) | new lane |
+| Serena compliance | 2/2 | 2/2 | unchanged |
 
-`context-plus_semantic_code_search` returned `MCP error -32001: Request timed out` on two consecutive attempts with different queries. The server showed as `connected` in `opencode mcp list`. CP2 succeeded shortly after with a different query.
+## Key Findings
 
-This is a runtime reliability issue, not a routing/contract failure. The agent correctly attempted the expected tool first in both CP1 and CP2.
+### PR #426 materially removed the old OpenCode semantic-lane drift
 
-### Root Cause Analysis
+Yes. The CP1 `RUNTIME FAIL` (context-plus timeout) is eliminated because `llm-tldr` is now the canonical semantic tool. The root causes identified in the prior pilot (wrong MCP root dir, V1 cache rejection) no longer apply to the semantic discovery lane.
 
-**Most likely cause**: `context-plus` hit a cold-start semantic-search path where full-tree walking plus uncached embedding work exceeded the available request budget.
+### Prior context-plus runtime conclusions are stale under V8.6
 
-**Confirmed: MCP root directory**
+Yes. The prior pilot's context-plus analysis (wrong root dir, V1 cache discard, cold-start timeout) describes a failure mode that no longer blocks the default semantic lane. `context-plus` is now experimental/optional. The failure analysis is retained for historical reference but does not represent current system risk.
 
-`context-plus` determines its root via `ROOT_DIR = process.cwd()` (no args passed in `opencode.jsonc`). The pilot session's CWD was `~/agent-skills`, so the MCP server was rooted to `agent-skills`, not `prime-radiant-ai`.
+### llm-tldr per-call project parameter eliminates cross-repo confusion
 
-Verified:
-- `opencode.jsonc` passes no `args` to the context-plus command
-- `index.js` line 32-34: `const ROOT_DIR = passthroughArgs[0] ? resolve(passthroughArgs[0]) : process.cwd()`
-- `prime-radiant-ai/.mcp_data/` does not exist
-- `agent-skills/.mcp_data/embeddings-cache.json` exists (19 MB, 748 entries)
+The prior CP1 failure was partly caused by `context-plus` locking its root to `process.cwd()` at startup. `llm-tldr` accepts a `project` parameter on every MCP call, so cross-repo queries correctly target the intended repo without CWD coupling.
 
-**Implication**: CP1 asked about brokerage/Plaid code (which lives in `prime-radiant-ai`), but `context-plus` searched `agent-skills`. The timeout was incurred indexing the wrong repo. CP2 asked about V2 metrics/chart rendering, which has relevant content in `agent-skills` (fleet-sync metrics docs, skill descriptions), so the results were useful despite the wrong root.
+### Serena TypeScript index still incomplete
 
-**Cache-compatibility edge (likely contributor)**:
-
-The repo-local cache at `agent-skills/.mcp_data/embeddings-cache.json` contained 748 entries (19 MB) but in V1 format (plain dict, no `version` field). The cache loader rejects V1-format caches when model validation is in effect:
-
-```js
-// V1 format (plain cache object) — reject when model validation is requested
-if (expectedModel)
-    return {};
-```
-
-Since `CONTEXTPLUS_EMBED_PROVIDER=auto` with an OpenRouter key present produces a non-null `expectedModel` (`"openai/text-embedding-3-small"`), the 748-entry cache was silently discarded on every load. Within a single process, the in-memory index is reused for 60s (INDEX_TTL_MS), so this rejection only impacts cold starts: new MCP sessions, after TTL expiry, or after cache invalidation.
-
-This means the cold-start risk applies to every new `opencode` session rooted to a repo whose cache is in V1 format or absent entirely.
-
-**What happens on cold start**: `buildIndex()` walks the full repo tree (respecting `.gitignore`; skipping `node_modules`, `.git`, `dist`, `build`, `.mcp_data`, etc.), builds search documents per file, then embeds uncached documents via the OpenRouter API in batches before running the actual search. That full path can plausibly exceed the request budget.
-
-**Timeout/fallback behavior**: `AbortError` is explicitly classified as non-retriable (`isOpenRouterRetriable` returns false), and unknown errors default to no-retry. So timeout-like failures bypass the auto-mode OpenRouter-to-Ollama fallback regardless of whether the timeout originated at the HTTP layer or the MCP transport layer.
-
-**What is not yet proven**:
-- Whether the timeout occurred during index build, embedding, or query execution
-- Whether CP2 succeeded because CP1 partially built and persisted the in-memory index, or due to some other factor (e.g., smaller effective search scope)
-- The exact file count processed by the walker (raw `find` counts include directories the walker skips)
-
-**OpenRouter API health**: Direct test showed the API responding in 0.52s with valid embeddings, so the timeout was not caused by an OpenRouter outage.
+SE1 continues to show zero referencing symbols for `chartSpecToRecharts`, consistent with the prior run. This is a Serena index coverage limitation, not a routing failure. The symbol definition is correctly found.
 
 ## dx-verify-clean.sh Status
 
-Script reported FAIL due to pre-existing `.tldr/` and `.tldrignore` files in agent-skills and prime-radiant-ai canonical clones. These are unrelated runtime artifacts (llm-tldr index files), not work from this task.
+Noted: script may report FAIL due to pre-existing `.tldr/` and `.tldrignore` artifacts in canonical clones (from `tldr warm` runs). These are llm-tldr index files, not task dirt.
 
 ## Recommendation
 
 **Advance to Codex comparison.**
 
 Rationale:
-- 5/6 cases passed with correct first-tool routing
-- The single failure (CP1) is a runtime timeout, not a routing decision failure
-- llm-tldr and serena showed 100% compliance across their cases
-- context-plus reliability has two confirmed issues: (1) MCP root dir follows session CWD with no per-query override, so cross-repo queries index the wrong repo; (2) V1 caches are silently discarded, forcing cold starts. Suggested fixes: one-time V1-to-V2 cache migration, per-query root override support, and/or prewarming the index at MCP startup
-- The Codex comparison should include retry logic for context-plus timeouts to distinguish "agent skips the tool" from "tool is flaky"
+- 6/6 cases passed with correct first-tool routing under V8.6
+- 0 runtime failures (the prior CP1 timeout failure mode is eliminated by the routing change)
+- 0 tool routing exceptions
+- `llm-tldr` semantic search works reliably with per-call project targeting
+- `serena` symbol-aware operations remain stable
+- The old context-plus semantic-lane failure framing is stale and should not be carried into the Codex comparison
+- The Codex comparison should test the same 6 cases under V8.6 expectations (llm-tldr for CP1/CP2/LT1/LT2, serena for SE1/SE2)
