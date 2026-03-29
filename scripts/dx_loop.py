@@ -455,6 +455,9 @@ class DxLoop:
 
             # PHASE 2: Poll active task progress
             self._check_progress()
+            reconciled = self.reconcile_finished_jobs()
+            if reconciled:
+                print("Recovered finished runner state for: " + ", ".join(reconciled))
 
             # PHASE 3: Get ready tasks (respecting scheduler state)
             readiness = self.beads_manager.describe_wave_readiness()
@@ -690,6 +693,66 @@ class DxLoop:
             adopted.append(beads_id)
 
         return adopted
+
+    def reconcile_finished_jobs(self) -> list[str]:
+        """
+        Recover completed runner outcomes that were missed while no supervisor polled.
+
+        This allows restart/resume to ingest finished implement or review jobs from
+        dx-runner state instead of leaving the baton stuck in an earlier phase.
+        """
+        reconciled: list[str] = []
+        candidate_ids = sorted(
+            set(self.beads_manager.tasks.keys())
+            | set(self.baton_manager.baton_states.keys())
+        )
+
+        for beads_id in candidate_ids:
+            if self.scheduler.state.is_completed(beads_id):
+                continue
+
+            baton_state = self.baton_manager.get_state(beads_id)
+            if baton_state and baton_state.phase in (
+                BatonPhase.COMPLETE,
+                BatonPhase.FAILED,
+                BatonPhase.MANUAL_TAKEOVER,
+            ):
+                continue
+
+            before_phase = baton_state.phase if baton_state else None
+            had_artifact = self.pr_enforcer.has_valid_artifact(beads_id)
+            handled = False
+
+            if baton_state and baton_state.phase == BatonPhase.REVIEW:
+                review_state = self.review_runner.check(f"{beads_id}-review")
+                if review_state and review_state.is_complete():
+                    self._check_review_progress(beads_id)
+                    handled = True
+            else:
+                task_state = self.implement_runner.check(beads_id)
+                if task_state and task_state.is_complete():
+                    if not baton_state:
+                        self.baton_manager.start_implement(
+                            beads_id,
+                            run_id=f"recovered-{beads_id}",
+                        )
+                    self._check_implement_progress(beads_id)
+                    handled = True
+
+            if not handled:
+                continue
+
+            after_state = self.baton_manager.get_state(beads_id)
+            after_phase = after_state.phase if after_state else None
+            has_artifact = self.pr_enforcer.has_valid_artifact(beads_id)
+            if (
+                before_phase != after_phase
+                or had_artifact != has_artifact
+                or self.scheduler.state.is_completed(beads_id)
+            ):
+                reconciled.append(beads_id)
+
+        return reconciled
 
     def _dispatch_task(self, beads_id: str, phase: str = "implement") -> bool:
         """Dispatch a single task through implement/review cycle"""
@@ -1765,7 +1828,8 @@ Do not return a verdict until you have checked whether:
 
 def cmd_start(args):
     """Start dx-loop for an epic"""
-    wave_id = args.wave_id or f"wave-{now_utc().replace(':', '-').replace('T', '-')}"
+    requested_wave_id = getattr(args, "wave_id", None)
+    wave_id = requested_wave_id or f"wave-{now_utc().replace(':', '-').replace('T', '-')}"
     epic_id = args.epic
 
     config = load_config_file(getattr(args, "config", None))
@@ -1779,16 +1843,22 @@ def cmd_start(args):
     if existing:
         existing_wave_id, _existing_state_file, existing_state = existing
         if existing_wave_id != wave_id and not _wave_is_replaceable(existing_state):
-            print(
-                f"Active wave already exists for epic {epic_id}: {existing_wave_id}",
-                file=sys.stderr,
-            )
-            print(
-                "Reuse the existing wave via `dx-loop status --epic "
-                f"{epic_id}` or `dx-loop explain --epic {epic_id}`.",
-                file=sys.stderr,
-            )
-            return 1
+            if not requested_wave_id:
+                print(
+                    f"Resuming existing active wave for epic {epic_id}: {existing_wave_id}"
+                )
+                wave_id = existing_wave_id
+            else:
+                print(
+                    f"Active wave already exists for epic {epic_id}: {existing_wave_id}",
+                    file=sys.stderr,
+                )
+                print(
+                    "Reuse the existing wave via `dx-loop status --epic "
+                    f"{epic_id}` or `dx-loop explain --epic {epic_id}`.",
+                    file=sys.stderr,
+                )
+                return 1
 
     loop = DxLoop(wave_id, config=config)
     print(f"Wave ID: {wave_id}")
@@ -1819,6 +1889,11 @@ def cmd_start(args):
         print(
             f"Adopted {len(adopted)} already-running job(s): {', '.join(adopted)}"
         )
+
+    reconcile_finished_jobs = getattr(loop, "reconcile_finished_jobs", None)
+    reconciled = reconcile_finished_jobs() if reconcile_finished_jobs else []
+    if reconciled:
+        print(f"Recovered finished job outcome(s): {', '.join(reconciled)}")
 
     loop._save_state()
     success = loop.run_loop()
