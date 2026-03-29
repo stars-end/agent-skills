@@ -1,4 +1,4 @@
-# Codex vs OpenCode MCP Tool-First Routing Comparison (Post-PR-419 Rerun)
+# Codex vs OpenCode MCP Tool-First Routing Comparison (Post-PR-426 Rerun)
 
 **Date**: 2026-03-29  
 **Runtime checked**: Codex CLI (`codex exec --json`)  
@@ -6,68 +6,105 @@
 **Subtask**: bd-e5z8  
 **Mode**: qa_pass
 
-## Why Pre-PR-419 Codex Result Was Stale/Incomplete
+## Why The Pre-PR-426 Codex Result Was Stale/Partially Stale
 
-The prior blocker state was stale at client level: this VM now exposes repo-scoped MCP entries in `codex mcp list`:
-- `context-plus-agent-skills`
-- `context-plus-prime-radiant-ai`
-- `context-plus-affordabot`
-- `context-plus-llm-common`
-- `llm-tldr`
-- `serena`
+The previous Codex memo in PR #413 scored semantic cases against the old context-plus-first contract. PR #426 replaced that contract: semantic discovery now routes to `llm-tldr` by default, and `context-plus` is experimental/optional.
 
-So pre-PR-419 assumptions about missing repo-scoped entries are no longer valid for this client session.
+So prior CP1/CP2 failures tied to context-plus expectations were not valid V8.6 compliance evidence.
 
-## What Changed After PR #419
+## What Changed After PR #426
 
-PR #419 merged the repo-scoped Context+ launcher contract on trunk (`origin/master` at `bf8d5836e804f9bc2fb19207ecaa4feea35e9bda`), including explicit path-arg MCP entries in:
-- `configs/mcp-tools.yaml`
-- `config-templates/fleet-sync-codex-cli.template.toml`
+Under V8.6:
+- semantic discovery -> `llm-tldr` (canonical default)
+- exact static analysis -> `llm-tldr`
+- symbol-aware tasks -> `serena`
+- `context-plus` -> optional/experimental only
 
-This rerun was executed after confirming that merged state.
+OpenCode PR #411 was also updated to this V8.6 baseline (`acb69003bcc7c46255da25c4e075567a10b4adc4`).
 
-## Preflight + Baselines
+## Merged Source Revisions Used
 
-- `prime-radiant-ai` HEAD used: `e1320248370ac4db9e810e22096d9beef26c9bbb`
-- OpenCode baseline memo read from PR #411
-- Codex comparison branch updated on PR #413
+| Repo | Revision Used | Notes |
+|------|---------------|-------|
+| agent-skills | `origin/master` -> `ebbe77933a722eece3633870d945b8b32ae9c2ef` | Verified V8.6 routing text via `origin/master` (canonical checkout blocked by unrelated untracked files) |
+| prime-radiant-ai | `e1320248370ac4db9e810e22096d9beef26c9bbb` | Required downstream baseline |
 
-## Rerun Results
+## Commands Run
+
+```bash
+# Mandatory fetch/read phase in canonical agent-skills
+git fetch origin pull/411/head:pr-411
+git fetch origin pull/413/head:pr-413
+git fetch origin pull/426/head:pr-426
+git checkout pr-413
+
+# Trunk verification (checkout blocked by unrelated untracked canonical files)
+git fetch origin
+git rev-parse origin/master
+git show origin/master:docs/specs/2026-03-27-mcp-tool-first-routing-and-cass-disposition.md
+
+git show origin/master:extended/llm-tldr/SKILL.md
+
+# prime baseline checkout
+git -C ~/prime-radiant-ai fetch origin
+git -C ~/prime-radiant-ai checkout e1320248370ac4db9e810e22096d9beef26c9bbb
+git -C ~/prime-radiant-ai rev-parse HEAD
+
+# worktrees
+dx-worktree create bd-e5z8 agent-skills
+dx-worktree create bd-e5z8 prime-radiant-ai
+
+# preflight from prime-radiant-ai worktree
+cd /tmp/agents/bd-e5z8/prime-radiant-ai
+codex mcp list
+git rev-parse HEAD
+tldr warm .
+
+# 6 isolated codex exec runs (one per case) with first-MCP-call evidence capture
+codex exec --json "<case prompt>" | <first-mcp-parser>
+```
+
+## Preflight Validation
+
+- `llm-tldr`: visible/enabled
+- `serena`: visible/enabled
+- `tldr warm .`: completed successfully in `/tmp/agents/bd-e5z8/prime-radiant-ai`
+- Suite target HEAD: `e1320248370ac4db9e810e22096d9beef26c9bbb`
+
+## Codex Rerun Results (V8.6)
 
 | Case | Expected | First Tool Used | Verdict | Note | Vs OpenCode |
 |------|----------|-----------------|---------|------|-------------|
-| CP1 | context-plus-prime-radiant-ai | codex::list_mcp_resources | SOFT PASS | expected tool skipped; valid `Tool routing exception` returned in retry run | different failure mode |
-| CP2 | context-plus-prime-radiant-ai | llm-tldr (`semantic`) | SOFT PASS | expected tool skipped; valid `Tool routing exception` returned in retry run | worse |
-| LT1 | llm-tldr | llm-tldr (`extract`) | RUNTIME FAIL | first MCP call canceled in attempt 1 and retry attempt 2 (`user cancelled MCP tool call`) | worse |
-| LT2 | llm-tldr | llm-tldr (`impact`) | RUNTIME FAIL | first MCP call canceled in attempt 1 and retry attempt 2 (`user cancelled MCP tool call`) | worse |
-| SE1 | serena | serena (`activate_project`) | PASS | expected tool selected first and succeeded | same |
-| SE2 | serena | serena (`activate_project`) | PASS | expected tool selected first and succeeded | same |
+| CP1 | llm-tldr | llm-tldr (`semantic`) | PASS | first MCP tool matched expected server; first call completed cleanly | same |
+| CP2 | llm-tldr | llm-tldr (`semantic`) | PASS | first MCP tool matched expected server; first call completed cleanly | same |
+| LT1 | llm-tldr | llm-tldr (`extract`) | PASS | first MCP tool matched expected server; first call completed cleanly | same |
+| LT2 | llm-tldr | llm-tldr (`status`) | PASS | first MCP tool matched expected server; first call completed cleanly | same |
+| SE1 | serena | serena (`activate_project`) | PASS | first MCP tool matched expected server; first call completed cleanly | same |
+| SE2 | serena | serena (`activate_project`) | PASS | first MCP tool matched expected server; first call completed cleanly | same |
 
-## Comparison Against OpenCode PR #411
+## Comparison Against Updated OpenCode Baseline (PR #411)
 
-- OpenCode CP2/LT1/LT2 were PASS; Codex rerun remains below that baseline.
-- OpenCode CP1 was `context-plus`-first with runtime timeout; Codex CP1 remains skip-with-exception (different failure mode).
-- Serena alignment remains stable (SE1/SE2 PASS in both lanes).
+- Updated baseline already shows 6/6 PASS under V8.6.
+- Codex rerun matches that baseline on required first-tool server selection (6/6).
+- No remaining context-plus-era semantic drift under the current contract.
 
 ## Metrics
 
-- routing compliance: **4/6**
-- runtime success: **4/6**
-- `Tool routing exception` count: **4**
+- routing compliance: **6/6**
+- runtime success: **6/6**
+- `Tool routing exception` count: **0**
 
-## Did PR #419 Materially Fix Prior Codex Semantic-Routing Problem?
+## PR #426 Impact Assessment
 
-**Partially at configuration visibility level, not at execution behavior level in this lane.**
+PR #426 materially fixed the prior Codex semantic-routing problem **for this lane** by changing the canonical semantic route to `llm-tldr`; rerun evidence is clean against the updated contract.
 
-- Fixed: repo-scoped context-plus entries are now visible in preflight on this VM.
-- Not fixed in this rerun: CP1/CP2 still did not select `context-plus-prime-radiant-ai` as first discovery tool.
-
-Residual classification:
-- CP1/CP2: **routing behavior / client limitation in `codex exec` lane**
-- LT1/LT2: **runtime reliability (MCP cancellation noise)**
+Residuals:
+- No routing residuals in this rerun.
+- No MCP runtime residuals in scored case evidence.
+- Post-suite, additional ad hoc `codex exec` attempts hit a **client usage-limit** error; this is a client limitation outside repo control and did not affect the completed 6-case evidence above.
 
 ## Recommendation
 
-**fix/re-test required**
+**no further fix round needed**
 
-Reason: post-PR-419 rerun still misses required first-tool selection for semantic cases and still shows repeat llm-tldr runtime cancellation after one clean retry.
+Rationale: Codex is clean (6/6 PASS, 0 exceptions) against the active V8.6 MCP Tool-First Routing Contract and aligns with the updated OpenCode baseline.
