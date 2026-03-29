@@ -41,6 +41,10 @@ dx_auth_unattended_op_enabled() {
   [[ "${DX_AUTH_UNATTENDED_OP:-0}" == "1" ]]
 }
 
+dx_auth_cache_only_enabled() {
+  [[ "${DX_AUTH_CACHE_ONLY:-0}" == "1" ]]
+}
+
 dx_auth_prepare_op_env() {
   if ! dx_auth_unattended_op_enabled; then
     return 0
@@ -51,6 +55,9 @@ dx_auth_prepare_op_env() {
 }
 
 dx_auth_run_op() {
+  if dx_auth_cache_only_enabled; then
+    return 1
+  fi
   dx_auth_prepare_op_env
   if dx_auth_unattended_op_enabled && [[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
     return 1
@@ -149,6 +156,10 @@ dx_auth_refresh_agent_item_cache() {
   cache_file="$(dx_auth_agent_item_cache_file)" || return 1
   lock_dir="${cache_file}.lock"
 
+  if dx_auth_cache_only_enabled; then
+    return 1
+  fi
+
   dx_auth_secret_cache_ensure_dir
 
   if ! mkdir "$lock_dir" >/dev/null 2>&1; then
@@ -221,6 +232,10 @@ dx_auth_read_secret_cached() {
       dx_auth_read_field_from_item_cache "$cache_file" "$field_name"
       return $?
     fi
+    if dx_auth_cache_only_enabled && [[ -f "$cache_file" ]]; then
+      dx_auth_read_field_from_item_cache "$cache_file" "$field_name"
+      return $?
+    fi
     dx_auth_refresh_agent_item_cache || true
     if [[ -f "$cache_file" ]]; then
       dx_auth_read_field_from_item_cache "$cache_file" "$field_name"
@@ -233,6 +248,10 @@ dx_auth_read_secret_cached() {
   cache_file="$(dx_auth_secret_cache_file "$cache_key")" || return 1
 
   if dx_auth_secret_cache_fresh "$cache_file"; then
+    cat "$cache_file"
+    return 0
+  fi
+  if dx_auth_cache_only_enabled && [[ -f "$cache_file" ]]; then
     cat "$cache_file"
     return 0
   fi
@@ -277,6 +296,9 @@ dx_auth_read_secret_cached() {
 }
 
 dx_auth_load_op_service_account_token() {
+  if dx_auth_cache_only_enabled; then
+    return 1
+  fi
   dx_auth_has_cmd op || return 1
 
   if [[ "${DX_AUTH_OP_TOKEN_VERIFIED:-0}" == "1" && -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
