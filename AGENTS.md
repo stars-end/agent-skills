@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 9c66e637c0b6ca5271e745113e2fd67830df7dad -->
-<!-- Last updated: 2026-03-30 07:16:23 UTC -->
+<!-- Source SHA: 09a4ad55bb21967a9a3eb5b885196e2c5e53cfa6 -->
+<!-- Last updated: 2026-03-30 13:38:03 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol

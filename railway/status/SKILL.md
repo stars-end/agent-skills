@@ -84,6 +84,57 @@ If status returns "No linked project":
 >
 > To create a new project: `railway init`
 
+## Deployment Freshness ("Is master live?")
+
+The authoritative answer to "is `origin/master` actually deployed?" comes from
+**runtime**, not the Railway CLI. Use the shared helper from
+`railway/_shared/scripts/railway-common.sh`:
+
+```bash
+source railway/_shared/scripts/railway-common.sh
+
+# Preferred: runtime endpoint exposes commit SHA via header
+check_deploy_freshness --endpoint-url https://my-app.up.railway.app
+
+# Fallback: Railway CLI deployment metadata only
+check_deploy_freshness -p PROJECT_ID -e production -s web
+```
+
+The function outputs structured JSON:
+
+```json
+{
+  "expected_sha": "abc1234...",
+  "actual_sha": "abc1234...",
+  "source": "runtime_endpoint",
+  "fresh": true,
+  "drift": false
+}
+```
+
+### Truth Hierarchy
+
+| Priority | Source | How |
+|----------|--------|-----|
+| 1 (preferred) | Runtime endpoint | App exposes `X-Commit-Sha` header (or `/commit-info` endpoint) |
+| 2 (fallback) | Railway CLI | `railway deployment list --json` — control-plane metadata, not runtime proof |
+
+**Why runtime first:** The Railway CLI reports what was *deployed*, not what is *serving*.
+Crash loops, partial rollouts, and cache layers can cause the CLI to show SUCCESS while
+the live endpoint serves stale code. Only a runtime check confirms actual truth.
+
+### How Product Repos Should Expose Commit Truth
+
+Each deployed service should expose its build commit SHA in a way the freshness check
+can read without application logic. Recommended patterns:
+
+1. **Response header** (preferred): Set `X-Commit-Sha` in the HTTP server.
+2. **Static file**: Serve `/commit-info.txt` or `/version.json` at build time.
+3. **Health endpoint**: Include `commit` in `/healthz` or `/ready` responses.
+
+The helper tries the `X-Commit-Sha` header via `curl -D -` by default. Extend the
+source list in `check_deploy_freshness()` if your repo uses a different mechanism.
+
 ## Presenting Status
 
 Parse the JSON and present:
@@ -92,11 +143,13 @@ Parse the JSON and present:
 - **Services**: list with deployment status
 - **Active Deployments**: any in-progress deployments (from `activeDeployments` field)
 - **Domains**: any configured domains
+- **Freshness**: whether `origin/master` matches the live deployment (see above)
 
 Example output format:
 ```
 Project: my-app (workspace: my-team)
 Environment: production
+Freshness: origin/master (09a4ad5) matches live deployment
 
 Services:
 - web: deployed (https://my-app.up.railway.app)

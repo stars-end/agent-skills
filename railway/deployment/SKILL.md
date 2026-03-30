@@ -19,6 +19,11 @@ Manage existing Railway deployments: list, view logs, redeploy, or remove.
 
 ## List Deployments
 
+> **Note:** `railway deployment list` is **control-plane metadata**, not proof of what
+> is currently serving. For freshness verification ("is master live?"), use the runtime
+> truth check from the `status` skill. Use deployment list here only for history,
+> debugging, or when no runtime endpoint is available.
+
 ```bash
 railway deployment list --limit 10 --json
 ```
