@@ -46,7 +46,7 @@ Use this skill when user intent is handoff/review packaging:
 - Validation summary (commands + pass/fail)
 - Tool Evidence summary:
   - tools used: `llm-tldr`, `serena`
-  - or `Tool routing exception: <reason>` (include if context-plus was used for opt-in)
+  - or `Tool routing exception: <reason>`
 - Changed files summary
 - Open blockers / decisions needed
 - How-to-review checklist

@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 010b55479b2f22f0b94170e92382abc532c1a65e -->
-<!-- Last updated: 2026-03-29 13:59:13 UTC -->
+<!-- Source SHA: 9c66e637c0b6ca5271e745113e2fd67830df7dad -->
+<!-- Last updated: 2026-03-30 07:16:23 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -284,8 +284,6 @@ If a named skill contains an explicit `BLOCKED` contract:
 - **Canonical active assistant stack**:
   - \`llm-tldr\`: semantic discovery + exact static analysis / trace / impact
   - \`serena\`: symbol-aware edits / persistent assistant memory
-- **Experimental / optional**:
-  - \`context-plus\`: available for opt-in use only; not part of the canonical routing contract (worktree blindness, single-root binding, O(n) config surface)
 - **Canonical non-default memory surface**:
   - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
 
@@ -529,7 +527,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **cass-memory** | Pilot-only CLI episodic memory workflow for explicit cross-agent memory experiments. | — |  |
 | **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode |
 | **cli-mastery** | **Tags:** #tools #cli #railway #github #env | — |  |
-| **context-plus** | MCP-native structural context analysis (experimental/optional as of V8.6). Available for opt-in use only; not part of the canonical routing contract. | — |  |
+| **context-plus** | REMOVED from canonical fleet contract (bd-rb0c.8). context-plus was fully removed in favor of llm-tldr for semantic discovery and serena for symbol-aware edits. This skill is retained as a tombstone only. | — |  |
 | **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with dx-runner as canonical governance surface, OpenCode as primary execution lane, and cc-glm as reliability backstop. dx-dispatch is break-glass only. | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty/WIP repositories. This skill provides a standardized workflow for: - Snapshotting uncommitted work to a WIP branch | — |  |
 | **dx-batch** | Deterministic orchestration over dx-runner for autonomous implement->review waves. Orchestrates 2-3 parallel tasks across 15-20 Beads items with strict lease locking, persistent ledger, and machine-readable contracts. Use for batch execution of implementation tasks with automatic review cycles. | `dx-batch start --items bd-aaa,bd-bbb,bd-ccc [--max-parallel ` | workflow, orchestration, batch, dx-runner, governance, parallel |

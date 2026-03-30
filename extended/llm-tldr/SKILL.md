@@ -89,7 +89,7 @@ llm-tldr accepts a `project` parameter on every MCP tool call. This is the workt
 # context(project="/tmp/agents/bd-xxx/agent-skills", entry="main", depth=2)
 ```
 
-The daemon spawns per-project-path (socket hash is per resolved path). An agent can call any tool with a worktree path and get a daemon for that specific worktree. This is fundamentally different from context-plus where `ROOT_DIR` is locked at server startup.
+The daemon spawns per-project-path (socket hash is per resolved path). An agent can call any tool with a worktree path and get a daemon for that specific worktree.
 
 ### Per-Call Project Parameter
 
@@ -142,7 +142,7 @@ Do not skip directly to repeated `read_file` traversal for these questions unles
 
 The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools were effectively unused. V8.6 closes this gap:
 
-- `semantic`: Was routed to context-plus. Now the canonical semantic lane.
+- `semantic`: Now the canonical semantic lane.
 - `context`: Was never routed. Biggest missed opportunity (95% token savings).
 - `change_impact`: Was never routed. Now surfaced for test targeting.
 - `dead`: Was never routed. Now surfaced for refactoring.
@@ -236,5 +236,4 @@ opencode mcp list # Should show llm-tldr
 
 - `fleet-sync`: Fleet Sync orchestrator
 - `serena`: Symbol-aware edits and persistent memory (canonical default)
-- `context-plus`: Experimental/optional only (not canonical default as of V8.6)
 - `cass-memory`: Pilot-only CLI memory

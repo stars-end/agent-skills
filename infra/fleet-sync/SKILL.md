@@ -51,7 +51,6 @@ Keep Fleet Sync honest and executable:
 |------|-------|--------|-----------------|-------|
 | `cass-memory` | `cli` | Disabled | N/A | Pilot-only CLI, not rendered to IDE configs |
 | `llm-tldr` | `mcp` | Enabled | **Canonical default** | Semantic discovery + exact static analysis |
-| `context-plus` | `mcp` | Enabled (opt-in) | Experimental/optional | Worktree blindness, single-root binding |
 | `serena` | `mcp` | Enabled | Canonical default | Symbol-aware edits + persistent memory |
 
 ## When To Use
@@ -70,20 +69,11 @@ Use this skill when the user asks to:
   - host runtime health
   - rendered config correctness
   - client-visible MCP availability
-- For `context-plus`, each canonical repo gets a repo-scoped MCP entry
-  (e.g., `context-plus-agent-skills`, `context-plus-prime-radiant-ai`).
-  Each entry launches the same patched build with the repo path as an
-  explicit argument: `node ~/.local/share/contextplus-patched/build/index.js ~/<repo>`.
-  This follows the upstream README contract: `contextplus [path]` starts the
-  MCP server for the specified path.
-  **V8.6**: context-plus is experimental/optional. Not the canonical routing
-  default. llm-tldr is now the canonical default for semantic discovery.
 - For `llm-tldr`, semantic search requires `tldr warm <project>` before
   first use. Every MCP tool call accepts a `project` parameter for
   worktree-safe operation (daemon per resolved path).
 - `antigravity` and `gemini-cli` use wrapped launcher form with the repo
   path inside the exec string.
-- `CONTEXTPLUS_ROOT` env var: escape-hatch only, not the primary contract.
 - Do not claim full GO while `serena` remains unresolved unless the contract explicitly excludes it.
 
 ## Validation Order
@@ -103,6 +93,5 @@ Use this skill when the user asks to:
 - `fleet-deploy` for rollout mechanics
 - `mcp-doctor` for warning-style diagnostics
 - `cass-memory`
-- `context-plus`
 - `llm-tldr`
 - `serena`
