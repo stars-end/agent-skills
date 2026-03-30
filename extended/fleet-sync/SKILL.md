@@ -39,8 +39,7 @@ Rendered into IDE MCP configs with `mcp.*` block.
 | Tool | Status | Binary | Health |
 |------|--------|--------|--------|
 | `llm-tldr` | Enabled | `tldr-mcp` | `tldr-mcp --version` |
-| `context-plus` | Enabled | `contextplus` | `contextplus --version` |
-| `serena` | Disabled | `serena` | `serena start-mcp-server --help` |
+| `serena` | Enabled | `serena` | `serena start-mcp-server --help` |
 
 ### CLI Tools (`integration_mode: cli`)
 Standalone CLI tools, not rendered to IDE configs.
@@ -100,7 +99,6 @@ Verify tool binaries work on each host:
 ```bash
 # MCP tools
 tldr-mcp --version || llm-tldr --version
-contextplus --version
 
 # CLI tools
 cm --version
@@ -123,10 +121,10 @@ cm doctor --json
 ### Layer 4: Client Visibility
 Verify MCP tools appear in IDE clients:
 ```bash
-codex mcp list    # Should show llm-tldr, context-plus
-claude mcp list   # Should show llm-tldr, context-plus
-gemini mcp list   # Should show llm-tldr, context-plus
-opencode mcp list # Should show llm-tldr, context-plus
+codex mcp list    # Should show llm-tldr
+claude mcp list   # Should show llm-tldr
+gemini mcp list   # Should show llm-tldr
+opencode mcp list # Should show llm-tldr
 ```
 
 Note: `cass-memory` is CLI-native and does NOT need to appear in MCP lists.
@@ -155,7 +153,7 @@ Key fields per tool:
 
 - `llm-tldr`: Static analysis context slicing
 - `cass-memory`: CLI-native episodic memory
-- `context-plus`: Structural context analysis
+- `serena`: Symbol-aware edits and persistent memory
 
 ## Related Docs
 

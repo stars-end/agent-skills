@@ -174,8 +174,6 @@ If a named skill contains an explicit `BLOCKED` contract:
 - **Canonical active assistant stack**:
   - \`llm-tldr\`: semantic discovery + exact static analysis / trace / impact
   - \`serena\`: symbol-aware edits / persistent assistant memory
-- **Experimental / optional**:
-  - \`context-plus\`: available for opt-in use only; not part of the canonical routing contract (worktree blindness, single-root binding, O(n) config surface)
 - **Canonical non-default memory surface**:
   - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
 

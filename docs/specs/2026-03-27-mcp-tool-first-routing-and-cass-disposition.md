@@ -27,17 +27,17 @@
 
 ## Active Contract
 
-**SUPERSEDED by V8.6 routing contract (bd-rb0c.7).** The routing matrix below reflects the original V8.5 contract. See the V8.6 changes in `publish-baseline.zsh` section 5.4 for the current canonical routing.
+**SUPERSEDED by V8.6 routing contract (bd-rb0c.7). context-plus fully removed in bd-rb0c.8.** The routing matrix below reflects the original V8.5 contract. See the V8.6 changes in `publish-baseline.zsh` section 5.4 for the current canonical routing.
 
 ### V8.6 Routing (Current)
 
 - Canonical default assistant stack:
   - `llm-tldr`: semantic discovery + exact static analysis / trace / impact
   - `serena`: symbol-aware edits / persistent assistant memory
-- Experimental / optional:
-  - `context-plus`: available for opt-in use only; not part of the canonical routing contract
 - Canonical non-default memory surface:
   - `cass-memory`: pilot-only CLI tool; not part of the default assistant loop
+- **Removed (bd-rb0c.8)**:
+  - `context-plus`: fully removed from the canonical fleet contract
 
 | Task shape | Canonical first tool | Reason |
 |------------|---------------------|--------|

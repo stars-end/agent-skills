@@ -124,4 +124,4 @@ cm --version && cm quickstart --json && cm doctor --json
 
 - `fleet-sync`: Fleet Sync orchestrator
 - `llm-tldr`: MCP static analysis
-- `context-plus`: MCP structural context
+- `serena`: MCP symbol-aware edits + memory

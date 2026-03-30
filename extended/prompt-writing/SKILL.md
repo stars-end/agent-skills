@@ -92,7 +92,7 @@ Every generated delegation prompt MUST enforce:
 - If missing, delegate must return blocker with exact next commands.
 
 6) **Tool routing contract for the delegated task**
-- semantic discovery -> `llm-tldr` (V8.6 — was context-plus)
+- semantic discovery -> `llm-tldr` (V8.6)
 - exact static analysis -> `llm-tldr`
 - symbol-aware editing / memory -> `serena`
 - If a delegated agent intentionally skips the expected tool, it must return `Tool routing exception: <reason>`
