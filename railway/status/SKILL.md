@@ -93,7 +93,7 @@ The authoritative answer to "is `origin/master` actually deployed?" comes from
 ```bash
 source railway/_shared/scripts/railway-common.sh
 
-# Preferred: runtime endpoint exposes commit SHA via header
+# Preferred: runtime endpoint exposes commit SHA (header or body)
 check_deploy_freshness --endpoint-url https://my-app.up.railway.app
 
 # Fallback: Railway CLI deployment metadata only
@@ -106,7 +106,7 @@ The function outputs structured JSON:
 {
   "expected_sha": "abc1234...",
   "actual_sha": "abc1234...",
-  "source": "runtime_endpoint",
+  "source": "runtime_header",
   "fresh": true,
   "drift": false
 }
@@ -114,10 +114,11 @@ The function outputs structured JSON:
 
 ### Truth Hierarchy
 
-| Priority | Source | How |
-|----------|--------|-----|
-| 1 (preferred) | Runtime endpoint | App exposes `X-Commit-Sha` header (or `/commit-info` endpoint) |
-| 2 (fallback) | Railway CLI | `railway deployment list --json` — control-plane metadata, not runtime proof |
+| Priority | Source | `source` field | How |
+|----------|--------|---------------|-----|
+| 1a (preferred) | Response header `X-Commit-Sha` | `runtime_header` | `curl -D -` reads the header |
+| 1b (next) | JSON body field | `runtime_body` | Parses `.commit`, `.sha`, or `.version.commit` from response body |
+| 2 (fallback) | Railway CLI | `railway_cli` | `railway deployment list --json` — control-plane metadata, not runtime proof |
 
 **Why runtime first:** The Railway CLI reports what was *deployed*, not what is *serving*.
 Crash loops, partial rollouts, and cache layers can cause the CLI to show SUCCESS while
@@ -126,14 +127,15 @@ the live endpoint serves stale code. Only a runtime check confirms actual truth.
 ### How Product Repos Should Expose Commit Truth
 
 Each deployed service should expose its build commit SHA in a way the freshness check
-can read without application logic. Recommended patterns:
+can read without application logic. The helper supports two mechanisms:
 
-1. **Response header** (preferred): Set `X-Commit-Sha` in the HTTP server.
-2. **Static file**: Serve `/commit-info.txt` or `/version.json` at build time.
-3. **Health endpoint**: Include `commit` in `/healthz` or `/ready` responses.
+1. **Response header** (preferred, checked first): Set `X-Commit-Sha` in the HTTP server.
+2. **JSON body**: Serve a JSON endpoint (e.g. `/commit-info`, `/version.json`, `/healthz`)
+   that includes a `commit`, `sha`, or `version.commit` field. The helper parses these
+   keys in order and uses the first match.
 
-The helper tries the `X-Commit-Sha` header via `curl -D -` by default. Extend the
-source list in `check_deploy_freshness()` if your repo uses a different mechanism.
+To add a new body field key, extend the `jq` extraction chain inside the `# 1b:` block
+of `check_deploy_freshness()` in `railway/_shared/scripts/railway-common.sh`.
 
 ## Presenting Status
 

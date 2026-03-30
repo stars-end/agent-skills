@@ -112,6 +112,7 @@ check_deploy_freshness() {
 
   # --- Source 1: Runtime endpoint (preferred) ---
   if [[ -n "$endpoint_url" ]]; then
+    # 1a: Response header X-Commit-Sha
     local commit_header
     commit_header=$(curl -sf -D - -o /dev/null "$endpoint_url" 2>/dev/null \
       | grep -i '^x-commit-sha:' \
@@ -119,9 +120,21 @@ check_deploy_freshness() {
       | sed 's/^[^:]*:[[:space:]]*//' \
       | tr -d '[:space:]')
 
-    if [[ -n "$commit_header" && ${#commit_sha} -ge 7 ]]; then
+    if [[ -n "$commit_header" && ${#commit_header} -ge 7 ]]; then
       actual_sha="$commit_header"
-      source="runtime_endpoint"
+      source="runtime_header"
+    fi
+
+    # 1b: Body-based JSON commit info (/commit-info, /version.json, /healthz)
+    if [[ -z "$actual_sha" ]]; then
+      local body_json
+      body_json=$(curl -sf "$endpoint_url" 2>/dev/null || true)
+      if [[ -n "$body_json" ]] && echo "$body_json" | jq -e . >/dev/null 2>&1; then
+        actual_sha=$(echo "$body_json" | jq -r '.commit // .sha // .version.commit // empty' 2>/dev/null)
+        if [[ -n "$actual_sha" ]]; then
+          source="runtime_body"
+        fi
+      fi
     fi
   fi
 
