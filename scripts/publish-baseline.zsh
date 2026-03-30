@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export LC_ALL=C
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 OUTFILE="$REPO_ROOT/AGENTS.md"
@@ -470,7 +471,7 @@ extract_skill() {
         END {
             if (capturing) print ""
         }
-    ' | sed 's/[[:space:]]\+/ /g; s/^[[:space:]]*//; s/[[:space:]]*$//')"
+    ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^[[:space:]]*//; s/[[:space:]]*$//')"
     if [[ -z "$desc" || "$desc" == "|" || "$desc" == ">" ]]; then
          desc=$(awk '/^description:/{flag=1; next} /^[a-zA-Z0-9_-]+:/{flag=0} /^---/{flag=0} flag' "$skill_file" | tr '\n' ' ' | sed 's/  */ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | cut -c1-160 || echo "")
     fi

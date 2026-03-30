@@ -188,7 +188,91 @@ DRAFT_FLAG="--draft"
 - **No post-merge tracker work:** avoids merge-time bookkeeping drift
 - **Clear workflow:** Close issue = "ready to ship", open issue = "work in progress"
 
-### 2.6. Validate Docs (Epics/Features Only)
+### 2.6. Pre-PR Derived Artifact Freshness Check (Mandatory)
+
+**Before creating any PR, agents MUST verify that derived artifacts are in sync.**
+
+This check applies to ALL PRs — not just agent-skills, but any repo that consumes
+generated outputs from agent-skills (AGENTS.md, universal-baseline.md, etc.).
+
+```bash
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📦 DERIVED ARTIFACT FRESHNESS CHECK"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+```
+
+**Step 1: Check if agent-skills sources changed.**
+
+If the PR modifies any of the following, derived artifacts MUST be regenerated:
+- Any `SKILL.md` file under `core/`, `extended/`, `health/`, `infra/`, `railway/`, `dispatch/`
+- `@NAKOMI.md`
+- `scripts/publish-baseline.zsh`
+- `Makefile` targets that affect baseline generation
+
+```bash
+CHANGED_SOURCES=$(git diff origin/master --name-only | \
+  grep -E '(SKILL\.md$|@NAKOMI\.md$|publish-baseline\.zsh$)' || true)
+
+if [ -n "$CHANGED_SOURCES" ]; then
+  echo "⚠️  Source files changed that affect derived artifacts:"
+  echo "$CHANGED_SOURCES" | sed 's/^/   /'
+  echo ""
+  echo "Running: make publish-baseline"
+  make publish-baseline
+  echo ""
+fi
+```
+
+**Step 2: Check if docs or repo guidance changed.**
+
+```bash
+DOCS_CHANGED=$(git diff origin/master --name-only | \
+  grep -E '^docs/' || true)
+
+if [ -n "$DOCS_CHANGED" ]; then
+  echo "ℹ️  Documentation files changed:"
+  echo "$DOCS_CHANGED" | sed 's/^/   /'
+  echo ""
+fi
+```
+
+**Step 3: Verify freshness deterministically (agent-skills repo only).**
+
+When working IN the agent-skills repo, run the freshness guard:
+
+```bash
+if [ -f "scripts/check-derived-freshness.sh" ]; then
+  echo "Running derived artifact freshness check..."
+  if ! bash scripts/check-derived-freshness.sh; then
+    echo ""
+    echo "❌ BLOCKED: Derived artifacts are stale."
+    echo "   Run 'make publish-baseline' and commit the updated files before creating this PR."
+    echo ""
+    exit 1
+  fi
+fi
+```
+
+**Step 4: Self-check checklist (ALL repos).**
+
+Before proceeding to PR creation, confirm:
+
+| Check | Action if YES |
+|-------|---------------|
+| SKILL.md files changed? | Run `make publish-baseline` (agent-skills) or regenerate consuming outputs |
+| docs/ changed? | Verify docs are complete and linked |
+| @NAKOMI.md changed? | Run `make publish-baseline` |
+| AGENTS.md appears stale? | Run `make publish-baseline` |
+| No source changes? | Proceed (no regeneration needed) |
+
+**Why this is critical:**
+- **Prevents silent drift:** agents changing sources without updating derived outputs
+- **Catches it at the chokepoint:** PR creation is the natural enforcement surface
+- **Deterministic CI backing:** the `derived-freshness` CI job will fail on stale artifacts
+
+### 2.7. Validate Docs (Epics/Features Only)
 
 **Check if docs exist and are linked:**
 
@@ -372,7 +456,7 @@ Check status: gh pr view {PR_NUMBER}
 Test in dev: dev.yourapp.com/pr-{PR_NUMBER}
  ```
 
-### 2.7. Frontend Evidence Contract (If Frontend Files Changed)
+### 2.8. Frontend Evidence Contract (If Frontend Files Changed)
 
 **When frontend files are modified in prime-radiant-ai, enforce evidence contract:**
 
@@ -433,7 +517,7 @@ fi
 - Catches visual regressions before merge
 - CI validates automatically - trust the pipeline
 
-### 2.8. Prime V2 Product Contract (If V2 Routes/Stories Changed)
+### 2.9. Prime V2 Product Contract (If V2 Routes/Stories Changed)
 
 > ⚠️ **CRITICAL EXCEPTION**: For Prime `/v2` and `/brokerage`, visual evidence is **evidence only**.
 
