@@ -18,6 +18,7 @@ from pathlib import Path
 @dataclass
 class BeadsTask:
     """Represents a Beads task with dependency metadata"""
+
     beads_id: str
     title: str
     description: str = ""
@@ -28,7 +29,7 @@ class BeadsTask:
     priority: int = 2
     details_loaded: bool = True
     detail_load_error: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "beads_id": self.beads_id,
@@ -64,11 +65,11 @@ class WaveReadiness:
 class BeadsWaveManager:
     """
     Manages Beads wave execution with topological dependency ordering
-    
+
     Reuses Ralph's Kahn's algorithm implementation for layer computation,
     but integrates with dx-runner substrate instead of curl sessions.
     """
-    
+
     def __init__(
         self,
         beads_repo_path: Optional[Path] = None,
@@ -97,7 +98,9 @@ class BeadsWaveManager:
         if dep_id in self.tasks:
             return self._is_terminal_dependency_status(self.tasks[dep_id].status)
 
-        return self._is_terminal_dependency_status(self.dependency_status_cache.get(dep_id))
+        return self._is_terminal_dependency_status(
+            self.dependency_status_cache.get(dep_id)
+        )
 
     def get_dependency_metadata(self, dep_id: str) -> Dict[str, Any]:
         """Return cached metadata for a dependency if available."""
@@ -156,11 +159,11 @@ class BeadsWaveManager:
             if lowered.startswith(prefix):
                 return repo
         return None
-    
+
     def load_epic_tasks(self, epic_id: str) -> List[BeadsTask]:
         """
         Load all subtasks of an epic from Beads
-        
+
         Uses bd show to get epic details with dependents.
         """
         try:
@@ -173,14 +176,14 @@ class BeadsWaveManager:
             )
             if result.returncode != 0:
                 return []
-            
+
             data = json.loads(result.stdout)
             if not data or not isinstance(data, list):
                 return []
-            
+
             epic = data[0]
             tasks = []
-            
+
             first_open_child = True
             for dep in epic.get("dependents", []):
                 if dep.get("dependency_type") == "parent-child":
@@ -207,20 +210,24 @@ class BeadsWaveManager:
                         continue
                     # Load full task details to get dependencies
                     timeout_seconds = 10 if first_open_child else 3
-                    task = self._load_task_details(task, timeout_seconds=timeout_seconds)
+                    task = self._load_task_details(
+                        task, timeout_seconds=timeout_seconds
+                    )
                     first_open_child = False
                     tasks.append(task)
                     self.tasks[task.beads_id] = task
 
             for task in tasks:
                 self._backfill_task_repo(task)
-            
+
             return tasks
-        
+
         except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
             return []
-    
-    def _load_task_details(self, task: BeadsTask, timeout_seconds: int = 3) -> BeadsTask:
+
+    def _load_task_details(
+        self, task: BeadsTask, timeout_seconds: int = 3
+    ) -> BeadsTask:
         """Load full task details including dependencies"""
         try:
             result = subprocess.run(
@@ -234,15 +241,17 @@ class BeadsWaveManager:
                 task.details_loaded = False
                 task.detail_load_error = f"bd_show_failed:{result.returncode}"
                 return task
-            
+
             data = json.loads(result.stdout)
             if not data or not isinstance(data, list):
                 task.details_loaded = False
                 task.detail_load_error = "invalid_payload"
                 return task
-            
+
             task_data = data[0]
-            task.repo = task.repo or self._infer_repo_from_title(task_data.get("title", task.title))
+            task.repo = task.repo or self._infer_repo_from_title(
+                task_data.get("title", task.title)
+            )
             task.description = task_data.get("description", task.description or "")
             task.dependencies = []
             for dep in task_data.get("dependencies", []):
@@ -262,9 +271,9 @@ class BeadsWaveManager:
             task.details_loaded = True
             task.detail_load_error = None
             self._backfill_task_repo(task)
-            
+
             return task
-        
+
         except subprocess.TimeoutExpired:
             task.details_loaded = False
             task.detail_load_error = "timeout"
@@ -282,19 +291,70 @@ class BeadsWaveManager:
             if self._is_terminal_dependency_status(task.status):
                 continue
             self._load_task_details(task, timeout_seconds=timeout_seconds)
-    
+
+    def refresh_task_status(
+        self, beads_id: str, timeout_seconds: int = 5
+    ) -> Optional[str]:
+        """
+        Re-poll Beads for the current status of a tracked task.
+
+        Returns the updated status string, or None if the poll failed.
+        If the task is now terminal in Beads but not yet in wave.completed,
+        the caller is responsible for advancing local state.
+        """
+        task = self.tasks.get(beads_id)
+        if not task:
+            return None
+
+        try:
+            result = subprocess.run(
+                ["bd", "show", beads_id, "--json"],
+                cwd=str(self.beads_repo_path),
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+            if result.returncode != 0:
+                return None
+
+            data = json.loads(result.stdout)
+            if not data or not isinstance(data, list):
+                return None
+
+            fresh_status = data[0].get("status", task.status)
+            fresh_title = data[0].get("title", task.title)
+            close_reason = data[0].get("close_reason")
+            if close_reason:
+                inferred_repo = task.repo or self._infer_repo_from_title(fresh_title)
+                self.dependency_metadata_cache[beads_id] = {
+                    "title": fresh_title,
+                    "repo": inferred_repo or "",
+                    "status": fresh_status,
+                    "close_reason": close_reason,
+                }
+
+            task.status = fresh_status
+
+            if self._is_terminal_dependency_status(fresh_status):
+                self.completed.add(beads_id)
+                self.dependency_status_cache[beads_id] = fresh_status
+
+            return fresh_status
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
+            return None
+
     def compute_layers(self, task_ids: Optional[List[str]] = None) -> List[List[str]]:
         """
         Compute execution layers using Kahn's algorithm (topological sort)
-        
+
         REUSED from Ralph beads-parallel.sh lines 138-268
-        
+
         Returns layers of tasks that can be executed in parallel.
         """
         tasks_to_process = task_ids or list(self.tasks.keys())
         if not tasks_to_process:
             return []
-        
+
         # Compute incoming edge counts (dependencies within this set)
         incoming = {tid: 0 for tid in tasks_to_process}
         for tid in tasks_to_process:
@@ -304,25 +364,26 @@ class BeadsWaveManager:
             for dep_id in task.dependencies:
                 if dep_id in tasks_to_process:
                     incoming[tid] += 1
-        
+
         # Build layers
         layers = []
         processed = set()
-        
+
         while len(processed) < len(tasks_to_process):
             # Find tasks with no incoming edges that haven't been processed
             layer = [
-                tid for tid in tasks_to_process
+                tid
+                for tid in tasks_to_process
                 if incoming[tid] == 0 and tid not in processed
             ]
-            
+
             if not layer:
                 # Cycle detected
                 break
-            
+
             layers.append(layer)
             processed.update(layer)
-            
+
             # Reduce incoming count for dependents
             for tid in layer:
                 task = self.tasks.get(tid)
@@ -334,19 +395,19 @@ class BeadsWaveManager:
                         continue
                     if tid in dep_task.dependencies:
                         incoming[dep_tid] -= 1
-        
+
         self.layers = layers
         return layers
-    
+
     def get_ready_tasks(self, layer: int = 0) -> List[str]:
         """
         Get tasks ready for execution in a specific layer
-        
+
         A task is ready if all its dependencies are completed.
         """
         if layer >= len(self.layers):
             return []
-        
+
         ready = []
         for tid in self.layers[layer]:
             task = self.tasks.get(tid)
@@ -354,21 +415,23 @@ class BeadsWaveManager:
                 continue
             if not task.details_loaded:
                 continue
-            
+
             # Check if all dependencies are completed
-            if all(self._is_dependency_satisfied(dep_id) for dep_id in task.dependencies):
+            if all(
+                self._is_dependency_satisfied(dep_id) for dep_id in task.dependencies
+            ):
                 ready.append(tid)
-        
+
         return ready
-    
+
     def mark_completed(self, beads_id: str):
         """Mark a task as completed"""
         self.completed.add(beads_id)
-    
+
     def get_next_wave(self) -> Optional[List[str]]:
         """
         Get next wave of tasks ready for execution
-        
+
         Finds first layer with ready tasks.
         """
         for layer_idx in range(len(self.layers)):
@@ -410,14 +473,18 @@ class BeadsWaveManager:
                 continue
 
             unmet = [
-                dep_id for dep_id in task.dependencies if not self._is_dependency_satisfied(dep_id)
+                dep_id
+                for dep_id in task.dependencies
+                if not self._is_dependency_satisfied(dep_id)
             ]
             if unmet:
                 dependency_statuses = {
                     dep_id: (
                         self.tasks[dep_id].status
                         if dep_id in self.tasks
-                        else self.dependency_status_cache.get(dep_id, "external_or_incomplete")
+                        else self.dependency_status_cache.get(
+                            dep_id, "external_or_incomplete"
+                        )
                     )
                     for dep_id in unmet
                 }
@@ -433,11 +500,11 @@ class BeadsWaveManager:
                 readiness.ready.append(task_id)
 
         return readiness
-    
+
     def has_pending_tasks(self) -> bool:
         """Check if there are pending tasks remaining"""
         return len(self.completed) < len(self.tasks)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "default_repo": self.default_repo,
@@ -447,7 +514,7 @@ class BeadsWaveManager:
             "dependency_status_cache": dict(self.dependency_status_cache),
             "dependency_metadata_cache": dict(self.dependency_metadata_cache),
         }
-    
+
     @classmethod
     def from_dict(
         cls,
@@ -457,14 +524,14 @@ class BeadsWaveManager:
     ) -> "BeadsWaveManager":
         """
         Restore BeadsWaveManager from serialized state
-        
+
         FIX for P1: Symmetric save/load for unattended restart/resume.
         """
         manager = cls(
             beads_repo_path=beads_repo_path,
             default_repo=default_repo or data.get("default_repo"),
         )
-        
+
         # Restore tasks
         if "tasks" in data:
             for tid, task_data in data["tasks"].items():
@@ -481,11 +548,11 @@ class BeadsWaveManager:
                     detail_load_error=task_data.get("detail_load_error"),
                 )
                 manager.tasks[tid] = task
-        
+
         # Restore layers
         if "layers" in data:
             manager.layers = data["layers"]
-        
+
         # Restore completed set
         if "completed" in data:
             manager.completed = set(data["completed"])
@@ -495,5 +562,5 @@ class BeadsWaveManager:
 
         if "dependency_metadata_cache" in data:
             manager.dependency_metadata_cache = dict(data["dependency_metadata_cache"])
-        
+
         return manager
