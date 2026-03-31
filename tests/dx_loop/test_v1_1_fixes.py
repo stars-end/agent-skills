@@ -1180,6 +1180,52 @@ def test_explain_reconciles_stale_closed_task_and_avoids_continue_monitoring(
     print("✓ explain reports actionable next step after stale close reconciliation")
 
 
+def test_status_reconciles_stale_closed_task_with_surface_timeout_budget(
+    tmp_path, monkeypatch, capsys
+):
+    """status reconciliation should use a longer Beads timeout than cadence polling."""
+    _build_stale_closed_review_wave(tmp_path, wave_id="wave-stale-timeout")
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco.2":
+            timeout = kwargs.get("timeout")
+            if timeout < dx_loop_script.SURFACE_BEADS_TIMEOUT_SECONDS:
+                raise subprocess.TimeoutExpired(cmd, timeout)
+            payload = [
+                {
+                    "id": "bd-bkco.2",
+                    "title": "Merged task",
+                    "status": "closed",
+                    "close_reason": "Merged in PR #344",
+                }
+            ]
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps(payload), stderr=""
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic="bd-bkco", beads_id=None, json=True)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    state = json.loads(captured.out)
+
+    assert state["baton_states"]["bd-bkco.2"]["phase"] == "complete"
+    assert "bd-bkco.2" not in state["wave_status"]["dispatchable_tasks"]
+    assert "bd-bkco.3" in state["wave_status"]["dispatchable_tasks"]
+
+    print("✓ status reconciliation uses longer Beads timeout budget")
+
+
 def test_status_reconciles_stale_closed_failed_blocked_task(
     tmp_path, monkeypatch, capsys
 ):
@@ -1277,6 +1323,66 @@ def test_status_reconciles_stale_closed_failed_blocked_task(
     assert "bd-bkco.3" in state["wave_status"]["dispatchable_tasks"]
 
     print("✓ status reconciles stale closed failed/blocked task")
+
+
+def test_status_reconcile_excludes_scheduler_blocked_dispatchables(
+    tmp_path, monkeypatch, capsys
+):
+    """status reconciliation should not advertise scheduler-blocked tasks as ready."""
+    wave_id = "wave-stale-blocked-surface"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-bkco"
+    loop.beads_manager.tasks = {
+        "bd-bkco.2": BeadsTask(
+            beads_id="bd-bkco.2",
+            title="Blocked task",
+            repo="agent-skills",
+            dependencies=[],
+            status="open",
+            details_loaded=True,
+        ),
+        "bd-bkco.3": BeadsTask(
+            beads_id="bd-bkco.3",
+            title="Downstream task",
+            repo="agent-skills",
+            dependencies=["bd-bkco.2"],
+            status="open",
+            details_loaded=True,
+        ),
+    }
+    loop.beads_manager.layers = [["bd-bkco.2"], ["bd-bkco.3"]]
+    loop.scheduler.state.mark_blocked("bd-bkco.2")
+    loop._set_wave_status(
+        LoopState.IN_PROGRESS_HEALTHY,
+        None,
+        "Dispatching 1 task(s)",
+        dispatchable_tasks=["bd-bkco.2"],
+    )
+    loop._save_state()
+
+    monkeypatch.setattr(DxLoop, "_refresh_beads_truth", lambda self, **kwargs: [])
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic="bd-bkco", beads_id=None, json=True)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    state = json.loads(captured.out)
+
+    assert state["wave_status"]["state"] == "waiting_on_dependency"
+    assert state["wave_status"]["blocker_code"] == "waiting_on_dependency"
+    assert state["wave_status"]["dispatchable_tasks"] == []
+    assert state["wave_status"]["blocked_details"][0]["beads_id"] == "bd-bkco.3"
+
+    print("✓ status reconciliation excludes blocked tasks from dispatchable set")
 
 
 def test_cmd_start_refuses_second_active_wave_for_same_epic(tmp_path, capsys):
