@@ -68,6 +68,10 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
   inside the exec string.
 - `llm-tldr` semantic search requires `tldr warm <project>` before first use.
   Every MCP tool call accepts a `project` parameter for worktree-safe operation.
+  **State containment (af-aqb.1):** llm-tldr runtime state (`.tldr/`, `.tldrignore`)
+  is redirected outside the project tree via `tldr-mcp-contained.sh` (MCP) and
+  `tldr-contained.sh` (CLI). State lives in `$TLDR_STATE_HOME/<project-hash>/`
+  (default: `~/.cache/tldr-state/`). No repo-local artifact leakage occurs.
 
 ## Removed Tools
 

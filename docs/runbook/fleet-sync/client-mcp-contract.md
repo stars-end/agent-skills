@@ -27,11 +27,6 @@ This document defines the authoritative configuration and registration contract 
   - `gemini-cli`: `~/.gemini/settings.json`
   - `antigravity`: `~/.gemini/antigravity/mcp_config.json`
 - **Durable Registration**: Add/maintain `mcpServers` entries in both files.
-- **Context-plus launcher nuance**:
-  - `gemini-cli` and `antigravity` must use:
-    - `command: "bash"`
-    - `args: ["-lc", "exec node ~/.local/share/contextplus-patched/build/index.js 2>/dev/null"]`
-  - stale `npx -y contextplus` and plain `node .../contextplus-patched/build/index.js` are treated as drift for Google surfaces.
 
 ### Codex CLI (`codex-cli`)
 - **Upstream Docs**: [Codex CLI MCP Support](https://developers.openai.com/codex/mcp/)
@@ -65,9 +60,8 @@ This document defines the authoritative configuration and registration contract 
 ## Tool Support Matrix
 | Tool | claude-code | gemini-cli | codex-cli | opencode |
 |------|-------------|------------|-----------|----------|
-| `llm-tldr` | ✅ | ✅ | ✅ | ✅ |
-| `context-plus` | ✅ | ✅ | ✅ | ✅ |
-| `serena` | ✅ | ✅ | ✅ | ✅ |
+| `llm-tldr` | MCP (contained) | MCP (contained) | MCP (contained) | MCP (contained) |
+| `serena` | MCP | MCP | MCP | MCP |
 | `cass-memory` | CLI Only | CLI Only | CLI Only | CLI Only |
 
 ## Verification Protocol

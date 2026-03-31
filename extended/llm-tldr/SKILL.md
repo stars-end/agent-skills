@@ -30,31 +30,62 @@ llm-tldr is rendered to IDE MCP configs and provides MCP server functionality.
 ## Installation
 
 ```bash
-# Install via uv
 uv tool install "llm-tldr==1.5.2"
 ```
 
 ## Health Commands
 
 ```bash
-# Version check (MCP binary)
-tldr-mcp --version
-
-# Fallback version check
-llm-tldr --version
+tldr-mcp --version || llm-tldr --version
 ```
+
+## State Containment (af-aqb.1)
+
+All llm-tldr runtime state (`.tldr/` and `.tldrignore`) is redirected outside
+the project tree via symlinks. This prevents artifact leakage into repos,
+worktrees, and nested subdirectories.
+
+### How It Works
+
+- **MCP server**: Fleet Sync renders `tldr-mcp-contained.sh` instead of `tldr-mcp`
+  directly. The contained wrapper patches the daemon at startup to create symlinks
+  before any state is written.
+- **CLI invocations**: Use `tldr-contained.sh` to pre-create symlinks before
+  `llm-tldr` writes state.
+- **State location**: `$TLDR_STATE_HOME/<project-hash>/` (default: `~/.cache/tldr-state/`)
+- **Project hash**: MD5 of the resolved project path. Same repo = same state, even
+  across worktrees with different absolute paths.
+
+### What Gets Symlinked
+
+| Artifact | In-Repo | External State |
+|----------|---------|----------------|
+| `.tldr/` | Symlink | `$TLDR_STATE_HOME/<hash>/.tldr/` |
+| `.tldrignore` | Symlink | `$TLDR_STATE_HOME/<hash>/.tldrignore` |
+
+### Fallback: Existing `.tldr` Directory
+
+If a real `.tldr` directory already exists (from pre-containment usage), the
+wrapper migrates it to the external state location and replaces it with a symlink.
+
+### Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `TLDR_STATE_HOME` | `~/.cache/tldr-state/` | External state root |
+| `TLDR_AUTO_DOWNLOAD` | unset | Skip model download prompts |
 
 ## MCP Configuration
 
-Rendered to IDE configs via Fleet Sync:
+Rendered to IDE configs via Fleet Sync (contained):
 
 ```json
 {
   "mcpServers": {
     "llm-tldr": {
       "type": "stdio",
-      "command": "tldr-mcp",
-      "args": []
+      "command": "bash",
+      "args": ["-lc", "exec ~/agent-skills/scripts/tldr-mcp-contained.sh"]
     }
   }
 }
@@ -64,61 +95,61 @@ Rendered to IDE configs via Fleet Sync:
 
 ### Warm / Index Lifecycle
 
-llm-tldr's `semantic` tool requires a one-time `tldr warm` to build the FAISS index. The daemon auto-spawns and indexes structural data (AST, call graph), but the semantic index must be built explicitly.
+llm-tldr's `semantic` tool requires a one-time `tldr warm` to build the FAISS
+index. Use the contained wrapper for warm operations:
 
 ```bash
-# One-time warm for canonical repos (~2 min each)
-tldr warm ~/agent-skills
-tldr warm ~/prime-radiant-ai
-tldr warm ~/affordabot
-tldr warm ~/llm-common
-
-# Warm for worktrees
-tldr warm /tmp/agents/<beads-id>/<repo>
+~/agent-skills/scripts/tldr-contained.sh warm ~/agent-skills
+~/agent-skills/scripts/tldr-contained.sh warm /tmp/agents/<beads-id>/<repo>
 ```
 
-The daemon auto-reindexes after 20 file changes, but the initial warm is required for semantic search to function.
+The daemon auto-reindexes after 20 file changes, but the initial warm is
+required for semantic search to function. The contained wrapper ensures no
+`.tldr/` or `.tldrignore` files are created inside the project tree, even when
+running `warm` from nested subdirectories.
 
 ### Worktree-Safe Project Usage
 
-llm-tldr accepts a `project` parameter on every MCP tool call. This is the worktree escape hatch:
+llm-tldr accepts a `project` parameter on every MCP tool call:
 
 ```bash
-# MCP call with explicit project path (worktree-safe)
-# semantic(project="/tmp/agents/bd-xxx/agent-skills", query="...")
-# context(project="/tmp/agents/bd-xxx/agent-skills", entry="main", depth=2)
+semantic(project="/tmp/agents/bd-xxx/agent-skills", query="...")
+context(project="/tmp/agents/bd-xxx/agent-skills", entry="main", depth=2)
 ```
 
-The daemon spawns per-project-path (socket hash is per resolved path). An agent can call any tool with a worktree path and get a daemon for that specific worktree.
+The contained MCP server ensures the daemon's state is always redirected to
+`$TLDR_STATE_HOME`, regardless of which project path is passed.
 
 ### Per-Call Project Parameter
 
 Every MCP tool accepts `project` (default `"."`):
-- In Claude Code worktrees, CWD is the worktree path and `project="."` works correctly.
+- In Claude Code worktrees, CWD is the worktree path and `project="."` works.
 - For multi-repo work, pass the explicit project path in each tool call.
-- The fleet MCP config launches `tldr-mcp` with no `--project` flag, letting each call specify the target.
+- The fleet MCP config launches the contained wrapper with no `--project` flag,
+  letting each call specify the target.
 
 ## Required Trigger Contract
 
 Use `llm-tldr` first for ALL of the following:
 
-**Semantic discovery (V8.6 — new default lane):**
+**Semantic discovery (V8.6):**
 - locating the part of the repo responsible for a concept or feature
 - mapping related files/modules before editing
 - answering "where does X live?" or "what code is related to X?"
 - natural language code search by meaning
 
-**Exact static analysis (existing lane):**
+**Exact static analysis:**
 - call graph or reverse-call impact
 - CFG/DFG/program slice
 - dead code or architecture layer analysis
 - "trace the exact code path that leads here"
 
-**Context and test targeting (V8.6 — newly surfaced):**
+**Context and test targeting (V8.6):**
 - "understand this function and its dependencies" -> `context` tool (95% token savings)
 - "what tests need to run" -> `change_impact` tool
 
-Do not skip directly to repeated `read_file` traversal for these questions unless a documented fallback condition applies.
+Do not skip directly to repeated `read_file` traversal for these questions unless
+a documented fallback condition applies.
 
 ### Key Functions
 
@@ -151,7 +182,7 @@ The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools w
 
 ## Status
 
-- Fleet contract: MCP-rendered tool
+- Fleet contract: MCP-rendered tool (contained via `tldr-mcp-contained.sh`)
 - Canonical install: `uv tool install "llm-tldr==1.5.2"`
 - Canonical health checks:
   - `tldr-mcp --version || llm-tldr --version`
@@ -170,7 +201,8 @@ The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools w
 3. **Worktree-safe**: `project` parameter per call, no single-root lock-in
 4. **Per-project daemons**: Daemon per resolved path, no central index requirement
 5. **Warm-gated semantic**: `tldr warm` required before first `semantic` call
-6. **Fallback path**: Keep fallback to normal repo-local context gathering
+6. **State-contained**: No `.tldr/` or `.tldrignore` in repo/worktree trees
+7. **Fallback path**: Keep fallback to normal repo-local context gathering
 
 ## Runtime Requirements
 
@@ -181,10 +213,7 @@ The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools w
 ## Fleet Sync Integration
 
 ```bash
-# Check health via Fleet Sync
 ~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json | jq '.tools[] | select(.tool=="llm-tldr")'
-
-# Install via Fleet Sync
 ~/agent-skills/scripts/dx-mcp-tools-sync.sh --apply --json
 ```
 
@@ -209,18 +238,28 @@ tldr-mcp --version || llm-tldr --version
 ~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json
 ```
 
-### Operational Proof (V8.6 — required after warm)
+### Artifact Leak Proof
 ```bash
-# Warm the index (one-time)
-tldr warm .
+find . -name .tldr -o -name .tldrignore
+~/agent-skills/scripts/tldr-contained.sh warm .
+find . -name .tldr -o -name .tldrignore
+```
+Expected: only symlinks, no real files under the project tree.
 
-# Prove semantic search works
+### Nested Invocation Proof
+```bash
+cd <nested-dir>
+~/agent-skills/scripts/tldr-contained.sh warm .
+cd -
+find . -name .tldr -o -name .tldrignore
+```
+Expected: only symlinks, no real files anywhere under the project tree.
+
+### Operational Proof (V8.6)
+```bash
+~/agent-skills/scripts/tldr-contained.sh warm .
 tldr semantic "routing contract" .
-
-# Prove structure analysis
 tldr structure . --lang python
-
-# Pick a real symbol, then prove context works
 tldr context <real-symbol> --project .
 ```
 
