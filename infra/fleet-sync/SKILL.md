@@ -76,7 +76,9 @@ Use this skill when the user asks to:
   `tldr-mcp-contained.sh`, which patches llm-tldr runtime path joins so
   `.tldr/` and `.tldrignore` never resolve inside the project tree. CLI warm
   operations should use `tldr-contained.sh`. No
-  repo-local artifact leakage occurs from root or nested invocations.
+  repo-local artifact leakage occurs from root or nested invocations. This is
+  enforced by `scripts/dx-verify-clean.sh`, which fails when leaked `.tldr/`
+  or `.tldrignore` artifacts are present in canonical repos.
 - `antigravity` and `gemini-cli` use wrapped launcher form with the repo
   path inside the exec string.
 - Do not claim full GO while `serena` remains unresolved unless the contract explicitly excludes it.

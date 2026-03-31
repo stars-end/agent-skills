@@ -198,6 +198,9 @@ The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools w
 6. **State-contained**: No `.tldr/` or `.tldrignore` in repo/worktree trees
 7. **Fallback path**: Keep fallback to normal repo-local context gathering
 
+Containment is enforced by the canonical done gate: `scripts/dx-verify-clean.sh`
+fails if `.tldr/` or `.tldrignore` appear under any canonical repo.
+
 ## Runtime Requirements
 
 - Python 3.12+
