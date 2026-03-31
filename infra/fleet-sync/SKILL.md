@@ -72,6 +72,11 @@ Use this skill when the user asks to:
 - For `llm-tldr`, semantic search requires `tldr warm <project>` before
   first use. Every MCP tool call accepts a `project` parameter for
   worktree-safe operation (daemon per resolved path).
+- **llm-tldr state containment (af-aqb.1):** The MCP server is launched via
+  `tldr-mcp-contained.sh`, which patches llm-tldr runtime path joins so
+  `.tldr/` and `.tldrignore` never resolve inside the project tree. CLI warm
+  operations should use `tldr-contained.sh`. No
+  repo-local artifact leakage occurs from root or nested invocations.
 - `antigravity` and `gemini-cli` use wrapped launcher form with the repo
   path inside the exec string.
 - Do not claim full GO while `serena` remains unresolved unless the contract explicitly excludes it.

@@ -1,5 +1,9 @@
 # Fleet Sync MCP Tool Rollout Plan (bd-d8f4)
 
+> **Note**: This plan describes work completed in bd-d8f4. `context-plus` was
+> fully removed in bd-rb0c.8 (2026-03-29). See
+> `infra/fleet-sync/resources/tool-contracts.md` for current tool roster.
+
 ## Overview
 This plan outlines the recommended order of restoration and validation for the Fleet Sync MCP tool stack across all canonical VMs.
 

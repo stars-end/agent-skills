@@ -43,3 +43,8 @@ tmp_*.js
 1iv
 1v
 worktrees/
+
+# llm-tldr fallback (primary containment is via tldr-contained.sh / tldr-mcp-contained.sh)
+# Only triggered if llm-tldr is invoked directly without the wrapper.
+.tldr/
+.tldrignore

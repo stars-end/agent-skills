@@ -158,11 +158,11 @@ Dry-run checks:
 
 Fleet Sync operates with two tool classes:
 
-### Tool Classes (V2.2)
+### Tool Classes (V2.3)
 
 | Class | Rendering | Layer 4 Check | Example |
 |-------|-----------|---------------|---------|
-| `mcp` | IDE config | `claude mcp list` | llm-tldr, context-plus, serena |
+| `mcp` | IDE config | `claude mcp list` | llm-tldr, serena |
 | `cli` | None | N/A | cass-memory |
 
 ### Current Tool Roster
@@ -170,15 +170,14 @@ Fleet Sync operates with two tool classes:
 | Tool | Mode | Status | Health Command |
 |------|------|--------|----------------|
 | `llm-tldr` | mcp | Enabled | `tldr-mcp --version` |
-| `cass-memory` | cli | Enabled | `cm --version` |
-| `context-plus` | mcp | Enabled | `test -f ~/.local/share/contextplus-patched/build/index.js` |
+| `cass-memory` | cli | Disabled | `cm --version` |
 | `serena` | mcp | Enabled | `serena --help` |
 
 **Current Status: FULL_GO**
 
-All four tools are enabled and pass Layer 1-3 checks:
-- CLI tools (`cass-memory`): Green when host runtime health passes
-- MCP tools (`llm-tldr`, `context-plus`, `serena`): Green when:
+Active tools pass Layer 1-3 checks:
+- CLI tools (`cass-memory`): Disabled by default (pilot-only)
+- MCP tools (`llm-tldr`, `serena`): Green when:
   1. Host runtime health passes
   2. IDE configs are rendered
   3. Client visibility confirmed
