@@ -84,6 +84,59 @@ If status returns "No linked project":
 >
 > To create a new project: `railway init`
 
+## Deployment Freshness ("Is master live?")
+
+The authoritative answer to "is `origin/master` actually deployed?" comes from
+**runtime**, not the Railway CLI. Use the shared helper from
+`railway/_shared/scripts/railway-common.sh`:
+
+```bash
+source railway/_shared/scripts/railway-common.sh
+
+# Preferred: runtime endpoint exposes commit SHA (header or body)
+check_deploy_freshness --endpoint-url https://my-app.up.railway.app
+
+# Fallback: Railway CLI deployment metadata only
+check_deploy_freshness -p PROJECT_ID -e production -s web
+```
+
+The function outputs structured JSON:
+
+```json
+{
+  "expected_sha": "abc1234...",
+  "actual_sha": "abc1234...",
+  "source": "runtime_header",
+  "fresh": true,
+  "drift": false
+}
+```
+
+### Truth Hierarchy
+
+| Priority | Source | `source` field | How |
+|----------|--------|---------------|-----|
+| 1a (preferred) | Response header `X-Commit-Sha` | `runtime_header` | `curl -D -` reads the header |
+| 1b (next) | JSON body field | `runtime_body` | Parses `.commit`, `.sha`, `.git_commit`, or `.version.commit` from response body |
+| 2 (fallback) | Railway CLI | `railway_cli` | `railway deployment list --json` — control-plane metadata, not runtime proof |
+
+**Why runtime first:** The Railway CLI reports what was *deployed*, not what is *serving*.
+Crash loops, partial rollouts, and cache layers can cause the CLI to show SUCCESS while
+the live endpoint serves stale code. Only a runtime check confirms actual truth.
+
+### How Product Repos Should Expose Commit Truth
+
+Each deployed service should expose its build commit SHA in a way the freshness check
+can read without application logic. The helper supports two mechanisms:
+
+1. **Response header** (preferred, checked first): Set `X-Commit-Sha` in the HTTP server.
+2. **JSON body**: Serve a JSON endpoint (e.g. `/commit-info`, `/version.json`, `/healthz`)
+   that includes a `commit`, `sha`, `git_commit`, or `version.commit` field. The helper parses these
+   keys in order and uses the first match.
+
+To add a new body field key, extend the `jq` extraction chain inside the `# 1b:` block
+of `check_deploy_freshness()` in `railway/_shared/scripts/railway-common.sh`.
+
 ## Presenting Status
 
 Parse the JSON and present:
@@ -92,11 +145,13 @@ Parse the JSON and present:
 - **Services**: list with deployment status
 - **Active Deployments**: any in-progress deployments (from `activeDeployments` field)
 - **Domains**: any configured domains
+- **Freshness**: whether `origin/master` matches the live deployment (see above)
 
 Example output format:
 ```
 Project: my-app (workspace: my-team)
 Environment: production
+Freshness: origin/master (09a4ad5) matches live deployment
 
 Services:
 - web: deployed (https://my-app.up.railway.app)
