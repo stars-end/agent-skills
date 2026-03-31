@@ -1172,6 +1172,105 @@ def test_explain_reconciles_stale_closed_task_and_avoids_continue_monitoring(
     print("✓ explain reports actionable next step after stale close reconciliation")
 
 
+def test_status_reconciles_stale_closed_failed_blocked_task(
+    tmp_path, monkeypatch, capsys
+):
+    """status --json should reconcile externally closed tasks stuck in failed/blocked state."""
+    wave_id = "wave-stale-failed-blocked"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-bkco"
+    loop.beads_manager.tasks = {
+        "bd-bkco.2": BeadsTask(
+            beads_id="bd-bkco.2",
+            title="Previously revision-blocked task",
+            repo="agent-skills",
+            dependencies=[],
+            status="open",
+            details_loaded=True,
+        ),
+        "bd-bkco.3": BeadsTask(
+            beads_id="bd-bkco.3",
+            title="Downstream task",
+            repo="agent-skills",
+            dependencies=["bd-bkco.2"],
+            status="open",
+            details_loaded=True,
+        ),
+    }
+    loop.beads_manager.layers = [["bd-bkco.2"], ["bd-bkco.3"]]
+
+    loop.baton_manager.start_implement("bd-bkco.2")
+    loop.baton_manager.complete_implement(
+        "bd-bkco.2", pr_url="https://example/pr/344", pr_head_sha="a" * 40
+    )
+    loop.baton_manager.start_review("bd-bkco.2", run_id="review-run-stale")
+    loop.baton_manager.complete_review(
+        "bd-bkco.2",
+        ReviewVerdict.REVISION_REQUIRED,
+        "Needs another revision",
+    )
+    loop.baton_manager.baton_states["bd-bkco.2"].revision_count = 3
+    loop.baton_manager.baton_states["bd-bkco.2"].metadata[
+        "failure_reason"
+    ] = "max_revisions_exceeded"
+    loop.scheduler.state.mark_blocked("bd-bkco.2")
+    loop._set_wave_status(
+        LoopState.REVIEW_BLOCKED,
+        BlockerCode.REVIEW_BLOCKED,
+        "Task stuck at max revisions",
+        blocked_details=[
+            {
+                "beads_id": "bd-bkco.2",
+                "phase": "review",
+                "reason_code": "max_revisions_exceeded",
+            }
+        ],
+        dispatchable_tasks=["bd-bkco.2"],
+    )
+    loop._save_state()
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco.2":
+            payload = [
+                {
+                    "id": "bd-bkco.2",
+                    "title": "Previously revision-blocked task",
+                    "status": "closed",
+                    "close_reason": "Merged in PR #344",
+                }
+            ]
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps(payload), stderr=""
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic="bd-bkco", beads_id=None, json=True)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    state = json.loads(captured.out)
+
+    assert "bd-bkco.2" in state["scheduler_state"]["completed_beads_ids"]
+    assert "bd-bkco.2" not in state["scheduler_state"]["blocked_beads_ids"]
+    assert "bd-bkco.2" in state["beads_manager"]["completed"]
+    assert state["baton_states"]["bd-bkco.2"]["phase"] == "complete"
+    assert "bd-bkco.2" not in state["wave_status"]["dispatchable_tasks"]
+    assert "bd-bkco.3" in state["wave_status"]["dispatchable_tasks"]
+
+    print("✓ status reconciles stale closed failed/blocked task")
+
+
 def test_cmd_start_refuses_second_active_wave_for_same_epic(tmp_path, capsys):
     """Starting a second live wave for the same epic should fail fast."""
     original_artifact_base = cmd_start.__globals__["ARTIFACT_BASE"]

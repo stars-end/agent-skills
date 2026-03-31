@@ -1152,7 +1152,6 @@ class DxLoop:
         for beads_id, baton_state in list(self.baton_manager.baton_states.items()):
             if baton_state.phase in (
                 BatonPhase.COMPLETE,
-                BatonPhase.FAILED,
                 BatonPhase.MANUAL_TAKEOVER,
                 BatonPhase.IDLE,
             ):
