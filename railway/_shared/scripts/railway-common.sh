@@ -130,7 +130,7 @@ check_deploy_freshness() {
       local body_json
       body_json=$(curl -sf "$endpoint_url" 2>/dev/null || true)
       if [[ -n "$body_json" ]] && echo "$body_json" | jq -e . >/dev/null 2>&1; then
-        actual_sha=$(echo "$body_json" | jq -r '.commit // .sha // .version.commit // empty' 2>/dev/null)
+        actual_sha=$(echo "$body_json" | jq -r '.commit // .sha // .git_commit // .version.commit // empty' 2>/dev/null)
         if [[ -n "$actual_sha" ]]; then
           source="runtime_body"
         fi

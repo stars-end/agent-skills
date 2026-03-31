@@ -117,7 +117,7 @@ The function outputs structured JSON:
 | Priority | Source | `source` field | How |
 |----------|--------|---------------|-----|
 | 1a (preferred) | Response header `X-Commit-Sha` | `runtime_header` | `curl -D -` reads the header |
-| 1b (next) | JSON body field | `runtime_body` | Parses `.commit`, `.sha`, or `.version.commit` from response body |
+| 1b (next) | JSON body field | `runtime_body` | Parses `.commit`, `.sha`, `.git_commit`, or `.version.commit` from response body |
 | 2 (fallback) | Railway CLI | `railway_cli` | `railway deployment list --json` — control-plane metadata, not runtime proof |
 
 **Why runtime first:** The Railway CLI reports what was *deployed*, not what is *serving*.
@@ -131,7 +131,7 @@ can read without application logic. The helper supports two mechanisms:
 
 1. **Response header** (preferred, checked first): Set `X-Commit-Sha` in the HTTP server.
 2. **JSON body**: Serve a JSON endpoint (e.g. `/commit-info`, `/version.json`, `/healthz`)
-   that includes a `commit`, `sha`, or `version.commit` field. The helper parses these
+   that includes a `commit`, `sha`, `git_commit`, or `version.commit` field. The helper parses these
    keys in order and uses the first match.
 
 To add a new body field key, extend the `jq` extraction chain inside the `# 1b:` block
