@@ -42,6 +42,19 @@ for repo in "${CANONICAL_REPOS[@]}"; do
     echo "✅ $repo: clean"
   fi
 
+  # Containment regression guard for llm-tldr runtime artifacts.
+  artifact_paths="$(
+    find "$repo_path" \
+      \( -path "$repo_path/.git" -o -path "$repo_path/.git/*" \) -prune -o \
+      \( -type d -name ".tldr" -o -type f -name ".tldrignore" \) -print 2>/dev/null || true
+  )"
+  if [[ -n "$artifact_paths" ]]; then
+    echo "❌ $repo: llm-tldr artifact leakage detected (.tldr/.tldrignore)"
+    echo "$artifact_paths" | sed 's/^/   /'
+    echo "   Remove leaked artifacts and re-run containment warm via scripts/tldr-contained.sh"
+    fail=1
+  fi
+
   # Check for stashes
   stashes="$(git -C "$repo_path" stash list 2>/dev/null || true)"
   if [[ -n "$stashes" ]]; then
