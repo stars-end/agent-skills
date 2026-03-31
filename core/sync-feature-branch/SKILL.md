@@ -26,7 +26,7 @@ Commit current work with Beads tracking + smart discovery handling + auto phase 
 bd-context
 ```
 
-If `bd-context` reports an incompatible issue prefix in `agent-skills`, stop there. Create or choose the correct `bd-*` issue for this repo, rename the branch to `feature-bd-<issue>`, and only then continue with commit flow.
+If `bd-context` reports an incompatible issue prefix in `agent-skills`, stop there. Create or choose the correct `bd-*` issue for this repo, rename the branch to `feature-bd-<issue>`, and only then continue with commit flow. If the active Beads default prefix is incompatible but the current branch is already `bd-*`, keep the branch and create any new tracking issues with explicit `bd create --id bd-<issue> --force`.
 
 ### 2. Get Current Issue
 ```bash

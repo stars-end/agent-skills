@@ -20,6 +20,7 @@ allowed-tools:
 AI-supervised issue tracking with git-backed distributed database.
 
 **Prefix note:** Examples use the Beads prefix for this repo (e.g., bd-xyz). If you are working in another repository, substitute that repo's issue ID prefix everywhere `{issue-id}` is shown (branch names, Feature-Key trailers, dependency IDs).
+In `agent-skills`, do not rely on the Beads default issue prefix when creating new tracking work. If the active Beads context is `af-*` or another non-`bd-*` prefix, create or choose an explicit `bd-*` issue id before branch, commit, or PR work.
 
 **References:**
 - Beads MCP Plugin: https://github.com/steveyegge/beads/blob/main/docs/PLUGIN.md

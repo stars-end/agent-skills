@@ -15,6 +15,15 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 REPO_NAME="$(basename -- "$REPO_ROOT")"
 REMOTE_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || echo "")"
 BRANCH="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo "")"
+BD_DB_PATH="${BD_DB:-$HOME/bd/.beads}"
+EXPECTED_PREFIX=""
+CURRENT_ISSUE_PREFIX=""
+
+case "$REPO_NAME" in
+  agent-skills|prime-radiant-ai|affordabot|llm-common)
+    EXPECTED_PREFIX="bd"
+    ;;
+esac
 
 if [[ -z "$BRANCH" ]]; then
   BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
@@ -33,6 +42,10 @@ if [[ -n "$BRANCH" ]]; then
   fi
 fi
 
+if [[ -n "$EXPECTED_PREFIX" ]] && command -v bd >/dev/null 2>&1; then
+  CURRENT_ISSUE_PREFIX="$(bd --db "$BD_DB_PATH" config get issue_prefix 2>/dev/null | tr -d '[:space:]' || true)"
+fi
+
 echo "repo_root: $REPO_ROOT"
 if [[ -n "$REMOTE_URL" ]]; then
   echo "origin:    $REMOTE_URL"
@@ -43,8 +56,14 @@ fi
 if [[ -n "$BEADS_ID" ]]; then
   echo "beads_id:  $BEADS_ID"
 fi
+if [[ -n "$EXPECTED_PREFIX" ]]; then
+  echo "expected_prefix: $EXPECTED_PREFIX"
+fi
+if [[ -n "$CURRENT_ISSUE_PREFIX" ]]; then
+  echo "config_prefix:   $CURRENT_ISSUE_PREFIX"
+fi
 
-if [[ "$REPO_NAME" == "agent-skills" && -n "$BEADS_ID" && ! "$BEADS_ID" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
+if [[ -n "$EXPECTED_PREFIX" && -n "$BEADS_ID" && ! "$BEADS_ID" =~ ^${EXPECTED_PREFIX}-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
   cat >&2 <<EOF
 
 ❌ INCOMPATIBLE BEADS CONTEXT
@@ -52,24 +71,59 @@ if [[ "$REPO_NAME" == "agent-skills" && -n "$BEADS_ID" && ! "$BEADS_ID" =~ ^bd-[
 repo:      $REPO_NAME
 branch:    $BRANCH
 beads_id:  $BEADS_ID
+expected:  ${EXPECTED_PREFIX}-*
 
-$REPO_NAME requires repo-compatible bd-* Feature-Keys and branch ids.
+This repo requires repo-compatible ${EXPECTED_PREFIX}-* Feature-Keys and branch ids.
 This context must be corrected before commit or PR steps.
 
 Next steps:
-  1. Create or choose the correct bd-* issue for this $REPO_NAME work.
-  2. Rename the branch to feature-bd-<issue>.
-  3. Re-run bd-context and continue only after it reports a bd-* id.
+  1. Create or choose the correct ${EXPECTED_PREFIX}-* issue for this $REPO_NAME work.
+  2. Rename the branch to feature-${EXPECTED_PREFIX}-<issue>.
+  3. Re-run bd-context and continue only after it reports a ${EXPECTED_PREFIX}-* id.
 
 EOF
   exit 2
+fi
+
+if [[ -n "$EXPECTED_PREFIX" && -n "$CURRENT_ISSUE_PREFIX" && "$CURRENT_ISSUE_PREFIX" != "$EXPECTED_PREFIX" ]]; then
+  if [[ -z "$BEADS_ID" || ! "$BEADS_ID" =~ ^${EXPECTED_PREFIX}-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
+    cat >&2 <<EOF
+
+⚠️  BEADS DEFAULT PREFIX MISMATCH
+
+repo:            $REPO_NAME
+expected prefix: ${EXPECTED_PREFIX}-*
+config prefix:   ${CURRENT_ISSUE_PREFIX}-*
+branch id:       ${BEADS_ID:-<none>}
+
+This repo expects explicit ${EXPECTED_PREFIX}-* Feature-Keys.
+Use a hook-compatible issue ID before branch, commit, or PR steps:
+  bd create --id ${EXPECTED_PREFIX}-<issue> --force --type <type> --title "..."
+
+EOF
+    exit 3
+  fi
+
+  cat >&2 <<EOF
+
+⚠️  BEADS DEFAULT PREFIX MISMATCH (branch is already compatible)
+
+repo:            $REPO_NAME
+expected prefix: ${EXPECTED_PREFIX}-*
+config prefix:   ${CURRENT_ISSUE_PREFIX}-*
+branch id:       ${BEADS_ID}
+
+The current branch is compatible, but new Beads issue creation in this repo
+must still use an explicit ${EXPECTED_PREFIX}-* id.
+
+EOF
 fi
 
 if command -v bd >/dev/null 2>&1; then
   if [[ -n "$BEADS_ID" && "$BEADS_ID" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
     echo ""
     echo "bd show $BEADS_ID (summary):"
-    bd show "$BEADS_ID" 2>/dev/null | head -20 || true
+    bd --db "$BD_DB_PATH" show "$BEADS_ID" 2>/dev/null | head -20 || true
   fi
 else
   echo ""

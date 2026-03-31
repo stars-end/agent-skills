@@ -82,6 +82,7 @@ FEATURE_KEY=$(echo "$CURRENT_BRANCH" | sed 's/^feature-//')
 - Provides clear recovery steps
 - Educates on Issue-First workflow
 - In `agent-skills`, this also guards against carrying `af-*` or any other non-`bd-*` Beads context into PR creation. Treat that mismatch as an early blocker and correct it before retrying.
+- If you need a fresh tracking issue in `agent-skills`, create it explicitly as `bd-*` with `bd create --id bd-<issue> --force` instead of relying on a generic default prefix.
 
 ### 2. Get Beads Context
 Use `bd` CLI:
