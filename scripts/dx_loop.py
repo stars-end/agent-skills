@@ -1179,16 +1179,32 @@ class DxLoop:
         Force baton to a terminal state and clear scheduler activity
         for a task that Beads now reports as closed/resolved.
 
-        Before advancing, any still-running implement or review job is
-        stopped so that dx-runner state does not leak past the task
-        lifecycle.
+        During active loop cadence (emit_logs=True), any still-running
+        implement or review job is stopped first.  If stop fails, the
+        task is quarantined as blocked rather than marked COMPLETE,
+        preventing orphaned jobs from leaking past the task lifecycle.
+
+        During passive queries (emit_logs=False), the terminal
+        transition proceeds without attempting a stop, since the
+        caller is only reconciling cached state.
         """
         baton_state = self.baton_manager.get_state(beads_id)
         if not baton_state:
             return
 
         if emit_logs:
-            self._stop_running_job_if_live(beads_id, baton_state, emit_logs=emit_logs)
+            stopped = self._stop_running_job_if_live(
+                beads_id, baton_state, emit_logs=True
+            )
+            if stopped is False:
+                self.scheduler.state.blocked_beads_ids.add(beads_id)
+                baton_state.metadata["blocker_code"] = "external_close_stop_failed"
+                print(
+                    f"QUARANTINED {beads_id}: runner stop failed, "
+                    "skipping terminal transition (will retry next cadence)",
+                    file=sys.stderr,
+                )
+                return
 
         had_pr = bool(baton_state.pr_url and baton_state.pr_head_sha)
 
@@ -1211,8 +1227,15 @@ class DxLoop:
 
     def _stop_running_job_if_live(
         self, beads_id: str, baton_state, *, emit_logs: bool = True
-    ) -> None:
-        """Stop a still-running dx-runner job before external-close transition."""
+    ) -> bool | None:
+        """
+        Stop a still-running dx-runner job before external-close transition.
+
+        Returns:
+            True  - job was running and stop succeeded
+            None  - job was not running (no action needed)
+            False - job was running but stop failed
+        """
         runner = (
             self.review_runner
             if baton_state.phase == BatonPhase.REVIEW
@@ -1223,13 +1246,22 @@ class DxLoop:
         )
 
         task_state = runner.check(check_id)
-        if task_state and task_state.is_running():
-            runner.stop(check_id)
-            if emit_logs:
+        if not task_state or not task_state.is_running():
+            return None
+
+        ok = runner.stop(check_id)
+        if emit_logs:
+            if ok:
                 print(
                     f"Stopped live {baton_state.phase.value} job for externally closed {beads_id}",
                     file=sys.stderr,
                 )
+            else:
+                print(
+                    f"FAILED to stop live {baton_state.phase.value} job for externally closed {beads_id}",
+                    file=sys.stderr,
+                )
+        return ok
 
     def _check_implement_progress(self, beads_id: str):
         """Check implement phase progress via RunnerAdapter"""
@@ -2255,8 +2287,7 @@ def _reconcile_wave_state_for_surfaces(
         loop._set_wave_status(
             LoopState.WAITING_ON_DEPENDENCY,
             BlockerCode.WAITING_ON_DEPENDENCY,
-            "No ready tasks: waiting on dependencies for "
-            f"{len(blocked_ids)} task(s)",
+            f"No ready tasks: waiting on dependencies for {len(blocked_ids)} task(s)",
             blocked_details=readiness.waiting_on_dependencies,
         )
     else:

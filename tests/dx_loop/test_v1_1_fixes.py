@@ -1090,7 +1090,9 @@ def test_explain_classifies_run_blocked_as_control_plane(tmp_path, capsys):
     print("✓ Explain classifies run-blocked waves as control-plane")
 
 
-def test_status_reconciles_stale_closed_active_review_task(tmp_path, monkeypatch, capsys):
+def test_status_reconciles_stale_closed_active_review_task(
+    tmp_path, monkeypatch, capsys
+):
     """status --json should clear stale active review state when Beads reports closed."""
     _build_stale_closed_review_wave(tmp_path, wave_id="wave-stale-status")
 
@@ -1166,8 +1168,14 @@ def test_explain_reconciles_stale_closed_task_and_avoids_continue_monitoring(
 
     captured = capsys.readouterr()
     assert rc == 0
-    assert "Next Action: Resume or restart dx-loop to dispatch ready tasks." in captured.out
-    assert "Continue monitoring; no blocking action is currently required." not in captured.out
+    assert (
+        "Next Action: Resume or restart dx-loop to dispatch ready tasks."
+        in captured.out
+    )
+    assert (
+        "Continue monitoring; no blocking action is currently required."
+        not in captured.out
+    )
 
     print("✓ explain reports actionable next step after stale close reconciliation")
 
@@ -1212,9 +1220,9 @@ def test_status_reconciles_stale_closed_failed_blocked_task(
         "Needs another revision",
     )
     loop.baton_manager.baton_states["bd-bkco.2"].revision_count = 3
-    loop.baton_manager.baton_states["bd-bkco.2"].metadata[
-        "failure_reason"
-    ] = "max_revisions_exceeded"
+    loop.baton_manager.baton_states["bd-bkco.2"].metadata["failure_reason"] = (
+        "max_revisions_exceeded"
+    )
     loop.scheduler.state.mark_blocked("bd-bkco.2")
     loop._set_wave_status(
         LoopState.REVIEW_BLOCKED,
@@ -3354,3 +3362,59 @@ def test_review_prompt_instructs_verdict_sidecar():
     assert "backward compatibility" in prompt
 
     print("✓ Default review prompt instructs verdict sidecar output")
+
+
+def test_external_close_stop_failure_quarantines_task(tmp_path, monkeypatch):
+    """When runner.stop() returns False, the task must be quarantined
+    and NOT advanced to COMPLETE."""
+    wave_id = "wave-stop-fail"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-stop-fail": BeadsTask(
+            beads_id="bd-stop-fail",
+            title="Agent-skills: stop failure test",
+            repo="agent-skills",
+            dependencies=[],
+        )
+    }
+    loop.baton_manager.start_implement("bd-stop-fail", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-stop-fail", "implement")
+
+    loop.implement_runner.stop = lambda beads_id: False
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="healthy",
+        reason_code="recent_log_activity",
+    )
+
+    def fake_run(cmd, **kwargs):
+        payload = [
+            {
+                "id": cmd[2],
+                "status": "closed",
+                "close_reason": "Done",
+            }
+        ]
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    loop._check_progress()
+
+    baton = loop.baton_manager.get_state("bd-stop-fail")
+    assert baton is not None, "Baton state should exist"
+    assert baton.phase != BatonPhase.COMPLETE, (
+        "Baton must NOT be COMPLETE when stop fails"
+    )
+    assert baton.metadata.get("blocker_code") == "external_close_stop_failed", (
+        f"Expected quarantine blocker, got: {baton.metadata.get('blocker_code')}"
+    )
+    assert "bd-stop-fail" in loop.scheduler.state.blocked_beads_ids, (
+        "Task should be in blocked set"
+    )
+
+    print("✓ Stop failure quarantines task and blocks terminal transition")
