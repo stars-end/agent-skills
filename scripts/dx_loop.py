@@ -42,6 +42,7 @@ from dx_loop.scheduler import DxLoopScheduler, SchedulerState
 from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState, RunnerStartResult
 
 VERSION = "1.4.0"
+SURFACE_BEADS_TIMEOUT_SECONDS = 15
 ARTIFACT_BASE = Path("/tmp/dx-loop")
 ACTIVE_EPIC_DIR = ARTIFACT_BASE / "active-epics"
 OPENCODE_IMPLEMENT_MODEL = "zai-coding-plan/glm-5"
@@ -1143,7 +1144,9 @@ class DxLoop:
             elif baton_state.phase == BatonPhase.REVIEW:
                 self._check_review_progress(beads_id)
 
-    def _refresh_beads_truth(self, *, emit_logs: bool = True) -> List[str]:
+    def _refresh_beads_truth(
+        self, *, emit_logs: bool = True, timeout_seconds: int = 5
+    ) -> List[str]:
         """
         Re-poll Beads for active baton tasks so that externally closed
         tasks do not pin stale scheduler or baton state.
@@ -1159,7 +1162,9 @@ class DxLoop:
             if beads_id in self.beads_manager.completed:
                 continue
 
-            fresh_status = self.beads_manager.refresh_task_status(beads_id)
+            fresh_status = self.beads_manager.refresh_task_status(
+                beads_id, timeout_seconds=timeout_seconds
+            )
             if fresh_status is None:
                 continue
             if not self.beads_manager._is_terminal_dependency_status(fresh_status):
@@ -2250,12 +2255,26 @@ def _reconcile_wave_state_for_surfaces(
     if not loop._load_state():
         return persisted_state
 
-    externally_closed = loop._refresh_beads_truth(emit_logs=False)
+    persisted_wave_status = persisted_state.get("wave_status", {})
+    persisted_blocker = persisted_wave_status.get("blocker_code")
 
-    if not externally_closed:
+    externally_closed = loop._refresh_beads_truth(
+        emit_logs=False, timeout_seconds=SURFACE_BEADS_TIMEOUT_SECONDS
+    )
+
+    if not externally_closed and persisted_blocker in {
+        BlockerCode.REVIEW_BLOCKED.value,
+        BlockerCode.RUN_BLOCKED.value,
+        BlockerCode.KICKOFF_ENV_BLOCKED.value,
+        BlockerCode.DETERMINISTIC_REDISPATCH_NEEDED.value,
+        BlockerCode.NEEDS_DECISION.value,
+        BlockerCode.MERGE_READY.value,
+    }:
         return persisted_state
 
-    readiness = loop.beads_manager.describe_wave_readiness()
+    readiness = loop.beads_manager.describe_wave_readiness(
+        timeout_seconds=SURFACE_BEADS_TIMEOUT_SECONDS
+    )
     active_count = len(loop.scheduler.state.active_beads_ids)
     dispatchable = [
         tid
@@ -2263,6 +2282,7 @@ def _reconcile_wave_state_for_surfaces(
         if not loop.scheduler.state.is_completed(tid)
         and not loop.scheduler.state.is_active(tid, "implement")
         and not loop.scheduler.state.is_active(tid, "review")
+        and not loop.scheduler.state.is_blocked(tid)
     ]
 
     if not readiness.pending_tasks and active_count == 0:

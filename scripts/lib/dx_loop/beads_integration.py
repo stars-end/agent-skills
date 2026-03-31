@@ -440,7 +440,7 @@ class BeadsWaveManager:
                 return ready
         return None
 
-    def describe_wave_readiness(self) -> WaveReadiness:
+    def describe_wave_readiness(self, timeout_seconds: int = 3) -> WaveReadiness:
         """
         Describe why the next wave is or is not dispatchable.
 
@@ -450,7 +450,7 @@ class BeadsWaveManager:
         - completed/no-pending conditions
         """
         readiness = WaveReadiness()
-        self.refresh_unhydrated_tasks()
+        self.refresh_unhydrated_tasks(timeout_seconds=timeout_seconds)
 
         for task_id, task in self.tasks.items():
             if task_id in self.completed:
