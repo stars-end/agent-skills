@@ -42,31 +42,25 @@ tldr-mcp --version || llm-tldr --version
 ## State Containment (af-aqb.1)
 
 All llm-tldr runtime state (`.tldr/` and `.tldrignore`) is redirected outside
-the project tree via symlinks. This prevents artifact leakage into repos,
+the project tree via runtime path translation. This prevents artifact leakage into repos,
 worktrees, and nested subdirectories.
 
 ### How It Works
 
 - **MCP server**: Fleet Sync renders `tldr-mcp-contained.sh` instead of `tldr-mcp`
-  directly. The contained wrapper patches the daemon at startup to create symlinks
-  before any state is written.
-- **CLI invocations**: Use `tldr-contained.sh` to pre-create symlinks before
-  `llm-tldr` writes state.
+  directly. The contained wrapper patches llm-tldr path joins at process startup
+  and patches MCP daemon startup so contained behavior is inherited by daemon forks.
+- **CLI invocations**: `tldr-contained.sh` launches a contained Python entrypoint
+  that patches llm-tldr before invoking `tldr.cli.main`.
 - **State location**: `$TLDR_STATE_HOME/<project-hash>/` (default: `~/.cache/tldr-state/`)
-- **Project hash**: MD5 of the resolved project path. Same repo = same state, even
-  across worktrees with different absolute paths.
+- **Project hash**: MD5 of the resolved project path used by the command.
 
-### What Gets Symlinked
+### Runtime State Mapping
 
 | Artifact | In-Repo | External State |
 |----------|---------|----------------|
-| `.tldr/` | Symlink | `$TLDR_STATE_HOME/<hash>/.tldr/` |
-| `.tldrignore` | Symlink | `$TLDR_STATE_HOME/<hash>/.tldrignore` |
-
-### Fallback: Existing `.tldr` Directory
-
-If a real `.tldr` directory already exists (from pre-containment usage), the
-wrapper migrates it to the external state location and replaces it with a symlink.
+| `.tldr/` | Absent | `$TLDR_STATE_HOME/<hash>/.tldr/` |
+| `.tldrignore` | Absent | `$TLDR_STATE_HOME/<hash>/.tldrignore` |
 
 ### Environment Variables
 
@@ -244,7 +238,7 @@ find . -name .tldr -o -name .tldrignore
 ~/agent-skills/scripts/tldr-contained.sh warm .
 find . -name .tldr -o -name .tldrignore
 ```
-Expected: only symlinks, no real files under the project tree.
+Expected: no output.
 
 ### Nested Invocation Proof
 ```bash
@@ -253,14 +247,14 @@ cd <nested-dir>
 cd -
 find . -name .tldr -o -name .tldrignore
 ```
-Expected: only symlinks, no real files anywhere under the project tree.
+Expected: no output.
 
 ### Operational Proof (V8.6)
 ```bash
 ~/agent-skills/scripts/tldr-contained.sh warm .
-tldr semantic "routing contract" .
-tldr structure . --lang python
-tldr context <real-symbol> --project .
+~/agent-skills/scripts/tldr-contained.sh semantic search "routing contract" --path . --k 2 --model all-MiniLM-L6-v2
+~/agent-skills/scripts/tldr-contained.sh structure . --lang python
+~/agent-skills/scripts/tldr-contained.sh context <real-symbol> --project .
 ```
 
 ### Layer 4 (Client Visibility)

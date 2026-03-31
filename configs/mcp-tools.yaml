@@ -15,8 +15,8 @@ tools:
   # ============================================================
   # llm-tldr: Semantic discovery + static analysis (MCP mode)
   # V8.6: Canonical default for semantic discovery AND exact
-  # Containment: uses tldr-mcp-contained.sh to redirect .tldr/
-  # and .tldrignore outside the project tree (af-aqb.1).
+  # Containment: uses tldr-mcp-contained.sh runtime patching so llm-tldr
+  # never creates .tldr/.tldrignore paths inside the project tree (af-aqb.1).
   # ============================================================
   llm-tldr:
     enabled: true
