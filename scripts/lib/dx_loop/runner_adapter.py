@@ -449,7 +449,10 @@ class RunnerAdapter:
             for line in reversed(transcript.splitlines()):
                 line = line.strip()
                 normalized = (
-                    line.lstrip("-*0123456789.> ").strip().replace("`", "").replace("*", "")
+                    line.lstrip("-*0123456789.> ")
+                    .strip()
+                    .replace("`", "")
+                    .replace("*", "")
                 )
                 if normalized.startswith("APPROVED:"):
                     return normalized
@@ -459,6 +462,43 @@ class RunnerAdapter:
                     return normalized
         except OSError:
             return None
+
+        return None
+
+    def extract_verdict_sidecar(self, worktree: Optional[Path]) -> Optional[str]:
+        """
+        Read a structured verdict from the task worktree sidecar file.
+
+        Looks for ``.dx-loop/verdict.json`` inside the worktree.  The file
+        should contain ``{"verdict": "APPROVED", "detail": "..."}`` (or
+        ``REVISION_REQUIRED`` / ``BLOCKED``).
+
+        Returns the verdict string (e.g. ``APPROVED: ...``) when the file
+        exists and contains a recognised verdict, or ``None`` otherwise.
+        """
+        if not worktree or not isinstance(worktree, Path):
+            return None
+
+        sidecar = worktree / ".dx-loop" / "verdict.json"
+        if not sidecar.exists():
+            return None
+
+        try:
+            data = json.loads(sidecar.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+
+        verdict_raw = data.get("verdict", "")
+        if not verdict_raw:
+            return None
+
+        verdict_upper = verdict_raw.upper().strip()
+        if verdict_upper.startswith("APPROVED"):
+            return f"APPROVED: {data.get('detail', verdict_raw)}"
+        if verdict_upper.startswith("REVISION_REQUIRED"):
+            return f"REVISION_REQUIRED: {data.get('detail', verdict_raw)}"
+        if verdict_upper.startswith("BLOCKED"):
+            return f"BLOCKED: {data.get('detail', verdict_raw)}"
 
         return None
 

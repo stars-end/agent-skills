@@ -41,7 +41,7 @@ from dx_loop import (
 from dx_loop.scheduler import DxLoopScheduler, SchedulerState
 from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState, RunnerStartResult
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 ARTIFACT_BASE = Path("/tmp/dx-loop")
 ACTIVE_EPIC_DIR = ARTIFACT_BASE / "active-epics"
 OPENCODE_IMPLEMENT_MODEL = "zai-coding-plan/glm-5"
@@ -141,7 +141,9 @@ def _iter_wave_states(artifact_base: Path) -> List[Tuple[str, Path, Dict[str, An
     return states
 
 
-def _active_epic_registry_path(epic_id: str, artifact_base: Path = ARTIFACT_BASE) -> Path:
+def _active_epic_registry_path(
+    epic_id: str, artifact_base: Path = ARTIFACT_BASE
+) -> Path:
     return artifact_base / "active-epics" / f"{epic_id}.json"
 
 
@@ -227,12 +229,16 @@ def _select_wave_state(
 
     registry_epic_id = epic_id
     if not registry_epic_id and beads_id:
-        epic_ids = {item[2].get("epic_id") for item in matches if item[2].get("epic_id")}
+        epic_ids = {
+            item[2].get("epic_id") for item in matches if item[2].get("epic_id")
+        }
         if len(epic_ids) == 1:
             registry_epic_id = next(iter(epic_ids))
 
     if registry_epic_id:
-        registry = _read_active_epic_registry(registry_epic_id, artifact_base=artifact_base)
+        registry = _read_active_epic_registry(
+            registry_epic_id, artifact_base=artifact_base
+        )
         if registry:
             registry_wave_id = registry.get("wave_id")
             for item in matches:
@@ -249,7 +255,11 @@ def _classify_wave_surface(
     """Classify whether the current problem is product, control-plane, dependency, or none."""
     wave_status = state.get("wave_status", {})
     blocker_code = wave_status.get("blocker_code")
-    if blocker_code in {"kickoff_env_blocked", "run_blocked", "deterministic_redispatch_needed"}:
+    if blocker_code in {
+        "kickoff_env_blocked",
+        "run_blocked",
+        "deterministic_redispatch_needed",
+    }:
         return "control_plane"
     if blocker_code == "waiting_on_dependency":
         return "dependency"
@@ -275,12 +285,15 @@ def _next_action_for_state(state: Dict[str, Any], *, surface: str) -> str:
     """Return a compact next action string for explain/status surfaces."""
     wave_status = state.get("wave_status", {})
     blocker_code = wave_status.get("blocker_code")
+    dispatchable_tasks = wave_status.get("dispatchable_tasks") or []
     if surface == "product":
         return "Address review findings or make a narrow manual repair, then resume the loop."
     if surface == "control_plane":
         return "Inspect dx-loop/dx-runner startup or runner state and repair the control plane before redispatch."
     if surface == "dependency":
         return "Wait for or complete upstream dependencies before retrying this task."
+    if dispatchable_tasks:
+        return "Resume or restart dx-loop to dispatch ready tasks."
     if blocker_code == "merge_ready":
         return "Review the PR and merge if clean."
     return "Continue monitoring; no blocking action is currently required."
@@ -1115,6 +1128,8 @@ class DxLoop:
 
     def _check_progress(self):
         """Check progress of all active tasks via RunnerAdapter"""
+        self._refresh_beads_truth()
+
         for beads_id, baton_state in list(self.baton_manager.baton_states.items()):
             if baton_state.phase in (
                 BatonPhase.COMPLETE,
@@ -1127,6 +1142,126 @@ class DxLoop:
                 self._check_implement_progress(beads_id)
             elif baton_state.phase == BatonPhase.REVIEW:
                 self._check_review_progress(beads_id)
+
+    def _refresh_beads_truth(self, *, emit_logs: bool = True) -> List[str]:
+        """
+        Re-poll Beads for active baton tasks so that externally closed
+        tasks do not pin stale scheduler or baton state.
+        """
+        externally_closed: List[str] = []
+        for beads_id, baton_state in list(self.baton_manager.baton_states.items()):
+            if baton_state.phase in (
+                BatonPhase.COMPLETE,
+                BatonPhase.MANUAL_TAKEOVER,
+                BatonPhase.IDLE,
+            ):
+                continue
+            if beads_id in self.beads_manager.completed:
+                continue
+
+            fresh_status = self.beads_manager.refresh_task_status(beads_id)
+            if fresh_status is None:
+                continue
+            if not self.beads_manager._is_terminal_dependency_status(fresh_status):
+                continue
+
+            self._force_terminal_for_externally_closed(
+                beads_id, fresh_status, emit_logs=emit_logs
+            )
+            externally_closed.append(beads_id)
+
+        return externally_closed
+
+    def _force_terminal_for_externally_closed(
+        self, beads_id: str, fresh_status: str, *, emit_logs: bool = True
+    ) -> None:
+        """
+        Force baton to a terminal state and clear scheduler activity
+        for a task that Beads now reports as closed/resolved.
+
+        During active loop cadence (emit_logs=True), any still-running
+        implement or review job is stopped first.  If stop fails, the
+        task is quarantined as blocked rather than marked COMPLETE,
+        preventing orphaned jobs from leaking past the task lifecycle.
+
+        During passive queries (emit_logs=False), the terminal
+        transition proceeds without attempting a stop, since the
+        caller is only reconciling cached state.
+        """
+        baton_state = self.baton_manager.get_state(beads_id)
+        if not baton_state:
+            return
+
+        if emit_logs:
+            stopped = self._stop_running_job_if_live(
+                beads_id, baton_state, emit_logs=True
+            )
+            if stopped is False:
+                self.scheduler.state.blocked_beads_ids.add(beads_id)
+                baton_state.metadata["blocker_code"] = "external_close_stop_failed"
+                print(
+                    f"QUARANTINED {beads_id}: runner stop failed, "
+                    "skipping terminal transition (will retry next cadence)",
+                    file=sys.stderr,
+                )
+                return
+
+        had_pr = bool(baton_state.pr_url and baton_state.pr_head_sha)
+
+        baton_state.phase = BatonPhase.COMPLETE
+        baton_state.metadata["external_close_status"] = fresh_status
+
+        self.beads_manager.mark_completed(beads_id)
+        self.scheduler.state.mark_completed(beads_id)
+        self.scheduler.state.blocked_beads_ids.discard(beads_id)
+
+        for phase in ("implement", "review"):
+            self.scheduler.state.clear_phase(beads_id, phase)
+
+        action = "Task completed externally"
+        if not had_pr:
+            action = "Task closed externally without PR artifacts"
+
+        if emit_logs:
+            print(f"{action}: {beads_id} (status={fresh_status})")
+
+    def _stop_running_job_if_live(
+        self, beads_id: str, baton_state, *, emit_logs: bool = True
+    ) -> bool | None:
+        """
+        Stop a still-running dx-runner job before external-close transition.
+
+        Returns:
+            True  - job was running and stop succeeded
+            None  - job was not running (no action needed)
+            False - job was running but stop failed
+        """
+        runner = (
+            self.review_runner
+            if baton_state.phase == BatonPhase.REVIEW
+            else self.implement_runner
+        )
+        check_id = (
+            f"{beads_id}-review" if baton_state.phase == BatonPhase.REVIEW else beads_id
+        )
+
+        task_state = runner.check(check_id)
+        if not task_state or not task_state.is_running():
+            return None
+
+        ok = runner.stop(check_id)
+        if emit_logs:
+            if ok:
+                print(
+                    f"Stopped live {baton_state.phase.value} job for externally closed {beads_id}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"FAILED to stop live {baton_state.phase.value} job for externally closed {beads_id}",
+                    file=sys.stderr,
+                )
+        return ok
 
     def _check_implement_progress(self, beads_id: str):
         """Check implement phase progress via RunnerAdapter"""
@@ -1330,10 +1465,14 @@ class DxLoop:
             return
 
         if task_state.is_complete():
-            verdict = self._parse_review_verdict(
-                self.review_runner.report(review_beads_id),
-                self.review_runner.extract_review_verdict(review_beads_id),
-            )
+            worktree = self._get_worktree_path(beads_id)
+            sidecar_verdict = self.review_runner.extract_verdict_sidecar(worktree)
+            report_data = self.review_runner.report(review_beads_id)
+            log_verdict = self.review_runner.extract_review_verdict(review_beads_id)
+
+            verdict = self._parse_review_verdict(report_data, sidecar_verdict)
+            if not verdict:
+                verdict = self._parse_review_verdict(report_data, log_verdict)
 
             if verdict:
                 baton_state = self.baton_manager.complete_review(
@@ -1646,10 +1785,17 @@ This review prompt follows the structure of [$prompt-writing](/Users/fengning/ag
 1. Review the actual implementation against the Beads task and the implementer return
 2. Prioritize concrete bugs, regressions, overclaims, missing validation, and contract drift
 3. Use findings-first review style with file references when possible
-4. End with exactly one verdict line in one of these forms:
-   - `APPROVED: <reason>`
-   - `REVISION_REQUIRED: <findings summary>`
-   - `BLOCKED: <critical issue>`
+
+## Verdict Output (REQUIRED)
+Write your verdict as a structured JSON sidecar file at `.dx-loop/verdict.json` in the worktree root.
+The file MUST contain exactly:
+
+```json
+{{"verdict": "APPROVED", "detail": "<one-line reason>"}}
+```
+
+Replace `APPROVED` with `REVISION_REQUIRED` or `BLOCKED` as appropriate.
+Also include the same verdict as the last non-empty line of your text response for backward compatibility.
 
 ## Done Gate
 Do not return a verdict until you have checked whether:
@@ -1829,7 +1975,9 @@ Do not return a verdict until you have checked whether:
 def cmd_start(args):
     """Start dx-loop for an epic"""
     requested_wave_id = getattr(args, "wave_id", None)
-    wave_id = requested_wave_id or f"wave-{now_utc().replace(':', '-').replace('T', '-')}"
+    wave_id = (
+        requested_wave_id or f"wave-{now_utc().replace(':', '-').replace('T', '-')}"
+    )
     epic_id = args.epic
 
     config = load_config_file(getattr(args, "config", None))
@@ -1886,9 +2034,7 @@ def cmd_start(args):
 
     adopted = loop.adopt_running_jobs()
     if adopted:
-        print(
-            f"Adopted {len(adopted)} already-running job(s): {', '.join(adopted)}"
-        )
+        print(f"Adopted {len(adopted)} already-running job(s): {', '.join(adopted)}")
 
     reconcile_finished_jobs = getattr(loop, "reconcile_finished_jobs", None)
     reconciled = reconcile_finished_jobs() if reconcile_finished_jobs else []
@@ -1935,6 +2081,12 @@ def cmd_status(args):
         print(f"Wave state not found for {target}", file=sys.stderr)
         return 1
     wave_id, state_file, state = resolved
+    state = _reconcile_wave_state_for_surfaces(
+        wave_id,
+        state_file=state_file,
+        persisted_state=state,
+        artifact_base=ARTIFACT_BASE,
+    )
 
     try:
         if args.json:
@@ -2023,7 +2175,13 @@ def cmd_explain(args):
         print(f"Wave state not found for {target}", file=sys.stderr)
         return 1
 
-    wave_id, _state_file, state = resolved
+    wave_id, state_file, state = resolved
+    state = _reconcile_wave_state_for_surfaces(
+        wave_id,
+        state_file=state_file,
+        persisted_state=state,
+        artifact_base=ARTIFACT_BASE,
+    )
     beads_id = getattr(args, "beads_id", None)
     wave_status = state.get("wave_status", {})
     surface = _classify_wave_surface(state, beads_id=beads_id)
@@ -2071,6 +2229,78 @@ def cmd_explain(args):
                 line = f"{line}: {' | '.join(extras)}"
             print(f"  {line}")
     return 0
+
+
+def _reconcile_wave_state_for_surfaces(
+    wave_id: str,
+    *,
+    state_file: Path,
+    persisted_state: Dict[str, Any],
+    artifact_base: Path = ARTIFACT_BASE,
+) -> Dict[str, Any]:
+    """
+    Reconcile persisted wave status against current Beads truth for status/explain.
+
+    This keeps stale active baton/scheduler state from pinning a wave when the task
+    was externally closed/merged while the supervisor was idle.
+    """
+    loop = DxLoop(wave_id)
+    loop.wave_dir = artifact_base / "waves" / wave_id
+    loop.state_file = state_file
+    if not loop._load_state():
+        return persisted_state
+
+    externally_closed = loop._refresh_beads_truth(emit_logs=False)
+
+    if not externally_closed:
+        return persisted_state
+
+    readiness = loop.beads_manager.describe_wave_readiness()
+    active_count = len(loop.scheduler.state.active_beads_ids)
+    dispatchable = [
+        tid
+        for tid in readiness.ready
+        if not loop.scheduler.state.is_completed(tid)
+        and not loop.scheduler.state.is_active(tid, "implement")
+        and not loop.scheduler.state.is_active(tid, "review")
+    ]
+
+    if not readiness.pending_tasks and active_count == 0:
+        loop._set_wave_status(
+            LoopState.COMPLETED,
+            None,
+            "All wave tasks are complete after reconciliation",
+        )
+    elif dispatchable:
+        loop._set_wave_status(
+            LoopState.IN_PROGRESS_HEALTHY,
+            None,
+            f"Reconciled wave state; {len(dispatchable)} task(s) ready for dispatch",
+            dispatchable_tasks=dispatchable,
+        )
+    elif readiness.waiting_on_dependencies and active_count == 0:
+        blocked_ids = {
+            item.get("beads_id")
+            for item in readiness.waiting_on_dependencies
+            if item.get("beads_id")
+        }
+        loop._set_wave_status(
+            LoopState.WAITING_ON_DEPENDENCY,
+            BlockerCode.WAITING_ON_DEPENDENCY,
+            f"No ready tasks: waiting on dependencies for {len(blocked_ids)} task(s)",
+            blocked_details=readiness.waiting_on_dependencies,
+        )
+    else:
+        loop._set_wave_status(
+            LoopState.IN_PROGRESS_HEALTHY,
+            None,
+            "Reconciled wave state; monitoring active tasks",
+            dispatchable_tasks=dispatchable,
+        )
+
+    loop._save_state()
+    reconciled = _read_wave_state(state_file)
+    return reconciled or persisted_state
 
 
 def cmd_takeover(args):

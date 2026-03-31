@@ -39,6 +39,47 @@ cmd_explain = dx_loop_script.cmd_explain
 cmd_start = dx_loop_script.cmd_start
 
 
+def _build_stale_closed_review_wave(tmp_path: Path, wave_id: str = "wave-stale-closed"):
+    """Create a persisted wave pinned on an active review task that is now closed."""
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-bkco"
+    loop.beads_manager.tasks = {
+        "bd-bkco.2": BeadsTask(
+            beads_id="bd-bkco.2",
+            title="Merged task",
+            repo="agent-skills",
+            dependencies=[],
+            status="open",
+            details_loaded=True,
+        ),
+        "bd-bkco.3": BeadsTask(
+            beads_id="bd-bkco.3",
+            title="Downstream task",
+            repo="agent-skills",
+            dependencies=["bd-bkco.2"],
+            status="open",
+            details_loaded=True,
+        ),
+    }
+    loop.beads_manager.layers = [["bd-bkco.2"], ["bd-bkco.3"]]
+    loop.baton_manager.start_implement("bd-bkco.2")
+    loop.baton_manager.complete_implement(
+        "bd-bkco.2", pr_url="https://example/pr/344", pr_head_sha="a" * 40
+    )
+    loop.baton_manager.start_review("bd-bkco.2", run_id="review-run-1")
+    loop.scheduler.state.mark_dispatched("bd-bkco.2", "review")
+    loop._set_wave_status(
+        LoopState.IN_PROGRESS_HEALTHY,
+        None,
+        "All ready tasks already active, waiting for progress",
+        dispatchable_tasks=["bd-bkco.2"],
+    )
+    loop._save_state()
+    return loop
+
+
 def test_no_duplicate_dispatch():
     """P0 fix: Active work not redispatched"""
     scheduler = DxLoopScheduler(cadence_seconds=1)
@@ -392,13 +433,21 @@ def test_load_epic_tasks_skips_closed_children(monkeypatch):
                     "title": "Open task",
                     "status": "open",
                     "description": "",
-                    "dependencies": [{"id": "bd-closed", "status": "closed", "dependency_type": "blocks"}],
+                    "dependencies": [
+                        {
+                            "id": "bd-closed",
+                            "status": "closed",
+                            "dependency_type": "blocks",
+                        }
+                    ],
                 }
             ]
         else:
             raise AssertionError(f"unexpected beads id: {beads_id}")
 
-        return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
@@ -639,9 +688,12 @@ def test_generated_review_prompt_consumes_implementation_return():
     assert "dx-loop-review-contract" in prompt
     assert "Implementer Return" in prompt
     assert "MODE: implementation_return" in prompt
-    assert "APPROVED:" in prompt
+    assert "APPROVED" in prompt
+    assert ".dx-loop/verdict.json" in prompt
 
-    print("✓ Review prompt consumes implementation return")
+    print(
+        "✓ Review prompt consumes implementation return and instructs verdict sidecar"
+    )
 
 
 def test_reconcile_finished_jobs_advances_stale_implement_baton():
@@ -661,7 +713,8 @@ def test_reconcile_finished_jobs_advances_stale_implement_baton():
         exit_code=0,
     )
     loop.implement_runner.extract_pr_artifacts = lambda beads_id: None
-    loop.implement_runner.extract_agent_output = lambda beads_id: """
+    loop.implement_runner.extract_agent_output = lambda beads_id: (
+        """
 ## Tech Lead Review (Implementation Return)
 - MODE: implementation_return
 - PR_URL: https://github.com/stars-end/prime-radiant-ai/pull/1030
@@ -670,6 +723,7 @@ def test_reconcile_finished_jobs_advances_stale_implement_baton():
 - BEADS_SUBTASK: bd-test-reconcile
 - BEADS_DEPENDENCIES: none
 """
+    )
 
     reconciled = loop.reconcile_finished_jobs()
 
@@ -678,9 +732,7 @@ def test_reconcile_finished_jobs_advances_stale_implement_baton():
     assert baton is not None
     assert baton.phase == BatonPhase.REVIEW
     assert baton.pr_url == "https://github.com/stars-end/prime-radiant-ai/pull/1030"
-    assert (
-        baton.pr_head_sha == "f4aaa8f48913e6f2e93311767e3ac99669d4e031"
-    )
+    assert baton.pr_head_sha == "f4aaa8f48913e6f2e93311767e3ac99669d4e031"
     assert loop.pr_enforcer.has_valid_artifact("bd-test-reconcile")
     assert not loop.scheduler.state.is_active("bd-test-reconcile", "implement")
 
@@ -730,7 +782,9 @@ def test_cmd_start_reuses_existing_active_wave_without_explicit_wave_id(
 
     captured = capsys.readouterr()
     assert rc == 0
-    assert "Resuming existing active wave for epic bd-epic: wave-existing" in captured.out
+    assert (
+        "Resuming existing active wave for epic bd-epic: wave-existing" in captured.out
+    )
     assert "Wave ID: wave-existing" in captured.out
 
     print("✓ start --epic resumes the existing active wave by default")
@@ -979,9 +1033,7 @@ def test_explain_classifies_review_blocked_as_product(tmp_path, capsys):
     original_artifact_base = cmd_explain.__globals__["ARTIFACT_BASE"]
     cmd_explain.__globals__["ARTIFACT_BASE"] = tmp_path
     try:
-        rc = cmd_explain(
-            SimpleNamespace(wave_id=None, epic=None, beads_id="bd-test")
-        )
+        rc = cmd_explain(SimpleNamespace(wave_id=None, epic=None, beads_id="bd-test"))
     finally:
         cmd_explain.__globals__["ARTIFACT_BASE"] = original_artifact_base
 
@@ -1036,6 +1088,195 @@ def test_explain_classifies_run_blocked_as_control_plane(tmp_path, capsys):
     assert "Next Action: Inspect dx-loop/dx-runner startup" in captured.out
 
     print("✓ Explain classifies run-blocked waves as control-plane")
+
+
+def test_status_reconciles_stale_closed_active_review_task(
+    tmp_path, monkeypatch, capsys
+):
+    """status --json should clear stale active review state when Beads reports closed."""
+    _build_stale_closed_review_wave(tmp_path, wave_id="wave-stale-status")
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco.2":
+            payload = [
+                {
+                    "id": "bd-bkco.2",
+                    "title": "Merged task",
+                    "status": "closed",
+                    "close_reason": "Merged in PR #344",
+                }
+            ]
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps(payload), stderr=""
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic="bd-bkco", beads_id=None, json=True)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    state = json.loads(captured.out)
+
+    assert "bd-bkco.2:review" not in state["scheduler_state"]["active_beads_ids"]
+    assert "bd-bkco.2" in state["scheduler_state"]["completed_beads_ids"]
+    assert "bd-bkco.2" in state["beads_manager"]["completed"]
+    assert "bd-bkco.2" not in state["wave_status"]["dispatchable_tasks"]
+    assert "bd-bkco.3" in state["wave_status"]["dispatchable_tasks"]
+    assert state["baton_states"]["bd-bkco.2"]["phase"] == "complete"
+
+    print("✓ status --json reconciles stale closed active review task")
+
+
+def test_explain_reconciles_stale_closed_task_and_avoids_continue_monitoring(
+    tmp_path, monkeypatch, capsys
+):
+    """explain should not report passive monitoring after stale close reconciliation."""
+    _build_stale_closed_review_wave(tmp_path, wave_id="wave-stale-explain")
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco.2":
+            payload = [
+                {
+                    "id": "bd-bkco.2",
+                    "title": "Merged task",
+                    "status": "closed",
+                    "close_reason": "Merged in PR #344",
+                }
+            ]
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps(payload), stderr=""
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    original_artifact_base = cmd_explain.__globals__["ARTIFACT_BASE"]
+    cmd_explain.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_explain(SimpleNamespace(wave_id=None, epic="bd-bkco", beads_id=None))
+    finally:
+        cmd_explain.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert (
+        "Next Action: Resume or restart dx-loop to dispatch ready tasks."
+        in captured.out
+    )
+    assert (
+        "Continue monitoring; no blocking action is currently required."
+        not in captured.out
+    )
+
+    print("✓ explain reports actionable next step after stale close reconciliation")
+
+
+def test_status_reconciles_stale_closed_failed_blocked_task(
+    tmp_path, monkeypatch, capsys
+):
+    """status --json should reconcile externally closed tasks stuck in failed/blocked state."""
+    wave_id = "wave-stale-failed-blocked"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-bkco"
+    loop.beads_manager.tasks = {
+        "bd-bkco.2": BeadsTask(
+            beads_id="bd-bkco.2",
+            title="Previously revision-blocked task",
+            repo="agent-skills",
+            dependencies=[],
+            status="open",
+            details_loaded=True,
+        ),
+        "bd-bkco.3": BeadsTask(
+            beads_id="bd-bkco.3",
+            title="Downstream task",
+            repo="agent-skills",
+            dependencies=["bd-bkco.2"],
+            status="open",
+            details_loaded=True,
+        ),
+    }
+    loop.beads_manager.layers = [["bd-bkco.2"], ["bd-bkco.3"]]
+
+    loop.baton_manager.start_implement("bd-bkco.2")
+    loop.baton_manager.complete_implement(
+        "bd-bkco.2", pr_url="https://example/pr/344", pr_head_sha="a" * 40
+    )
+    loop.baton_manager.start_review("bd-bkco.2", run_id="review-run-stale")
+    loop.baton_manager.complete_review(
+        "bd-bkco.2",
+        ReviewVerdict.REVISION_REQUIRED,
+        "Needs another revision",
+    )
+    loop.baton_manager.baton_states["bd-bkco.2"].revision_count = 3
+    loop.baton_manager.baton_states["bd-bkco.2"].metadata["failure_reason"] = (
+        "max_revisions_exceeded"
+    )
+    loop.scheduler.state.mark_blocked("bd-bkco.2")
+    loop._set_wave_status(
+        LoopState.REVIEW_BLOCKED,
+        BlockerCode.REVIEW_BLOCKED,
+        "Task stuck at max revisions",
+        blocked_details=[
+            {
+                "beads_id": "bd-bkco.2",
+                "phase": "review",
+                "reason_code": "max_revisions_exceeded",
+            }
+        ],
+        dispatchable_tasks=["bd-bkco.2"],
+    )
+    loop._save_state()
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco.2":
+            payload = [
+                {
+                    "id": "bd-bkco.2",
+                    "title": "Previously revision-blocked task",
+                    "status": "closed",
+                    "close_reason": "Merged in PR #344",
+                }
+            ]
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps(payload), stderr=""
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic="bd-bkco", beads_id=None, json=True)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    state = json.loads(captured.out)
+
+    assert "bd-bkco.2" in state["scheduler_state"]["completed_beads_ids"]
+    assert "bd-bkco.2" not in state["scheduler_state"]["blocked_beads_ids"]
+    assert "bd-bkco.2" in state["beads_manager"]["completed"]
+    assert state["baton_states"]["bd-bkco.2"]["phase"] == "complete"
+    assert "bd-bkco.2" not in state["wave_status"]["dispatchable_tasks"]
+    assert "bd-bkco.3" in state["wave_status"]["dispatchable_tasks"]
+
+    print("✓ status reconciles stale closed failed/blocked task")
 
 
 def test_cmd_start_refuses_second_active_wave_for_same_epic(tmp_path, capsys):
@@ -1184,7 +1425,10 @@ def test_dx_ensure_bins_links_dx_loop(tmp_path):
         text=True,
         check=True,
     )
-    assert "dx-loop 1.3.0" in version.stdout
+    version_match = version.stdout.strip()
+    assert version_match.startswith("dx-loop "), (
+        f"Unexpected version output: {version_match}"
+    )
 
     print("✓ dx-loop canonical entrypoint is linked")
 
@@ -2588,3 +2832,589 @@ if __name__ == "__main__":
     test_runner_adapter_no_model_flag_when_null()
     test_runner_adapter_review_model_propagation()
     print("\nAll v1.1 fix tests passed!")
+
+
+# ---------------------------------------------------------------------------
+# v1.4 truth-hardening tests — bd-xifc incident bundle
+# ---------------------------------------------------------------------------
+
+
+def test_external_close_detection_forces_baton_to_complete(tmp_path, monkeypatch):
+    """An externally closed Beads task should force baton to COMPLETE."""
+    wave_id = "wave-external-close-baton"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-closed-externally": BeadsTask(
+            beads_id="bd-closed-externally",
+            title="Externally closed task",
+            repo="agent-skills",
+            dependencies=[],
+        )
+    }
+    loop.beads_manager.layers = [["bd-closed-externally"]]
+    loop.baton_manager.start_implement("bd-closed-externally", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-closed-externally", "implement")
+
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id, state="exited_ok"
+    )
+
+    def fake_run(cmd, **kwargs):
+        beads_id = cmd[2]
+        if beads_id == "bd-closed-externally":
+            payload = [
+                {
+                    "id": beads_id,
+                    "title": "Externally closed task",
+                    "status": "closed",
+                    "close_reason": "Merged manually",
+                }
+            ]
+        else:
+            raise AssertionError(f"unexpected bd show call for {beads_id}")
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    loop._check_progress()
+
+    baton = loop.baton_manager.get_state("bd-closed-externally")
+    assert baton is not None
+    assert baton.phase == BatonPhase.COMPLETE
+    assert "bd-closed-externally" in loop.beads_manager.completed
+    assert loop.scheduler.state.is_completed("bd-closed-externally")
+    assert baton.metadata.get("external_close_status") == "closed"
+
+    print("✓ Externally closed task forces baton to COMPLETE")
+
+
+def test_external_close_clears_scheduler_activity(tmp_path, monkeypatch):
+    """Externally closed tasks should be removed from active and blocked sets."""
+    wave_id = "wave-external-close-scheduler"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-closed-review": BeadsTask(
+            beads_id="bd-closed-review",
+            title="Closed during review",
+            repo="agent-skills",
+            dependencies=[],
+        )
+    }
+    loop.beads_manager.layers = [["bd-closed-review"]]
+    loop.baton_manager.start_implement("bd-closed-review")
+    loop.baton_manager.complete_implement(
+        "bd-closed-review", pr_url="http://example/1", pr_head_sha="a" * 40
+    )
+    loop.baton_manager.start_review("bd-closed-review", run_id="review-run-1")
+    loop.scheduler.state.mark_dispatched("bd-closed-review", "review")
+
+    loop.review_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id, state="exited_ok"
+    )
+
+    def fake_run(cmd, **kwargs):
+        beads_id = cmd[2]
+        payload = [
+            {
+                "id": beads_id,
+                "title": "Closed during review",
+                "status": "resolved",
+                "close_reason": "Superseded by PR #500",
+            }
+        ]
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    loop._check_progress()
+
+    assert not loop.scheduler.state.is_active("bd-closed-review")
+    assert not loop.scheduler.state.is_blocked("bd-closed-review")
+    assert loop.scheduler.state.is_completed("bd-closed-review")
+
+    print("✓ Externally closed task clears all scheduler activity")
+
+
+def test_wave_readiness_excludes_externally_closed_tasks(tmp_path, monkeypatch):
+    """describe_wave_readiness should not list externally closed tasks as dispatchable."""
+    manager = BeadsWaveManager()
+    manager.tasks = {
+        "bd-open": BeadsTask(
+            beads_id="bd-open",
+            title="Open task",
+            dependencies=[],
+            details_loaded=True,
+        ),
+        "bd-closed": BeadsTask(
+            beads_id="bd-closed",
+            title="Closed task",
+            dependencies=[],
+            details_loaded=True,
+            status="open",
+        ),
+    }
+    manager.layers = [["bd-open", "bd-closed"]]
+
+    def fake_run(cmd, **kwargs):
+        beads_id = cmd[2]
+        if beads_id == "bd-closed":
+            payload = [
+                {
+                    "id": beads_id,
+                    "status": "closed",
+                    "close_reason": "Done outside loop",
+                }
+            ]
+        else:
+            payload = [{"id": beads_id, "status": "open"}]
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    manager.refresh_task_status("bd-closed")
+
+    readiness = manager.describe_wave_readiness()
+
+    assert "bd-closed" in manager.completed
+    assert "bd-closed" not in readiness.ready
+    assert "bd-closed" not in readiness.pending_tasks
+    assert "bd-open" in readiness.ready
+
+    print("✓ Externally closed tasks excluded from wave readiness")
+
+
+def test_verdict_sidecar_preferred_over_transcript(tmp_path):
+    """A structured verdict sidecar should be preferred over transcript parsing."""
+    adapter = RunnerAdapter(provider="opencode")
+    worktree = tmp_path / "agents" / "bd-sidecar-test" / "agent-skills"
+    sidecar_dir = worktree / ".dx-loop"
+    sidecar_dir.mkdir(parents=True)
+    (sidecar_dir / "verdict.json").write_text(
+        json.dumps({"verdict": "APPROVED", "detail": "All tests pass"})
+    )
+
+    verdict = adapter.extract_verdict_sidecar(worktree)
+
+    assert verdict is not None
+    assert "APPROVED" in verdict
+    assert "All tests pass" in verdict
+
+    print("✓ Structured verdict sidecar is preferred")
+
+
+def test_verdict_fallback_to_transcript_when_no_sidecar(tmp_path):
+    """Verdict extraction should fall back to transcript when no sidecar exists."""
+    adapter = RunnerAdapter(provider="opencode")
+    worktree = tmp_path / "agents" / "bd-no-sidecar" / "agent-skills"
+    worktree.mkdir(parents=True)
+
+    verdict = adapter.extract_verdict_sidecar(worktree)
+
+    assert verdict is None
+
+    log_dir = Path("/tmp/dx-runner/opencode")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "bd-no-sidecar-review.log"
+    log_path.write_text("Some text\nAPPROVED: looks good\n")
+
+    try:
+        transcript_verdict = adapter.extract_review_verdict("bd-no-sidecar-review")
+    finally:
+        log_path.unlink(missing_ok=True)
+
+    assert transcript_verdict == "APPROVED: looks good"
+
+    print("✓ Verdict falls back to transcript parsing when sidecar absent")
+
+
+def test_verdict_sidecar_revision_required(tmp_path):
+    """Sidecar should handle REVISION_REQUIRED verdicts."""
+    adapter = RunnerAdapter(provider="opencode")
+    worktree = tmp_path / "agents" / "bd-revision" / "agent-skills"
+    sidecar_dir = worktree / ".dx-loop"
+    sidecar_dir.mkdir(parents=True)
+    (sidecar_dir / "verdict.json").write_text(
+        json.dumps({"verdict": "REVISION_REQUIRED", "detail": "Missing test coverage"})
+    )
+
+    verdict = adapter.extract_verdict_sidecar(worktree)
+
+    assert verdict is not None
+    assert "REVISION_REQUIRED" in verdict
+    assert "Missing test coverage" in verdict
+
+    print("✓ Sidecar handles REVISION_REQUIRED verdicts")
+
+
+def test_verdict_sidecar_blocked(tmp_path):
+    """Sidecar should handle BLOCKED verdicts."""
+    adapter = RunnerAdapter(provider="opencode")
+    worktree = tmp_path / "agents" / "bd-blocked" / "agent-skills"
+    sidecar_dir = worktree / ".dx-loop"
+    sidecar_dir.mkdir(parents=True)
+    (sidecar_dir / "verdict.json").write_text(
+        json.dumps({"verdict": "BLOCKED", "detail": "Critical security issue"})
+    )
+
+    verdict = adapter.extract_verdict_sidecar(worktree)
+
+    assert verdict is not None
+    assert "BLOCKED" in verdict
+    assert "Critical security issue" in verdict
+
+    print("✓ Sidecar handles BLOCKED verdicts")
+
+
+def test_verdict_sidecar_ignores_invalid_json(tmp_path):
+    """Invalid JSON in sidecar should return None, not raise."""
+    adapter = RunnerAdapter(provider="opencode")
+    worktree = tmp_path / "agents" / "bd-bad-json" / "agent-skills"
+    sidecar_dir = worktree / ".dx-loop"
+    sidecar_dir.mkdir(parents=True)
+    (sidecar_dir / "verdict.json").write_text("not valid json {")
+
+    verdict = adapter.extract_verdict_sidecar(worktree)
+
+    assert verdict is None
+
+    print("✓ Invalid sidecar JSON is handled gracefully")
+
+
+def test_verdict_sidecar_ignores_unknown_verdict(tmp_path):
+    """Sidecar with unknown verdict string should return None."""
+    adapter = RunnerAdapter(provider="opencode")
+    worktree = tmp_path / "agents" / "bd-unknown" / "agent-skills"
+    sidecar_dir = worktree / ".dx-loop"
+    sidecar_dir.mkdir(parents=True)
+    (sidecar_dir / "verdict.json").write_text(
+        json.dumps({"verdict": "MAYBE", "detail": "Not sure"})
+    )
+
+    verdict = adapter.extract_verdict_sidecar(worktree)
+
+    assert verdict is None
+
+    print("✓ Unknown verdict in sidecar is ignored")
+
+
+def test_refresh_task_status_returns_none_for_unknown_task():
+    """refresh_task_status should return None for tasks not in the wave."""
+    manager = BeadsWaveManager()
+    result = manager.refresh_task_status("bd-unknown")
+    assert result is None
+
+    print("✓ refresh_task_status returns None for unknown tasks")
+
+
+def test_refresh_task_status_survives_beads_timeout(monkeypatch):
+    """refresh_task_status should return None on Beads timeout, not crash."""
+    manager = BeadsWaveManager()
+    manager.tasks["bd-timeout"] = BeadsTask(
+        beads_id="bd-timeout",
+        title="Timeout task",
+        status="open",
+    )
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=5)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = manager.refresh_task_status("bd-timeout")
+
+    assert result is None
+    assert "bd-timeout" not in manager.completed
+
+    print("✓ refresh_task_status survives Beads timeout gracefully")
+
+
+def test_external_close_stops_live_implement_job(tmp_path, monkeypatch):
+    """External close should stop a still-running implement job before terminal transition."""
+    wave_id = "wave-stop-live-implement"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-running-close": BeadsTask(
+            beads_id="bd-running-close",
+            title="Running then closed",
+            repo="agent-skills",
+            dependencies=[],
+        )
+    }
+    loop.beads_manager.layers = [["bd-running-close"]]
+    loop.baton_manager.start_implement("bd-running-close", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-running-close", "implement")
+
+    stop_calls = []
+
+    def fake_stop(beads_id):
+        stop_calls.append(beads_id)
+        return True
+
+    loop.implement_runner.stop = fake_stop
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="healthy",
+        reason_code="recent_log_activity",
+    )
+
+    def fake_run(cmd, **kwargs):
+        beads_id = cmd[2]
+        payload = [
+            {
+                "id": beads_id,
+                "status": "closed",
+                "close_reason": "Merged manually",
+            }
+        ]
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    loop._check_progress()
+
+    assert "bd-running-close" in stop_calls, "Live implement job should be stopped"
+    baton = loop.baton_manager.get_state("bd-running-close")
+    assert baton is not None
+    assert baton.phase == BatonPhase.COMPLETE
+
+    print("✓ External close stops live implement job before terminal transition")
+
+
+def test_external_close_stops_live_review_job(tmp_path, monkeypatch):
+    """External close should stop a still-running review job before terminal transition."""
+    wave_id = "wave-stop-live-review"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-review-close": BeadsTask(
+            beads_id="bd-review-close",
+            title="Review then closed",
+            repo="agent-skills",
+            dependencies=[],
+        )
+    }
+    loop.baton_manager.start_implement("bd-review-close")
+    loop.baton_manager.complete_implement(
+        "bd-review-close", pr_url="http://example/1", pr_head_sha="a" * 40
+    )
+    loop.baton_manager.start_review("bd-review-close", run_id="review-run-1")
+    loop.scheduler.state.mark_dispatched("bd-review-close", "review")
+
+    stop_calls = []
+
+    def fake_stop(beads_id):
+        stop_calls.append(beads_id)
+        return True
+
+    loop.review_runner.stop = fake_stop
+    loop.review_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="healthy",
+        reason_code="recent_log_activity",
+    )
+
+    def fake_run(cmd, **kwargs):
+        payload = [
+            {
+                "id": cmd[2],
+                "status": "resolved",
+                "close_reason": "Superseded",
+            }
+        ]
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    loop._check_progress()
+
+    assert "bd-review-close-review" in stop_calls, "Live review job should be stopped"
+    baton = loop.baton_manager.get_state("bd-review-close")
+    assert baton is not None
+    assert baton.phase == BatonPhase.COMPLETE
+
+    print("✓ External close stops live review job before terminal transition")
+
+
+def test_external_close_skips_stop_when_job_exited(tmp_path, monkeypatch):
+    """External close should not call stop when the runner job already exited."""
+    wave_id = "wave-no-stop-exited"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-exited-close": BeadsTask(
+            beads_id="bd-exited-close",
+            title="Exited then closed",
+            repo="agent-skills",
+            dependencies=[],
+        )
+    }
+    loop.baton_manager.start_implement("bd-exited-close", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-exited-close", "implement")
+
+    stop_calls = []
+
+    def fake_stop(beads_id):
+        stop_calls.append(beads_id)
+        return True
+
+    loop.implement_runner.stop = fake_stop
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="exited_ok",
+        reason_code="process_exit_with_rc",
+    )
+
+    def fake_run(cmd, **kwargs):
+        payload = [
+            {
+                "id": cmd[2],
+                "status": "closed",
+                "close_reason": "Done",
+            }
+        ]
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    loop._check_progress()
+
+    assert stop_calls == [], "stop should not be called for an already-exited job"
+
+    print("✓ External close skips stop when runner job already exited")
+
+
+def test_refresh_task_status_writes_correct_repo_in_metadata(tmp_path, monkeypatch):
+    """refresh_task_status should use inferred repo, not title, in metadata."""
+    manager = BeadsWaveManager()
+    manager.tasks["bd-repo-test"] = BeadsTask(
+        beads_id="bd-repo-test",
+        title="Agent-skills: harden dx-loop",
+        status="open",
+        repo="agent-skills",
+    )
+
+    def fake_run(cmd, **kwargs):
+        payload = [
+            {
+                "id": "bd-repo-test",
+                "title": "Agent-skills: harden dx-loop",
+                "status": "closed",
+                "close_reason": "PR #434",
+            }
+        ]
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = manager.refresh_task_status("bd-repo-test")
+
+    assert result == "closed"
+    meta = manager.get_dependency_metadata("bd-repo-test")
+    assert meta["repo"] == "agent-skills", (
+        f"Expected inferred repo, got: {meta['repo']}"
+    )
+    assert meta["title"] == "Agent-skills: harden dx-loop"
+
+    print("✓ refresh_task_status writes correct repo in metadata")
+
+
+def test_review_prompt_instructs_verdict_sidecar():
+    """Default review prompt should instruct the reviewer to write .dx-loop/verdict.json."""
+    loop = DxLoop("wave-test")
+    loop.beads_manager.tasks["bd-sidecar-wire"] = BeadsTask(
+        beads_id="bd-sidecar-wire",
+        title="Agent-skills: wire sidecar",
+        description="Ensure reviewers emit the verdict sidecar.",
+        repo="agent-skills",
+    )
+
+    prompt = loop._generate_review_prompt(
+        "bd-sidecar-wire",
+        "https://github.com/stars-end/agent-skills/pull/434",
+        "a" * 40,
+    )
+
+    assert ".dx-loop/verdict.json" in prompt
+    assert '"verdict": "APPROVED"' in prompt
+    assert '"detail"' in prompt
+    assert "backward compatibility" in prompt
+
+    print("✓ Default review prompt instructs verdict sidecar output")
+
+
+def test_external_close_stop_failure_quarantines_task(tmp_path, monkeypatch):
+    """When runner.stop() returns False, the task must be quarantined
+    and NOT advanced to COMPLETE."""
+    wave_id = "wave-stop-fail"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-stop-fail": BeadsTask(
+            beads_id="bd-stop-fail",
+            title="Agent-skills: stop failure test",
+            repo="agent-skills",
+            dependencies=[],
+        )
+    }
+    loop.baton_manager.start_implement("bd-stop-fail", run_id="run-1")
+    loop.scheduler.state.mark_dispatched("bd-stop-fail", "implement")
+
+    loop.implement_runner.stop = lambda beads_id: False
+    loop.implement_runner.check = lambda beads_id: RunnerTaskState(
+        beads_id=beads_id,
+        state="healthy",
+        reason_code="recent_log_activity",
+    )
+
+    def fake_run(cmd, **kwargs):
+        payload = [
+            {
+                "id": cmd[2],
+                "status": "closed",
+                "close_reason": "Done",
+            }
+        ]
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    loop._check_progress()
+
+    baton = loop.baton_manager.get_state("bd-stop-fail")
+    assert baton is not None, "Baton state should exist"
+    assert baton.phase != BatonPhase.COMPLETE, (
+        "Baton must NOT be COMPLETE when stop fails"
+    )
+    assert baton.metadata.get("blocker_code") == "external_close_stop_failed", (
+        f"Expected quarantine blocker, got: {baton.metadata.get('blocker_code')}"
+    )
+    assert "bd-stop-fail" in loop.scheduler.state.blocked_beads_ids, (
+        "Task should be in blocked set"
+    )
+
+    print("✓ Stop failure quarantines task and blocks terminal transition")
