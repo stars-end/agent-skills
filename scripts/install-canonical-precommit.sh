@@ -81,6 +81,49 @@ EOF
   exit 1
 fi
 
+CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
+if [ -z "$CURRENT_BRANCH" ]; then
+  CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+fi
+
+if [ "$REPO_NAME" = "agent-skills" ] && [ -n "${CURRENT_BRANCH:-}" ]; then
+  BRANCH_CONTEXT="${CURRENT_BRANCH##*/}"
+  if [[ "$BRANCH_CONTEXT" == feature-* ]]; then
+    BRANCH_CONTEXT="${BRANCH_CONTEXT#feature-}"
+  fi
+  DETECTED_ISSUE_ID=""
+  if [[ "$BRANCH_CONTEXT" =~ ^([a-z][a-z0-9]*-[a-z0-9]+(\.[a-z0-9]+)*)$ ]]; then
+    DETECTED_ISSUE_ID="${BASH_REMATCH[1]}"
+  else
+    DETECTED_ISSUE_ID="$(printf '%s\n' "$CURRENT_BRANCH" | rg -o '[a-z][a-z0-9]*-[a-z0-9]+(\.[a-z0-9]+)*' 2>/dev/null | head -1 || true)"
+  fi
+  if [ -n "${DETECTED_ISSUE_ID:-}" ] && [[ ! "$DETECTED_ISSUE_ID" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
+    cat >&2 <<EOF
+
+❌ COMMIT BLOCKED: incompatible issue prefix for $REPO_NAME
+
+Current branch:
+  $CURRENT_BRANCH
+
+Detected issue id:
+  $DETECTED_ISSUE_ID
+
+$REPO_NAME requires repo-compatible bd-* Feature-Keys and branch ids.
+Do not continue with an af-* (or other non-bd-*) issue id here.
+
+Next steps:
+  1. Create or choose the correct bd-* issue for the $REPO_NAME work.
+  2. Rename the branch to feature-bd-<issue>.
+  3. Retry the commit.
+
+If this work is linked to another prefix elsewhere, track that relationship in Beads instead
+of committing from $REPO_NAME with an incompatible Feature-Key.
+
+EOF
+    exit 1
+  fi
+fi
+
 exit 0
 HOOK
 
@@ -147,6 +190,9 @@ if [[ ! "$FEATURE_KEY_VALUE" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
 
 Feature-Key must match:
   ^bd-[a-z0-9]+(\\.[a-z0-9]+)*$
+
+For agent-skills, non-bd prefixes such as af-* are incompatible.
+Create or choose the repo-compatible bd-* issue before retrying.
 
 EOF
   exit 1

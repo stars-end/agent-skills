@@ -81,6 +81,7 @@ FEATURE_KEY=$(echo "$CURRENT_BRANCH" | sed 's/^feature-//')
 - Prevents silent failures downstream
 - Provides clear recovery steps
 - Educates on Issue-First workflow
+- In `agent-skills`, this also guards against carrying `af-*` or any other non-`bd-*` Beads context into PR creation. Treat that mismatch as an early blocker and correct it before retrying.
 
 ### 2. Get Beads Context
 Use `bd` CLI:
