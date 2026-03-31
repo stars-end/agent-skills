@@ -23,6 +23,9 @@ Ensures **Issue-First** pattern: All implementation work tracked in Beads BEFORE
 
 **Philosophy:** Fast classification + Hierarchical tracking + No lost work
 
+Repo compatibility rule:
+- In `agent-skills`, do not carry an active non-`bd-*` issue id into implementation. If the current context is `af-*` (or another prefix), stop and create or choose the repo-compatible `bd-*` issue before branch, commit, or PR work.
+
 ## When to Use This Skill
 
 **Auto-activated when:**

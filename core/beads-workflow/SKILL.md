@@ -38,6 +38,7 @@ Beads provides persistent task memory across sessions, enabling:
 - Canonical Beads repo is `~/bd` (remote `stars-end/bd`).
 - Canonical backend is Dolt server mode.
 - Run Beads mutations from `~/bd` by default; app repos should use worktrees for code and reference Beads IDs.
+- In `agent-skills`, active context must resolve to a repo-compatible `bd-*` issue id before commit or PR work. If `bd-context` surfaces `af-*` or another non-`bd-*` prefix here, stop early and create or choose the correct `bd-*` issue instead of carrying the mismatch forward.
 - No SQLite fallback for active fleet operation. If you see `sqlite3: unable to open database file` or `unknown command "dolt"`, stop and repair runtime/binary first.
 - Before dispatch waves, verify:
 

@@ -26,6 +26,8 @@ Commit current work with Beads tracking + smart discovery handling + auto phase 
 bd-context
 ```
 
+If `bd-context` reports an incompatible issue prefix in `agent-skills`, stop there. Create or choose the correct `bd-*` issue for this repo, rename the branch to `feature-bd-<issue>`, and only then continue with commit flow.
+
 ### 2. Get Current Issue
 ```bash
 git branch --show-current
