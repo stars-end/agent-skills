@@ -13,7 +13,25 @@ if [ ! -f "$METADATA" ]; then
   exit 2
 fi
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "beads-truth-guard: jq is required to inspect $METADATA"
+  echo "Cannot verify backend mode safely. Use live CLI queries for truth:"
+  echo "  bd show <id> --json"
+  echo "  bd list --json"
+  echo "  beads-dolt status --json"
+  exit 2
+fi
+
 DB_TYPE="$(jq -r '.database // empty' "$METADATA" 2>/dev/null || true)"
+
+if [ -z "$DB_TYPE" ]; then
+  echo "beads-truth-guard: unable to determine backend type from $METADATA"
+  echo "Cannot verify backend mode safely. Use live CLI queries for truth:"
+  echo "  bd show <id> --json"
+  echo "  bd list --json"
+  echo "  beads-dolt status --json"
+  exit 2
+fi
 
 if [ "$DB_TYPE" = "dolt" ]; then
   cat <<'MSG'
