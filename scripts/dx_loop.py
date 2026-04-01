@@ -1898,9 +1898,18 @@ Do not return a verdict until you have checked whether:
             "wave_status": self.wave_status,
         }
 
-        tmp_file = self.state_file.with_suffix(".tmp")
-        tmp_file.write_text(json.dumps(state, indent=2))
-        tmp_file.rename(self.state_file)
+        tmp_file = self.wave_dir / (
+            f"{self.state_file.stem}.{os.getpid()}.{time.time_ns()}.tmp"
+        )
+        try:
+            tmp_file.write_text(json.dumps(state, indent=2))
+            os.replace(tmp_file, self.state_file)
+        finally:
+            try:
+                if tmp_file.exists():
+                    tmp_file.unlink()
+            except OSError:
+                pass
         if self.epic_id:
             _write_active_epic_registry(
                 self.epic_id,

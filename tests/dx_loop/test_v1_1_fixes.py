@@ -8,8 +8,10 @@ Tests for dx-loop v1.1 fixes:
 """
 
 import json
+import os
 import sys
 import subprocess
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 import importlib.util
@@ -559,6 +561,73 @@ def test_load_state_restores_default_repo_config(tmp_path):
     assert restored.beads_manager.default_repo == "prime-radiant-ai"
 
     print("✓ Restart restores persisted default repo config")
+
+
+def test_save_state_survives_concurrent_surface_writers(tmp_path, monkeypatch):
+    """Concurrent saves should use unique temp files and avoid FileNotFoundError."""
+    wave_id = "wave-concurrent-save"
+    wave_dir = tmp_path / "waves" / wave_id
+    loops = []
+    for idx in range(2):
+        loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+        loop.wave_dir = wave_dir
+        loop.state_file = wave_dir / "loop_state.json"
+        loop.wave_status = {
+            "state": "in_progress_healthy",
+            "blocker_code": None,
+            "reason": f"writer-{idx}",
+            "blocked_details": [],
+            "dispatchable_tasks": [],
+        }
+        loops.append(loop)
+
+    barrier = threading.Barrier(2)
+    real_write_text = Path.write_text
+
+    def gated_write_text(path_obj, data, *args, **kwargs):
+        result = real_write_text(path_obj, data, *args, **kwargs)
+        if (
+            path_obj.parent == wave_dir
+            and path_obj.name.startswith("loop_state")
+            and path_obj.suffix == ".tmp"
+        ):
+            try:
+                barrier.wait(timeout=2)
+            except threading.BrokenBarrierError:
+                pass
+        return result
+
+    replace_sources = []
+    real_replace = os.replace
+
+    def tracking_replace(src, dst):
+        replace_sources.append(Path(src).name)
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(Path, "write_text", gated_write_text)
+    monkeypatch.setattr(dx_loop_script.os, "replace", tracking_replace)
+
+    errors = []
+
+    def writer(loop: DxLoop):
+        try:
+            loop._save_state()
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=writer, args=(loop,)) for loop in loops]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert not errors
+    assert wave_dir.joinpath("loop_state.json").exists()
+    assert len(replace_sources) == 2
+    assert len(set(replace_sources)) == 2
+
+    print("✓ Concurrent _save_state writers do not race on temp rename")
 
 
 def test_extract_implementation_return_from_agent_output():
