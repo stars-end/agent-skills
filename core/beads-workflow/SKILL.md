@@ -562,3 +562,22 @@ bd config set beads.role maintainer
 **References:**
 - Beads MCP: https://github.com/steveyegge/beads/blob/main/docs/PLUGIN.md
 - Beads README: https://github.com/steveyegge/beads/blob/main/README.md
+
+## Dolt truth guardrail (required)
+
+Before any Beads truth inspection on canonical hosts, run:
+
+```bash
+~/agent-skills/scripts/beads-truth-guard
+```
+
+If Dolt mode is detected, treat CLI results as source of truth and do not treat these files as live truth:
+
+- `~/bd/.beads/issues.jsonl`
+- `~/bd/.beads/backup/issues.jsonl`
+
+Use:
+
+- `bd show <id> --json`
+- `bd list --json`
+- `beads-dolt status --json`

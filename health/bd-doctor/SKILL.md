@@ -207,3 +207,22 @@ ssh epyc6 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/
 - Do not run ad hoc `dolt sql-server` during active waves.
 - Prefer managed services (`systemd --user` or `launchd`) for uptime.
 - Use `beads-dolt dolt test --json` + `beads-dolt status --json` as source of truth.
+
+## Dolt truth guardrail (required)
+
+Run this first when diagnosing issue visibility or data drift:
+
+```bash
+~/agent-skills/scripts/beads-truth-guard
+```
+
+When Dolt mode is reported, do not use these files as live truth:
+
+- `~/bd/.beads/issues.jsonl`
+- `~/bd/.beads/backup/issues.jsonl`
+
+Use live checks instead:
+
+- `bd show <id> --json`
+- `bd list --json`
+- `beads-dolt status --json`
