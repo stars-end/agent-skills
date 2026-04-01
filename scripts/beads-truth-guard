@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BEADS_ROOT="${BEADS_DIR:-$HOME/bd/.beads}"
+METADATA="$BEADS_ROOT/metadata.json"
+
+if [ ! -f "$METADATA" ]; then
+  echo "beads-truth-guard: metadata not found at $METADATA"
+  echo "Cannot verify backend mode. Use live CLI queries for truth:" 
+  echo "  bd show <id> --json"
+  echo "  bd list --json"
+  echo "  beads-dolt status --json"
+  exit 2
+fi
+
+DB_TYPE="$(jq -r '.database // empty' "$METADATA" 2>/dev/null || true)"
+
+if [ "$DB_TYPE" = "dolt" ]; then
+  cat <<'MSG'
+beads-truth-guard: DOLT MODE DETECTED
+
+Do not use file-based truth checks in this mode:
+  ~/bd/.beads/issues.jsonl
+  ~/bd/.beads/backup/issues.jsonl
+
+In dolt-native mode, JSONL exports are not the live source of truth.
+Use live commands instead:
+  bd show <id> --json
+  bd list --json
+  beads-dolt status --json
+MSG
+  exit 3
+fi
+
+echo "beads-truth-guard: backend is '$DB_TYPE' (non-dolt)."
+echo "Live CLI truth checks are still recommended: bd show/list --json"
+exit 0

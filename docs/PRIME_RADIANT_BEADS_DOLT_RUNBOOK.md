@@ -378,3 +378,22 @@ Provenance:
 - PR: <https://github.com/stars-end/agent-skills/pull/269>
 - Beads reconciliation task: `bd-wh4m`
 - See: `docs/BEADS_ID_RECONCILIATION_2026-03-02.md`
+
+## Guardrail: Dolt truth source check
+
+Use the helper below before any manual Beads data inspection:
+
+```bash
+~/agent-skills/scripts/beads-truth-guard
+```
+
+If it reports Dolt mode, do not treat these files as source of truth:
+
+- `~/bd/.beads/issues.jsonl`
+- `~/bd/.beads/backup/issues.jsonl`
+
+Canonical truth commands:
+
+- `bd show <id> --json`
+- `bd list --json`
+- `beads-dolt status --json`
