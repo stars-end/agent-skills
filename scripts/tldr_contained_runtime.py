@@ -8,11 +8,14 @@ This module enforces literal no-in-repo containment for `.tldr` and
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path, PurePath
-from typing import Any
+from typing import Any, Iterator
 
 
 STATE_HOME = Path(
@@ -21,6 +24,7 @@ STATE_HOME = Path(
 
 _PATCHED_BASE = False
 _PATCHED_MCP = False
+_PATCHED_SEMANTIC = False
 _ORIG_TRUEDIV = None
 
 
@@ -44,6 +48,40 @@ def _rewrite_special_path(base: Path, leaf: str) -> Path:
     bucket = _state_bucket(base)
     bucket.mkdir(parents=True, exist_ok=True)
     return bucket / leaf
+
+
+def _semantic_bootstrap_lock_path(project_path: str | Path) -> Path:
+    bucket = _state_bucket(Path(project_path))
+    bucket.mkdir(parents=True, exist_ok=True)
+    return bucket / ".semantic-bootstrap.lock"
+
+
+@contextmanager
+def _semantic_bootstrap_lock(project_path: str | Path) -> Iterator[None]:
+    lock_path = _semantic_bootstrap_lock_path(project_path)
+    with open(lock_path, "w") as lock_file:
+        if os.name == "nt":
+            import msvcrt
+
+            while True:
+                try:
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            try:
+                yield
+            finally:
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            return
+
+        import fcntl
+
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _patch_path_join() -> None:
@@ -79,7 +117,6 @@ def _patch_mcp_daemon_startup() -> None:
     import os as _os
 
     import tldr.mcp_server as mcp_mod
-    from tldr.daemon import start_daemon
 
     def _contained_ensure_daemon(project: str, timeout: float = 10.0) -> None:
         if mcp_mod._ping_daemon(project):
@@ -119,7 +156,20 @@ def _patch_mcp_daemon_startup() -> None:
                     except OSError:
                         pass
 
-                start_daemon(project, foreground=False)
+                helper = Path(__file__).with_name("tldr-contained-daemon.py")
+                popen_kwargs: dict[str, Any] = {
+                    "stdout": subprocess.DEVNULL,
+                    "stderr": subprocess.DEVNULL,
+                }
+                if _os.name == "nt":
+                    popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+                else:
+                    popen_kwargs["start_new_session"] = True
+
+                subprocess.Popen(
+                    [sys.executable, str(helper), project],
+                    **popen_kwargs,
+                )
 
                 start = time.time()
                 while time.time() - start < timeout:
@@ -140,15 +190,163 @@ def _patch_mcp_daemon_startup() -> None:
     mcp_mod._ensure_daemon = _contained_ensure_daemon
 
 
+def _bootstrap_semantic_index(
+    *,
+    build_semantic_index: Any,
+    project_path: str,
+    model: str | None,
+) -> None:
+    lang = os.environ.get("TLDR_SEMANTIC_AUTOBUILD_LANG", "all")
+    bootstrap_model = model or os.environ.get("TLDR_SEMANTIC_AUTOBUILD_MODEL")
+    build_semantic_index(
+        str(Path(project_path).resolve()),
+        lang=lang,
+        model=bootstrap_model,
+        show_progress=False,
+    )
+
+
+def _semantic_index_files(project_path: str | Path) -> tuple[Path, Path]:
+    import tldr.semantic as semantic_mod
+
+    project_root = semantic_mod._find_project_root(Path(project_path).resolve())
+    cache_dir = project_root / ".tldr" / "cache" / "semantic"
+    return cache_dir / "index.faiss", cache_dir / "metadata.json"
+
+
+def _semantic_index_ready(project_path: str | Path) -> bool:
+    index_file, metadata_file = _semantic_index_files(project_path)
+    return index_file.exists() and metadata_file.exists()
+
+
+def _semantic_index_missing_error(exc: FileNotFoundError) -> bool:
+    message = str(exc)
+    return (
+        "Semantic index not found" in message
+        or "Metadata not found" in message
+    )
+
+
+def _ensure_semantic_bootstrap(
+    *,
+    build_semantic_index: Any,
+    semantic_search: Any,
+    project_path: str,
+    query: str,
+    k: int,
+    expand_graph: bool,
+    model: str | None,
+):
+    try:
+        return semantic_search(
+            project_path,
+            query,
+            k=k,
+            expand_graph=expand_graph,
+            model=model,
+        )
+    except FileNotFoundError as exc:
+        if not _semantic_index_missing_error(exc):
+            raise
+
+    with _semantic_bootstrap_lock(project_path):
+        try:
+            return semantic_search(
+                project_path,
+                query,
+                k=k,
+                expand_graph=expand_graph,
+                model=model,
+            )
+        except FileNotFoundError as exc:
+            if not _semantic_index_missing_error(exc):
+                raise
+
+        try:
+            _bootstrap_semantic_index(
+                build_semantic_index=build_semantic_index,
+                project_path=project_path,
+                model=model,
+            )
+        except Exception as build_exc:
+            raise RuntimeError(
+                f"Semantic index missing and contained auto-bootstrap failed for {Path(project_path).resolve()}: {build_exc}"
+            ) from build_exc
+
+        return semantic_search(
+            project_path,
+            query,
+            k=k,
+            expand_graph=expand_graph,
+            model=model,
+        )
+
+
+def _patch_semantic_autobootstrap() -> None:
+    import tldr.semantic as semantic_mod
+    import tldr.mcp_server as mcp_mod
+
+    original_search = semantic_mod.semantic_search
+    original_build = semantic_mod.build_semantic_index
+    original_send_command = mcp_mod._send_command
+
+    def _contained_semantic_search(
+        project_path: str,
+        query: str,
+        k: int = 5,
+        expand_graph: bool = False,
+        model: str | None = None,
+    ):
+        return _ensure_semantic_bootstrap(
+            build_semantic_index=original_build,
+            semantic_search=original_search,
+            project_path=project_path,
+            query=query,
+            k=k,
+            expand_graph=expand_graph,
+            model=model,
+        )
+
+    def _contained_send_command(project: str, command: dict) -> dict:
+        if command.get("cmd") == "semantic" and command.get("action", "search") == "search":
+            with _semantic_bootstrap_lock(project):
+                if not _semantic_index_ready(project):
+                    _bootstrap_semantic_index(
+                        build_semantic_index=original_build,
+                        project_path=project,
+                        model=os.environ.get("TLDR_SEMANTIC_AUTOBUILD_MODEL"),
+                    )
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                return original_send_command(project, command)
+            except json.JSONDecodeError as exc:
+                last_error = exc
+                if command.get("cmd") != "semantic":
+                    raise
+                time.sleep(0.2 * (attempt + 1))
+        if last_error is not None:
+            raise last_error
+        return original_send_command(project, command)
+
+    semantic_mod.semantic_search = _contained_semantic_search
+    mcp_mod._send_command = _contained_send_command
+
+
 def apply_containment_patches(*, include_mcp: bool) -> None:
     global _PATCHED_BASE
     global _PATCHED_MCP
+    global _PATCHED_SEMANTIC
 
     if not _PATCHED_BASE:
         STATE_HOME.mkdir(parents=True, exist_ok=True)
         _patch_path_join()
         _patch_semantic_markers()
         _PATCHED_BASE = True
+
+    if not _PATCHED_SEMANTIC:
+        _patch_semantic_autobootstrap()
+        _PATCHED_SEMANTIC = True
 
     if include_mcp and not _PATCHED_MCP:
         _patch_mcp_daemon_startup()
@@ -169,4 +367,12 @@ def run_mcp() -> int:
     from tldr.mcp_server import main as mcp_main
 
     mcp_main()
+    return 0
+
+
+def run_daemon(project_path: str) -> int:
+    apply_containment_patches(include_mcp=False)
+    from tldr.daemon.startup import start_daemon
+
+    start_daemon(project_path, foreground=True)
     return 0
