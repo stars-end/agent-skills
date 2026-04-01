@@ -89,16 +89,20 @@ Rendered to IDE configs via Fleet Sync (contained):
 
 ### Warm / Index Lifecycle
 
-llm-tldr's `semantic` tool requires a one-time `tldr warm` to build the FAISS
-index. Use the contained wrapper for warm operations:
+`tldr warm` pre-builds structural call graph caches.
+`semantic` search uses a separate FAISS index built via `semantic index`.
+
+Use the contained wrapper for both:
 
 ```bash
 ~/agent-skills/scripts/tldr-contained.sh warm ~/agent-skills
 ~/agent-skills/scripts/tldr-contained.sh warm /tmp/agents/<beads-id>/<repo>
+~/agent-skills/scripts/tldr-contained.sh semantic index /tmp/agents/<beads-id>/<repo> --model all-MiniLM-L6-v2
 ```
 
-The daemon auto-reindexes after 20 file changes, but the initial warm is
-required for semantic search to function. The contained wrapper ensures no
+The daemon auto-reindexes structural caches after file changes, but semantic
+search still requires a semantic index build for the target project path.
+The contained wrapper ensures no
 `.tldr/` or `.tldrignore` files are created inside the project tree, even when
 running `warm` from nested subdirectories.
 
@@ -194,7 +198,7 @@ The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools w
 2. **Token efficient**: 95% token savings vs reading raw files
 3. **Worktree-safe**: `project` parameter per call, no single-root lock-in
 4. **Per-project daemons**: Daemon per resolved path, no central index requirement
-5. **Warm-gated semantic**: `tldr warm` required before first `semantic` call
+5. **Semantic-index-gated semantic**: run `tldr semantic index <project>` before first `semantic search`
 6. **State-contained**: No `.tldr/` or `.tldrignore` in repo/worktree trees
 7. **Fallback path**: Keep fallback to normal repo-local context gathering
 
@@ -255,6 +259,7 @@ Expected: no output.
 ### Operational Proof (V8.6)
 ```bash
 ~/agent-skills/scripts/tldr-contained.sh warm .
+~/agent-skills/scripts/tldr-contained.sh semantic index . --model all-MiniLM-L6-v2
 ~/agent-skills/scripts/tldr-contained.sh semantic search "routing contract" --path . --k 2 --model all-MiniLM-L6-v2
 ~/agent-skills/scripts/tldr-contained.sh structure . --lang python
 ~/agent-skills/scripts/tldr-contained.sh context <real-symbol> --project .
