@@ -1,6 +1,8 @@
 ---
 name: cli-mastery
-description: **Tags:** #tools #cli #railway #github #env
+description: |
+  CLI environment and command-line usage guidance for Railway, GitHub, and
+  general repo workflows.
 ---
 
 # CLI Mastery & Environment Protocol
