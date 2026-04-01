@@ -11,6 +11,9 @@ def write_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+_RAILWAY_LIB_DEPS = ("dx-auth.sh", "dx-railway.sh")
+
+
 def write_script_fixture(tmp_path: Path, script_name: str) -> Path:
     scripts_dir = Path(__file__).parent.parent / "scripts"
     script = tmp_path / script_name
@@ -19,7 +22,8 @@ def write_script_fixture(tmp_path: Path, script_name: str) -> Path:
 
     lib_dir = tmp_path / "lib"
     lib_dir.mkdir(exist_ok=True)
-    (lib_dir / "dx-auth.sh").write_text((scripts_dir / "lib" / "dx-auth.sh").read_text())
+    for lib_name in _RAILWAY_LIB_DEPS:
+        (lib_dir / lib_name).write_text((scripts_dir / "lib" / lib_name).read_text())
     return script
 
 
