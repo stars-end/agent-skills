@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Set
 import subprocess
 import json
+import os
 from pathlib import Path
 
 
@@ -341,6 +342,95 @@ class BeadsWaveManager:
 
             return fresh_status
         except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
+            return None
+
+    def refresh_epic_truth(
+        self, epic_id: str, timeout_seconds: int = 5
+    ) -> Optional[str]:
+        """
+        Re-poll Beads for parent epic truth and child statuses.
+
+        Returns the epic status, or None when refresh fails.
+        """
+        try:
+            result = subprocess.run(
+                ["bd", "show", epic_id, "--json"],
+                cwd=str(self.beads_repo_path),
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+            if result.returncode != 0:
+                bd_bin = os.environ.get("BD_BIN")
+                if (
+                    bd_bin
+                    and bd_bin != "bd"
+                    and "embedded Dolt requires CGO" in (result.stderr or "")
+                ):
+                    result = subprocess.run(
+                        [bd_bin, "show", epic_id, "--json"],
+                        cwd=str(self.beads_repo_path),
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout_seconds,
+                    )
+                if result.returncode != 0:
+                    return None
+
+            data = json.loads(result.stdout)
+            if not data or not isinstance(data, list):
+                return None
+
+            epic = data[0]
+            epic_status = epic.get("status")
+
+            for dep in epic.get("dependents", []):
+                if dep.get("dependency_type") != "parent-child":
+                    continue
+                dep_id = dep.get("id")
+                if not dep_id:
+                    continue
+
+                dep_title = dep.get("title", "")
+                dep_status = dep.get("status")
+                dep_close_reason = dep.get("close_reason")
+
+                task = self.tasks.get(dep_id)
+                dep_repo = (
+                    (task.repo if task else None)
+                    or self._infer_repo_from_title(dep_title)
+                    or self.dependency_metadata_cache.get(dep_id, {}).get("repo")
+                )
+
+                self.dependency_metadata_cache[dep_id] = {
+                    "title": dep_title,
+                    "repo": dep_repo or "",
+                    "status": dep_status,
+                    "close_reason": dep_close_reason,
+                }
+
+                if dep_status:
+                    self.dependency_status_cache[dep_id] = dep_status
+
+                if task:
+                    if dep_title:
+                        task.title = dep_title
+                    if dep_status:
+                        task.status = dep_status
+                        if self._is_terminal_dependency_status(dep_status):
+                            self.completed.add(dep_id)
+
+            # If Beads marks the epic terminal, stale cached children must not
+            # remain dispatchable in local wave state.
+            if self._is_terminal_dependency_status(epic_status):
+                for task_id, task in self.tasks.items():
+                    if not self._is_terminal_dependency_status(task.status):
+                        task.status = "closed"
+                    self.completed.add(task_id)
+                    self.dependency_status_cache[task_id] = task.status
+
+            return epic_status
+        except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
             return None
 
     def compute_layers(self, task_ids: Optional[List[str]] = None) -> List[List[str]]:

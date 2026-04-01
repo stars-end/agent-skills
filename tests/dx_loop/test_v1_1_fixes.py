@@ -80,6 +80,70 @@ def _build_stale_closed_review_wave(tmp_path: Path, wave_id: str = "wave-stale-c
     return loop
 
 
+def _build_stale_closed_epic_frontier_wave(
+    tmp_path: Path, wave_id: str = "wave-stale-epic-frontier"
+):
+    """Create a persisted wave with stale cached open children under a closed epic."""
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-bkco"
+    loop.beads_manager.tasks = {
+        "bd-bkco.2": BeadsTask(
+            beads_id="bd-bkco.2",
+            title="Merged prerequisite",
+            repo="affordabot",
+            dependencies=[],
+            status="closed",
+            details_loaded=True,
+        ),
+        "bd-bkco.3": BeadsTask(
+            beads_id="bd-bkco.3",
+            title="Stale child A",
+            repo="affordabot",
+            dependencies=["bd-bkco.2"],
+            status="open",
+            details_loaded=True,
+        ),
+        "bd-bkco.4": BeadsTask(
+            beads_id="bd-bkco.4",
+            title="Stale child B",
+            repo="affordabot",
+            dependencies=["bd-bkco.2"],
+            status="open",
+            details_loaded=True,
+        ),
+        "bd-bkco.5": BeadsTask(
+            beads_id="bd-bkco.5",
+            title="Stale child C",
+            repo="affordabot",
+            dependencies=["bd-bkco.2"],
+            status="open",
+            details_loaded=True,
+        ),
+        "bd-bkco.6": BeadsTask(
+            beads_id="bd-bkco.6",
+            title="Stale child D",
+            repo="affordabot",
+            dependencies=["bd-bkco.2", "bd-bkco.3", "bd-bkco.4", "bd-bkco.5"],
+            status="open",
+            details_loaded=True,
+        ),
+    }
+    loop.beads_manager.completed = {"bd-bkco.1", "bd-bkco.2"}
+    loop.beads_manager.layers = [["bd-bkco.2", "bd-bkco.3", "bd-bkco.4", "bd-bkco.5"]]
+    loop.scheduler.state.active_beads_ids = set()
+    loop.scheduler.state.blocked_beads_ids = set()
+    loop._set_wave_status(
+        LoopState.IN_PROGRESS_HEALTHY,
+        None,
+        "Reconciled wave state; 3 task(s) ready for dispatch",
+        dispatchable_tasks=["bd-bkco.3", "bd-bkco.4", "bd-bkco.5"],
+    )
+    loop._save_state()
+    return loop
+
+
 def test_no_duplicate_dispatch():
     """P0 fix: Active work not redispatched"""
     scheduler = DxLoopScheduler(cadence_seconds=1)
@@ -1178,6 +1242,141 @@ def test_explain_reconciles_stale_closed_task_and_avoids_continue_monitoring(
     )
 
     print("✓ explain reports actionable next step after stale close reconciliation")
+
+
+def test_status_retires_stale_dispatch_frontier_when_epic_closed(
+    tmp_path, monkeypatch, capsys
+):
+    """status --json should retire stale dispatch frontier when parent epic is closed."""
+    _build_stale_closed_epic_frontier_wave(tmp_path, wave_id="wave-stale-epic-closed")
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco":
+            payload = [
+                {
+                    "id": "bd-bkco",
+                    "status": "closed",
+                    "dependents": [
+                        {
+                            "id": "bd-bkco.2",
+                            "dependency_type": "parent-child",
+                            "title": "Merged prerequisite",
+                            "status": "closed",
+                            "close_reason": "Merged via PR #344",
+                        },
+                        {
+                            "id": "bd-bkco.3",
+                            "dependency_type": "parent-child",
+                            "title": "Stale child A",
+                            "status": "closed",
+                            "close_reason": "Closing before merge in PR #347",
+                        },
+                        {
+                            "id": "bd-bkco.4",
+                            "dependency_type": "parent-child",
+                            "title": "Stale child B",
+                            "status": "closed",
+                            "close_reason": "Closing before merge in PR #348",
+                        },
+                        {
+                            "id": "bd-bkco.5",
+                            "dependency_type": "parent-child",
+                            "title": "Stale child C",
+                            "status": "closed",
+                            "close_reason": "Closing before merge in PR #349",
+                        },
+                        {
+                            "id": "bd-bkco.6",
+                            "dependency_type": "parent-child",
+                            "title": "Stale child D",
+                            "status": "closed",
+                            "close_reason": "Closing before merge in PR #350",
+                        },
+                    ],
+                }
+            ]
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps(payload), stderr=""
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic="bd-bkco", beads_id=None, json=True)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    state = json.loads(captured.out)
+
+    assert state["wave_status"]["state"] == "completed"
+    assert state["wave_status"]["dispatchable_tasks"] == []
+    assert "closed in Beads" in state["wave_status"]["reason"]
+    assert "bd-bkco.3" in state["beads_manager"]["completed"]
+    assert "bd-bkco.4" in state["beads_manager"]["completed"]
+    assert "bd-bkco.5" in state["beads_manager"]["completed"]
+    assert "bd-bkco.6" in state["beads_manager"]["completed"]
+    assert state["beads_manager"]["tasks"]["bd-bkco.3"]["status"] == "closed"
+    assert state["beads_manager"]["tasks"]["bd-bkco.4"]["status"] == "closed"
+    assert state["beads_manager"]["tasks"]["bd-bkco.5"]["status"] == "closed"
+    assert state["beads_manager"]["tasks"]["bd-bkco.6"]["status"] == "closed"
+
+    print("✓ status retires stale dispatch frontier for closed epic")
+
+
+def test_explain_reports_closed_epic_as_retired(tmp_path, monkeypatch, capsys):
+    """explain should be truthful when a stale wave belongs to a closed epic."""
+    _build_stale_closed_epic_frontier_wave(
+        tmp_path, wave_id="wave-stale-epic-explain-closed"
+    )
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco":
+            payload = [
+                {
+                    "id": "bd-bkco",
+                    "status": "closed",
+                    "dependents": [
+                        {
+                            "id": "bd-bkco.3",
+                            "dependency_type": "parent-child",
+                            "title": "Stale child A",
+                            "status": "closed",
+                        }
+                    ],
+                }
+            ]
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps(payload), stderr=""
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    original_artifact_base = cmd_explain.__globals__["ARTIFACT_BASE"]
+    cmd_explain.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_explain(SimpleNamespace(wave_id=None, epic="bd-bkco", beads_id=None))
+    finally:
+        cmd_explain.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "State: completed" in captured.out
+    assert "Reason: Epic bd-bkco is closed in Beads; stale wave cache retired" in captured.out
+    assert (
+        "Next Action: No action required: epic is already closed and this wave is retired."
+        in captured.out
+    )
+    assert "dispatch ready tasks" not in captured.out
+
+    print("✓ explain reports closed epic wave as retired")
 
 
 def test_status_reconciles_stale_closed_task_with_surface_timeout_budget(

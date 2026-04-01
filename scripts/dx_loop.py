@@ -286,7 +286,10 @@ def _next_action_for_state(state: Dict[str, Any], *, surface: str) -> str:
     """Return a compact next action string for explain/status surfaces."""
     wave_status = state.get("wave_status", {})
     blocker_code = wave_status.get("blocker_code")
+    state_name = wave_status.get("state")
     dispatchable_tasks = wave_status.get("dispatchable_tasks") or []
+    if state_name == LoopState.COMPLETED.value:
+        return "No action required: epic is already closed and this wave is retired."
     if surface == "product":
         return "Address review findings or make a narrow manual repair, then resume the loop."
     if surface == "control_plane":
@@ -2257,6 +2260,47 @@ def _reconcile_wave_state_for_surfaces(
 
     persisted_wave_status = persisted_state.get("wave_status", {})
     persisted_blocker = persisted_wave_status.get("blocker_code")
+    persisted_dispatchable = persisted_wave_status.get("dispatchable_tasks") or []
+
+    should_refresh_epic_truth = (
+        bool(loop.epic_id)
+        and bool(persisted_dispatchable)
+        and not loop.scheduler.state.active_beads_ids
+        and not loop.scheduler.state.blocked_beads_ids
+    )
+    if should_refresh_epic_truth:
+        epic_status = loop.beads_manager.refresh_epic_truth(
+            loop.epic_id, timeout_seconds=SURFACE_BEADS_TIMEOUT_SECONDS
+        )
+        if loop.beads_manager._is_terminal_dependency_status(epic_status):
+            for beads_id, baton_state in list(loop.baton_manager.baton_states.items()):
+                if baton_state.phase in (
+                    BatonPhase.COMPLETE,
+                    BatonPhase.MANUAL_TAKEOVER,
+                    BatonPhase.IDLE,
+                ):
+                    continue
+                loop._force_terminal_for_externally_closed(
+                    beads_id,
+                    epic_status or "closed",
+                    emit_logs=False,
+                )
+
+            for task_id in list(loop.beads_manager.tasks.keys()):
+                loop.beads_manager.mark_completed(task_id)
+                loop.scheduler.state.mark_completed(task_id)
+                loop.scheduler.state.blocked_beads_ids.discard(task_id)
+                for phase in ("implement", "review"):
+                    loop.scheduler.state.clear_phase(task_id, phase)
+
+            loop._set_wave_status(
+                LoopState.COMPLETED,
+                None,
+                f"Epic {loop.epic_id} is closed in Beads; stale wave cache retired",
+            )
+            loop._save_state()
+            reconciled = _read_wave_state(state_file)
+            return reconciled or persisted_state
 
     externally_closed = loop._refresh_beads_truth(
         emit_logs=False, timeout_seconds=SURFACE_BEADS_TIMEOUT_SECONDS
