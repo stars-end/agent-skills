@@ -141,6 +141,13 @@ beads-dolt show <known-beads-id> --json
 
 On `macmini`, avoid using `bd ready --json` as an interactive health probe. Broad readiness queries can be slow enough to trip orchestration timeouts even when the hub and targeted issue reads are healthy.
 
+Operator note for file-based inspection on Dolt-backed hosts:
+
+- Treat live `bd` queries (`bd show`, `beads-dolt status --json`, `beads-dolt dolt test --json`) as the source of truth.
+- Do **not** assume `~/bd/.beads/issues.jsonl` is current. On this fleet it can be a stale legacy export even when live Dolt-backed reads are correct.
+- `~/bd/.beads/backup/issues.jsonl` may be a fresher mirror than the top-level `issues.jsonl`, but it is still only a file mirror, not the primary truth source.
+- If a Beads id is visible in `bd show` but missing from `~/bd/.beads/issues.jsonl`, classify that as stale file export drift, not as a missing issue in live Beads.
+
 Fleet checks from macmini:
 
 ```bash
