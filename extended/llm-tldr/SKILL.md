@@ -90,7 +90,7 @@ Rendered to IDE configs via Fleet Sync (contained):
 ### Warm / Index Lifecycle
 
 `tldr warm` pre-builds structural call graph caches.
-`semantic` search uses a separate FAISS index built via `semantic index`.
+Contained semantic search auto-bootstraps a FAISS index on first use when missing.
 
 Use the contained wrapper for both:
 
@@ -100,8 +100,10 @@ Use the contained wrapper for both:
 ~/agent-skills/scripts/tldr-contained.sh semantic index /tmp/agents/<beads-id>/<repo> --model all-MiniLM-L6-v2
 ```
 
-The daemon auto-reindexes structural caches after file changes, but semantic
-search still requires a semantic index build for the target project path.
+The daemon auto-reindexes structural caches after file changes. The contained
+wrapper now auto-builds a missing semantic index on first semantic search for
+the target project path. Explicit `semantic index` remains useful when you want
+to prewarm for lower-latency first queries or pick a specific model.
 The contained wrapper ensures no
 `.tldr/` or `.tldrignore` files are created inside the project tree, even when
 running `warm` from nested subdirectories.
@@ -153,7 +155,7 @@ a documented fallback condition applies.
 
 | Function | Purpose | Requires Warm? |
 |----------|---------|----------------|
-| `semantic` | Semantic code search by meaning (FAISS + bge-large) | Yes |
+| `semantic` | Semantic code search by meaning (FAISS + bge-large) | No (contained auto-bootstrap) |
 | `context` | Token-efficient context from entry point (95% savings) | No |
 | `structure` | Code structure / codemaps | No |
 | `calls` | Cross-file call graph | No |
@@ -198,7 +200,7 @@ The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools w
 2. **Token efficient**: 95% token savings vs reading raw files
 3. **Worktree-safe**: `project` parameter per call, no single-root lock-in
 4. **Per-project daemons**: Daemon per resolved path, no central index requirement
-5. **Semantic-index-gated semantic**: run `tldr semantic index <project>` before first `semantic search`
+5. **Auto-bootstrap semantic**: contained semantic search builds missing semantic index on first use
 6. **State-contained**: No `.tldr/` or `.tldrignore` in repo/worktree trees
 7. **Fallback path**: Keep fallback to normal repo-local context gathering
 
