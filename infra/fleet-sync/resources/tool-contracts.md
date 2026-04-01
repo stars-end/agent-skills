@@ -66,7 +66,8 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
 - `serena` PyPI has package collision with an unrelated AMQP client - must install from GitHub.
 - `gemini-cli` + `antigravity` use wrapped launcher form with the repo path
   inside the exec string.
-- `llm-tldr` semantic search requires `tldr warm <project>` before first use.
+- `llm-tldr` semantic search requires `tldr semantic index <project>` before first use.
+  `tldr warm <project>` only warms structural caches.
   Every MCP tool call accepts a `project` parameter for worktree-safe operation.
   **State containment (af-aqb.1):** llm-tldr runtime state (`.tldr/`, `.tldrignore`)
   is resolved outside the project tree by contained runtime patching in
