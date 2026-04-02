@@ -11,6 +11,9 @@ set -euo pipefail
 ENV_NAME="${DX_RAILWAY_ENV:-dev}"
 SERVICE_NAME="${DX_RAILWAY_SERVICE:-backend}"
 PROJECT_ID="${DX_RAILWAY_PROJECT_ID:-}"
+EXPLICIT_ENV=0
+EXPLICIT_SERVICE=0
+EXPLICIT_PROJECT=0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/dx-auth.sh"
@@ -74,14 +77,17 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)
       ENV_NAME="${2:-}"
+      EXPLICIT_ENV=1
       shift 2
       ;;
     --service)
       SERVICE_NAME="${2:-}"
+      EXPLICIT_SERVICE=1
       shift 2
       ;;
     --project-id)
       PROJECT_ID="${2:-}"
+      EXPLICIT_PROJECT=1
       shift 2
       ;;
     --context-file)
@@ -110,11 +116,6 @@ if [[ -z "${RAILWAY_API_TOKEN:-}" ]]; then
   dx_auth_load_railway_api_token >/dev/null 2>&1 || true
 fi
 
-# Use active local link if present.
-if railway status >/dev/null 2>&1; then
-  exec railway run -- "$@"
-fi
-
 if [[ -f "$CONTEXT_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$CONTEXT_FILE"
@@ -123,6 +124,17 @@ fi
 PROJECT_ID="${PROJECT_ID:-${RAILWAY_PROJECT_ID:-}}"
 ENV_NAME="${ENV_NAME:-${RAILWAY_ENVIRONMENT:-dev}}"
 SERVICE_NAME="${SERVICE_NAME:-${RAILWAY_SERVICE:-backend}}"
+
+has_explicit_context=0
+if [[ "$EXPLICIT_ENV" -eq 1 || "$EXPLICIT_SERVICE" -eq 1 || "$EXPLICIT_PROJECT" -eq 1 ]]; then
+  has_explicit_context=1
+fi
+
+# Use active local link only when the caller did not ask for an explicit context
+# and we did not resolve a seeded worktree/project context.
+if [[ "$has_explicit_context" -eq 0 && -z "$PROJECT_ID" ]] && railway status >/dev/null 2>&1; then
+  exec railway run -- "$@"
+fi
 
 if [[ -z "$PROJECT_ID" ]]; then
   die "missing Railway project id. Run dx-worktree create again, or set DX_RAILWAY_PROJECT_ID / RAILWAY_PROJECT_ID."

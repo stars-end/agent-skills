@@ -113,6 +113,47 @@ def test_dx_railway_run_uses_seeded_context_when_unlinked(tmp_path):
     assert "-p test-project-id -e dev -s backend -- make verify-pipeline" in logged
 
 
+def test_dx_railway_run_honors_service_override_even_when_linked(tmp_path):
+    script = write_script_fixture(tmp_path, "dx-railway-run.sh")
+
+    railway = tmp_path / "railway"
+    run_log = tmp_path / "run.log"
+    write_executable(
+        railway,
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                "set -euo pipefail",
+                'cmd="${1:-}"',
+                "shift || true",
+                'if [[ "$cmd" == "status" ]]; then',
+                '  [[ "${RAILWAY_MOCK_LINKED:-0}" == "1" ]] && exit 0 || exit 1',
+                "fi",
+                'if [[ "$cmd" == "run" ]]; then',
+                '  echo "$*" >> "$DX_RAILWAY_RUN_LOG"',
+                "  exit 0",
+                "fi",
+                "exit 0",
+            ]
+        ),
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+    env["RAILWAY_MOCK_LINKED"] = "1"
+    env["DX_RAILWAY_RUN_LOG"] = str(run_log)
+    env["DX_RAILWAY_PROJECT_ID"] = "project-123"
+
+    result = subprocess.run(
+        [str(script), "--service", "backend", "--", "python3", "-V"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0
+    assert "-p project-123 -e dev -s backend -- python3 -V" in run_log.read_text()
+
+
 def test_dx_railway_run_executes_directly_in_railway_shell(tmp_path):
     script = write_script_fixture(tmp_path, "dx-railway-run.sh")
 
