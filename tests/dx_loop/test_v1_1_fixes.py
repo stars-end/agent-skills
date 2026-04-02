@@ -144,6 +144,41 @@ def _build_stale_closed_epic_frontier_wave(
     return loop
 
 
+def _build_stale_waiting_closed_epic_frontier_wave(
+    tmp_path: Path, wave_id: str = "wave-stale-epic-waiting"
+):
+    """Create stale waiting-on-dependency wave state with empty dispatchables."""
+    loop = _build_stale_closed_epic_frontier_wave(tmp_path, wave_id=wave_id)
+    loop._set_wave_status(
+        LoopState.WAITING_ON_DEPENDENCY,
+        BlockerCode.WAITING_ON_DEPENDENCY,
+        "No ready tasks: waiting on dependencies for 3 task(s)",
+        blocked_details=[
+            {
+                "beads_id": "bd-bkco.3",
+                "title": "Stale child A",
+                "unmet_dependencies": ["bd-bkco.2"],
+                "dependency_statuses": {"bd-bkco.2": "closed"},
+            },
+            {
+                "beads_id": "bd-bkco.4",
+                "title": "Stale child B",
+                "unmet_dependencies": ["bd-bkco.2"],
+                "dependency_statuses": {"bd-bkco.2": "closed"},
+            },
+            {
+                "beads_id": "bd-bkco.5",
+                "title": "Stale child C",
+                "unmet_dependencies": ["bd-bkco.2"],
+                "dependency_statuses": {"bd-bkco.2": "closed"},
+            },
+        ],
+        dispatchable_tasks=[],
+    )
+    loop._save_state()
+    return loop
+
+
 def test_no_duplicate_dispatch():
     """P0 fix: Active work not redispatched"""
     scheduler = DxLoopScheduler(cadence_seconds=1)
@@ -1328,6 +1363,92 @@ def test_status_retires_stale_dispatch_frontier_when_epic_closed(
     assert state["beads_manager"]["tasks"]["bd-bkco.6"]["status"] == "closed"
 
     print("✓ status retires stale dispatch frontier for closed epic")
+
+
+def test_status_retires_closed_epic_waiting_wave_with_empty_dispatchable(
+    tmp_path, monkeypatch, capsys
+):
+    """Closed-epic retirement should not depend on persisted dispatchable tasks."""
+    _build_stale_waiting_closed_epic_frontier_wave(
+        tmp_path, wave_id="wave-stale-epic-waiting-empty"
+    )
+    calls = {"epic_refresh": 0}
+
+    def fake_run(cmd, **kwargs):
+        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco":
+            calls["epic_refresh"] += 1
+            payload = [
+                {
+                    "id": "bd-bkco",
+                    "status": "closed",
+                    "dependents": [
+                        {
+                            "id": "bd-bkco.2",
+                            "dependency_type": "parent-child",
+                            "title": "Merged prerequisite",
+                            "status": "closed",
+                            "close_reason": "Merged via PR #344",
+                        },
+                        {
+                            "id": "bd-bkco.3",
+                            "dependency_type": "parent-child",
+                            "title": "Stale child A",
+                            "status": "closed",
+                            "close_reason": "Closing before merge in PR #347",
+                        },
+                        {
+                            "id": "bd-bkco.4",
+                            "dependency_type": "parent-child",
+                            "title": "Stale child B",
+                            "status": "closed",
+                            "close_reason": "Closing before merge in PR #348",
+                        },
+                        {
+                            "id": "bd-bkco.5",
+                            "dependency_type": "parent-child",
+                            "title": "Stale child C",
+                            "status": "closed",
+                            "close_reason": "Closing before merge in PR #349",
+                        },
+                        {
+                            "id": "bd-bkco.6",
+                            "dependency_type": "parent-child",
+                            "title": "Stale child D",
+                            "status": "closed",
+                            "close_reason": "Closing before merge in PR #350",
+                        },
+                    ],
+                }
+            ]
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps(payload), stderr=""
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic="bd-bkco", beads_id=None, json=True)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    state = json.loads(captured.out)
+
+    assert calls["epic_refresh"] == 1
+    assert state["wave_status"]["state"] == "completed"
+    assert state["wave_status"]["dispatchable_tasks"] == []
+    assert "closed in Beads" in state["wave_status"]["reason"]
+    assert state["wave_status"]["blocker_code"] is None
+    assert "bd-bkco.3" in state["beads_manager"]["completed"]
+    assert state["beads_manager"]["tasks"]["bd-bkco.3"]["status"] == "closed"
+
+    print("✓ status retires closed-epic waiting wave with empty dispatchables")
 
 
 def test_explain_reports_closed_epic_as_retired(tmp_path, monkeypatch, capsys):

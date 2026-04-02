@@ -2260,11 +2260,8 @@ def _reconcile_wave_state_for_surfaces(
 
     persisted_wave_status = persisted_state.get("wave_status", {})
     persisted_blocker = persisted_wave_status.get("blocker_code")
-    persisted_dispatchable = persisted_wave_status.get("dispatchable_tasks") or []
-
     should_refresh_epic_truth = (
         bool(loop.epic_id)
-        and bool(persisted_dispatchable)
         and not loop.scheduler.state.active_beads_ids
         and not loop.scheduler.state.blocked_beads_ids
     )
