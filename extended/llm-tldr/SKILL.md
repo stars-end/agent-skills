@@ -124,6 +124,17 @@ context(project="/tmp/agents/bd-xxx/agent-skills", entry="main", depth=2)
 The contained MCP server ensures the daemon's state is always redirected to
 `$TLDR_STATE_HOME`, regardless of which project path is passed.
 
+### MCP Failure Observability
+
+When MCP daemon transport returns invalid/empty JSON (for example parser-style
+errors such as `Expecting value: line 1 column 1 (char 0)`), the contained
+runtime now enriches the surfaced error with bounded diagnostics:
+- project path + command summary
+- daemon ping/socket/lock status
+- best-effort raw daemon response probe (`bytes_received`, preview, JSON parse status)
+
+This keeps failures explicit and actionable without changing upstream llm-tldr.
+
 ### Per-Call Project Parameter
 
 Every MCP tool accepts `project` (default `"."`):

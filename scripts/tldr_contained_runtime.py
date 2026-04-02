@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -227,6 +228,124 @@ def _semantic_index_missing_error(exc: FileNotFoundError) -> bool:
     )
 
 
+def _safe_preview(raw: bytes, limit: int = 240) -> str:
+    text = raw.decode("utf-8", errors="replace")
+    text = text.replace("\n", "\\n").replace("\r", "\\r")
+    return text[:limit]
+
+
+def _probe_daemon_raw_response(*, mcp_mod: Any, project: str, command: dict) -> dict[str, Any]:
+    """Best-effort probe for daemon raw response diagnostics.
+
+    This intentionally mirrors upstream socket transport logic, but captures
+    raw bytes and parser state to make JSON decode failures actionable.
+    """
+
+    result: dict[str, Any] = {
+        "probe_status": "unknown",
+        "bytes_received": 0,
+    }
+
+    try:
+        addr, port = mcp_mod._get_connection_info(project)
+        result["connection"] = {
+            "addr": str(addr),
+            "port": port,
+        }
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) if port is not None else socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(2.0)
+        try:
+            if port is not None:
+                sock.connect((addr, port))
+            else:
+                sock.connect(addr)
+            payload = json.dumps(command).encode("utf-8") + b"\n"
+            sock.sendall(payload)
+
+            chunks: list[bytes] = []
+            while True:
+                try:
+                    chunk = sock.recv(65536)
+                except TimeoutError:
+                    result["probe_status"] = "timeout"
+                    break
+                if not chunk:
+                    result["probe_status"] = "eof"
+                    break
+                chunks.append(chunk)
+                joined = b"".join(chunks)
+                result["bytes_received"] = len(joined)
+                try:
+                    parsed = json.loads(joined)
+                    result["probe_status"] = "json_ok"
+                    if isinstance(parsed, dict):
+                        result["parsed_keys"] = sorted(parsed.keys())
+                    else:
+                        result["parsed_type"] = type(parsed).__name__
+                    return result
+                except json.JSONDecodeError:
+                    continue
+
+            raw = b"".join(chunks)
+            result["bytes_received"] = len(raw)
+            result["raw_preview"] = _safe_preview(raw)
+            try:
+                json.loads(raw)
+            except json.JSONDecodeError as parse_exc:
+                result["json_error"] = f"{parse_exc}"
+            return result
+        finally:
+            sock.close()
+    except Exception as exc:  # pragma: no cover - best effort diagnostics
+        result["probe_status"] = "probe_exception"
+        result["probe_error"] = f"{type(exc).__name__}: {exc}"
+        return result
+
+
+def _format_send_command_decode_diagnostic(
+    *,
+    mcp_mod: Any,
+    project: str,
+    command: dict[str, Any],
+    exc: json.JSONDecodeError,
+) -> str:
+    cmd = command.get("cmd")
+    action = command.get("action")
+    entry = command.get("entry")
+    diagnostics: dict[str, Any] = {
+        "project": str(Path(project).resolve()),
+        "command_summary": {
+            "cmd": cmd,
+            "action": action,
+            "entry": entry,
+        },
+        "json_decode_error": f"{exc}",
+    }
+    try:
+        socket_path = mcp_mod._get_socket_path(project)
+        lock_path = mcp_mod._get_lock_path(project)
+        diagnostics["daemon"] = {
+            "ping_ok": bool(mcp_mod._ping_daemon(project)),
+            "socket_path": str(socket_path),
+            "socket_exists": socket_path.exists(),
+            "lock_path": str(lock_path),
+            "lock_exists": lock_path.exists(),
+        }
+    except Exception as diag_exc:  # pragma: no cover - best effort diagnostics
+        diagnostics["daemon_probe_error"] = f"{type(diag_exc).__name__}: {diag_exc}"
+
+    diagnostics["raw_probe"] = _probe_daemon_raw_response(
+        mcp_mod=mcp_mod,
+        project=project,
+        command=command,
+    )
+    return (
+        "llm-tldr MCP daemon JSON parse failure (contained runtime diagnostics): "
+        + json.dumps(diagnostics, ensure_ascii=True, sort_keys=True)
+    )
+
+
 def _ensure_semantic_bootstrap(
     *,
     build_semantic_index: Any,
@@ -322,11 +441,27 @@ def _patch_semantic_autobootstrap() -> None:
                 return original_send_command(project, command)
             except json.JSONDecodeError as exc:
                 last_error = exc
-                if command.get("cmd") != "semantic":
-                    raise
+                is_semantic = command.get("cmd") == "semantic"
+                if not is_semantic:
+                    raise RuntimeError(
+                        _format_send_command_decode_diagnostic(
+                            mcp_mod=mcp_mod,
+                            project=project,
+                            command=command,
+                            exc=exc,
+                        )
+                    ) from exc
                 time.sleep(0.2 * (attempt + 1))
         if last_error is not None:
-            raise last_error
+            assert isinstance(last_error, json.JSONDecodeError)
+            raise RuntimeError(
+                _format_send_command_decode_diagnostic(
+                    mcp_mod=mcp_mod,
+                    project=project,
+                    command=command,
+                    exc=last_error,
+                )
+            ) from last_error
         return original_send_command(project, command)
 
     semantic_mod.semantic_search = _contained_semantic_search
