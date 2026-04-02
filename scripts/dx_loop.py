@@ -2269,6 +2269,27 @@ def _reconcile_wave_state_for_surfaces(
 
     persisted_wave_status = persisted_state.get("wave_status", {})
     persisted_blocker = persisted_wave_status.get("blocker_code")
+    if not loop.beads_manager.tasks:
+        if (
+            loop.epic_id
+            and loop.scheduler.state.dispatch_count == 0
+            and not loop.scheduler.state.active_beads_ids
+            and not loop.scheduler.state.completed_beads_ids
+        ):
+            loop._set_wave_status(
+                LoopState.PENDING,
+                None,
+                "Wave bootstrap pending; task graph not yet materialized",
+            )
+        else:
+            loop._set_wave_status(
+                LoopState.KICKOFF_ENV_BLOCKED,
+                BlockerCode.KICKOFF_ENV_BLOCKED,
+                "Wave has no hydrated task graph; inspect bootstrap or repo resolution before redispatch",
+            )
+        loop._save_state()
+        reconciled = _read_wave_state(state_file)
+        return reconciled or persisted_state
     should_refresh_epic_truth = (
         bool(loop.epic_id)
         and not loop.scheduler.state.active_beads_ids

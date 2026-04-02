@@ -2504,6 +2504,42 @@ def test_cmd_start_fresh_persists_state_before_bootstrap(tmp_path, monkeypatch):
     print("✓ Fresh start persists wave state before bootstrap")
 
 
+def test_status_reconcile_does_not_false_complete_minimal_wave(tmp_path, monkeypatch):
+    """Status surfaces must not mark a just-initialized zero-dispatch wave as completed."""
+    wave_id = "wave-minimal-bootstrap"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-test-epic"
+    loop._save_state()
+
+    monkeypatch.setattr(
+        dx_loop_script.BeadsWaveManager,
+        "refresh_epic_truth",
+        lambda self, epic_id, timeout_seconds=5: "open",
+    )
+    monkeypatch.setattr(
+        dx_loop_script.DxLoop,
+        "_refresh_beads_truth",
+        lambda self, emit_logs=False, timeout_seconds=5: [],
+    )
+
+    persisted = json.loads(loop.state_file.read_text())
+    reconciled = dx_loop_script._reconcile_wave_state_for_surfaces(
+        wave_id,
+        state_file=loop.state_file,
+        persisted_state=persisted,
+        artifact_base=tmp_path,
+    )
+
+    assert reconciled["wave_status"]["state"] == "pending"
+    assert reconciled["wave_status"]["reason"] == (
+        "Wave bootstrap pending; task graph not yet materialized"
+    )
+
+    print("✓ Status reconciliation preserves pending state for minimal zero-dispatch waves")
+
+
 def test_bootstrap_state_persisted_before_run_loop(tmp_path, monkeypatch):
     """Bootstrap state should be saved to disk before run_loop starts (bd-5w5o.19)."""
     wave_id = "wave-bootstrap-vis"
