@@ -123,6 +123,12 @@ def _run_transport_bridge() -> int:
                 child.stdin.write(line)
                 child.stdin.flush()
                 line = stdin.readline()
+    except Exception as exc:
+        print(
+            f"tldr-mcp-contained transport bridge error (framed={framed}): {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     finally:
         try:
             child.stdin.close()
