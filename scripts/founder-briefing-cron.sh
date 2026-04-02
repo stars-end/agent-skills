@@ -27,6 +27,8 @@ export PATH="${HOME}/.local/bin:${HOME}/.local/share/mise/shims:/opt/homebrew/bi
 STATE_DIR="$HOME/.dx-state"
 RECOVERY_LOG="$STATE_DIR/recovery-commands.log"
 mkdir -p "$STATE_DIR"
+# Founder briefing posts should never fall back to non-prod defaults.
+FOUNDER_BRIEFING_SLACK_CHANNEL="${FOUNDER_BRIEFING_SLACK_CHANNEL:-#dx-alerts}"
 
 log_founder_event() {
     local status="$1"
@@ -45,7 +47,7 @@ run_founder_daily() {
     local output_file="$1"
     local log_file="$2"
 
-    "${HOME}/agent-skills/scripts/dx-founder-daily.sh" --json >"$output_file" 2>"$log_file"
+    "${HOME}/agent-skills/scripts/dx-founder-daily.sh" --slack >"$output_file" 2>"$log_file"
 }
 
 # GitHub authentication for cron environment
@@ -99,6 +101,11 @@ fi
 MSG="$(cat "$TMP_MSG")"
 rm -f "$TMP_MSG" "$TMP_ERR"
 
+# Strip optional delimiter used by dx-founder-daily thread formatting.
+MSG="${MSG//$'\n---THREAD---\n'/$'\n\n'}"
+MSG="${MSG//$'\n---THREAD---'/$'\n\n'}"
+MSG="${MSG//---THREAD---/$'\n\n'}"
+
 if [[ "$DRY_RUN" == "true" ]]; then
     if [[ -z "$MSG" ]]; then
         MSG='{"founder_pipeline":{"status":"ok","source":"unknown","reason":"dry-run"}}'
@@ -119,9 +126,9 @@ fi
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Message generated (${#MSG} chars)"
 
 # Send via Agent Coordination Slack transport.
-if agent_coordination_send_message "$MSG" "${DX_ALERTS_CHANNEL_ID:-}"; then
+if agent_coordination_send_message "$MSG" "$FOUNDER_BRIEFING_SLACK_CHANNEL"; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Message sent successfully"
-    log_founder_event "success" "posted" "chars=${#MSG}"
+    log_founder_event "success" "posted" "channel=${FOUNDER_BRIEFING_SLACK_CHANNEL} chars=${#MSG}"
     exit 0
 else
     founder_status="$(echo "$MSG" | jq -r '.founder_pipeline.status // "ok"' 2>/dev/null || echo "ok")"
