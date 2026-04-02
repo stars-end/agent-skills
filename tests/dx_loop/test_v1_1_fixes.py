@@ -2540,6 +2540,37 @@ def test_status_reconcile_does_not_false_complete_minimal_wave(tmp_path, monkeyp
     print("✓ Status reconciliation preserves pending state for minimal zero-dispatch waves")
 
 
+def test_status_reconcile_empty_graph_retire_when_epic_closed(tmp_path, monkeypatch):
+    """An empty cached task graph should still retire once Beads says the epic is closed."""
+    wave_id = "wave-empty-graph-closed-epic"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-test-epic"
+    loop._save_state()
+
+    monkeypatch.setattr(
+        dx_loop_script.BeadsWaveManager,
+        "refresh_epic_truth",
+        lambda self, epic_id, timeout_seconds=5: "closed",
+    )
+
+    persisted = json.loads(loop.state_file.read_text())
+    reconciled = dx_loop_script._reconcile_wave_state_for_surfaces(
+        wave_id,
+        state_file=loop.state_file,
+        persisted_state=persisted,
+        artifact_base=tmp_path,
+    )
+
+    assert reconciled["wave_status"]["state"] == "completed"
+    assert reconciled["wave_status"]["reason"] == (
+        "Epic bd-test-epic is closed in Beads; empty wave cache retired"
+    )
+
+    print("✓ Empty task-graph waves retire correctly when the epic is already closed")
+
+
 def test_bootstrap_state_persisted_before_run_loop(tmp_path, monkeypatch):
     """Bootstrap state should be saved to disk before run_loop starts (bd-5w5o.19)."""
     wave_id = "wave-bootstrap-vis"
