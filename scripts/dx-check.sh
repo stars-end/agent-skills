@@ -10,6 +10,120 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RESET='\033[0m'
 
+detect_dx_runtime() {
+    if [[ -n "${DX_CHECK_RUNTIME:-}" ]]; then
+        echo "$DX_CHECK_RUNTIME"
+        return
+    fi
+
+    local candidates=()
+    command -v codex >/dev/null 2>&1 && candidates+=("codex")
+    command -v claude >/dev/null 2>&1 && candidates+=("claude")
+    command -v opencode >/dev/null 2>&1 && candidates+=("opencode")
+    command -v gemini >/dev/null 2>&1 && candidates+=("gemini")
+
+    if [[ "${#candidates[@]}" -eq 1 ]]; then
+        echo "${candidates[0]}"
+        return
+    fi
+
+    if [[ "${#candidates[@]}" -gt 1 ]]; then
+        echo "__ambiguous__:${candidates[*]}"
+        return
+    fi
+
+    echo ""
+}
+
+runtime_mcp_list_cmd() {
+    local runtime="$1"
+    case "$runtime" in
+        codex) echo "codex mcp list" ;;
+        claude) echo "claude mcp list" ;;
+        opencode) echo "opencode mcp list" ;;
+        gemini) echo "gemini mcp list" ;;
+        *) return 1 ;;
+    esac
+}
+
+runtime_tool_visible() {
+    local runtime="$1"
+    local tool="$2"
+    local out="$3"
+
+    case "$runtime" in
+        codex)
+            echo "$out" | rg -q "^${tool}[[:space:]].*enabled"
+            ;;
+        claude)
+            echo "$out" | rg -q "${tool}: .*Connected"
+            ;;
+        opencode)
+            echo "$out" | rg -q "${tool} .*connected"
+            ;;
+        gemini)
+            echo "$out" | rg -q "${tool}: .*Connected"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+check_active_runtime_mcp_exposure() {
+    local runtime
+    runtime="$(detect_dx_runtime)"
+
+    if [[ "$runtime" == __ambiguous__:* ]]; then
+        local options="${runtime#__ambiguous__:}"
+        echo -e "${YELLOW}⚠️  MCP preflight skipped: active runtime is ambiguous (${options}).${RESET}"
+        echo "   Set DX_CHECK_RUNTIME to one of: codex, claude, opencode, gemini"
+        echo "   to enforce runtime-specific MCP preflight."
+        return 0
+    fi
+
+    if [[ -z "$runtime" ]]; then
+        echo -e "${YELLOW}⚠️  MCP preflight skipped: no supported runtime CLI found (codex/claude/opencode/gemini).${RESET}"
+        return 0
+    fi
+
+    local cmd
+    if ! cmd="$(runtime_mcp_list_cmd "$runtime")"; then
+        echo -e "${RED}❌ MCP preflight failed: unsupported DX_CHECK_RUNTIME='$runtime'.${RESET}"
+        echo "   Use one of: codex, claude, opencode, gemini"
+        return 1
+    fi
+
+    if [[ -z "${DX_CHECK_RUNTIME:-}" ]]; then
+        echo -e "${BLUE}🔎 Active-runtime MCP preflight (${runtime}, inferred single available runtime)...${RESET}"
+    else
+        echo -e "${BLUE}🔎 Active-runtime MCP preflight (${runtime}, explicit DX_CHECK_RUNTIME)...${RESET}"
+    fi
+
+    local out
+    if ! out="$(eval "$cmd" 2>&1)"; then
+        echo -e "${RED}❌ MCP preflight failed: could not run '$cmd'.${RESET}"
+        echo "   Action: verify runtime CLI health and MCP startup; then rerun dx-check."
+        return 1
+    fi
+
+    local missing=""
+    for tool in llm-tldr serena; do
+        if ! runtime_tool_visible "$runtime" "$tool" "$out"; then
+            missing="$missing $tool"
+        fi
+    done
+
+    if [[ -n "$missing" ]]; then
+        echo -e "${RED}❌ MCP preflight failed (${runtime}): required tools not visible:${missing}${RESET}"
+        echo "   Action: run Fleet Sync apply/repair, restart the ${runtime} runtime, and retry dx-check."
+        return 1
+    fi
+
+    echo -e "${GREEN}✅ MCP preflight passed (${runtime}): llm-tldr + serena visible${RESET}"
+    return 0
+}
+
 # Resolve symlinks to get actual script directory (works on macOS and Linux)
 SOURCE="${BASH_SOURCE[0]}"
 while [ -L "$SOURCE" ]; do
@@ -146,6 +260,10 @@ if [ -f "${SCRIPT_DIR}/dx-wip-check.sh" ]; then
     "${SCRIPT_DIR}/dx-wip-check.sh"
 fi
 
+if ! check_active_runtime_mcp_exposure; then
+    needs_fix=1
+fi
+
 if [ "$needs_fix" -eq 0 ]; then
     echo -e "${GREEN}✨ Environment is healthy.${RESET}"
 else
@@ -163,6 +281,9 @@ else
         "${SCRIPT_DIR}/dx-hydrate.sh"
         echo -e "${BLUE}🔄 Re-checking status...${RESET}"
         if ! "${SCRIPT_DIR}/dx-status.sh"; then
+            exit 1
+        fi
+        if ! check_active_runtime_mcp_exposure; then
             exit 1
         fi
     else
