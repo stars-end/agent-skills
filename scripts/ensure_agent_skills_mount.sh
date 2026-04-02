@@ -158,6 +158,17 @@ if [[ -x "$CODEX_INSTALLER" ]]; then
   fi
 fi
 
+# Ensure touched legacy drift (bd-1cpm) is repaired deterministically across roots.
+SKILL_ROOT_REPAIR="$AGENT_SKILLS_DIR/scripts/dx-skill-root-repair.sh"
+if [[ -x "$SKILL_ROOT_REPAIR" ]]; then
+  if ! "$SKILL_ROOT_REPAIR" --check >/dev/null 2>&1; then
+    log_warn "Skill root drift detected for migrated/archive entries, running repair..."
+    "$SKILL_ROOT_REPAIR" --apply >/dev/null 2>&1 || true
+  else
+    log_info "Skill root migrated/archive entries are healthy"
+  fi
+fi
+
 # 5. Quick health check
 echo ""
 if [[ -d "$AGENT_SKILLS_DIR" ]] && [[ -e "$SKILLS_MOUNT" ]]; then

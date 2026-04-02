@@ -41,6 +41,23 @@ To keep both the shared plane and the Codex plane healthy together, run:
 
 If Codex doesn’t pick up changes after the mirror is repaired, restart Codex.
 
+## Deterministic Skill-Root Repair (bd-1cpm)
+
+To repair known legacy drift for migrated/archived entries across user roots, use:
+
+```bash
+~/agent-skills/scripts/dx-skill-root-repair.sh --check
+~/agent-skills/scripts/dx-skill-root-repair.sh --apply
+```
+
+This repair is intentionally narrow and deterministic:
+- Migrated to canonical indexed paths under `extended/`: `design-md`, `reactcomponents`, `stitch-loop`
+- Archived drift removed: `parallelize-cloud-work`
+- Managed roots: `~/.agents/skills`, `~/.codex/skills`, `~/.claude/skills`
+- Codex system content is preserved (`~/.codex/skills/.system`)
+
+`~/agent-skills/scripts/ensure_agent_skills_mount.sh` now calls this repair path automatically when drift is detected.
+
 ## Legacy Mount (Compatibility)
 
 Some older helper scripts and docs still refer to:
