@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: c14313eeab17f2c73ed4a726a874600148e98231 -->
-<!-- Last updated: 2026-04-01 19:01:31 UTC -->
+<!-- Source SHA: 66d86b5ab0801ae37d7f7f8134f6dd964c82a486 -->
+<!-- Last updated: 2026-04-02 07:17:49 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -529,6 +529,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **cli-mastery** | CLI environment and command-line usage guidance for Railway, GitHub, and general repo workflows. | — |  |
 | **context-plus** | REMOVED from canonical fleet contract (bd-rb0c.8). context-plus was fully removed in favor of llm-tldr for semantic discovery and serena for symbol-aware edits. This skill is retained as a tombstone only. | — |  |
 | **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with dx-runner as canonical governance surface, OpenCode as primary execution lane, and cc-glm as reliability backstop. dx-dispatch is break-glass only. | — |  |
+| **design-md** | Analyze Stitch projects and synthesize a semantic design system into DESIGN.md files | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty or WIP repositories. Standardizes snapshotting uncommitted work to a WIP branch before destructive operations. | — |  |
 | **dx-batch** | Deterministic orchestration over dx-runner for autonomous implement->review waves. Orchestrates 2-3 parallel tasks across 15-20 Beads items with strict lease locking, persistent ledger, and machine-readable contracts. Use for batch execution of implementation tasks with automatic review cycles. | `dx-batch start --items bd-aaa,bd-bbb,bd-ccc [--max-parallel ` | workflow, orchestration, batch, dx-runner, governance, parallel |
 | **dx-loop-review-contract** | Deterministic review contract for dx-loop reviewer runs. Enforces findings-first review style, concrete verdicts, and machine-actionable end states for baton automation. | — | workflow, review, dx-loop, baton |
@@ -545,10 +546,12 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | `dx-runner start --provider opencode --beads bd-xxx --prompt-` | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |
 | **plan-refine** | Iteratively refine implementation plans using the "Convexity" pattern. Simulates a multi-round architectural critique to converge on a secure, robust specification. Use when you have a draft plan that needs deep architectural review or "APR" style optimization. | — | architecture, planning, review, refinement, apr |
 | **prompt-writing** | Draft self-contained prompts for delegated agents with cross-VM-safe context. MUST BE USED when assigning work to another agent (implementation, QA, rollout, or audit). Enforces: worktree-first, no canonical writes, Beads traceability (epic/subtask/dependencies), MCP routing expectations, and required PR artifacts (PR_URL + PR_HEAD_SHA). Trigger phrases include: "assign to another agent", "write a one-shot prompt", "dispatch this", "prepare autonomous prompt", "QA agent prompt", "parallelize work to cloud", and "assign to jules". | — | workflow, prompts, orchestration, dx, safety |
+| **reactcomponents** | Converts Stitch designs into modular Vite and React components using system-level networking and AST-based validation. | — |  |
 | **serena** | MCP-native AI assistant memory for persistent context across sessions. | — |  |
 | **skill-creator** | Deprecated compatibility shim for legacy skill creation requests. Use when the user still says "skill-creator" or asks to create a skill, then route canonical `~/agent-skills` work to `agent-skills-creator`. Route implementation-plan/spec requests with Beads epic+dependencies+subtasks to `implementation-planner`. | — | meta, skill-creation, compatibility, deprecation |
 | **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lightweight locking). Uses direct Slack Web API calls and/or the slack-coordinator systemd service. Does not require MCP. | — | slack, coordination, workflow, optional |
 | **spark-prompt-writer** | Write tightly scoped, execution-ready prompts optimized for `gpt-5.3-codex-spark` implementation batches and short verification passes. Use when the user wants a Spark-specific overnight batch prompt, a large grouped-fix prompt, or a follow-on integrated verification prompt after fix waves. Preserve the `prompt-writing` DX contract: worktree-first, no canonical writes, Beads traceability, cross-VM-safe context, and required `PR_URL` + `PR_HEAD_SHA`. | — | workflow, prompts, orchestration, spark, dx |
+| **stitch-loop** | Teaches agents to iteratively build websites using Stitch with an autonomous baton-passing loop pattern | — |  |
 | **wooyun-legacy** | WooYun漏洞分析专家系统。提供基于88,636个真实漏洞案例提炼的元思考方法论、测试流程和绕过技巧。适用于漏洞挖掘、渗透测试、安全审计及代码审计。支持SQL注入、XSS、命令执行、逻辑漏洞、文件上传、未授权访问等多种漏洞类型。 | — |  |
 | **worktree-workflow** | Workspace-first git worktree management (DX V8.6). Create, open, resume, and recover workspaces while keeping canonical repos clean. All mutating work happens in /tmp/agents/<beads-id>/<repo>. Commands: create <beads-id> <repo> - Create workspace (prints path) open <beads-id> <repo> [-- <cmd>] - Show status or exec command resume <beads-id> <repo> [-- <cmd>] - Resume workspace evacuate-canonical <repo> - Recover dirty canonical repo cleanup <beads-id> - Remove workspace prune <repo> - Prune worktree metadata explain - Show workspace-first policy Use when starting work on a Beads ID, when an agent needs a clean workspace, or when recovering from dirty canonical repos. | `dx-worktree create <beads-id> <repo>` | dx, git, worktree, workspace, workflow, v86 |
 
