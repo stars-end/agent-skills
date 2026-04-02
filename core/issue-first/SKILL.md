@@ -1,3 +1,9 @@
+## Canonical bd prefix cutover (2026-04-02)
+
+- For new work created against canonical `~/bd`, the expected Beads ID is now `bd-*`.
+- Older `af-*` and other legacy IDs may still exist in the shared database, but they are legacy carry-forward context.
+- If repo workflow needs a current tracking issue, create a fresh `bd-*` issue instead of carrying a legacy prefix forward into branch / commit / PR metadata.
+
 ---
 name: issue-first
 description: |

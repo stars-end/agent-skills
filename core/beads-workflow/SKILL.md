@@ -1,3 +1,10 @@
+## Canonical bd prefix cutover (2026-04-02)
+
+- Canonical `~/bd` now creates new issues with the `bd-*` prefix.
+- Legacy prefixes remain readable in the shared database via `allowed_prefixes` for historical continuity.
+- Treat legacy prefixes as carry-forward context only. Do not start new canonical workflow from `af-*` or other legacy prefixes when a fresh `bd-*` issue is appropriate.
+- Under the current local DX model, `bd-*` is the default workflow contract for new work that depends on canonical `~/bd`.
+
 ---
 name: beads-workflow
 description: |
