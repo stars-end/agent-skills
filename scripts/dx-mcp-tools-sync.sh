@@ -197,6 +197,19 @@ def load_manifest() -> dict:
         raise RuntimeError("manifest is not a mapping")
     return data
 
+def normalize_local_path(part):
+    if isinstance(part, str) and part.startswith("~"):
+        return str(Path(part).expanduser())
+    return part
+
+def normalize_entry_for_render(entry: dict) -> dict:
+    normalized = dict(entry)
+    normalized["command"] = normalize_local_path(normalized.get("command", ""))
+    args = normalized.get("args", [])
+    if isinstance(args, list):
+        normalized["args"] = [normalize_local_path(part) for part in args]
+    return normalized
+
 def render_json(path: Path, servers: dict, ide: str):
     key = "mcp" if ide == "opencode" else "mcpServers"
     payload = {}
@@ -211,15 +224,11 @@ def render_json(path: Path, servers: dict, ide: str):
     if not isinstance(mcp, dict):
         mcp = {}
     for name, entry in servers.items():
+        entry = normalize_entry_for_render(entry)
         if ide == "opencode":
             cmd = entry.get("command", "")
             args = entry.get("args", [])
             entry_env = entry.get("env", {})
-
-            def normalize_local_path(part: str) -> str:
-                if isinstance(part, str) and part.startswith("~"):
-                    return str(Path(part).expanduser())
-                return part
 
             cmd_parts = [cmd] if isinstance(cmd, str) else list(cmd)
             cmd_parts = [normalize_local_path(part) for part in cmd_parts]
@@ -245,6 +254,7 @@ def render_toml(path: Path, servers: dict):
         base = re.sub(pattern, "", base).rstrip() + "\n"
     lines = [managed_begin]
     for name, entry in sorted(servers.items()):
+        entry = normalize_entry_for_render(entry)
         # Codex uses mcp_servers (underscore) format, not mcpServers (camelCase)
         lines.append(f"[mcp_servers.{json.dumps(name)}]")
         lines.append(f"type = {json.dumps(entry.get('type', 'stdio'))}")

@@ -78,12 +78,16 @@ Rendered to IDE configs via Fleet Sync (contained):
   "mcpServers": {
     "llm-tldr": {
       "type": "stdio",
-      "command": "~/agent-skills/scripts/tldr-mcp-contained-launch.py",
+      "command": "/home/<user>/agent-skills/scripts/tldr-mcp-contained-launch.py",
       "args": []
     }
   }
 }
 ```
+
+Fleet Sync expands the launcher path to an absolute host-local path before
+writing client configs so direct stdio clients do not depend on shell `~`
+expansion.
 
 ## Operational Guidance
 

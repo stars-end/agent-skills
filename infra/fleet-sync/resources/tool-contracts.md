@@ -66,6 +66,9 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
 - `serena` PyPI has package collision with an unrelated AMQP client - must install from GitHub.
 - `gemini-cli` + `antigravity` use wrapped launcher form with the repo path
   inside the exec string.
+- Fleet Sync expands `~` launcher paths to absolute host-local paths before
+  writing client configs so direct stdio clients do not depend on shell
+  expansion.
 - `llm-tldr` contained semantic search auto-bootstraps a missing semantic index
   on first use for the target project path.
   `tldr warm <project>` only warms structural caches.
