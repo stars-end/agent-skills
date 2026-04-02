@@ -75,7 +75,7 @@ Use this skill when the user asks to:
   Every MCP tool call accepts a `project` parameter for
   worktree-safe operation (daemon per resolved path).
 - **llm-tldr state containment (af-aqb.1):** The MCP server is launched via
-  `tldr-mcp-contained.sh`, which patches llm-tldr runtime path joins so
+  `tldr-mcp-contained-launch.py`, which patches llm-tldr runtime path joins so
   `.tldr/` and `.tldrignore` never resolve inside the project tree. CLI warm
   operations should use `tldr-contained.sh`. No
   repo-local artifact leakage occurs from root or nested invocations. This is

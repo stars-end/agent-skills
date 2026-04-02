@@ -72,7 +72,7 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
   Every MCP tool call accepts a `project` parameter for worktree-safe operation.
   **State containment (af-aqb.1):** llm-tldr runtime state (`.tldr/`, `.tldrignore`)
   is resolved outside the project tree by contained runtime patching in
-  `tldr-mcp-contained.sh` (MCP) and `tldr-contained.sh` (CLI). State lives in
+  `tldr-mcp-contained-launch.py` (MCP) and `tldr-contained.sh` (CLI). State lives in
   `$TLDR_STATE_HOME/<project-hash>/` (default: `~/.cache/tldr-state/`). No
   `.tldr`/`.tldrignore` paths are created under repo/worktree trees. This is
   enforced by `scripts/dx-verify-clean.sh`, which fails on leaked artifacts in
