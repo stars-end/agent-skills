@@ -47,7 +47,7 @@ worktrees, and nested subdirectories.
 
 ### How It Works
 
-- **MCP server**: Fleet Sync renders `tldr-mcp-contained.sh` instead of `tldr-mcp`
+- **MCP server**: Fleet Sync renders `tldr-mcp-contained-launch.py` instead of `tldr-mcp`
   directly. The contained wrapper patches llm-tldr path joins at process startup
   and patches MCP daemon startup so contained behavior is inherited by daemon forks.
 - **CLI invocations**: `tldr-contained.sh` launches a contained Python entrypoint
@@ -78,8 +78,8 @@ Rendered to IDE configs via Fleet Sync (contained):
   "mcpServers": {
     "llm-tldr": {
       "type": "stdio",
-      "command": "bash",
-      "args": ["-lc", "exec ~/agent-skills/scripts/tldr-mcp-contained.sh"]
+      "command": "~/agent-skills/scripts/tldr-mcp-contained-launch.py",
+      "args": []
     }
   }
 }
@@ -182,7 +182,7 @@ The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools w
 
 ## Status
 
-- Fleet contract: MCP-rendered tool (contained via `tldr-mcp-contained.sh`)
+- Fleet contract: MCP-rendered tool (contained via `tldr-mcp-contained-launch.py`)
 - Canonical install: `uv tool install "llm-tldr==1.5.2"`
 - Canonical health checks:
   - `tldr-mcp --version || llm-tldr --version`
