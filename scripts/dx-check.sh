@@ -70,6 +70,42 @@ runtime_tool_visible() {
     esac
 }
 
+check_codex_thread_surface() {
+    local helper="${SCRIPT_DIR}/dx-codex-thread-surface-check.sh"
+    [[ -x "$helper" ]] || return 0
+
+    local out status reason missing observed thread_id
+    out="$("$helper" "$(pwd)")"
+    status="$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')"
+    reason="$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("reason",""))')"
+
+    case "$status" in
+        pass)
+            echo -e "${GREEN}✅ Codex thread-surface check passed: llm-tldr + serena present in recent thread state${RESET}"
+            return 0
+            ;;
+        skip)
+            echo -e "${YELLOW}⚠️  Codex thread-surface check skipped (${reason}).${RESET}"
+            return 0
+            ;;
+        fail)
+            missing="$(printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(" ".join(d.get("missing",[])))')"
+            observed="$(printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(",".join(d.get("observed",[])))')"
+            thread_id="$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("thread_id",""))')"
+            echo -e "${RED}❌ Codex thread-surface check failed: recent thread state is missing required MCP tools:${missing}${RESET}"
+            echo "   Thread: ${thread_id}"
+            echo "   Observed dynamic tools: ${observed:-<none>}"
+            echo "   Diagnosis: codex mcp list can be green while the live thread tool surface is still missing llm-tldr/serena."
+            echo "   Action: restart Codex, create a fresh thread in this workspace, and re-run dx-check."
+            return 1
+            ;;
+        *)
+            echo -e "${YELLOW}⚠️  Codex thread-surface check produced unexpected output; skipping.${RESET}"
+            return 0
+            ;;
+    esac
+}
+
 check_active_runtime_mcp_exposure() {
     local runtime
     runtime="$(detect_dx_runtime)"
@@ -121,6 +157,9 @@ check_active_runtime_mcp_exposure() {
     fi
 
     echo -e "${GREEN}✅ MCP preflight passed (${runtime}): llm-tldr + serena visible${RESET}"
+    if [[ "$runtime" == "codex" ]]; then
+        check_codex_thread_surface || return 1
+    fi
     return 0
 }
 
