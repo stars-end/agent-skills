@@ -25,6 +25,11 @@ CASS Memory is a CLI-native tool. It is NOT rendered to IDE MCP configs. It runs
 - Fleet status: pilot-only / disabled by default in the manifest
 - Use only when the task explicitly asks for cross-session or cross-agent memory experimentation
 - Do not require this tool in standard repo workflows
+- Active pilot contract: `docs/specs/2026-04-03-cass-memory-cross-vm-dx-pilot.md` (`bd-953g`)
+- Active pilot starter package: `docs/runbook/cass-memory-pilot-quickstart.md` (`bd-9q92`)
+- Pilot templates:
+  - `templates/cass-memory-pilot-entry-template.md`
+  - `templates/cass-memory-pilot-reuse-log-template.csv`
 
 ## Installation
 
