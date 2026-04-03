@@ -19,6 +19,7 @@ echo "=========================================================="
 missing_required=0
 missing_optional=0
 client_warnings=0
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 if [[ -f "$CANONICAL_TARGETS" ]]; then
   # shellcheck disable=SC1090
@@ -139,6 +140,26 @@ fi
 check_mcp_client "opencode" "$HOME/.config/opencode/opencode.jsonc" "\"mcp\"" "opencode mcp list" "VERIFIED" "1"
 check_mcp_client "antigravity" "$HOME/.gemini/antigravity/mcp_config.json" "mcpServers" "none" "INFERRED" "1"
 
+echo -n "- codex-cli thread tool surface: "
+CODEX_THREAD_HELPER="${SKILLS_DIR}/scripts/dx-codex-thread-surface-check.sh"
+if [[ ! -x "$CODEX_THREAD_HELPER" ]]; then
+  echo "ℹ️  helper missing ($CODEX_THREAD_HELPER)"
+else
+  CODEX_THREAD_JSON="$("$CODEX_THREAD_HELPER" "$REPO_ROOT")"
+  CODEX_THREAD_STATUS="$(printf '%s' "$CODEX_THREAD_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')"
+  CODEX_THREAD_REASON="$(printf '%s' "$CODEX_THREAD_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("reason",""))')"
+  if [[ "$CODEX_THREAD_STATUS" == "pass" ]]; then
+    echo "✅ recent thread state includes llm-tldr + serena"
+  elif [[ "$CODEX_THREAD_STATUS" == "skip" ]]; then
+    echo "ℹ️  skipped ($CODEX_THREAD_REASON)"
+  else
+    CODEX_THREAD_MISSING="$(printf '%s' "$CODEX_THREAD_JSON" | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin).get("missing",[])))')"
+    CODEX_THREAD_OBSERVED="$(printf '%s' "$CODEX_THREAD_JSON" | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin).get("observed",[])))')"
+    echo "⚠️  recent thread state missing:$CODEX_THREAD_MISSING (observed: ${CODEX_THREAD_OBSERVED:-<none>})"
+    client_warnings=$((client_warnings+1))
+  fi
+fi
+
 check_context_plus_google_contract() {
   local gemini_path="$HOME/.gemini/settings.json"
   local antigravity_path="$HOME/.gemini/antigravity/mcp_config.json"
@@ -216,8 +237,6 @@ echo ""
 echo "=========================================================="
 echo " Legacy / Optional Tool Checks"
 echo "=========================================================="
-
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 FILES_BASE=(
   "$REPO_ROOT/.claude/settings.json"
