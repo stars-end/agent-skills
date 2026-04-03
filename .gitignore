@@ -48,3 +48,7 @@ worktrees/
 # Only triggered if llm-tldr is invoked directly without the wrapper.
 .tldr/
 .tldrignore
+
+# Local tool runtime residue
+.cass/
+.serena/
