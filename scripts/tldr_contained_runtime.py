@@ -477,22 +477,16 @@ def _patch_semantic_autobootstrap() -> None:
                         model=os.environ.get("TLDR_SEMANTIC_AUTOBUILD_MODEL"),
                     )
         last_error: Exception | None = None
-        for attempt in range(3):
+        max_attempts = 3
+        for attempt in range(max_attempts):
             try:
                 return original_send_command(project, command)
             except json.JSONDecodeError as exc:
                 last_error = exc
-                is_semantic = command.get("cmd") == "semantic"
-                if not is_semantic:
-                    raise RuntimeError(
-                        _format_send_command_decode_diagnostic(
-                            mcp_mod=mcp_mod,
-                            project=project,
-                            command=command,
-                            exc=exc,
-                        )
-                    ) from exc
-                time.sleep(0.2 * (attempt + 1))
+                if attempt + 1 < max_attempts:
+                    time.sleep(0.2 * (attempt + 1))
+                    continue
+                break
         if last_error is not None:
             assert isinstance(last_error, json.JSONDecodeError)
             raise RuntimeError(
