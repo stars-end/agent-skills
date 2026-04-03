@@ -234,6 +234,45 @@ def _safe_preview(raw: bytes, limit: int = 240) -> str:
     return text[:limit]
 
 
+def _is_json_serializable(value: Any) -> bool:
+    try:
+        json.dumps(value)
+        return True
+    except TypeError:
+        return False
+
+
+def _coerce_context_result_for_mcp(value: Any) -> Any:
+    """Make daemon context results safe for JSON socket transport."""
+
+    if hasattr(value, "to_llm_string"):
+        try:
+            return value.to_llm_string()
+        except Exception:
+            return str(value)
+    if _is_json_serializable(value):
+        return value
+    return str(value)
+
+
+def _patch_context_serialization() -> None:
+    import tldr.daemon.cached_queries as cached_queries_mod
+    import tldr.daemon.core as daemon_core_mod
+
+    original_cached_context = cached_queries_mod.cached_context
+
+    def _contained_cached_context(db: Any, project: str, entry: str, language: str, depth: int) -> dict:
+        result = original_cached_context(db, project, entry, language, depth)
+        if isinstance(result, dict) and result.get("status") == "ok" and "result" in result:
+            coerced = dict(result)
+            coerced["result"] = _coerce_context_result_for_mcp(result.get("result"))
+            return coerced
+        return result
+
+    cached_queries_mod.cached_context = _contained_cached_context
+    daemon_core_mod.cached_context = _contained_cached_context
+
+
 def _probe_daemon_raw_response(*, mcp_mod: Any, project: str, command: dict) -> dict[str, Any]:
     """Best-effort probe for daemon raw response diagnostics.
 
@@ -481,6 +520,7 @@ def apply_containment_patches(*, include_mcp: bool) -> None:
 
     if not _PATCHED_SEMANTIC:
         _patch_semantic_autobootstrap()
+        _patch_context_serialization()
         _PATCHED_SEMANTIC = True
 
     if include_mcp and not _PATCHED_MCP:
