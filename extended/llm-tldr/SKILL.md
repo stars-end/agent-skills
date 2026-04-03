@@ -139,11 +139,21 @@ local contained daemon helper instead of plain `python -m tldr.cli`:
   --repo /tmp/agents/<beads-id>/<repo> \
   --query "where is tool routing implemented?" \
   --k 5
+
+~/agent-skills/scripts/tldr-daemon-fallback.sh tree --repo /tmp/agents/<beads-id>/<repo>
+~/agent-skills/scripts/tldr-daemon-fallback.sh structure --repo /tmp/agents/<beads-id>/<repo>
+~/agent-skills/scripts/tldr-daemon-fallback.sh diagnostics --path /tmp/agents/<beads-id>/<repo>/path/to/file.py
+~/agent-skills/scripts/tldr-daemon-fallback.sh --help
 ```
 
 This helper calls `tldr.mcp_server` tool functions directly after contained
 runtime patching, so queries stay on the daemon/socket path (`_send_command`)
 instead of the plain CLI direct API path.
+
+Current command surface mirrors the practical MCP tools:
+`tree`, `structure`, `search`, `extract`, `context`, `cfg`, `dfg`, `slice`,
+`impact`, `dead`, `arch`, `calls`, `imports`, `importers`, `semantic`,
+`diagnostics`, `change-impact` (alias `change_impact`), and `status`.
 
 ### MCP Failure Observability
 
