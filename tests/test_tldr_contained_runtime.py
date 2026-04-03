@@ -21,19 +21,33 @@ class _FallbackObject:
         return "fallback object"
 
 
-def test_coerce_context_result_uses_llm_string_when_available():
+def test_coerce_daemon_response_uses_llm_string_when_available():
     value = _FakeRelevantContext()
 
-    assert runtime._coerce_context_result_for_mcp(value) == "serialized context"
+    assert runtime._coerce_daemon_response_value(value) == "serialized context"
 
 
-def test_coerce_context_result_preserves_json_values():
+def test_coerce_daemon_response_preserves_json_values():
     value = {"status": "ok", "items": [1, 2, 3]}
 
-    assert runtime._coerce_context_result_for_mcp(value) == value
+    assert runtime._coerce_daemon_response_value(value) == value
 
 
-def test_coerce_context_result_falls_back_to_str_for_non_json_object():
+def test_coerce_daemon_response_falls_back_to_str_for_non_json_object():
     value = _FallbackObject()
 
-    assert runtime._coerce_context_result_for_mcp(value) == "fallback object"
+    assert runtime._coerce_daemon_response_value(value) == "fallback object"
+
+
+def test_coerce_daemon_response_recurses_through_dicts_and_lists():
+    value = {
+        "status": "ok",
+        "result": {
+            "items": [_FakeRelevantContext(), _FallbackObject()],
+        },
+    }
+
+    assert runtime._coerce_daemon_response_value(value) == {
+        "status": "ok",
+        "result": {"items": ["serialized context", "fallback object"]},
+    }

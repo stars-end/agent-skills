@@ -242,8 +242,16 @@ def _is_json_serializable(value: Any) -> bool:
         return False
 
 
-def _coerce_context_result_for_mcp(value: Any) -> Any:
-    """Make daemon context results safe for JSON socket transport."""
+def _coerce_daemon_response_value(value: Any) -> Any:
+    """Make daemon response payloads safe for JSON socket transport."""
+
+    if isinstance(value, dict):
+        return {
+            key: _coerce_daemon_response_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_coerce_daemon_response_value(item) for item in value]
 
     if hasattr(value, "to_llm_string"):
         try:
@@ -255,22 +263,16 @@ def _coerce_context_result_for_mcp(value: Any) -> Any:
     return str(value)
 
 
-def _patch_context_serialization() -> None:
-    import tldr.daemon.cached_queries as cached_queries_mod
+def _patch_daemon_response_serialization() -> None:
     import tldr.daemon.core as daemon_core_mod
 
-    original_cached_context = cached_queries_mod.cached_context
+    original_handle_command = daemon_core_mod.TLDRDaemon.handle_command
 
-    def _contained_cached_context(db: Any, project: str, entry: str, language: str, depth: int) -> dict:
-        result = original_cached_context(db, project, entry, language, depth)
-        if isinstance(result, dict) and result.get("status") == "ok" and "result" in result:
-            coerced = dict(result)
-            coerced["result"] = _coerce_context_result_for_mcp(result.get("result"))
-            return coerced
-        return result
+    def _contained_handle_command(self: Any, command: dict[str, Any]) -> dict[str, Any]:
+        result = original_handle_command(self, command)
+        return _coerce_daemon_response_value(result)
 
-    cached_queries_mod.cached_context = _contained_cached_context
-    daemon_core_mod.cached_context = _contained_cached_context
+    daemon_core_mod.TLDRDaemon.handle_command = _contained_handle_command
 
 
 def _probe_daemon_raw_response(*, mcp_mod: Any, project: str, command: dict) -> dict[str, Any]:
@@ -520,7 +522,7 @@ def apply_containment_patches(*, include_mcp: bool) -> None:
 
     if not _PATCHED_SEMANTIC:
         _patch_semantic_autobootstrap()
-        _patch_context_serialization()
+        _patch_daemon_response_serialization()
         _PATCHED_SEMANTIC = True
 
     if include_mcp and not _PATCHED_MCP:
