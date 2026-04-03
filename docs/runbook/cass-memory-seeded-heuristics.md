@@ -67,8 +67,9 @@ They are intentionally narrow and cross-agent.
 
 - Category: workflow
 - Scope: cass-memory
-- Rule: Default retrieval should be `cm context "<task>" --json`; use `cm similar`
-  with threshold tuning only when broader search is needed.
+- Rule: Default retrieval should be `cm context "<task>" --json` with
+  task-shaped phrasing and `.data.relevantBullets`; use `cm similar` with
+  threshold tuning only when broader search is needed.
 
 ## Candidate 10: Candidate First, Promote Later
 

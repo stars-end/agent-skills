@@ -80,9 +80,23 @@ cm playbook add "<sanitized one-paragraph summary of the entry>" --category work
 
 ```bash
 cm context "<incident or task>" --json
+# Inspect the primary context payload:
+jq '.data.relevantBullets'
+
 # If needed, search more broadly with tuned similarity:
 cm similar "<incident phrase>" --threshold 0.1 --json
 ```
+
+Use task-shaped retrieval phrasing, not just a bare topic label. Good examples:
+
+```bash
+cm context "use op cli and service-account auth for dev secrets" --json
+cm context "prefer z.ai coding endpoints first for this coding lane" --json
+cm context "verify deploy identity before treating this remote failure as product" --json
+```
+
+Loose phrase probing and discoverability QA belong on `cm similar`, not as the
+main judgment of whether `cm context` is working.
 
 10. Record a row in `templates/cass-memory-pilot-reuse-log-template.csv` (or copied log file) for each reuse event.
 
@@ -128,8 +142,12 @@ cross-agent enrichment settings, use:
 cm privacy status
 ```
 
-Treat cross-machine / cross-agent enrichment as a later pilot extension, not a
-default assumption for first use.
+For later pilot extension, upstream supports two distinct surfaces:
+
+1. `remoteCass` for SSH-based remote history during `cm context`
+2. `cm playbook export` / `cm playbook import` for explicit promoted-rule sync
+
+Do not treat `remoteCass` as automatic playbook replication.
 
 ## End-of-Slice Output
 
