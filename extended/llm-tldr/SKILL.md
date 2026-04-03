@@ -135,6 +135,42 @@ runtime now enriches the surfaced error with bounded diagnostics:
 
 This keeps failures explicit and actionable without changing upstream llm-tldr.
 
+### Context Response Safety
+
+The contained runtime now sanitizes daemon responses before socket transport.
+This matters most for `context`, where upstream daemon results can include rich
+objects that are not JSON-serializable by default.
+
+Expected steady-state behavior:
+- `context` over MCP should return a normal text context payload
+- daemon/socket transport should not fail with empty-payload EOF just because a
+  response object was not JSON-safe
+
+### Context Recovery Steps
+
+If `context` fails but other surfaces such as `search` still work, use this
+order:
+
+1. Probe the same entrypoint through the contained CLI:
+
+```bash
+~/agent-skills/scripts/tldr-contained.sh context <entry> --project <project> --depth 2
+```
+
+2. If the CLI works but MCP reports enriched diagnostics such as:
+   - `raw_probe.bytes_received=0`
+   - `probe_status=eof`
+   restart the per-project `llm-tldr` daemon and retry the MCP call.
+
+3. Restart Codex / the client only if the MCP transport itself is stale
+   (for example `Transport closed` after the daemon restart).
+
+Interpretation:
+- CLI pass + MCP fail usually means runtime/MCP transport or daemon lifecycle
+  state, not a repo-content problem
+- `search` pass + `context` fail usually means the issue is isolated to the
+  `context` response path, not a full `llm-tldr` outage
+
 ### Per-Call Project Parameter
 
 Every MCP tool accepts `project` (default `"."`):
