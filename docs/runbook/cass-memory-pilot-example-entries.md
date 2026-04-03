@@ -14,7 +14,7 @@ These are sanitized examples for the pilot. Do not copy host-specific secrets or
 - Reuse guidance: Use for parser/EOF-style context failures; do not use for install/auth failures.
 - Sources: runtime diagnostics + pilot runbook
 
-Summary candidate for `cm remember`:
+Summary candidate for `cm playbook add`:
 > When MCP context fails with EOF but search works, verify via contained CLI, restart per-project daemon, then retry MCP; only restart client if transport is stale.
 
 ## Example 2: Fleet Audit Red With Host-Specific Drift
@@ -29,5 +29,5 @@ Summary candidate for `cm remember`:
 - Reuse guidance: Use only for fleet control-plane health checks, not product service outages.
 - Sources: `dx-audit` payload + `dx-fleet-repair` command output
 
-Summary candidate for `cm remember`:
+Summary candidate for `cm playbook add`:
 > For single-host red fleet audits, follow remediation hint per host, then re-run daily audit and compare the same host/check id before escalating.

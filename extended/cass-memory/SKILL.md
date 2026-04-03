@@ -49,6 +49,9 @@ cm quickstart --json
 
 # Full diagnostics
 cm doctor --json
+
+# Repair degraded local setup
+cm doctor --fix --no-interactive
 ```
 
 ## Usage Patterns
@@ -57,14 +60,17 @@ cm doctor --json
 Session logs remain local by default.
 
 ```bash
-# Store a memory
-cm remember "Pattern: Always use worktrees for canonical repos"
+# Get task-specific context before non-trivial DX work
+cm context "repair MCP daemon EOF issue" --json
 
-# Recall memories
-cm recall "worktree"
+# Store a memory/playbook bullet
+cm playbook add "Always use worktrees for canonical repos" --category workflow
 
-# List recent
-cm list --recent
+# Inspect rules
+cm playbook list
+
+# Broader similarity search when context is too narrow
+cm similar "worktree recovery" --threshold 0.1 --json
 ```
 
 ### Cross-Agent Sharing (Opt-In)
@@ -84,6 +90,7 @@ export CASS_NO_SHARE=1
 2. **Opt-in sharing**: Cross-agent sharing must be explicitly enabled
 3. **Sanitized output**: Never persist raw secrets, raw transcripts, or tokens
 4. **No IDE config**: CLI-native, not rendered to IDE MCP configs
+5. **Primary agent read path**: use `cm context "<task>" --json` before trying broader retrieval
 
 ## Controls
 
@@ -91,6 +98,14 @@ export CASS_NO_SHARE=1
 |---------|---------|
 | `CASS_SHARE_MEMORY` | Enable cross-agent digest sharing |
 | `CASS_NO_SHARE` | Disable all sharing |
+
+For the current upstream CLI, explicit privacy controls are also available via:
+
+```bash
+cm privacy status
+cm privacy enable
+cm privacy disable
+```
 
 ## Expected Output
 
