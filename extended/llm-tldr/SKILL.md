@@ -124,6 +124,27 @@ context(project="/tmp/agents/bd-xxx/agent-skills", entry="main", depth=2)
 The contained MCP server ensures the daemon's state is always redirected to
 `$TLDR_STATE_HOME`, regardless of which project path is passed.
 
+### Codex MCP Hydration Fallback (Daemon-Backed)
+
+If Codex desktop exposes no `llm-tldr` MCP tool in the active thread, use the
+local contained daemon helper instead of plain `python -m tldr.cli`:
+
+```bash
+~/agent-skills/scripts/tldr-daemon-fallback.sh context \
+  --repo /tmp/agents/<beads-id>/<repo> \
+  --entry <symbol> \
+  --depth 2
+
+~/agent-skills/scripts/tldr-daemon-fallback.sh semantic \
+  --repo /tmp/agents/<beads-id>/<repo> \
+  --query "where is tool routing implemented?" \
+  --k 5
+```
+
+This helper calls `tldr.mcp_server` tool functions directly after contained
+runtime patching, so queries stay on the daemon/socket path (`_send_command`)
+instead of the plain CLI direct API path.
+
 ### MCP Failure Observability
 
 When MCP daemon transport returns invalid/empty JSON (for example parser-style
