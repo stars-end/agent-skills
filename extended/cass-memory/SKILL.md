@@ -25,6 +25,7 @@ CASS Memory is a CLI-native tool. It is NOT rendered to IDE MCP configs. It runs
 - Fleet status: pilot-only / disabled by default in the manifest
 - Use only when the task explicitly asks for cross-session or cross-agent memory experimentation
 - Do not require this tool in standard repo workflows
+- Do not activate or recommend this tool without an explicit pilot owner and success rubric
 
 ## Installation
 
@@ -79,6 +80,42 @@ export CASS_NO_SHARE=1
 2. **Opt-in sharing**: Cross-agent sharing must be explicitly enabled
 3. **Sanitized output**: Never persist raw secrets, raw transcripts, or tokens
 4. **No IDE config**: CLI-native, not rendered to IDE MCP configs
+5. **Pilot-only**: Not part of the default `llm-tldr + serena` operating stack
+
+## Pilot Entry Gate
+
+Use `cass-memory` only when all of the following are true:
+
+1. A named pilot owner is responsible for evaluating it
+2. The pilot has a concrete hypothesis that is not already covered by `serena`
+3. The pilot has explicit success criteria and an evaluation window
+4. The task explicitly benefits from cross-agent memory distillation, not just
+   repo discovery or assistant continuity
+
+If any of those are missing, keep `cass-memory` dormant and use the canonical
+stack instead:
+- `llm-tldr` for discovery / static analysis
+- `serena` for assistant continuity / symbol-aware memory
+
+## Pilot Success Criteria
+
+Before expanding beyond pilot status, the owner should be able to show:
+
+1. A recurring workflow where `cass-memory` materially improves outcomes beyond
+   `serena` alone
+2. A low-noise retrieval pattern that agents actually use in practice
+3. Clear privacy/redaction handling acceptable for the memory being stored
+4. Evidence that the tool reduces repeated mistakes or repeated rediscovery
+   across agents or sessions
+
+## Pilot Exit Criteria
+
+Close or deprecate the pilot if:
+
+1. No active owner is maintaining the experiment
+2. Agents are not using it in real workflows
+3. It duplicates the effective role of `serena` without clear added value
+4. It adds operational complexity without measurable DX benefit
 
 ## Controls
 
