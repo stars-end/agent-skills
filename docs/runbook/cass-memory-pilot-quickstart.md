@@ -1,6 +1,9 @@
 # CASS Memory Pilot Quickstart (bd-9q92)
 
 Use this runbook to execute the first bounded pilot slice defined in `docs/specs/2026-04-03-cass-memory-cross-vm-dx-pilot.md`.
+For candidate admission and promotion rules, also read:
+- `docs/specs/2026-04-03-cass-memory-candidate-contract.md`
+- `docs/runbook/cass-memory-seeded-heuristics.md`
 
 ## Scope
 
@@ -34,6 +37,16 @@ Only store memory when the incident requires procedural recovery knowledge that 
 
 If any check fails, do not create a cass-memory entry.
 
+## Candidate-First Rule
+
+If an agent thinks something is important, that is enough to nominate a
+**candidate**, not enough to create durable shared truth automatically.
+
+Use this pilot flow:
+1. write the candidate using the template
+2. keep rich context in repo docs
+3. promote only after reuse or explicit operator validation
+
 ## Pilot Workflow
 
 1. Resolve incident using normal workflow.
@@ -55,13 +68,15 @@ cm init
 
 4. Open `templates/cass-memory-pilot-entry-template.md`.
 5. Write a sanitized entry and retain source references (PR URL, file paths, runbook links).
-6. Store the concise procedural summary in the playbook manually (example):
+6. If the item is still only a candidate, keep it in docs/templates first.
+7. Promote into `cass-memory` only when the promotion gate is satisfied.
+8. Store the concise procedural summary in the playbook manually (example):
 
 ```bash
 cm playbook add "<sanitized one-paragraph summary of the entry>" --category workflow
 ```
 
-7. Retrieve memory during future incidents with:
+9. Retrieve memory during future incidents with:
 
 ```bash
 cm context "<incident or task>" --json
@@ -69,12 +84,13 @@ cm context "<incident or task>" --json
 cm similar "<incident phrase>" --threshold 0.1 --json
 ```
 
-8. Record a row in `templates/cass-memory-pilot-reuse-log-template.csv` (or copied log file) for each reuse event.
+10. Record a row in `templates/cass-memory-pilot-reuse-log-template.csv` (or copied log file) for each reuse event.
 
 ## Suggested Storage Pattern
 
 - Keep rich entry bodies in repo docs for auditability.
-- Store concise procedural summaries in cass-memory for retrieval speed.
+- Keep agent-judged ideas as candidates until they earn promotion.
+- Store concise procedural summaries in cass-memory only after promotion for retrieval speed.
 - Link summaries back to repo artifacts.
 
 ## Redaction Rules

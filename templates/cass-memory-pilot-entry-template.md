@@ -7,7 +7,11 @@ Use this template for sanitized, reusable procedural entries.
 - Title:
 - Date (UTC):
 - Author:
+- Status: candidate
+- Category:
+- Confidence: low | medium | high
 - Incident Class: DX/control-plane
+- Scope:
 - Host(s):
 - Runtime/Client:
 - Related Beads ID:
@@ -34,6 +38,23 @@ What indicates this procedure is not working and should be stopped?
 
 When should this be reused, and when should it not?
 
+## Promotion Gate
+
+What must happen before this candidate becomes durable shared memory?
+
+- Reused successfully in 2+ incidents, or
+- Explicitly validated by operator, or
+- Backed by stable runbook/contract plus one successful reuse
+
+## Prune Conditions
+
+When should this candidate be dropped or marked obsolete?
+
+- superseded
+- harmful/misleading
+- too repo-specific
+- duplicates an existing runbook or established memory
+
 ## Redaction Check
 
 Confirm the entry contains none of:
@@ -47,8 +68,9 @@ Confirm the entry contains none of:
 - PR URL:
 - File path(s):
 - Runbook/doc link(s):
+- Runtime evidence / command notes:
 
-## One-Paragraph Summary For `cm remember`
+## One-Paragraph Summary For `cm playbook add`
 
 Write a compact summary suitable for storage in cass-memory:
 
