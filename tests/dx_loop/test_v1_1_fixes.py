@@ -1169,6 +1169,85 @@ def test_status_prefers_registered_active_wave_for_beads_id(tmp_path, capsys):
     print("✓ Status prefers the registered canonical active wave")
 
 
+def test_status_resolves_epic_when_passed_via_beads_id(tmp_path, capsys):
+    """status --beads-id should resolve epic wave state when id is an epic token."""
+    wave_id = "wave-epic-token-lookup"
+    loop = DxLoop(wave_id)
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-xep1"
+    loop.beads_manager.tasks = {
+        "bd-child": BeadsTask(
+            beads_id="bd-child",
+            title="Child task",
+            repo="affordabot",
+            dependencies=[],
+        )
+    }
+    loop._set_wave_status(
+        LoopState.WAITING_ON_DEPENDENCY,
+        BlockerCode.WAITING_ON_DEPENDENCY,
+        "No dispatches: waiting on dependencies for 1 task(s)",
+        blocked_details=[
+            {
+                "beads_id": "bd-child",
+                "phase": "implement",
+                "reason_code": "dx_dependency_artifacts_missing",
+                "detail": "Upstream dependency missing PR artifacts: bd-iey6",
+            }
+        ],
+    )
+    loop._save_state()
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic=None, beads_id="bd-xep1", json=False)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert f"Wave: {wave_id}" in captured.out
+    assert "Epic: bd-xep1" in captured.out
+
+    print("✓ status resolves epic token passed via --beads-id")
+
+
+def test_status_missing_wave_reports_epic_token_diagnostics(tmp_path, capsys):
+    """Missing-wave surfaces should provide actionable epic-token diagnostics."""
+    active_epics = tmp_path / "active-epics"
+    active_epics.mkdir(parents=True)
+    (active_epics / "bd-xep1.json").write_text(
+        json.dumps(
+            {
+                "epic_id": "bd-xep1",
+                "wave_id": "wave-missing",
+                "pid": 1234,
+                "updated_at": "2026-04-03T00:00:00Z",
+            }
+        )
+    )
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic=None, beads_id="bd-xep1", json=False)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Wave state not found for bd-xep1" in captured.err
+    assert "Active epic registry points to missing wave file" in captured.err
+
+    print("✓ missing-wave diagnostics explain unresolved epic-token lookup")
+
+
 def test_explain_classifies_review_blocked_as_product(tmp_path, capsys):
     """explain should classify review-blocked waves as product work."""
     wave_id = "wave-explain-product"
@@ -1769,9 +1848,69 @@ def test_status_reconcile_excludes_scheduler_blocked_dispatchables(
     assert state["wave_status"]["state"] == "waiting_on_dependency"
     assert state["wave_status"]["blocker_code"] == "waiting_on_dependency"
     assert state["wave_status"]["dispatchable_tasks"] == []
-    assert state["wave_status"]["blocked_details"][0]["beads_id"] == "bd-bkco.3"
+    assert state["wave_status"]["blocked_details"][0]["beads_id"] == "bd-bkco.2"
+    assert "blocked before runner start" in state["wave_status"]["reason"]
 
     print("✓ status reconciliation excludes blocked tasks from dispatchable set")
+
+
+def test_status_reconcile_preserves_blocked_state_without_baton(
+    tmp_path, monkeypatch, capsys
+):
+    """status reconciliation should stay blocked when scheduler is blocked but baton is empty."""
+    wave_id = "wave-blocked-no-baton"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = None
+    loop.beads_manager.tasks = {
+        "bd-blocked": BeadsTask(
+            beads_id="bd-blocked",
+            title="Blocked before runner start",
+            repo="affordabot",
+            dependencies=[],
+            status="open",
+            details_loaded=True,
+        )
+    }
+    loop.beads_manager.layers = [["bd-blocked"]]
+    loop.scheduler.state.mark_blocked("bd-blocked")
+    loop._set_wave_status(
+        LoopState.WAITING_ON_DEPENDENCY,
+        BlockerCode.WAITING_ON_DEPENDENCY,
+        "No dispatches: waiting on dependency PR artifacts for 1 task(s)",
+        blocked_details=[
+            {
+                "beads_id": "bd-blocked",
+                "phase": "implement",
+                "reason_code": "dx_dependency_artifacts_missing",
+                "detail": "Upstream dependency missing PR artifacts: bd-iey6",
+                "unmet_dependencies": ["bd-iey6"],
+            }
+        ],
+    )
+    loop._save_state()
+
+    monkeypatch.setattr(DxLoop, "_refresh_beads_truth", lambda self, **kwargs: [])
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic=None, beads_id="bd-blocked", json=True)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    state = json.loads(captured.out)
+    assert state["wave_status"]["state"] == "waiting_on_dependency"
+    assert state["wave_status"]["blocker_code"] == "waiting_on_dependency"
+    assert state["wave_status"]["dispatchable_tasks"] == []
+    assert "blocked before runner start" in state["wave_status"]["reason"]
+
+    print("✓ status reconciliation preserves blocked no-baton state")
 
 
 def test_cmd_start_refuses_second_active_wave_for_same_epic(tmp_path, capsys):
@@ -2206,6 +2345,107 @@ def test_run_loop_persists_truthful_state_when_initial_dispatch_fails(tmp_path):
     assert "exiting without resident loop" in state["wave_status"]["reason"]
 
     print("✓ Failed initial dispatch persists blocked state")
+
+
+def test_run_loop_exits_when_initial_dispatch_blocked_by_dependency_artifacts(tmp_path):
+    """If first dispatch blocks before runner start, loop should exit with truthful blocked state."""
+    wave_id = "wave-dispatch-artifact-block"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-iey6": BeadsTask(
+            beads_id="bd-iey6",
+            title="Upstream done without artifact cache",
+            repo="affordabot",
+            dependencies=[],
+            status="closed",
+            details_loaded=True,
+        ),
+        "bd-hfk0": BeadsTask(
+            beads_id="bd-hfk0",
+            title="Downstream task",
+            repo="affordabot",
+            dependencies=["bd-iey6"],
+            status="open",
+            details_loaded=True,
+        ),
+    }
+    loop.beads_manager.layers = [["bd-hfk0"]]
+    loop.beads_manager.completed = {"bd-iey6"}
+    loop.beads_manager.dependency_status_cache["bd-iey6"] = "closed"
+    loop.beads_manager.dependency_metadata_cache["bd-iey6"] = {
+        "title": "Closed upstream",
+        "repo": "",
+        "status": "closed",
+        "close_reason": "",
+    }
+
+    assert loop.run_loop(max_iterations=1) is False
+
+    state = json.loads(loop.state_file.read_text())
+    assert state["scheduler_state"]["dispatch_count"] == 0
+    assert state["wave_status"]["state"] == "waiting_on_dependency"
+    assert state["wave_status"]["blocker_code"] == "waiting_on_dependency"
+    assert "exiting without resident loop" in state["wave_status"]["reason"]
+    assert (
+        state["wave_status"]["blocked_details"][0]["reason_code"]
+        == "dx_dependency_artifacts_missing"
+    )
+
+    print("✓ first-dispatch artifact blocks exit with truthful blocked state")
+
+
+def test_recover_closed_dependency_artifact_uses_default_repo_when_repo_missing(
+    tmp_path, monkeypatch
+):
+    """Artifact recovery should use default repo when cached closed dependency repo is missing."""
+    wave_id = "wave-recover-default-repo"
+    loop = DxLoop(wave_id, config={"cadence_seconds": 0, "default_repo": "affordabot"})
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-hfk0": BeadsTask(
+            beads_id="bd-hfk0",
+            title="Downstream task",
+            repo="affordabot",
+            dependencies=["bd-iey6"],
+        )
+    }
+    loop.beads_manager.completed = {"bd-iey6"}
+    loop.beads_manager.dependency_status_cache["bd-iey6"] = "closed"
+    loop.beads_manager.dependency_metadata_cache["bd-iey6"] = {
+        "title": "Closed upstream",
+        "repo": "",
+        "status": "closed",
+        "close_reason": "Completed via PR #362",
+    }
+
+    def fake_run(cmd, capture_output=None, text=None, timeout=None):
+        assert cmd[:4] == ["gh", "pr", "view", "362"]
+        assert "--repo" in cmd
+        repo_idx = cmd.index("--repo")
+        assert cmd[repo_idx + 1] == "stars-end/affordabot"
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout=json.dumps(
+                {
+                    "url": "https://github.com/stars-end/affordabot/pull/362",
+                    "headRefOid": "a" * 40,
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    block = loop._check_dependency_artifacts("bd-hfk0")
+
+    assert block is None
+    assert loop.pr_enforcer.has_valid_artifact("bd-iey6")
+
+    print("✓ closed dependency artifact recovery falls back to default repo")
 
 
 def test_ensure_worktree_creates_missing_repo_workspace(tmp_path, monkeypatch):

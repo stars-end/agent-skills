@@ -161,8 +161,9 @@ def test_dispatch_blocked_when_upstream_missing_pr_artifacts(tmp_path):
     block = loop._check_dependency_artifacts("bd-child")
 
     assert block is not None
-    assert "missing PR artifacts" in block
-    assert "bd-upstream" in block
+    assert "missing PR artifacts" in block["message"]
+    assert "bd-upstream" in block["message"]
+    assert block["missing_dependencies"] == ["bd-upstream"]
 
     print("Pillar A: dispatch blocked when upstream missing artifacts")
 

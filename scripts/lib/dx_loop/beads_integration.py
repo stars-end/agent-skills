@@ -189,6 +189,8 @@ class BeadsWaveManager:
             for dep in epic.get("dependents", []):
                 if dep.get("dependency_type") == "parent-child":
                     dep_repo = self._infer_repo_from_title(dep.get("title", ""))
+                    if not dep_repo:
+                        dep_repo = self.default_repo
                     self.dependency_metadata_cache[dep["id"]] = {
                         "title": dep.get("title", ""),
                         "repo": dep_repo,
@@ -260,9 +262,12 @@ class BeadsWaveManager:
                     continue
                 dep_id = dep["id"]
                 task.dependencies.append(dep_id)
+                dep_repo = self._infer_repo_from_title(dep.get("title", ""))
+                if not dep_repo:
+                    dep_repo = self.default_repo
                 self.dependency_metadata_cache[dep_id] = {
                     "title": dep.get("title", ""),
-                    "repo": self._infer_repo_from_title(dep.get("title", "")),
+                    "repo": dep_repo,
                     "status": dep.get("status"),
                     "close_reason": dep.get("close_reason"),
                 }
@@ -326,7 +331,11 @@ class BeadsWaveManager:
             fresh_title = data[0].get("title", task.title)
             close_reason = data[0].get("close_reason")
             if close_reason:
-                inferred_repo = task.repo or self._infer_repo_from_title(fresh_title)
+                inferred_repo = (
+                    task.repo
+                    or self._infer_repo_from_title(fresh_title)
+                    or self.default_repo
+                )
                 self.dependency_metadata_cache[beads_id] = {
                     "title": fresh_title,
                     "repo": inferred_repo or "",
@@ -400,6 +409,7 @@ class BeadsWaveManager:
                     (task.repo if task else None)
                     or self._infer_repo_from_title(dep_title)
                     or self.dependency_metadata_cache.get(dep_id, {}).get("repo")
+                    or self.default_repo
                 )
 
                 self.dependency_metadata_cache[dep_id] = {

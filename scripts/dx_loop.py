@@ -220,11 +220,20 @@ def _select_wave_state(
             return None
         return wave_id, state_file, state
 
+    all_states = _iter_wave_states(artifact_base)
     matches = [
         item
-        for item in _iter_wave_states(artifact_base)
+        for item in all_states
         if _wave_matches(item[2], epic_id=epic_id, beads_id=beads_id)
     ]
+    if not matches and beads_id and not epic_id:
+        # Operator fallback: treat --beads-id like --epic when the token resolves
+        # to an epic id in persisted wave state.
+        matches = [
+            item for item in all_states if _wave_matches(item[2], epic_id=beads_id)
+        ]
+        if matches:
+            epic_id = beads_id
     if not matches:
         return None
 
@@ -248,6 +257,81 @@ def _select_wave_state(
 
     matches.sort(key=lambda item: item[2].get("updated_at", ""), reverse=True)
     return matches[0]
+
+
+def _missing_wave_diagnostics(
+    *,
+    wave_id: Optional[str] = None,
+    epic_id: Optional[str] = None,
+    beads_id: Optional[str] = None,
+    artifact_base: Path = ARTIFACT_BASE,
+) -> str:
+    """Build actionable diagnostics when a wave lookup cannot be resolved."""
+    target = wave_id or epic_id or beads_id or "<unknown>"
+    lines = [f"Wave state not found for {target}"]
+
+    if wave_id:
+        state_file = artifact_base / "waves" / wave_id / "loop_state.json"
+        if not state_file.exists():
+            lines.append(f"No state file exists at: {state_file}")
+        return "\n".join(lines)
+
+    all_states = _iter_wave_states(artifact_base)
+
+    if epic_id:
+        registry = _read_active_epic_registry(epic_id, artifact_base=artifact_base)
+        if registry:
+            registry_wave_id = registry.get("wave_id")
+            if registry_wave_id:
+                registry_state = (
+                    artifact_base / "waves" / registry_wave_id / "loop_state.json"
+                )
+                if registry_state.exists():
+                    lines.append(
+                        "Hint: retry with "
+                        f"`dx-loop status --wave-id {registry_wave_id}`."
+                    )
+                else:
+                    lines.append(
+                        "Active epic registry points to missing wave file: "
+                        f"{registry_wave_id} ({registry_state})"
+                    )
+        epic_matches = [
+            wid for wid, _state_file, state in all_states if state.get("epic_id") == epic_id
+        ]
+        if epic_matches:
+            lines.append(
+                "Observed wave ids for this epic: " + ", ".join(sorted(epic_matches))
+            )
+
+    if beads_id and not epic_id:
+        registry = _read_active_epic_registry(beads_id, artifact_base=artifact_base)
+        if registry:
+            registry_wave_id = registry.get("wave_id")
+            if registry_wave_id:
+                registry_state = (
+                    artifact_base / "waves" / registry_wave_id / "loop_state.json"
+                )
+                if registry_state.exists():
+                    lines.append(
+                        f"`{beads_id}` resolves as an epic id; retry with "
+                        f"`--epic {beads_id}` or `--wave-id {registry_wave_id}`."
+                    )
+                else:
+                    lines.append(
+                        "Active epic registry points to missing wave file: "
+                        f"{registry_wave_id} ({registry_state})"
+                    )
+
+    if len(lines) == 1:
+        if all_states:
+            lines.append(
+                f"Known persisted waves: {len(all_states)} (run `dx-loop status` to list)."
+            )
+        else:
+            lines.append(f"No persisted waves found under {artifact_base / 'waves'}.")
+
+    return "\n".join(lines)
 
 
 def _classify_wave_surface(
@@ -553,6 +637,7 @@ class DxLoop:
                     capped = dispatchable[:dispatch_capacity]
                     capacity_blocked = False
                     successful_dispatches = []
+                    blocked_attempts = []
                     print(
                         f"Dispatching {len(capped)}/{len(dispatchable)} task(s) "
                         f"(active={active_count}, max_parallel={max_parallel})"
@@ -561,21 +646,26 @@ class DxLoop:
                         if self._dispatch_task(beads_id, phase):
                             self.scheduler.state.mark_dispatched(beads_id, phase)
                             successful_dispatches.append(beads_id)
-                        elif self.wave_status.get("blocker_code") == "run_blocked":
-                            details = self.wave_status.get("blocked_details", [])
-                            reason_codes = {
-                                d.get("reason_code")
-                                for d in details
-                                if d.get("beads_id") == beads_id
-                            }
-                            if "dx_runner_provider_capacity_blocked" in reason_codes:
-                                capacity_blocked = True
-                                print(
-                                    "Provider at capacity, stopping dispatch "
-                                    "for this cycle",
-                                    file=sys.stderr,
-                                )
-                                break
+                        else:
+                            blocked_attempts.append(beads_id)
+                            if self.wave_status.get("blocker_code") == "run_blocked":
+                                details = self.wave_status.get("blocked_details", [])
+                                reason_codes = {
+                                    d.get("reason_code")
+                                    for d in details
+                                    if d.get("beads_id") == beads_id
+                                }
+                                if (
+                                    "dx_runner_provider_capacity_blocked"
+                                    in reason_codes
+                                ):
+                                    capacity_blocked = True
+                                    print(
+                                        "Provider at capacity, stopping dispatch "
+                                        "for this cycle",
+                                        file=sys.stderr,
+                                    )
+                                    break
                     if capacity_blocked:
                         self._set_wave_status(
                             LoopState.RUN_BLOCKED,
@@ -591,6 +681,46 @@ class DxLoop:
                             f"Dispatching {len(successful_dispatches)} task(s)",
                             dispatchable_tasks=successful_dispatches,
                         )
+                    elif (
+                        blocked_attempts
+                        and iteration == 1
+                        and self.scheduler.state.dispatch_count == 0
+                        and not self.scheduler.state.active_beads_ids
+                        and self.wave_status.get("state")
+                        not in {
+                            LoopState.WAITING_ON_DEPENDENCY.value,
+                            LoopState.KICKOFF_ENV_BLOCKED.value,
+                            LoopState.RUN_BLOCKED.value,
+                        }
+                    ):
+                        blocked_details = self.wave_status.get("blocked_details", [])
+                        if not blocked_details:
+                            blocked_details = [
+                                {
+                                    "beads_id": bid,
+                                    "phase": "implement",
+                                    "reason_code": "dispatch_blocked_before_runner_start",
+                                    "detail": "Dispatch attempt blocked before any runner started",
+                                }
+                                for bid in blocked_attempts
+                            ]
+                        self._set_wave_status(
+                            LoopState.WAITING_ON_DEPENDENCY,
+                            BlockerCode.WAITING_ON_DEPENDENCY,
+                            f"Initial dispatch blocked before runner start for {len(blocked_attempts)} task(s)",
+                            blocked_details=blocked_details,
+                        )
+                        if self._should_exit_failed_initial_dispatch(iteration):
+                            print(
+                                "Initial dispatch failed before any run started; "
+                                "exiting without resident loop"
+                            )
+                            self.wave_status["reason"] = (
+                                f"{self.wave_status.get('reason', 'Dispatch failed')} "
+                                "[exiting without resident loop]"
+                            )
+                            self._save_state()
+                            return False
                     elif self._should_exit_failed_initial_dispatch(iteration):
                         print(
                             "Initial dispatch failed before any run started; "
@@ -603,13 +733,38 @@ class DxLoop:
                         self._save_state()
                         return False
                 else:
-                    self._set_wave_status(
-                        LoopState.IN_PROGRESS_HEALTHY,
-                        None,
-                        "All ready tasks already active, waiting for progress",
-                        dispatchable_tasks=ready,
-                    )
-                    print(f"All ready tasks already active, waiting...")
+                    blocked_ready = [
+                        tid for tid in ready if self.scheduler.state.is_blocked(tid)
+                    ]
+                    if blocked_ready and not self.scheduler.state.active_beads_ids:
+                        blocked_details = self.wave_status.get("blocked_details", [])
+                        if not blocked_details:
+                            blocked_details = [
+                                {
+                                    "beads_id": tid,
+                                    "phase": "implement",
+                                    "reason_code": "dispatch_blocked_before_runner_start",
+                                    "detail": "Task remained blocked before runner start",
+                                }
+                                for tid in blocked_ready
+                            ]
+                        self._set_wave_status(
+                            LoopState.WAITING_ON_DEPENDENCY,
+                            BlockerCode.WAITING_ON_DEPENDENCY,
+                            f"Ready tasks are blocked with no active runs: {len(blocked_ready)} task(s)",
+                            blocked_details=blocked_details,
+                        )
+                        print(
+                            "All ready tasks are currently blocked; waiting for operator action"
+                        )
+                    else:
+                        self._set_wave_status(
+                            LoopState.IN_PROGRESS_HEALTHY,
+                            None,
+                            "All ready tasks already active, waiting for progress",
+                            dispatchable_tasks=ready,
+                        )
+                        print(f"All ready tasks already active, waiting...")
 
             # Save state after each iteration
             self._save_state()
@@ -643,6 +798,7 @@ class DxLoop:
             in {
                 LoopState.KICKOFF_ENV_BLOCKED.value,
                 LoopState.RUN_BLOCKED.value,
+                LoopState.WAITING_ON_DEPENDENCY.value,
             }
         )
 
@@ -783,8 +939,36 @@ class DxLoop:
         elif next_action == "start_implement":
             dep_block = self._check_dependency_artifacts(beads_id)
             if dep_block:
-                print(f"Task {beads_id} blocked: {dep_block}")
+                print(f"Task {beads_id} blocked: {dep_block['message']}")
                 self.scheduler.state.mark_blocked(beads_id)
+                blocked_details = [
+                    detail
+                    for detail in (self.wave_status.get("blocked_details") or [])
+                    if detail.get("beads_id") != beads_id
+                    or detail.get("reason_code") != "dx_dependency_artifacts_missing"
+                ]
+                blocked_details.append(
+                    {
+                        "beads_id": beads_id,
+                        "phase": "implement",
+                        "reason_code": "dx_dependency_artifacts_missing",
+                        "detail": dep_block["message"],
+                        "unmet_dependencies": dep_block["missing_dependencies"],
+                    }
+                )
+                blocked_count = len(
+                    {
+                        detail.get("beads_id")
+                        for detail in blocked_details
+                        if detail.get("beads_id")
+                    }
+                )
+                self._set_wave_status(
+                    LoopState.WAITING_ON_DEPENDENCY,
+                    BlockerCode.WAITING_ON_DEPENDENCY,
+                    f"No dispatches: waiting on dependency PR artifacts for {blocked_count} task(s)",
+                    blocked_details=blocked_details,
+                )
                 return False
             return self._start_implement(beads_id)
         elif next_action == "start_review":
@@ -1590,7 +1774,37 @@ class DxLoop:
 
         metadata = self.beads_manager.get_dependency_metadata(dep_id)
         pr_number = self._extract_pr_number(metadata.get("close_reason"))
-        repo = metadata.get("repo")
+        repo = (metadata.get("repo") or "").strip()
+        if not repo:
+            dep_task = self.beads_manager.tasks.get(dep_id)
+            dep_repo = getattr(dep_task, "repo", None) if dep_task else None
+            if dep_repo:
+                repo = dep_repo
+        if not repo:
+            sibling_repos = {
+                task.repo for task in self.beads_manager.tasks.values() if task.repo
+            }
+            if len(sibling_repos) == 1:
+                repo = next(iter(sibling_repos))
+        if not repo:
+            repo = self.beads_manager.default_repo or self.config.get("default_repo")
+        if not repo:
+            close_reason = metadata.get("close_reason") or ""
+            for candidate in (
+                "affordabot",
+                "prime-radiant-ai",
+                "agent-skills",
+                "llm-common",
+            ):
+                if candidate in close_reason:
+                    repo = candidate
+                    break
+
+        if repo:
+            dep_meta = dict(self.beads_manager.dependency_metadata_cache.get(dep_id, {}))
+            dep_meta["repo"] = repo
+            self.beads_manager.dependency_metadata_cache[dep_id] = dep_meta
+
         if not pr_number or not repo:
             return False
 
@@ -1640,7 +1854,7 @@ class DxLoop:
         lines.append("")
         return "\n".join(lines)
 
-    def _check_dependency_artifacts(self, beads_id: str) -> Optional[str]:
+    def _check_dependency_artifacts(self, beads_id: str) -> Optional[Dict[str, Any]]:
         """Block dispatch if upstream deps lack PR artifacts (Pillar A)."""
         task = self.beads_manager.tasks.get(beads_id)
         if not task or not task.dependencies:
@@ -1664,10 +1878,13 @@ class DxLoop:
                         missing.append(dep_id)
 
         if missing:
-            return (
-                f"Upstream dependency missing PR artifacts: {', '.join(missing)}. "
-                "Child tasks should not proceed without upstream PR artifacts."
-            )
+            return {
+                "message": (
+                    f"Upstream dependency missing PR artifacts: {', '.join(missing)}. "
+                    "Child tasks should not proceed without upstream PR artifacts."
+                ),
+                "missing_dependencies": missing,
+            }
         return None
 
     def _generate_implement_prompt(self, beads_id: str) -> str:
@@ -2094,8 +2311,15 @@ def cmd_status(args):
         artifact_base=ARTIFACT_BASE,
     )
     if not resolved:
-        target = wave_id or epic_id or beads_id or "<unknown>"
-        print(f"Wave state not found for {target}", file=sys.stderr)
+        print(
+            _missing_wave_diagnostics(
+                wave_id=wave_id,
+                epic_id=epic_id,
+                beads_id=beads_id,
+                artifact_base=ARTIFACT_BASE,
+            ),
+            file=sys.stderr,
+        )
         return 1
     wave_id, state_file, state = resolved
     state = _reconcile_wave_state_for_surfaces(
@@ -2183,13 +2407,15 @@ def cmd_explain(args):
         artifact_base=ARTIFACT_BASE,
     )
     if not resolved:
-        target = (
-            getattr(args, "wave_id", None)
-            or getattr(args, "epic", None)
-            or getattr(args, "beads_id", None)
-            or "<unknown>"
+        print(
+            _missing_wave_diagnostics(
+                wave_id=getattr(args, "wave_id", None),
+                epic_id=getattr(args, "epic", None),
+                beads_id=getattr(args, "beads_id", None),
+                artifact_base=ARTIFACT_BASE,
+            ),
+            file=sys.stderr,
         )
-        print(f"Wave state not found for {target}", file=sys.stderr)
         return 1
 
     wave_id, state_file, state = resolved
@@ -2334,6 +2560,11 @@ def _reconcile_wave_state_for_surfaces(
         and not loop.scheduler.state.is_active(tid, "review")
         and not loop.scheduler.state.is_blocked(tid)
     ]
+    blocked_ids = {
+        tid
+        for tid in loop.scheduler.state.blocked_beads_ids
+        if not loop.scheduler.state.is_completed(tid)
+    }
 
     if not readiness.pending_tasks and active_count == 0:
         loop._set_wave_status(
@@ -2348,8 +2579,26 @@ def _reconcile_wave_state_for_surfaces(
             f"Reconciled wave state; {len(dispatchable)} task(s) ready for dispatch",
             dispatchable_tasks=dispatchable,
         )
+    elif blocked_ids and active_count == 0:
+        blocked_details = loop.wave_status.get("blocked_details", [])
+        if not blocked_details:
+            blocked_details = [
+                {
+                    "beads_id": tid,
+                    "phase": "implement",
+                    "reason_code": "dispatch_blocked_before_runner_start",
+                    "detail": "Task is blocked with no active dx-runner job",
+                }
+                for tid in sorted(blocked_ids)
+            ]
+        loop._set_wave_status(
+            LoopState.WAITING_ON_DEPENDENCY,
+            BlockerCode.WAITING_ON_DEPENDENCY,
+            f"No active runs: {len(blocked_ids)} task(s) blocked before runner start",
+            blocked_details=blocked_details,
+        )
     elif readiness.waiting_on_dependencies and active_count == 0:
-        blocked_ids = {
+        waiting_ids = {
             item.get("beads_id")
             for item in readiness.waiting_on_dependencies
             if item.get("beads_id")
@@ -2357,7 +2606,7 @@ def _reconcile_wave_state_for_surfaces(
         loop._set_wave_status(
             LoopState.WAITING_ON_DEPENDENCY,
             BlockerCode.WAITING_ON_DEPENDENCY,
-            f"No ready tasks: waiting on dependencies for {len(blocked_ids)} task(s)",
+            f"No ready tasks: waiting on dependencies for {len(waiting_ids)} task(s)",
             blocked_details=readiness.waiting_on_dependencies,
         )
     else:
