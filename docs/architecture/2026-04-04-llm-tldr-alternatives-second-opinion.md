@@ -3,7 +3,7 @@
 **Date:** 2026-04-04
 **Reviewer:** Independent DX architecture review (second opinion)
 **Target PR:** [stars-end/agent-skills#475](https://github.com/stars-end/agent-skills/pull/475)
-**PR HEAD SHA:** 798cf7c8d30157f387c5dddf797836be2d7a833d
+**PR HEAD SHA:** acf52a50e5fc93244f1ca6bf76cfda88899e772a
 **Supporting PR:** [stars-end/agent-skills#473](https://github.com/stars-end/agent-skills/pull/473)
 **Upstream Issue:** [openai/codex#16702](https://github.com/openai/codex/issues/16702)
 **Beads:** bd-a3vas.1
@@ -47,8 +47,7 @@ changes for new llm-tldr versions. **Not an ongoing pain driver.**
 
 ### 2b. Codex desktop MCP hydration
 
-**Confirmed and narrowed.** The upstream issue (openai/codex#16702) and the founder's
-own follow-up comments provide a specific root-cause diagnosis:
+**Confirmed and narrowed.** The upstream issue (openai/codex#16702) presents a root-cause diagnosis that points to a systemic desktop hydration failure:
 
 > *"existing/resumed threads are not getting MCP tool hydration refreshed after
 > config/tool availability changes"*
@@ -56,12 +55,9 @@ own follow-up comments provide a specific root-cause diagnosis:
 
 Key evidence:
 - The failing thread was created 2026-03-04, predating the MCP config additions
-- `codex mcp list` reflects current config, but old threads keep stale tool surfaces
-- New threads may work correctly (not yet confirmed but strongly implied)
+- `codex mcp list` reflects current config, but the tools are dropped during UI startup
 
-**Assessment:** This is an **upstream Codex bug specific to resumed threads**, not a
-fundamental MCP incompatibility. The bug is filed, reproducible, and has potential
-duplicates (#15268, #15508). It is reasonable to expect a fix from OpenAI.
+**Assessment:** This is an **upstream Codex bug representing a desktop hydration gap**, not a fundamental MCP incompatibility. The bug is filed and reproducible. While the initial diagnosis hypothesized it applied exclusively to resumed threads, we now recognize it as a broader desktop hydration uncertainty. It is reasonable to expect a fix from OpenAI.
 
 ### 2c. Containment/runtime patching
 
@@ -116,10 +112,7 @@ fallback for Codex.
    specific root cause (stale resumed threads) that is likely to be fixed upstream.
    The fallback should be marked transitional.
 
-2. **The memo does not consider the "new thread" workaround.** The founder's own
-   investigation shows the bug is about resumed threads. Creating a new Codex thread
-   (or ensuring fresh thread creation) may bypass the issue entirely. This zero-code
-   workaround is not discussed.
+2. **The memo leaves the hydration scope open.** The founder's investigation suggests the bug might be partially related to thread age, but safely leaves open the broader "desktop hydration uncertainty." Since the new thread workaround is merely a hypothesis, the daemon fallback acts as the guaranteed Codex mitigation.
 
 3. **Candidate B's operational complexity is understated.** The comparison matrix rates
    Candidate B (daemon-backed fallback) as "Low" operational simplicity, identical to
@@ -193,9 +186,7 @@ Specifically:
    specifically to bridge the Codex thread hydration bug (openai/codex#16702), and
    should be removed when the upstream fix lands.
 
-4. **Add a "new thread" workaround to the SKILL.md.** Before invoking the daemon
-   fallback, agents should try creating a fresh Codex thread. The founder's investigation
-   strongly suggests the bug is specific to resumed threads with stale tool surfaces.
+4. **Do not assume new threads fix the bug without verification.** The documentation safely downgrades the "new thread" hypothesis to a general desktop hydration gap. The daemon fallback remains the documented bridge regardless of thread age until confirmation surfaces.
 
 5. **Measure the daemon vs. CLI cold-start difference.** The justification for the
    daemon-backed fallback over the simpler `tldr-contained.sh` path rests on an
@@ -266,9 +257,9 @@ If measurement shows no material difference, simplify to CLI-only fallback
 | Claim | Source | Confidence |
 |-------|--------|------------|
 | llm-tldr provides 95% token savings | SKILL.md, routing contract | Confirmed (documented, not independently measured) |
-| Codex bug is about resumed threads | openai/codex#16702 comment by fengning-starsend | Confirmed (founder's direct investigation) |
+| Codex bug is about desktop hydration gap | openai/codex#16702 comment by fengning-starsend | Confirmed (founder's direct investigation, exact thread triggers remain uncertain) |
 | context-plus was removed for worktree blindness | context-plus/SKILL.md tombstone | Confirmed |
 | Containment layer is ~750 lines | Line counts of scripts/ | Confirmed |
 | Daemon is alive when Codex threads don't expose tools | Bug report process checks | Confirmed |
 | Daemon caching is faster than CLI | PR 475 memo (residual uncertainty section) | Unconfirmed — assumption |
-| New Codex threads work correctly with MCP | Inferred from thread-age analysis | Uncertain — not tested |
+| New Codex threads work correctly with MCP | Inferred from thread-age analysis | High Uncertainty — strictly unverified |
