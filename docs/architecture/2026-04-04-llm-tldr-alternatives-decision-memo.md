@@ -53,15 +53,20 @@ Any proposed stack or alternative must be evaluated against the following:
    - *Pros:* Highly standardized.
    - *Cons:* LSPs provide poor semantic discovery and lack the "95% token compression" features of `llm-tldr`'s context extraction tool. It replaces our custom glue with configuring multiple independent language environments for every worktree.
 
+5. **Candidate E: Revive `context-plus` (Fully Revert V8.6)**
+   - *Description:* Return to the deprecated `context-plus` MCP tool (recently removed from the canonical contract in V8.6 bd-rb0c.8) which utilizes spectral clustering, full memory-graph generation, and Ollama-based embeddings instead of `llm-tldr`.
+   - *Pros:* Robust semantic and architectural tools (BLAST radius, semantic identifier search). 
+   - *Cons:* High operational dependency relying heavily on a running local `Ollama` process vs. `llm-tldr`'s lightweight native BGE index. Crucially, as an MCP server, `context-plus` collides with the exact same Codex IDE thread hydration failures (Issue #16702). Swapping the tool does not solve the upstream IDE bug; it only introduces new orchestration overhead.
+
 ## 4. Comparison Matrix
 
-| Criteria | A: Status Quo | B: Narrow (CLI only) | C: Split (RG/Ctags) | D: Alternative MCPs |
-| :--- | :---: | :---: | :---: | :---: |
-| **Reliability in runtimes** | Low (Codex MCP gap) | High | High | Low (Same Codex bugs) |
-| **Worktree-safe** | High (but expensive glue) | High (but expensive glue) | High (Native) | Varies |
-| **Semantic discovery** | High | High | None | Medium |
-| **Structural trace**| High | High | Low | High (Language dependent) |
-| **Operational Simplicity** | Low | Medium | High | Low |
+| Criteria | A: Status Quo | B: Narrow (CLI only) | C: Split (RG/Ctags) | D: Alternative MCPs | E: Revive context-plus |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Reliability in runtimes** | Low (Codex MCP gap) | High | High | Low (Same Codex bugs) | Low (Same Codex bugs) |
+| **Worktree-safe** | High (but expensive glue) | High (but expensive glue) | High (Native) | Varies | High (Global persistent memory) |
+| **Semantic discovery** | High | High | None | Medium | High |
+| **Structural trace**| High | High | Low | High (Language dependent) | High |
+| **Operational Simplicity** | Low | Medium | High | Low | Very Low (Ollama Req) |
 
 ## 5. Recommendation
 
