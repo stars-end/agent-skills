@@ -3,7 +3,7 @@
 **Date:** 2026-04-04
 **Reviewer:** Independent DX architecture review (second opinion)
 **Target PR:** [stars-end/agent-skills#475](https://github.com/stars-end/agent-skills/pull/475)
-**PR HEAD SHA:** f1c8958638887ee474ebf5497576329aca139d32
+**PR HEAD SHA:** 2186b9ff0ef114e557f93153f2a0a5d883d21fa9
 **Supporting PR:** [stars-end/agent-skills#473](https://github.com/stars-end/agent-skills/pull/473)
 **Upstream Issue:** [openai/codex#16702](https://github.com/openai/codex/issues/16702)
 **Beads:** bd-a3vas.1
@@ -108,9 +108,8 @@ fallback for Codex.
 
 1. **The memo treats the daemon-backed fallback as a permanent architecture decision.**
    It frames "narrow via daemon-backed fallback" as the answer, rather than as a
-   temporary bridge for a specific upstream bug. The Codex thread hydration issue has a
-   specific root cause (stale resumed threads) that is likely to be fixed upstream.
-   The fallback should be marked transitional.
+   temporary bridge for a specific upstream bug. The Codex thread hydration issue
+   is likely to be fixed upstream. The fallback should be marked transitional.
 
 2. **The memo leaves the hydration scope open.** The investigation acknowledges the uncertainty around whether this bug is thread-specific or UI-wide. By avoiding a "new thread" mandate, the daemon fallback remains the primary tactical bridge regardless of thread state.
 
@@ -201,8 +200,8 @@ correct and well-argued. The daemon-backed fallback is a reasonable tactical mit
 However:
 
 - The memo should frame the fallback as **transitional**, not as permanent architecture
-- The memo should reference the specific upstream root cause (stale resumed threads)
-- The memo should acknowledge the "new thread" workaround
+- The memo should reference the specific upstream hydration gap
+- The memo should acknowledge the hydration uncertainty workaround
 - The comparison matrix should be corrected (Candidate B operational simplicity is
   lower than Candidate A, not equal)
 
@@ -247,10 +246,10 @@ If measurement shows no material difference, simplify to CLI-only fallback
 | Item | Status | Impact |
 |------|--------|--------|
 | Will OpenAI fix Codex thread hydration? | Open (issue filed, potential duplicates exist) | Determines if fallback is temporary or permanent |
-| Does the "new thread" workaround actually bypass the bug? | Inferred from evidence, not confirmed | If yes, simplifies the whole approach |
+| Does the hydration uncertainty workaround actually bypass the bug? | Inferred from evidence, not confirmed | If yes, simplifies the whole approach |
 | Is daemon caching materially faster than CLI cold-start? | Unconfirmed | Determines if daemon fallback is worth its complexity over CLI fallback |
 | Does llm-tldr containment break on version upgrades? | No evidence of breakage so far | Low risk but worth monitoring |
-| Are there other Codex MCP bugs beyond stale threads? | Unknown | Could invalidate the "new thread" workaround |
+| Are there other Codex MCP bugs beyond hydration gaps? | Unknown | Could invalidate the workaround |
 
 ## 8. Evidence Provenance
 

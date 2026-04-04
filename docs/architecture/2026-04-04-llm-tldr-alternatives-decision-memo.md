@@ -3,7 +3,7 @@
 **Date:** 2026-04-04
 **Topic:** Tactical re-evaluation of the `llm-tldr` code-understanding stack fallback path.
 **Context PR:** [Stars-End Agent-Skills #475](https://github.com/stars-end/agent-skills/pull/475)
-**Context PR SHA:** f1c8958638887ee474ebf5497576329aca139d32
+**Context PR SHA:** 2186b9ff0ef114e557f93153f2a0a5d883d21fa9
 **Related Issues:** [OpenAI Codex #16702](https://github.com/openai/codex/issues/16702)
 
 ## 1. What problem are we actually trying to solve?
