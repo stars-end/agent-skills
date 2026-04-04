@@ -1248,6 +1248,127 @@ def test_status_missing_wave_reports_epic_token_diagnostics(tmp_path, capsys):
     print("✓ missing-wave diagnostics explain unresolved epic-token lookup")
 
 
+def test_status_missing_wave_for_first_use_beads_task_is_actionable(
+    tmp_path, monkeypatch, capsys
+):
+    """status --beads-id should guide first-use tasks without persisted wave state."""
+    existing = DxLoop("wave-existing")
+    existing.wave_dir = tmp_path / "waves" / "wave-existing"
+    existing.state_file = existing.wave_dir / "loop_state.json"
+    existing.epic_id = "bd-other"
+    existing._set_wave_status(
+        LoopState.IN_PROGRESS_HEALTHY,
+        None,
+        "Existing wave for a different epic",
+    )
+    existing._save_state()
+
+    def fake_run(cmd, **kwargs):
+        assert cmd == ["bd", "show", "bd-epyeg", "--json"]
+        payload = [
+            {
+                "id": "bd-epyeg",
+                "dependencies": [
+                    {
+                        "id": "bd-5w5o",
+                        "dependency_type": "parent-child",
+                    }
+                ],
+            }
+        ]
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(wave_id=None, epic=None, beads_id="bd-epyeg", json=False)
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Wave state not found for bd-epyeg" in captured.err
+    assert "Blocker Class: control_plane_missing_wave_state" in captured.err
+    assert "Resolved parent epic: bd-5w5o" in captured.err
+    assert "`dx-loop start --epic bd-5w5o`" in captured.err
+    assert "`dx-loop status --beads-id bd-epyeg`" in captured.err
+
+    print("✓ status first-use missing-wave diagnostics are actionable")
+
+
+def test_explain_missing_wave_for_first_use_beads_task_is_actionable(
+    tmp_path, monkeypatch, capsys
+):
+    """explain --beads-id should guide first-use tasks without persisted wave state."""
+
+    def fake_run(cmd, **kwargs):
+        assert cmd == ["bd", "show", "bd-epyeg", "--json"]
+        payload = [
+            {
+                "id": "bd-epyeg",
+                "dependencies": [
+                    {
+                        "id": "bd-5w5o",
+                        "dependency_type": "parent-child",
+                    }
+                ],
+            }
+        ]
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    original_artifact_base = cmd_explain.__globals__["ARTIFACT_BASE"]
+    cmd_explain.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_explain(
+            SimpleNamespace(wave_id=None, epic=None, beads_id="bd-epyeg")
+        )
+    finally:
+        cmd_explain.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Wave state not found for bd-epyeg" in captured.err
+    assert "Blocker Class: control_plane_missing_wave_state" in captured.err
+    assert "Resolved parent epic: bd-5w5o" in captured.err
+    assert "`dx-loop start --epic bd-5w5o`" in captured.err
+
+    print("✓ explain first-use missing-wave diagnostics are actionable")
+
+
+def test_missing_wave_diagnostics_for_explicit_wave_id_remains_specific(
+    tmp_path, capsys
+):
+    """Explicit --wave-id misses should remain specific and not use first-use guidance."""
+    original_artifact_base = cmd_status.__globals__["ARTIFACT_BASE"]
+    cmd_status.__globals__["ARTIFACT_BASE"] = tmp_path
+    try:
+        rc = cmd_status(
+            SimpleNamespace(
+                wave_id="wave-does-not-exist", epic=None, beads_id=None, json=False
+            )
+        )
+    finally:
+        cmd_status.__globals__["ARTIFACT_BASE"] = original_artifact_base
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Wave state not found for wave-does-not-exist" in captured.err
+    assert "No state file exists at:" in captured.err
+    assert "Blocker Class: control_plane_missing_wave_state" not in captured.err
+
+    print("✓ explicit wave-id diagnostics remain unchanged")
+
+
 def test_explain_classifies_review_blocked_as_product(tmp_path, capsys):
     """explain should classify review-blocked waves as product work."""
     wave_id = "wave-explain-product"
