@@ -43,6 +43,8 @@ from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState, RunnerStartRe
 
 VERSION = "1.4.0"
 SURFACE_BEADS_TIMEOUT_SECONDS = 15
+CADENCE_HYDRATION_TIMEOUT_SECONDS = 3
+STARTUP_HYDRATION_TIMEOUT_SECONDS = 10
 ARTIFACT_BASE = Path("/tmp/dx-loop")
 ACTIVE_EPIC_DIR = ARTIFACT_BASE / "active-epics"
 OPENCODE_IMPLEMENT_MODEL = "zai-coding-plan/glm-5"
@@ -59,6 +61,7 @@ DEFAULT_CONFIG = {
     "review_model": None,  # defaults per provider/phase in __init__
     "require_review": True,
     "exit_on_zero_dispatch_start": True,
+    "startup_hydration_timeout_seconds": STARTUP_HYDRATION_TIMEOUT_SECONDS,
     "worktree_base": "/tmp/agents",  # Base dir for worktrees
     "default_repo": None,
 }
@@ -561,7 +564,10 @@ class DxLoop:
                 print("Recovered finished runner state for: " + ", ".join(reconciled))
 
             # PHASE 3: Get ready tasks (respecting scheduler state)
-            readiness = self.beads_manager.describe_wave_readiness()
+            readiness_timeout_seconds = self._wave_readiness_timeout_seconds(iteration)
+            readiness = self.beads_manager.describe_wave_readiness(
+                timeout_seconds=readiness_timeout_seconds
+            )
             ready = readiness.ready or None
 
             if not ready:
@@ -575,28 +581,63 @@ class DxLoop:
                     self._save_state()
                     return True
                 if readiness.waiting_on_dependencies:
-                    blocked_ids = [
-                        item["beads_id"] for item in readiness.waiting_on_dependencies
-                    ]
-                    self.scheduler.state.blocked_beads_ids = set(blocked_ids)
-                    blocked_reason = f"No dispatches: waiting on dependencies for {len(blocked_ids)} task(s)"
-                    if self._should_exit_blocked_at_start(iteration):
-                        blocked_reason = (
-                            f"Initial frontier blocked with {len(blocked_ids)} task(s); "
-                            "exiting without resident loop"
+                    hydration_blocked, dependency_blocked = (
+                        self._split_hydration_and_dependency_blockers(
+                            readiness.waiting_on_dependencies
                         )
-                    self._set_wave_status(
-                        LoopState.WAITING_ON_DEPENDENCY,
-                        BlockerCode.WAITING_ON_DEPENDENCY,
-                        blocked_reason,
-                        blocked_details=readiness.waiting_on_dependencies,
                     )
-                    print(
-                        f"No ready tasks: waiting on dependencies for {len(blocked_ids)} task(s)"
-                    )
-                    for item in readiness.waiting_on_dependencies[:3]:
-                        deps = ", ".join(item["unmet_dependencies"])
-                        print(f"  {item['beads_id']} waiting on: {deps}")
+                    blocked_ids = [item["beads_id"] for item in readiness.waiting_on_dependencies]
+                    self.scheduler.state.blocked_beads_ids = set(blocked_ids)
+                    if hydration_blocked and self.scheduler.state.dispatch_count == 0:
+                        blocked_reason = (
+                            "Startup task metadata hydration timed out for "
+                            f"{len(hydration_blocked)} task(s) "
+                            f"(timeout={readiness_timeout_seconds}s); "
+                            "dependency graph is not fully hydrated"
+                        )
+                        if self._should_exit_blocked_at_start(iteration):
+                            blocked_reason += "; exiting without resident loop"
+                        self._set_wave_status(
+                            LoopState.KICKOFF_ENV_BLOCKED,
+                            BlockerCode.KICKOFF_ENV_BLOCKED,
+                            blocked_reason,
+                            blocked_details=self._startup_hydration_blocked_details(
+                                readiness=readiness,
+                                hydration_blocked=hydration_blocked,
+                                timeout_seconds=readiness_timeout_seconds,
+                            ),
+                        )
+                        print(
+                            "No ready tasks: startup metadata hydration timed out for "
+                            f"{len(hydration_blocked)} task(s)"
+                        )
+                        if dependency_blocked:
+                            print(
+                                "  Additional dependency blockers observed: "
+                                f"{len(dependency_blocked)} task(s)"
+                            )
+                    else:
+                        blocked_reason = (
+                            "No dispatches: waiting on dependencies for "
+                            f"{len(blocked_ids)} task(s)"
+                        )
+                        if self._should_exit_blocked_at_start(iteration):
+                            blocked_reason = (
+                                f"Initial frontier blocked with {len(blocked_ids)} task(s); "
+                                "exiting without resident loop"
+                            )
+                        self._set_wave_status(
+                            LoopState.WAITING_ON_DEPENDENCY,
+                            BlockerCode.WAITING_ON_DEPENDENCY,
+                            blocked_reason,
+                            blocked_details=readiness.waiting_on_dependencies,
+                        )
+                        print(
+                            f"No ready tasks: waiting on dependencies for {len(blocked_ids)} task(s)"
+                        )
+                        for item in readiness.waiting_on_dependencies[:3]:
+                            deps = ", ".join(item["unmet_dependencies"])
+                            print(f"  {item['beads_id']} waiting on: {deps}")
                     if self._should_exit_blocked_at_start(iteration):
                         print(
                             "Initial frontier has zero dispatchable tasks; exiting "
@@ -773,6 +814,84 @@ class DxLoop:
             time.sleep(self.config["cadence_seconds"])
 
         return False
+
+    def _wave_readiness_timeout_seconds(self, iteration: int) -> int:
+        """Use a larger hydration timeout on first startup iteration."""
+        if iteration == 1 and self.scheduler.state.dispatch_count == 0:
+            timeout_seconds = self.config.get(
+                "startup_hydration_timeout_seconds",
+                STARTUP_HYDRATION_TIMEOUT_SECONDS,
+            )
+            try:
+                parsed = int(timeout_seconds)
+                if parsed > 0:
+                    return parsed
+            except (TypeError, ValueError):
+                pass
+            return STARTUP_HYDRATION_TIMEOUT_SECONDS
+        return CADENCE_HYDRATION_TIMEOUT_SECONDS
+
+    @staticmethod
+    def _split_hydration_and_dependency_blockers(
+        blockers: List[Dict[str, Any]],
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Separate metadata-hydration blockers from true dependency blockers."""
+        hydration_blocked: List[Dict[str, Any]] = []
+        dependency_blocked: List[Dict[str, Any]] = []
+
+        for item in blockers:
+            unmet = item.get("unmet_dependencies") or []
+            if unmet == ["task_metadata_unavailable"]:
+                hydration_blocked.append(item)
+            else:
+                dependency_blocked.append(item)
+
+        return hydration_blocked, dependency_blocked
+
+    def _startup_hydration_blocked_details(
+        self,
+        *,
+        readiness: Any,
+        hydration_blocked: List[Dict[str, Any]],
+        timeout_seconds: int,
+    ) -> List[Dict[str, Any]]:
+        """Build actionable startup hydration diagnostics for operator surfaces."""
+        loaded_count = sum(
+            1 for task in self.beads_manager.tasks.values() if task.details_loaded
+        )
+        total_count = len(readiness.pending_tasks)
+        timed_out_count = sum(
+            1 for task in self.beads_manager.tasks.values() if task.detail_load_error == "timeout"
+        )
+
+        details: List[Dict[str, Any]] = [
+            {
+                "beads_id": self.epic_id or self.wave_id,
+                "phase": "startup",
+                "reason_code": "startup_hydration_timeout",
+                "detail": (
+                    f"Hydration loaded {loaded_count}/{total_count} pending tasks; "
+                    f"metadata timed out for {timed_out_count} task(s) "
+                    f"at timeout={timeout_seconds}s"
+                ),
+                "loaded_task_count": loaded_count,
+                "pending_task_count": total_count,
+                "timed_out_task_count": timed_out_count,
+                "timeout_seconds": timeout_seconds,
+            }
+        ]
+
+        for item in hydration_blocked:
+            detail = dict(item)
+            detail["reason_code"] = "startup_hydration_timeout"
+            detail["detail"] = (
+                "Task metadata unavailable during startup hydration; retry with "
+                f"a larger hydration timeout than {timeout_seconds}s"
+            )
+            detail["timeout_seconds"] = timeout_seconds
+            details.append(detail)
+
+        return details
 
     def _should_exit_blocked_at_start(self, iteration: int) -> bool:
         """

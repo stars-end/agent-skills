@@ -2026,6 +2026,97 @@ def test_run_loop_exits_when_initial_frontier_is_fully_blocked(tmp_path):
     print("✓ Blocked-at-start waves exit promptly")
 
 
+def test_run_loop_uses_startup_hydration_timeout_budget(tmp_path):
+    """First-pass readiness should use startup hydration timeout, not cadence timeout."""
+    wave_id = "wave-startup-hydration-timeout-budget"
+    loop = DxLoop(
+        wave_id,
+        config={"cadence_seconds": 0, "startup_hydration_timeout_seconds": 7},
+    )
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.beads_manager.tasks = {
+        "bd-ready": BeadsTask(
+            beads_id="bd-ready",
+            title="Ready task",
+            dependencies=[],
+            details_loaded=True,
+        )
+    }
+    loop.beads_manager.layers = [["bd-ready"]]
+
+    readiness_timeouts = []
+
+    def fake_describe(timeout_seconds=3):
+        readiness_timeouts.append(timeout_seconds)
+        return SimpleNamespace(
+            ready=["bd-ready"],
+            waiting_on_dependencies=[],
+            pending_tasks=["bd-ready"],
+        )
+
+    loop.beads_manager.describe_wave_readiness = fake_describe
+    loop.beads_manager.has_pending_tasks = lambda: True
+    loop._dispatch_task = lambda beads_id, phase: True
+
+    assert loop.run_loop(max_iterations=1) is False
+
+    state = json.loads(loop.state_file.read_text())
+    assert readiness_timeouts == [7]
+    assert state["scheduler_state"]["dispatch_count"] == 1
+    assert state["wave_status"]["state"] == "in_progress_healthy"
+
+    print("✓ Startup readiness uses dedicated hydration timeout budget")
+
+
+def test_run_loop_classifies_startup_hydration_timeout_as_control_plane(tmp_path):
+    """Startup metadata timeouts should not be persisted as dependency blockers."""
+    wave_id = "wave-startup-hydration-timeout-control-plane"
+    loop = DxLoop(
+        wave_id,
+        config={"cadence_seconds": 0, "startup_hydration_timeout_seconds": 7},
+    )
+    loop.wave_dir = tmp_path / "waves" / wave_id
+    loop.state_file = loop.wave_dir / "loop_state.json"
+    loop.epic_id = "bd-epic"
+    loop.beads_manager.tasks = {
+        "bd-slow": BeadsTask(
+            beads_id="bd-slow",
+            title="Slow metadata task",
+            dependencies=[],
+            details_loaded=False,
+            detail_load_error="timeout",
+        )
+    }
+    loop.beads_manager.layers = [["bd-slow"]]
+    loop.beads_manager.has_pending_tasks = lambda: True
+    loop.beads_manager.describe_wave_readiness = lambda timeout_seconds=3: SimpleNamespace(
+        ready=[],
+        waiting_on_dependencies=[
+            {
+                "beads_id": "bd-slow",
+                "title": "Slow metadata task",
+                "unmet_dependencies": ["task_metadata_unavailable"],
+                "dependency_statuses": {"task_metadata_unavailable": "timeout"},
+            }
+        ],
+        pending_tasks=["bd-slow"],
+    )
+
+    assert loop.run_loop(max_iterations=1) is True
+
+    state = json.loads(loop.state_file.read_text())
+    assert state["scheduler_state"]["dispatch_count"] == 0
+    assert state["wave_status"]["state"] == "kickoff_env_blocked"
+    assert state["wave_status"]["blocker_code"] == "kickoff_env_blocked"
+    assert "startup_hydration_timeout" in {
+        detail.get("reason_code") for detail in state["wave_status"]["blocked_details"]
+    }
+    assert "waiting_on_dependency" != state["wave_status"]["blocker_code"]
+
+    print("✓ Startup metadata timeouts are classified as control-plane blockers")
+
+
 def test_dx_ensure_bins_links_dx_loop(tmp_path):
     """dx-loop should be linked into the canonical operator bin dir and execute."""
     bin_dir = tmp_path / "bin"
