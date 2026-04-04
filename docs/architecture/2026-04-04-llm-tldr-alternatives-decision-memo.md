@@ -1,70 +1,80 @@
-# Decision Memo: First-Principles Review of the Code-Understanding Stack
+# Decision Memo: Code-Understanding Architecture Alternatives
 
 **Date:** 2026-04-04
-**Topic:** Re-evaluating the `llm-tldr` code-understanding stack against true foundational constraints (Statelessness, Reliability, and Native Integration).
-**Context PR:** [Stars-End Agent-Skills PR #473](https://github.com/stars-end/agent-skills/pull/473)
+**Topic:** First-principles re-evaluation of the `llm-tldr` code-understanding stack for agent semantic discovery and exact static analysis.
+**Context PR:** [Stars-End Agent-Skills #473](https://github.com/stars-end/agent-skills/pull/473)
 **Related Issues:** [OpenAI Codex #16702](https://github.com/openai/codex/issues/16702)
 
-## 1. Defining the True Problem Boundaries
+## 1. What problem are we actually trying to solve?
 
-The initial review of the `llm-tldr` architectural gap conflated superficial fixes with architectural health. A strict, first-principles examination reveals fundamental instability in our current "containment" approach:
+We are attempting to provide agents with a high-fidelity, highly compressed repository map (95% token savings) across multiple UI runtimes (Codex desktop, Claude Code, etc.) without mutating the canonical project filesystem or injecting brittle orchestration shims. 
 
-1. **The `llm-tldr` Caching Assumption:** `llm-tldr` is fundamentally engineered assuming it owns `.tldr` cache directories inside the primary project root. It achieves its "95% token savings" through continuous background index synchronization. 
-2. **The Codex Desktop Failure (#16702):** Codex successfully registers MCP tools but fails to expose them into the sqlite state of the active chat thread. This upstream bug forces all tools to degrade, acting as a catalyst that exposed our brittle tool layers.
-3. **The Containment Time-Bomb:** Because of our strict *no canonical write* constraints, we implemented `tldr_contained_runtime.py`. This script globally monkey-patches Python's `pathlib.PurePath.__truediv__` operator to intercept any filepath creation ending in `.tldr` and redirects it. **This is a catastrophic architectural choice.** Intercepting global path operations inside the Python runtime just to reroute cache files makes the agent stack vulnerable to upstream python version updates (like 3.12+ `pathlib` refactors) and introduces massive unseen collision risks.
-4. **Tool Redundancy (`serena`):** We are currently running `serena` (which also deposits `.serena` caches) alongside `llm-tldr`. If `serena` performs symbol-aware editing, paying the structural overhead for two overlapping MCP code-understanding ecosystems is unsustainable.
-
-**Conclusion on Pain Ownership:** The Codex bug is an external hydration delay. But the immense operational risk (the `__truediv__` hack, daemons, socket fallbacks) rests entirely on our decision to force a *stateful* tool (`llm-tldr`) into a *stateless* (worktree-safe) environment via brute-force monkey patching.
+**Pain Attribution Breakdown:**
+- **`llm-tldr`:** Owns the desire to write intense local state (`.tldr`) into the nearest project root. It treats statefulness as a requirement for fast contextual querying.
+- **Codex desktop MCP hydration:** Exclusively owns the `#16702` bug. Codex successfully registers backend MCP tools via stdio but drops them during UI thread-database hydration. Notably, the Codex CLI does *not* suffer from this bug since it skips the Electron frontend SQLite state mechanism.
+- **Our containment/runtime patching:** Owns the `PurePath.__truediv__` global python monkey-patch trap. We actively intercept standard dictionary `pathlib` queries to forcibly export `.tldr` caches. **This is a ticking time bomb.** A standard Python library refactor will crash the entire stack silently.
+- **Our fallback helper complexity:** The `tldr-daemon-fallback.py` script exists entirely to route around the Codex Desktop UI bug while blindly preserving the `llm-tldr` daemon architecture.
 
 ## 2. Evaluation Criteria
 
-Instead of comparing "how to connect the socket," candidates are evaluated on:
-1. **Statelessness / Worktree-Safety:** Can the context map be generated without persistent disk caches or path-hijacking? 
-2. **Token Efficiency:** Can the tool actually output dense, semantic-graph context matching the 95% reduction threshold without massive indexing delays?
-3. **Protocol Independence:** Does the solution rely strictly on MCP (vulnerable to IDE bugs) or can its output be piped reliably?
-4. **Maintenance Overhead:** Time spent writing fallback wrappers and containment shims.
+Instead of assuming MCP is the right transport, the framework is evaluated against raw architectural physics:
+1. **Reliability in real agent runtimes:** Across Codex (Desktop + CLI), and remote OpenCode instances.
+2. **Local-first/worktree-safe behavior:** Absolutely zero path-hijacking required to remain cleanly isolated.
+3. **Semantic discovery quality:** Replicating or exceeding `llm-tldr`'s verified upstream metric of 89-99% token compression via AST search.
+4. **Exact structural tracing quality:** Accurate call graphs and dead-code detection without redundant coverage against existing tools like `serena`.
+5. **Operational simplicity & Agent ergonomics:** Minimal moving parts for the runtime orchestration shell.
+6. **Need for custom wrappers/glue:** Avoid daemons and global-override python hooks strictly.
 
-## 3. Candidate Shortlist
+## 3. The True Alternatives (First-Principles Analysis)
 
-1. **Candidate A: Status Quo (Hybrid Daemon + Custom Glue)**
-   - *Description:* Retain `llm-tldr` over MCP where healthy, fallback to `tldr-daemon-fallback.py` in Codex, and preserve the global `PurePath` monkey-patching to catch state leaks.
-   - *Pros:* Keeps the high-fidelity `bge-large` FAISS semantic searching. 
-   - *Cons:* Leaves the `PurePath.__truediv__` timebomb ticking within agent boundaries. Preserves immense tech debt.
+A review of the actual ecosystem (`aider`, SCIP, `mentat`) reveals a fundamental split between *Stateful Daemon Architecture* and *Stateless CLI Mapping*.
 
-2. **Candidate B: Deprecate State and Adopt Stateless AST Native Tooling (The Aider Model)**
-   - *Description:* Study modern tools like `aider`'s repo-map. Aider builds a full Abstract Syntax Tree (AST) using `tree-sitter`, scores symbols via PageRank, and dynamically yields a token-budgeted map *entirely in memory*. No background daemons, no `.tldr` database, no MCP sockets required.
-   - *Pros:* 100% natively worktree-safe. Completely stateless. Cannot conflict with IDE thread hydration bugs.
-   - *Cons:* Requires building or importing a stateless tree-sitter context script to replace `llm-tldr`'s structural mappings.
+### Candidate A: Status Quo (The Hybrid Daemon Trap)
+- **Description:** Preserve `llm-tldr` and the `_send_command` socket fallback. Accept the `tldr_contained_runtime.py` hook and daemon management logic to route around Codex Desktop's UI failures.
+- **Protocol:** Relies on MCP and daemonized sockets.
+- **Pros:** Retains current verified 95% token savings; FAISS-backed semantic discovery.
+- **Cons:** Binds our core agent code-understanding stack to an explosive `__truediv__` monkey-patch and immense operational complexity merely to satisfy a localized IDE bug. 
 
-3. **Candidate C: Upstream `llm-tldr` Stateless Refactor (The True Narrow)**
-   - *Description:* Instead of wrapping `llm-tldr` locally with path hooks, submit an upstream patch to `llm-tldr` enforcing a strict `--no-cache` or `--cache-dir` parameter that safely routes state natively without python-level monkey patching.
-   - *Pros:* Retains the tool we have adopted seamlessly, but kills the toxic local custom glue.
-   - *Cons:* Requires upstream cooperation and we still rely heavily on daemon fallbacks for the Codex surface.
+### Candidate B: Stateless AST Native Tooling (The Aider Paradigm)
+- **Description:** Deprecate MCP and daemons for structure trace completely. Utilize a stateless tree-sitter based mapping script (mirroring `aider`'s PageRank repository map) that generates token-budgeted graphs *on the fly*, entirely in-memory.
+- **Protocol:** Pure CLI (Stateless/Ephemeral).
+- **Pros:** 100% native worktree isolation. No `.tldr` database to contain, thus deleting the entire monkey-patching and fallback script ecosystem. Immune to Codex thread hydration drops.
+- **Cons:** Requires either wrapping `aider`'s mapping logic standalone or replacing `llm-tldr`'s structural mappings manually.
+
+### Candidate C: Upstream `llm-tldr` Stateless Refactor (The True Narrow)
+- **Description:** Submit a patch to `parcadei/llm-tldr` that exposes a `--cache-dir` constraint natively, allowing us to enforce `TLDR_STATE_HOME` inside standard environmental variables rather than hijacking the Python VM logic dynamically.
+- **Protocol:** MCP + CLI wrapper.
+- **Pros:** Keeps the preferred structural tool while eliminating the toxic `PurePath` containment glue.
+- **Cons:** Still forces us to own daemon lifecycles inside `dx-runner` transient containers to handle the Codex caching fallback.
 
 ## 4. Comparison Matrix
 
 | Criteria | A: Status Quo | B: Stateless Native (Tree-sitter) | C: Upstream Stateless Refactor |
 | :--- | :---: | :---: | :---: |
-| **Stateless / Worktree Safe** | Low (Gross path hijacking) | Extremely High (In Memory) | High (Native mapping) |
+| **Reliability in runtimes** | Low (Codex UI gaps) | Extremely High | Medium |
+| **Worktree Safe** | Highest Risk (Gross path hijacking) | Extremely High (In Memory) | High (Native mapping) |
+| **Semantic discovery** | High | Very High (Provd by Aider) | High |
+| **Structural trace** | High | High | High |
 | **Operational Simplicity** | Lowest (Overrides python globals) | High | Medium |
-| **Resilience to MCP bugs** | Low | High (Not dependent on socket) | Low / Medium |
-| **Context Quality** | Very High | Very High (Proved by Aider) | Very High |
+| **Need for custom glue** | High (Daemons + Shims) | None | Medium |
 
 ## 5. Recommendation
 
-**Verdict: Reject State. Migrate to Stateless Architecture.**
+**Verdict: Reject MCP Transport for Statefulness. Pivot to Stateless AST Tooling.**
 
-Our primary mandate is minimizing custom glue and ensuring local-first worktree safety. Global monkey-patching of `PurePath.__truediv__` is a fundamental engineering violation that cannot be sustained as a "fix" for a transient `.tldr` directory.
+Our mandate is minimizing custom glue and guaranteeing local-first worktree safety. 
 
-We must **replace** the current implementation approach. I recommend immediately pursuing **Candidate B (Stateless AST Tooling)** or aggressively enforcing **Candidate C**. 
+MCP is the wrong transport layer for a transient context map tool if it demands daemonization and global dictionary path hijacking to remain safe. Relying on `PurePath.__truediv__` overrides to keep `llm-tldr` safely out of the canonical repo is an engineering failure.
 
-We cannot allow the agent stack's baseline Python environment to be deeply compromised just to maintain a background cache directory. The correct long-term technical answer for a code-understanding stack inside a dynamic, multi-agent temporal container is stateless memory generation (ala Aider's `repo-map` tree-sitter logic). 
+We must aggressively strip out the containment patching and pursue **Candidate B**. By shifting code-understanding contexts entirely to stateless `tree-sitter` generators (like `aider`'s map methodology), we eliminate daemon fallbacks, bypass the Codex Desktop UI bugs altogether, and remove the timebomb threat of Python 3.12+ `pathlib` refactors breaking our orchestrator.
+
+If we *must* keep `llm-tldr`, we must strictly enforce **Candidate C**—pausing all `agent-skills` local glue integration until `llm-tldr` supports stateless/cache constraints upstream natively.
 
 ## 6. What Not To Do
 
-- **DO NOT** approve the `tldr_contained_runtime.py` file for long-term canonical merge. It is a technical trap. 
-- **DO NOT** assume `llm-tldr`'s "95% token savings" requires massive background disk state. Tree-sitter mapping proves this can be done in real time. 
+- **DO NOT** approve the merging of `tldr_contained_runtime.py`. It is a technical trap that hides explosive system-level overrides to mask a tool boundary mismatch.
+- **DO NOT** replace `llm-tldr` with Sourcegraph SCIP or Cursor/Windsurf logic, as these rely on intensive asynchronous indexing times or proprietary cloud LSP pipelines that violate our fast, local-first transient `.tmp` lane speed requirements.
 
 ## 7. Residual Uncertainty
 
-- **Overlap with Serena:** We must immediately perform a capability mapping of `serena` to verify if it already possesses internal AST structures capable of generating token-budgeted codebase maps, potentially allowing us to deprecate `llm-tldr` structurally without bringing in new software.
+- **Tool Overlap:** While `serena` focuses heavily on exact symbol patching and basic structural inference, it currently lacks the PageRank-weighted file dependency graphing needed to replace `llm-tldr`. We must verify if extending `serena`'s existing minimal AST capabilities is cheaper than wrapping Aider natively.
