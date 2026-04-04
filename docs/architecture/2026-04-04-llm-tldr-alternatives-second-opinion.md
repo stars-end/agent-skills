@@ -3,7 +3,7 @@
 **Date:** 2026-04-04
 **Reviewer:** Independent DX architecture review (second opinion)
 **Target PR:** [stars-end/agent-skills#475](https://github.com/stars-end/agent-skills/pull/475)
-**PR HEAD SHA:** acf52a50e5fc93244f1ca6bf76cfda88899e772a
+**PR HEAD SHA:** f1c8958638887ee474ebf5497576329aca139d32
 **Supporting PR:** [stars-end/agent-skills#473](https://github.com/stars-end/agent-skills/pull/473)
 **Upstream Issue:** [openai/codex#16702](https://github.com/openai/codex/issues/16702)
 **Beads:** bd-a3vas.1
@@ -57,7 +57,7 @@ Key evidence:
 - The failing thread was created 2026-03-04, predating the MCP config additions
 - `codex mcp list` reflects current config, but the tools are dropped during UI startup
 
-**Assessment:** This is an **upstream Codex bug representing a desktop hydration gap**, not a fundamental MCP incompatibility. The bug is filed and reproducible. While the initial diagnosis hypothesized it applied exclusively to resumed threads, we now recognize it as a broader desktop hydration uncertainty. It is reasonable to expect a fix from OpenAI.
+**Assessment:** This is an **upstream Codex bug representing a desktop hydration gap**, not a fundamental MCP incompatibility. While initial evidence pointed toward resumed threads specifically, the current diagnosis is a broader **desktop hydration uncertainty**. It is reasonable to expect a fix from OpenAI.
 
 ### 2c. Containment/runtime patching
 
@@ -112,7 +112,7 @@ fallback for Codex.
    specific root cause (stale resumed threads) that is likely to be fixed upstream.
    The fallback should be marked transitional.
 
-2. **The memo leaves the hydration scope open.** The founder's investigation suggests the bug might be partially related to thread age, but safely leaves open the broader "desktop hydration uncertainty." Since the new thread workaround is merely a hypothesis, the daemon fallback acts as the guaranteed Codex mitigation.
+2. **The memo leaves the hydration scope open.** The investigation acknowledges the uncertainty around whether this bug is thread-specific or UI-wide. By avoiding a "new thread" mandate, the daemon fallback remains the primary tactical bridge regardless of thread state.
 
 3. **Candidate B's operational complexity is understated.** The comparison matrix rates
    Candidate B (daemon-backed fallback) as "Low" operational simplicity, identical to
@@ -186,7 +186,7 @@ Specifically:
    specifically to bridge the Codex thread hydration bug (openai/codex#16702), and
    should be removed when the upstream fix lands.
 
-4. **Do not assume new threads fix the bug without verification.** The documentation safely downgrades the "new thread" hypothesis to a general desktop hydration gap. The daemon fallback remains the documented bridge regardless of thread age until confirmation surfaces.
+4. **Do not assume new threads fix the bug without verification.** The documentation safely treats the issue as a general desktop hydration gap. The daemon fallback remains the documented bridge until confirmation of a reliable workaround surfaces.
 
 5. **Measure the daemon vs. CLI cold-start difference.** The justification for the
    daemon-backed fallback over the simpler `tldr-contained.sh` path rests on an

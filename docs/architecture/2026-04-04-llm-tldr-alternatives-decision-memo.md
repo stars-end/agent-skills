@@ -3,7 +3,7 @@
 **Date:** 2026-04-04
 **Topic:** Tactical re-evaluation of the `llm-tldr` code-understanding stack fallback path.
 **Context PR:** [Stars-End Agent-Skills #475](https://github.com/stars-end/agent-skills/pull/475)
-**Context PR SHA:** acf52a50e5fc93244f1ca6bf76cfda88899e772a
+**Context PR SHA:** f1c8958638887ee474ebf5497576329aca139d32
 **Related Issues:** [OpenAI Codex #16702](https://github.com/openai/codex/issues/16702)
 
 ## 1. What problem are we actually trying to solve?
@@ -35,24 +35,21 @@ Instead of seeking a full replacement of the entire stack, we evaluate the immed
 
 ## 4. Benchmark Validation
 
-To conclusively settle between Candidate A and Candidate B, we measured latency via raw bash timings (`context main --project .`):
-
+To conclusively settle the fallback path, we measured latency via raw timings on the `agent-skills` repository:
+- **Baseline Command:** `context main --project .`
 - **Contained CLI (Candidate B):**
-  - Cold Run: ~7.92 seconds
-  - Warm Run: ~7.60 seconds
+  - Cold Run: 7.92s
+  - Warm Run: 7.60s
 - **Daemon Fallback (Candidate A):**
-  - Warm Run: ~0.89 seconds
+  - Warm Run: 0.89s
   
-*(Output completeness tests verified structural AST match probability as identical 1:1.)*
+**Result:** The stateless CLI fallback imposes an 8.5x latency penalty. Output completeness tests verified 1:1 parity between payloads.
 
 ## 5. Recommendation
 
 **Verdict: Modest Hold (Transitional Daemon-Fallback)**
 
-Our current direction is functionally correct and solidly evidenced by the benchmark:
-- `llm-tldr` stays the canonical semantic tool.
-- We will NOT migrate to hosted vector DBs, nor to stateless AST mappers natively.
-- The `tldr-contained.sh` pure CLI fallback speed (7.6 seconds) materially degrades the common agent loop. An 8.5x latency penalty is structurally unacceptable.
-
-**The Fallback Path:**
-The `daemon-backed fallback` stays. However, it must be clearly marked as **tactical and transitional**, pending an upstream Codex fix for issue #16702 that restores reliable MCP socket visibility natively.
+The benchmark data confirms the tactical necessity of the daemon-backed fallback:
+- `llm-tldr` stays the canonical tool.
+- The `tldr-contained.sh` pure CLI fallback is too slow (7.6s) for interactive agent loops.
+- **The Fallback Path:** The `daemon-backed fallback` stays as a **tactical and transitional** bridge, specifically to mitigate the OpenAI Codex Desktop hydration uncertainty (#16702). It should be deprecated if/when an upstream fix restores reliable MCP surface visibility.
