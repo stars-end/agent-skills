@@ -38,10 +38,10 @@ Any proposed stack or alternative must be evaluated against the following:
    - *Pros:* High token efficiency (95% savings), excellent semantic discovery, powerful CFG/DFG capabilities. We have already written the containment patches.
    - *Cons:* Extremely fragile glue logic. If Codex continues to drift, fallback scripts will break or require continuous maintenance.
 
-2. **Candidate B: Narrow `llm-tldr` to a Pure CLI tool (No MCP Daemon)**
-   - *Description:* Drop the MCP config rendering for Codex entirely. Call `llm-tldr` strictly via a single unified CLI wrapper (which agents invoke using standard shell tools). 
-   - *Pros:* Exposes one reliable interface across all runtimes. Solves the Codex thread hydration gap by side-stepping MCP in affected tools.
-   - *Cons:* The CLI approach doesn't benefit from MCP UI integrations. We still have to run the containment wrappers (`tldr_contained_runtime.py`) to keep `.tldr` data isolated. 
+2. **Candidate B: Narrow `llm-tldr` via Daemon-Backed Fallback (Hybrid)**
+   - *Description:* Keep the MCP config and daemon alive for healthy environments (like Claude Code), but route agents experiencing the Codex hydration failure through `tldr-daemon-fallback.py`.
+   - *Pros:* Solves the Codex thread hydration gap while preserving near-MCP-parity performance and caching by continuing to utilize the `_send_command` daemon socket transport upstream.
+   - *Cons:* Maintains immense operational complexity. It still requires running the background socket daemons, heavy `.tldr` file containment patching (`tldr_contained_runtime.py`), and a secondary custom script just to talk to the socket.
 
 3. **Candidate C: Split the Stack (Native Tools + Ripgrep/Ctags)**
    - *Description:* Abandon unified semantic/structural AI search. Use `ripgrep` for discovery, standard AST/TreeSitter scripts for structure, and `serena` exclusively for navigation. 
@@ -60,24 +60,24 @@ Any proposed stack or alternative must be evaluated against the following:
 
 ## 4. Comparison Matrix
 
-| Criteria | A: Status Quo | B: Narrow (CLI only) | C: Split (RG/Ctags) | D: Alternative MCPs | E: Revive context-plus |
+| Criteria | A: Status Quo | B: Narrow (Daemon-backed Fallback) | C: Split (RG/Ctags) | D: Alternative MCPs | E: Revive context-plus |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Reliability in runtimes** | Low (Codex MCP gap) | High | High | Low (Same Codex bugs) | Low (Same Codex bugs) |
 | **Worktree-safe** | High (but expensive glue) | High (but expensive glue) | High (Native) | Varies | High (Global persistent memory) |
 | **Semantic discovery** | High | High | None | Medium | High |
 | **Structural trace**| High | High | Low | High (Language dependent) | High |
-| **Operational Simplicity** | Low | Medium | High | Low | Very Low (Ollama Req) |
+| **Operational Simplicity** | Low | Low (Complex daemon + wrapper overhead) | High | Low | Very Low (Ollama Req) |
 
 ## 5. Recommendation
 
 **Verdict: Keep but Narrow.**
 
-We should **narrow the role** of `llm-tldr` to a purely CLI-backed surface (using our contained CLI wrappers) for endpoints exhibiting the MCP hydration bug (Codex desktop), while allowing valid MCP integrations to continue on platforms that natively support it (e.g. Claude Code).
+We should **narrow the role** of `llm-tldr` strictly to use our daemon-backed local helper (`tldr-daemon-fallback.py`) for endpoints exhibiting the MCP hydration bug (like Codex desktop), while allowing valid MCP socket integrations to continue on platforms that natively support it (e.g. Claude Code).
 
 **Why?**
-The token savings and structural analysis precision of `llm-tldr` are unmatched and impossible to replicate with simple split tools like `ripgrep` without sacrificing significant accuracy. The actual root cause of the current pain is an upstream `Codex` issue (#16702) combined with our fallback routing complexity. 
+The token savings and structural analysis precision of `llm-tldr` are unmatched and impossible to replicate with simple split tools like `ripgrep` without sacrificing significant accuracy. The actual root cause of the current pain is an upstream `Codex` issue (#16702). 
 
-By standardizing agent instructions to use the CLI fallback `tldr-contained.sh` script as the first-class interaction point specifically for the Codex lane (bypassing the daemon/MCP socket), we immediately isolate the fault. This simplifies agent ergonomics and relies reliably on `tldr_contained_runtime.py`, treating the Codex MCP unreliability as an environment restriction, not a reason to discard our best tool. 
+By standardizing agent instructions to fall back specifically to the daemon-backed helper rather than a plain CLI wrapper, we immediately isolate the fault *without* sacrificing the caching and performance parity of the `_send_command` socket path. This embraces the operational complexity as a necessary tax to preserve our best semantic/static tool, treating the Codex MCP unreliability as an environment restriction that we mitigate exactly as currently merged, not a reason to discard the daemon entirely.
 
 ## 6. What Not To Do
 
