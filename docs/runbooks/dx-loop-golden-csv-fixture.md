@@ -26,7 +26,7 @@ Each task appends one deterministic line to a CSV file.
 
 - `bd` CLI available and connected to a Beads Dolt backend
 - `dx-loop` available in PATH
-- Python 3.10+
+- Python 3.9+
 
 ## Step-by-Step Execution
 

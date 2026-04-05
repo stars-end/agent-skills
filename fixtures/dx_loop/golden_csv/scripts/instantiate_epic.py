@@ -57,7 +57,7 @@ def instantiate_epic(dry_run: bool = False) -> str:
             dep_str = ""
             if t["deps"]:
                 dep_parts = [f"<EPIC_ID>.{d}" for d in t["deps"]]
-                dep_str = " --dep " + ",".join(dep_parts)
+                dep_str = " --deps " + ",".join(dep_parts)
             cmds.append(
                 f'bd create --title "{t["title"]}" --type task --parent <EPIC_ID>{dep_str}'
             )
@@ -95,7 +95,7 @@ def instantiate_epic(dry_run: bool = False) -> str:
         for dep_idx in t["deps"]:
             dep_id = child_ids.get(dep_idx)
             if dep_id:
-                cmd += ["--dep", dep_id]
+                cmd += ["--deps", dep_id]
 
         cr = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if cr.returncode != 0:

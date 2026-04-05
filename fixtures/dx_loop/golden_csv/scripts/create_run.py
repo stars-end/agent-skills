@@ -16,6 +16,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 
 RUN_ROOT = "/tmp/dx-loop-fixtures/golden-csv"
@@ -29,7 +30,9 @@ def generate_run_id() -> str:
     return f"golden-csv-{ts}"
 
 
-def create_run(run_id: str | None = None, template_dir: Path | None = None) -> str:
+def create_run(
+    run_id: Optional[str] = None, template_dir: Optional[Path] = None
+) -> str:
     if run_id is None:
         run_id = generate_run_id()
     if template_dir is None:

@@ -13,13 +13,14 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_TEMPLATE_DIR = SCRIPT_DIR.parent / "template"
 
 
-def validate_run(run_dir: str, template_dir: str | None = None) -> dict:
+def validate_run(run_dir: str, template_dir: Optional[str] = None) -> dict:
     rdir = Path(run_dir)
     tdir = Path(template_dir) if template_dir else REPO_TEMPLATE_DIR
 
