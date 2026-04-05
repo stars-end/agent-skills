@@ -259,6 +259,50 @@ def _select_wave_state(
     return matches[0]
 
 
+def _infer_epic_id_from_subtask_token(beads_id: str) -> Optional[str]:
+    """Infer a parent epic id from canonical subtask tokens (e.g. bd-abc.1)."""
+    match = re.match(r"^(bd-[a-z0-9]+)\.\d+$", beads_id or "")
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _resolve_parent_epic_from_beads(
+    beads_id: str,
+    *,
+    beads_repo_path: Path = Path.home() / "bd",
+    timeout_seconds: int = SURFACE_BEADS_TIMEOUT_SECONDS,
+) -> Optional[str]:
+    """Resolve parent epic id from Beads metadata for first-use task lookups."""
+    inferred_epic = _infer_epic_id_from_subtask_token(beads_id)
+    if inferred_epic:
+        return inferred_epic
+
+    try:
+        result = subprocess.run(
+            ["bd", "show", beads_id, "--json"],
+            cwd=str(beads_repo_path),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+        if result.returncode != 0:
+            return None
+        payload = json.loads(result.stdout or "[]")
+        if not payload or not isinstance(payload, list):
+            return None
+        issue = payload[0]
+        for dependency in issue.get("dependencies", []):
+            if dependency.get("dependency_type") == "parent-child":
+                parent_id = dependency.get("id")
+                if isinstance(parent_id, str) and parent_id:
+                    return parent_id
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
+        return None
+
+    return None
+
+
 def _missing_wave_diagnostics(
     *,
     wave_id: Optional[str] = None,
@@ -322,6 +366,26 @@ def _missing_wave_diagnostics(
                         "Active epic registry points to missing wave file: "
                         f"{registry_wave_id} ({registry_state})"
                     )
+        else:
+            parent_epic = _resolve_parent_epic_from_beads(beads_id)
+            lines.append("Blocker Class: control_plane_missing_wave_state")
+            lines.append(
+                f"No persisted wave currently tracks task {beads_id}."
+            )
+            if parent_epic:
+                lines.append(f"Resolved parent epic: {parent_epic}")
+                lines.append(
+                    "First-use guidance: start a wave for the parent epic, then retry "
+                    "this task lookup."
+                )
+                lines.append(f"`dx-loop start --epic {parent_epic}`")
+                lines.append(f"`dx-loop status --beads-id {beads_id}`")
+            else:
+                lines.append(
+                    "First-use guidance: identify the parent epic and start a wave."
+                )
+                lines.append(f"`bd show {beads_id} --json`")
+                lines.append("`dx-loop start --epic <epic-id>`")
 
     if len(lines) == 1:
         if all_states:
