@@ -1,0 +1,45 @@
+{
+  "fixture": "golden-csv",
+  "version": 1,
+  "epic_title": "Golden dx-loop CSV requalification run",
+  "tasks": [
+    {
+      "index": 1,
+      "title": "Append line 1",
+      "line": "line 1",
+      "dependencies": []
+    },
+    {
+      "index": 2,
+      "title": "Append line 2",
+      "line": "line 2",
+      "dependencies": [1]
+    },
+    {
+      "index": 3,
+      "title": "Append line 3",
+      "line": "line 3",
+      "dependencies": [2]
+    },
+    {
+      "index": 4,
+      "title": "Append line 4",
+      "line": "line 4",
+      "dependencies": [2]
+    },
+    {
+      "index": 5,
+      "title": "Append line 5",
+      "line": "line 5",
+      "dependencies": [3, 4]
+    }
+  ],
+  "expected_output_file": "expected.csv",
+  "run_root": "/tmp/dx-loop-fixtures/golden-csv",
+  "assertions": {
+    "line_count": 5,
+    "no_duplicates": true,
+    "exact_order": true,
+    "exact_content": ["line 1", "line 2", "line 3", "line 4", "line 5"]
+  }
+}
