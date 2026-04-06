@@ -34,11 +34,6 @@ args = ["~/.local/share/contextplus-patched/build/index.js", "~/llm-common"]
 OPENROUTER_EMBED_MODEL = "openai/text-embedding-3-small"
 CONTEXTPLUS_EMBED_PROVIDER = "auto"
 
-[mcpServers."cass-memory"]
-type = "stdio"
-command = "cass-memory"
-args = []
-
 [mcpServers."serena"]
 type = "stdio"
 command = "serena"

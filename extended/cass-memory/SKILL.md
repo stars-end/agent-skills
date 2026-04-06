@@ -23,7 +23,9 @@ CASS Memory is a CLI-native tool. It is NOT rendered to IDE MCP configs. It runs
 
 - Default stack status: NOT CANONICAL
 - Fleet status: pilot-only / disabled by default in the manifest
-- Use only when the task explicitly asks for cross-session or cross-agent memory experimentation
+- Use only when:
+  - the task explicitly asks for cross-session or cross-agent memory experimentation, or
+  - a repeated DX/control-plane incident matches known pilot heuristics
 - Do not require this tool in standard repo workflows
 - Active pilot contract: `docs/specs/2026-04-03-cass-memory-cross-vm-dx-pilot.md` (`bd-953g`)
 - Active pilot starter package: `docs/runbook/cass-memory-pilot-quickstart.md` (`bd-9q92`)
@@ -63,19 +65,16 @@ cm doctor --fix --no-interactive
 Session logs remain local by default.
 
 ```bash
-# Get task-specific context before non-trivial DX work
+# Default read path for pilot-shaped retrieval
 cm context "repair MCP daemon EOF issue" --json
 
 # Inspect the actual context payload
 cm context "prefer z.ai coding endpoints first for this coding lane" --json | jq '.data.relevantBullets'
 
-# Store a memory/playbook bullet
-cm playbook add "Always use worktrees for canonical repos" --category workflow
-
 # Inspect rules
 cm playbook list
 
-# Broader similarity search when context is too narrow
+# Broader fallback for wording QA / loose discovery
 cm similar "worktree recovery" --threshold 0.1 --json
 ```
 
@@ -98,8 +97,10 @@ export CASS_NO_SHARE=1
 4. **No IDE config**: CLI-native, not rendered to IDE MCP configs
 5. **Primary agent read path**: use `cm context "<task>" --json` before trying broader retrieval
 6. **Candidate-first writes**: agent judgment can nominate candidates, but durable shared memory requires promotion
-7. **Task-shaped retrieval**: phrase reads like an actual operator task; use `cm similar` for loose wording checks
-8. **Cross-VM split**: upstream `remoteCass` is for SSH-based remote history, while promoted-rule sharing should use explicit playbook export/import
+7. **Task-shaped retrieval**: phrase reads like an actual operator task
+8. **`cm similar` role**: use only for loose wording checks and discoverability QA
+9. **No direct durable writes from intuition**: if promotion evidence is not met, keep the item as a candidate artifact
+10. **Cross-VM split**: upstream `remoteCass` is for SSH-based remote history, while promoted-rule sharing should use explicit playbook export/import
 
 ## Controls
 

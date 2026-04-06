@@ -48,11 +48,6 @@
         "CONTEXTPLUS_EMBED_PROVIDER": "auto"
       }
     },
-    "cass-memory": {
-      "type": "stdio",
-      "command": "cass-memory",
-      "args": []
-    },
     "serena": {
       "type": "stdio",
       "command": "serena",

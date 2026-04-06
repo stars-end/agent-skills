@@ -177,6 +177,7 @@ If a named skill contains an explicit `BLOCKED` contract:
   - \`serena\`: symbol-aware edits / persistent assistant memory
 - **Canonical non-default memory surface**:
   - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
+  - Use \`cm context\` only for explicit cross-session memory work or repeated DX/control-plane incidents with known pilot heuristics.
 
 For qualifying tasks, agents MUST route the first discovery action through the matching MCP tool before broad shell search or repeated file traversal:
 - semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`llm-tldr\` (semantic tool, requires \`tldr warm\` first)

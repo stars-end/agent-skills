@@ -70,7 +70,7 @@ cm init
 5. Write a sanitized entry and retain source references (PR URL, file paths, runbook links).
 6. If the item is still only a candidate, keep it in docs/templates first.
 7. Promote into `cass-memory` only when the promotion gate is satisfied.
-8. Store the concise procedural summary in the playbook manually (example):
+8. Only after promotion conditions are met, store the concise procedural summary in the playbook (example):
 
 ```bash
 cm playbook add "<sanitized one-paragraph summary of the entry>" --category workflow
@@ -98,7 +98,13 @@ cm context "verify deploy identity before treating this remote failure as produc
 Loose phrase probing and discoverability QA belong on `cm similar`, not as the
 main judgment of whether `cm context` is working.
 
-10. Record a row in `templates/cass-memory-pilot-reuse-log-template.csv` (or copied log file) for each reuse event.
+10. Record a row in `templates/cass-memory-pilot-reuse-log-template.csv` (or copied log file) for each real reuse event.
+11. If a recalled rule materially helped or misled, mark it:
+
+```bash
+cm mark <bullet-id> --helpful
+cm mark <bullet-id> --harmful --reason "<why it was misleading>"
+```
 
 ## Suggested Storage Pattern
 
@@ -106,6 +112,28 @@ main judgment of whether `cm context` is working.
 - Keep agent-judged ideas as candidates until they earn promotion.
 - Store concise procedural summaries in cass-memory only after promotion for retrieval speed.
 - Link summaries back to repo artifacts.
+- Do not add durable playbook bullets directly from one-off agent intuition.
+
+## Agent-Native Session Harvesting (Candidate Only)
+
+You can harvest recurring patterns from prior sessions without API reflection
+costs, but keep outputs candidate-first:
+
+```bash
+# Find candidate sessions
+cass search "*" --robot --limit 30
+
+# Export one for analysis
+cass export "/path/to/session.jsonl" --format markdown > session.md
+```
+
+Then:
+1. Extract candidate rules into repo artifacts/templates.
+2. Link provenance and redaction checks.
+3. Wait for reuse evidence or operator validation before promotion.
+
+Do not bypass the candidate contract by bulk-writing direct durable bullets from
+harvested sessions.
 
 ## Redaction Rules
 
