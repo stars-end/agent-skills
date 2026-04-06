@@ -101,13 +101,19 @@ enforcer actions (`DX_CONTROLLER=1`); replicas run the same job in no-op mode.
 # V8 DX Automation (macmini)
 DX_CONTROLLER=1
 
+# V8: canonical-evacuate-cron-tz
+CRON_TZ=America/Los_Angeles
+
 # V8: canonical-evacuate-active-15m
-*/15 5-16 * * * TZ=America/Los_Angeles /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh canonical-evacuate -- \
+*/15 5-16 * * * /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh canonical-evacuate -- \
   ~/agent-skills/scripts/canonical-evacuate-active.sh >> ~/logs/dx/canonical-evacuate.log 2>&1
 
 # V8: canonical-evacuate-active-1700
-0 17 * * * TZ=America/Los_Angeles /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh canonical-evacuate -- \
+0 17 * * * /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh canonical-evacuate -- \
   ~/agent-skills/scripts/canonical-evacuate-active.sh >> ~/logs/dx/canonical-evacuate.log 2>&1
+
+# V8: canonical-evacuate-cron-tz-reset
+CRON_TZ=America/Los_Angeles
 
 # V8: canonical-sync
 5 3 * * * /opt/homebrew/bin/bash ~/agent-skills/scripts/dx-job-wrapper.sh canonical-sync -- \

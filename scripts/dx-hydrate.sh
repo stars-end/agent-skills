@@ -224,6 +224,42 @@ install_cron_entry() {
     fi
 }
 
+detect_local_cron_tz() {
+    if [[ -n "${CRON_TZ_LOCAL_OVERRIDE:-}" ]]; then
+        printf '%s\n' "$CRON_TZ_LOCAL_OVERRIDE"
+        return 0
+    fi
+
+    if [[ "$(uname -s)" == "Darwin" ]] && command -v systemsetup >/dev/null 2>&1; then
+        local tz
+        tz="$(systemsetup -gettimezone 2>/dev/null | awk -F': ' 'NR==1 {print $2}')"
+        if [[ -n "$tz" ]]; then
+            printf '%s\n' "$tz"
+            return 0
+        fi
+    fi
+
+    if [[ -r /etc/timezone ]]; then
+        local tz
+        tz="$(head -n 1 /etc/timezone | tr -d '[:space:]')"
+        if [[ -n "$tz" ]]; then
+            printf '%s\n' "$tz"
+            return 0
+        fi
+    fi
+
+    local tz_link=""
+    tz_link="$(readlink /etc/localtime 2>/dev/null || true)"
+    if [[ "$tz_link" == *"/zoneinfo/"* ]]; then
+        printf '%s\n' "${tz_link##*/zoneinfo/}"
+        return 0
+    fi
+
+    printf '%s\n' "UTC"
+}
+
+LOCAL_CRON_TZ="$(detect_local_cron_tz)"
+
 WRAPPER="$AGENTS_ROOT/scripts/dx-job-wrapper.sh"
 
 # Detect bash path (macOS Homebrew vs Linux)
@@ -247,19 +283,27 @@ remove_wrapper_job_entries "queue-enforcer" "queue-hygiene-enforcer.sh"
 remove_wrapper_job_entries "beads-health" "beads-health-alert.sh"
 remove_direct_script_entries "dx-heartbeat-cron.sh"
 remove_v8_marker_variants "V8.3.x: Canonical Enforcer - Active Hours (5am-5pm PT)"
+remove_v8_marker_variants "V8: canonical-evacuate-cron-tz"
 remove_v8_marker_variants "V8: canonical-evacuate-active-15m"
 remove_v8_marker_variants "V8: canonical-evacuate-active-1700"
+remove_v8_marker_variants "V8: canonical-evacuate-cron-tz-reset"
 remove_v8_marker_variants "V8: canonical-sync"
 remove_v8_marker_variants "V8: worktree-push"
 remove_v8_marker_variants "V8: worktree-gc"
 remove_v8_marker_variants "V8: queue-hygiene-enforcer"
 remove_v8_marker_variants "V8: beads-health"
 
+install_cron_entry "V8: canonical-evacuate-cron-tz" \
+    "CRON_TZ=America/Los_Angeles"
+
 install_cron_entry "V8: canonical-evacuate-active-15m" \
-    "*/15 5-16 * * * TZ=America/Los_Angeles $BASH_PATH $WRAPPER canonical-evacuate -- $AGENTS_ROOT/scripts/canonical-evacuate-active.sh >> $HOME/logs/dx/canonical-evacuate.log 2>&1"
+    "*/15 5-16 * * * $BASH_PATH $WRAPPER canonical-evacuate -- $AGENTS_ROOT/scripts/canonical-evacuate-active.sh >> $HOME/logs/dx/canonical-evacuate.log 2>&1"
 
 install_cron_entry "V8: canonical-evacuate-active-1700" \
-    "0 17 * * * TZ=America/Los_Angeles $BASH_PATH $WRAPPER canonical-evacuate -- $AGENTS_ROOT/scripts/canonical-evacuate-active.sh >> $HOME/logs/dx/canonical-evacuate.log 2>&1"
+    "0 17 * * * $BASH_PATH $WRAPPER canonical-evacuate -- $AGENTS_ROOT/scripts/canonical-evacuate-active.sh >> $HOME/logs/dx/canonical-evacuate.log 2>&1"
+
+install_cron_entry "V8: canonical-evacuate-cron-tz-reset" \
+    "CRON_TZ=${LOCAL_CRON_TZ}"
 
 install_cron_entry "V8: canonical-sync" \
     "5 3 * * * $BASH_PATH $WRAPPER canonical-sync -- $AGENTS_ROOT/scripts/canonical-sync-v8.sh >> $HOME/logs/dx/canonical-sync.log 2>&1"
