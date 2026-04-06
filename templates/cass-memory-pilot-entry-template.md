@@ -69,6 +69,7 @@ Confirm the entry contains none of:
 - File path(s):
 - Runbook/doc link(s):
 - Runtime evidence / command notes:
+- `dx-cass-evidence.sh` event / run id:
 
 ## One-Paragraph Summary For `cm playbook add`
 

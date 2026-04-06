@@ -287,7 +287,7 @@ get_ide_artifacts() {
   primary="$(get_ide_config "$ide")" || return 1
   echo "$primary"
   case "$ide" in
-    gemini-cli)
+    antigravity|gemini-cli)
       echo "$HOME/.gemini/GEMINI.md"
       ;;
   esac

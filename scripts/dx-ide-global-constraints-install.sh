@@ -11,7 +11,7 @@ Installs the DX "global constraints rail" into IDE-global instruction files by s
 Targets (per-user):
   ~/.codex/AGENTS.md
   ~/.claude/CLAUDE.md
-  ~/.gemini/GEMINI.md
+  ~/.gemini/GEMINI.md   # shared by Gemini CLI and Antigravity
   ~/.config/opencode/AGENTS.md
 
 Usage:

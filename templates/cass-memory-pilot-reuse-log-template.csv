@@ -1,1 +1,1 @@
-timestamp_utc,incident_id,entry_title,recall_query,recalled_summary_id_or_hint,reuse_outcome,time_to_action_minutes,retrieval_noise,privacy_ok,evidence_link,notes
+timestamp_utc,incident_id,entry_title,recall_query,recalled_summary_id_or_hint,reuse_outcome,time_to_action_minutes,retrieval_noise,privacy_ok,evidence_link,dx_cass_run_id_or_event,notes

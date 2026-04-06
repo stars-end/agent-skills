@@ -65,11 +65,16 @@ cm doctor --fix --no-interactive
 Session logs remain local by default.
 
 ```bash
-# Default read path for pilot-shaped retrieval
-cm context "repair MCP daemon EOF issue" --json
+# Safe retrieval + evidence logging wrapper
+~/agent-skills/scripts/dx-cass-evidence.sh start \
+  --client codex-desktop \
+  --task "repair MCP daemon EOF issue"
 
 # Inspect the actual context payload
-cm context "prefer z.ai coding endpoints first for this coding lane" --json | jq '.data.relevantBullets'
+~/agent-skills/scripts/dx-cass-evidence.sh start \
+  --client gemini-cli \
+  --task "prefer z.ai coding endpoints first for this coding lane" \
+  | jq '.data.relevantBullets'
 
 # Inspect rules
 cm playbook list
@@ -95,12 +100,13 @@ export CASS_NO_SHARE=1
 2. **Opt-in sharing**: Cross-agent sharing must be explicitly enabled
 3. **Sanitized output**: Never persist raw secrets, raw transcripts, or tokens
 4. **No IDE config**: CLI-native, not rendered to IDE MCP configs
-5. **Primary agent read path**: use `cm context "<task>" --json` before trying broader retrieval
+5. **Primary agent read path**: use `~/agent-skills/scripts/dx-cass-evidence.sh start --client <client> --task "<task>"` for pilot retrieval so the read is logged before broader retrieval
 6. **Candidate-first writes**: agent judgment can nominate candidates, but durable shared memory requires promotion
 7. **Task-shaped retrieval**: phrase reads like an actual operator task
 8. **`cm similar` role**: use only for loose wording checks and discoverability QA
 9. **No direct durable writes from intuition**: if promotion evidence is not met, keep the item as a candidate artifact
 10. **Cross-VM split**: upstream `remoteCass` is for SSH-based remote history, while promoted-rule sharing should use explicit playbook export/import
+11. **Structured feedback only**: use `~/agent-skills/scripts/dx-cass-evidence.sh finish ...` with `--helpful`, `--harmful`, or `--no-effect`; do not rely on ad hoc inline comments as the primary evidence path
 
 ## Controls
 
@@ -119,9 +125,42 @@ cm privacy disable
 
 ## Expected Output
 
-- Local playbook updates
+- Append-only local evidence events under `~/.cass-memory/evidence/events.jsonl`
+- Local playbook feedback updates through `cm mark`
 - Optional redacted digest records for fleet learning
 - Decision logs for recurring patterns
+
+## Evidence Workflow
+
+Use the shared wrapper so every canonical client records the same evidence shape:
+
+```bash
+# Retrieval
+~/agent-skills/scripts/dx-cass-evidence.sh start \
+  --client antigravity \
+  --task "verify deploy identity before treating this remote failure as product"
+
+# Helpful / harmful feedback
+~/agent-skills/scripts/dx-cass-evidence.sh finish \
+  --client antigravity \
+  --bullet-id b-123 \
+  --helpful
+
+~/agent-skills/scripts/dx-cass-evidence.sh finish \
+  --client opencode \
+  --bullet-id b-456 \
+  --harmful \
+  --reason "wrong_context"
+
+# Retrieval happened but no recalled rule mattered
+~/agent-skills/scripts/dx-cass-evidence.sh finish \
+  --client codex-desktop \
+  --task "repair MCP daemon EOF issue" \
+  --no-effect
+
+# Review recent event counts
+~/agent-skills/scripts/dx-cass-evidence.sh status --days 14 --json
+```
 
 ## Fleet Sync Integration
 

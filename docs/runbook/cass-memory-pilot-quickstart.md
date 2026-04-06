@@ -76,10 +76,13 @@ cm init
 cm playbook add "<sanitized one-paragraph summary of the entry>" --category workflow
 ```
 
-9. Retrieve memory during future incidents with:
+9. Retrieve memory during future incidents with the shared evidence wrapper:
 
 ```bash
-cm context "<incident or task>" --json
+~/agent-skills/scripts/dx-cass-evidence.sh start \
+  --client codex-desktop \
+  --task "<incident or task>"
+
 # Inspect the primary context payload:
 jq '.data.relevantBullets'
 
@@ -99,12 +102,33 @@ Loose phrase probing and discoverability QA belong on `cm similar`, not as the
 main judgment of whether `cm context` is working.
 
 10. Record a row in `templates/cass-memory-pilot-reuse-log-template.csv` (or copied log file) for each real reuse event.
-11. If a recalled rule materially helped or misled, mark it:
+11. Close the loop for every retrieval with the evidence wrapper:
 
 ```bash
-cm mark <bullet-id> --helpful
-cm mark <bullet-id> --harmful --reason "<why it was misleading>"
+# Materially helpful
+~/agent-skills/scripts/dx-cass-evidence.sh finish \
+  --client codex-desktop \
+  --bullet-id <bullet-id> \
+  --helpful
+
+# Misleading / harmful
+~/agent-skills/scripts/dx-cass-evidence.sh finish \
+  --client codex-desktop \
+  --bullet-id <bullet-id> \
+  --harmful \
+  --reason "<why it was misleading>"
+
+# Retrieved, but nothing actually changed the path
+~/agent-skills/scripts/dx-cass-evidence.sh finish \
+  --client codex-desktop \
+  --task "<incident or task>" \
+  --no-effect
 ```
+
+The wrapper appends structured events to `~/.cass-memory/evidence/events.jsonl`.
+Use this as the primary evidence source across Codex Desktop, Gemini CLI,
+Antigravity, and OpenCode. Inline comments can still exist, but they should not
+be the main measurement path for this pilot.
 
 ## Suggested Storage Pattern
 
@@ -182,5 +206,6 @@ Do not treat `remoteCass` as automatic playbook replication.
 At the end of the first slice, produce:
 - count of pilot entries created
 - count of reuse events
+- count of structured evidence events from `dx-cass-evidence.sh`
 - notes on retrieval noise (high/medium/low)
 - recommendation: continue or stop

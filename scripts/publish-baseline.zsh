@@ -178,6 +178,7 @@ If a named skill contains an explicit `BLOCKED` contract:
 - **Canonical non-default memory surface**:
   - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
   - Use \`cm context\` only for explicit cross-session memory work or repeated DX/control-plane incidents with known pilot heuristics.
+  - When the cass pilot applies, use \`~/agent-skills/scripts/dx-cass-evidence.sh start --client <codex-desktop|gemini-cli|antigravity|opencode> --task "<task>"\`, then close with \`dx-cass-evidence.sh finish\` using \`--helpful\`, \`--harmful\`, or \`--no-effect\`.
 
 For qualifying tasks, agents MUST route the first discovery action through the matching MCP tool before broad shell search or repeated file traversal:
 - semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`llm-tldr\` (semantic tool, requires \`tldr warm\` first)
