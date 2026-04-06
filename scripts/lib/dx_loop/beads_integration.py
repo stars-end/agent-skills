@@ -212,7 +212,7 @@ class BeadsWaveManager:
                         self.dependency_status_cache[task.beads_id] = task.status
                         continue
                     # Load full task details to get dependencies
-                    timeout_seconds = 10 if first_open_child else 3
+                    timeout_seconds = 10
                     task = self._load_task_details(
                         task, timeout_seconds=timeout_seconds
                     )

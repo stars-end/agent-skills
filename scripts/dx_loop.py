@@ -341,7 +341,9 @@ def _missing_wave_diagnostics(
                         f"{registry_wave_id} ({registry_state})"
                     )
         epic_matches = [
-            wid for wid, _state_file, state in all_states if state.get("epic_id") == epic_id
+            wid
+            for wid, _state_file, state in all_states
+            if state.get("epic_id") == epic_id
         ]
         if epic_matches:
             lines.append(
@@ -369,9 +371,7 @@ def _missing_wave_diagnostics(
         else:
             parent_epic = _resolve_parent_epic_from_beads(beads_id)
             lines.append("Blocker Class: control_plane_missing_wave_state")
-            lines.append(
-                f"No persisted wave currently tracks task {beads_id}."
-            )
+            lines.append(f"No persisted wave currently tracks task {beads_id}.")
             if parent_epic:
                 lines.append(f"Resolved parent epic: {parent_epic}")
                 lines.append(
@@ -574,7 +574,13 @@ class DxLoop:
 
         print(f"Found {len(tasks)} tasks")
 
-        # Compute execution layers
+        unhydrated = [t for t in tasks if not t.details_loaded]
+        if unhydrated:
+            print(
+                f"Retrying {len(unhydrated)} unhydrated task(s) with extended timeout..."
+            )
+            self.beads_manager.refresh_unhydrated_tasks(timeout_seconds=15)
+
         layers = self.beads_manager.compute_layers()
         print(f"Computed {len(layers)} execution layers")
 
@@ -1865,7 +1871,9 @@ class DxLoop:
                     break
 
         if repo:
-            dep_meta = dict(self.beads_manager.dependency_metadata_cache.get(dep_id, {}))
+            dep_meta = dict(
+                self.beads_manager.dependency_metadata_cache.get(dep_id, {})
+            )
             dep_meta["repo"] = repo
             self.beads_manager.dependency_metadata_cache[dep_id] = dep_meta
 

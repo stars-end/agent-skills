@@ -81,7 +81,7 @@ dx-loop explain --beads-id <EPIC_ID>.1
 ### 4. Bootstrap the Wave
 
 ```bash
-dx-loop start --epic <EPIC_ID>
+dx-loop start --epic <EPIC_ID> --repo agent-skills
 ```
 
 **Pass**:
