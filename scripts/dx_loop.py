@@ -1571,6 +1571,10 @@ class DxLoop:
                     ].phase = BatonPhase.COMPLETE
                     self.beads_manager.mark_completed(beads_id)
                     self.scheduler.state.mark_completed(beads_id)
+                    self.beads_manager.close_beads_task(
+                        beads_id,
+                        reason=f"dx-loop: implement complete (no review)",
+                    )
                     print(f"Implement complete for {beads_id} (no review required)")
             else:
                 reason = task_state.reason_code or "missing_implementation_return"
@@ -1751,6 +1755,10 @@ class DxLoop:
                 if baton_state.phase == BatonPhase.COMPLETE:
                     self.beads_manager.mark_completed(beads_id)
                     self.scheduler.state.mark_completed(beads_id)
+                    self.beads_manager.close_beads_task(
+                        beads_id,
+                        reason=f"dx-loop: review approved",
+                    )
                     print(f"Review APPROVED for {beads_id}, task complete")
 
                     # Emit merge_ready notification with handoff context
