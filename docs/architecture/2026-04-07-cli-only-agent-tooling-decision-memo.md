@@ -67,37 +67,56 @@ We shortlisted 5 distinct candidates across the three buckets for deep evaluatio
 We recommend moving to a **Split Stack** utilizing strictly isolated Unix-philosophy tools.
 
 ### Bucket A (Code Understanding): `grep-ast` + `ripgrep`
-*   **Why**: `grep-ast` natively solves the core value proposition of `llm-tldr`: providing token-efficient, hierarchical code context without reading full files. When combined with `ripgrep` for raw regex baseline searches, they fully replace `llm-tldr` discovery capabilities with complete CLI determinism.
+*   **Why**: `grep-ast` provides raw token-efficient, hierarchical code context without reading full files. When combined with `ripgrep` for raw regex baseline searches, they serve as a partial, deterministic bridge for discovery capabilities, though they do *not* provide the rich semantic mapping or exact call-tracing supplied by `llm-tldr`.
 
 ### Bucket B (Symbol-Aware Editing): `ast-grep` (`sg`)
-*   **Why**: `ast-grep` is a dedicated AST structural search-and-replace tool. It operates entirely over the CLI (`ast-grep -p pattern -r replacement`), requires zero daemon runtime, and eliminates the multi-line regex brittleness that makes tools like `sed` dangerous for agent refactoring. It fully supersedes `serena` for symbol-targeted editing.
+*   **Why**: `ast-grep` is a dedicated AST structural search-and-replace tool. It operates entirely over the CLI (`ast-grep -p pattern -r replacement`), requires zero daemon runtime, and eliminates the multi-line regex brittleness of `sed`. It acts as a fallback for structural editing, although it requires precise syntax rules and lacks `serena`'s automatic insertion-point safety and multi-file rename intelligence.
 
 ### Bucket C (Memory/Continuity): Tracked Markdown Files + `ripgrep`
 *   **Why**: We already maintain `AGENTS.md` and repository-level docs. Instead of leveraging an opaque persistent memory layer like `cass-memory`, we should enforce agents to write session context explicitly to `docs/agent-memory/` (or similar tracked Markdown paths). Human operators can effortlessly review and revert memory simply using `git` and `bat`/`cat`.
 
-## 8. Migration Implications
+## 8. Capability Coverage Analysis
+
+As part of this transition, we embrace a significant regression in implicit tool intelligence. The new CLI-only stack covers the target capabilities as follows:
+
+| Capability | Coverage | Nuance |
+| :--- | :--- | :--- |
+| **Semantic search** | `none` | We fall back entirely to `ripgrep` regex/keyword matching. |
+| **Exact structural tracing** | `none` | (or partial) `ast-grep` provides local syntax boundaries; cross-file graph traversal is absent. |
+| **File tree / symbol structure** | `partial` | `grep-ast` and `tree` commands replace rich outline APIs. |
+| **Call graph / callers / imports** | `none` | Agents must manually chase text usages. |
+| **Change impact / reverse impact** | `none` | Agents must infer impact manually. |
+| **Architecture understanding** | `none` | No automated grouping; relies strictly on file reading. |
+| **Dead-code / reachability** | `none` | Must be established manually via usage search. |
+| **Low-token repo understanding** | `partial` | `grep-ast` minimizes individual file reads but lacks global repo-maps. |
+| **Symbol lookup / references** | `partial` | Handled via raw text search and `ast-grep`. |
+| **Rename/refactor safety** | `partial` | `ast-grep` validates local AST blocks, but cross-file safety requires manual validation. |
+| **Insertion-point awareness** | `none` | Agents must calculate exact line numbers for insertion. |
+| **Memory continuity / cross-agent notes** | `full` | Captured effectively via explicitly tracked Markdown (`AGENTS.md`). |
+
+## 9. Migration Implications
 
 *   **Agent Prompts**: Instructions must be rewritten to instruct agents on using `grep-ast` (often aliased as `gast`) and `ast-grep` for discovery and edits.
 *   **Environment Setup**: We must ensure `ast-grep` (Rust binary) and `grep-ast` (Python package) are deterministically provisioned on all canonical VMs/worktrees.
 *   **Loss of Impact Analysis**: Semantic change impact mapping (a feature of `llm-tldr`) will require chaining `rg` and `grep-ast` calls, meaning agents will perform the analysis themselves rather than relying on a ready-made impact graph.
 
-## 9. What We Should Stop Using By Default
+## 10. What We Should Stop Using By Default
 
 *   `llm-tldr` (MCP Server)
 *   `serena` (MCP Server)
 *   `cass-memory` (MCP Server)
 *   Ad-hoc `grep` / `sed` for complex refactoring chains.
 
-## 10. Residual Uncertainty
+## 11. Residual Uncertainty
 
 *   **AST-Grep Cognitive Load**: Writing `ast-grep` structural patterns is a higher cognitive leap for models than natural language edits via `serena`. We may experience higher retry rates initially as models learn `ast-grep` syntax limits across different languages.
 *   **Token Overhead without Aider**: `grep-ast` is excellent for focused files, but lacks Aider's PageRank-based whole-repository map. For massive worktrees, we might hit context limits faster than before.
 
-## 11. Explicit Recommendation
+## 12. Explicit Recommendation
 
-**REPLACE**.
+**PARTIAL REPLACEMENT / NARROW**.
 
-The existing MCP-first layer should be replaced entirely with the CLI-native composite stack:
+The existing MCP-first layer should be transitioned for headless workloads to the CLI-native composite stack, accepting the heavy capability losses outlined above in exchange for complete determinism:
 *   **`grep-ast`** (Contextual Navigation)
 *   **`ast-grep`** (Structural Editing)
 *   **Plain Markdown** (Persistent Memory)
