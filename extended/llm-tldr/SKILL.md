@@ -127,28 +127,30 @@ The contained MCP server ensures the daemon's state is always redirected to
 ### Codex MCP Hydration Fallback (Daemon-Backed)
 
 If Codex desktop exposes no `llm-tldr` MCP tool in the active thread, use the
-local contained daemon helper instead of plain `python -m tldr.cli`:
+stable local Codex wrapper instead of plain `python -m tldr.cli`:
 
 ```bash
-~/agent-skills/scripts/tldr-daemon-fallback.sh context \
+~/agent-skills/scripts/tldr-codex.sh context \
   --repo /tmp/agents/<beads-id>/<repo> \
   --entry <symbol> \
   --depth 2
 
-~/agent-skills/scripts/tldr-daemon-fallback.sh semantic \
+~/agent-skills/scripts/tldr-codex.sh semantic \
   --repo /tmp/agents/<beads-id>/<repo> \
   --query "where is tool routing implemented?" \
   --k 5
 
-~/agent-skills/scripts/tldr-daemon-fallback.sh tree --repo /tmp/agents/<beads-id>/<repo>
-~/agent-skills/scripts/tldr-daemon-fallback.sh structure --repo /tmp/agents/<beads-id>/<repo>
-~/agent-skills/scripts/tldr-daemon-fallback.sh diagnostics --path /tmp/agents/<beads-id>/<repo>/path/to/file.py
-~/agent-skills/scripts/tldr-daemon-fallback.sh --help
+~/agent-skills/scripts/tldr-codex.sh tree --repo /tmp/agents/<beads-id>/<repo>
+~/agent-skills/scripts/tldr-codex.sh structure --repo /tmp/agents/<beads-id>/<repo>
+~/agent-skills/scripts/tldr-codex.sh diagnostics --path /tmp/agents/<beads-id>/<repo>/path/to/file.py
+~/agent-skills/scripts/tldr-codex.sh --help
 ```
 
-This helper calls `tldr.mcp_server` tool functions directly after contained
-runtime patching, so queries stay on the daemon/socket path (`_send_command`)
-instead of the plain CLI direct API path.
+`tldr-codex.sh` is only a thin stable entrypoint. It prints one explicit
+fallback notice, then delegates to `tldr-daemon-fallback.sh`, which calls
+`tldr.mcp_server` tool functions directly after contained runtime patching so
+queries stay on the daemon/socket path (`_send_command`) instead of the plain
+CLI direct API path.
 
 Current command surface mirrors the practical MCP tools:
 `tree`, `structure`, `search`, `extract`, `context`, `cfg`, `dfg`, `slice`,
