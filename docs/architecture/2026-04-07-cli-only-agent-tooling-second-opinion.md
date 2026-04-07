@@ -32,34 +32,46 @@ To avoid relying on vendor marketing or the framing of the first memo, we cloned
 | **Install Burden** | Zero | Low | Low | Medium |
 | **Wrapper Tax Risk** | Zero | Low | Medium | High |
 
-## 5. Recommendation
-**NARROW**
+## 5. Editing Coverage Analysis
 
-Instead of building a complex "split" stack of specialized CLI tools (like forcing agents to learn `ast-grep` syntax), we should **narrow** the toolset to the absolute baseline: **`ripgrep` + `sed`/`awk` + Universal Ctags**.
+There is not a viable full replacement for the editing bucket under the current CLI-only constraints. Any CLI-only path requires accepting some degradation compared to `serena`.
 
-*Why?* The constraint "CLI-only" is correct, but replacing complex MCP tools with complex CLI tools (`ast-grep`, `tree-sitter`) merely shifts the cognitive burden from the infrastructure to the agent's prompt generation. LLMs are universally pre-trained to be absolute experts at standard Unix utilities (`grep`, `sed`, `patch`, standard diffs). They are not universally experts at writing `ast-grep` YAML rules or Tree-sitter S-expressions without trial and error.
+We directly compare three realistic editing options:
+
+| Editing Capability | `sed` / unified diff | `ast-grep` | Aider (CLI mode) |
+| :--- | :--- | :--- | :--- |
+| **Symbol lookup** | None | Partial (AST matching) | Full (PageRank Map) |
+| **Reference-aware edits** | None | Partial (Same-file) | Partial (Cross-file via LLM) |
+| **Rename/refactor safety** | None | Partial | Partial |
+| **Insertion-point awareness**| Partial (Regex boundaries)| Full (AST boundaries)| Full |
+| **Scriptability / Determinism**| Full | Full | Partial (LLM in loop) |
+
+## 6. Capability Loss Accounting
+
+If we shift from an MCP-first structural editing tool (`serena`) to a narrowed Unix-primitive stack (`rg` + `sed` + `ctags`), we must explicitly account for the following capability losses. These represent accepted degradation, not true parity replacement:
+
+1. **Symbol-Aware Rename/Refactor Safety**: Lost. Agents cannot confidently rename a function and implicitly update all usages across a large project. They must manually string-replace (`sed`) across all files, risking regex fragility and false positives.
+2. **Reference-Aware Edits**: Lost. A basic CLI stack cannot intrinsically know if an edited variable affects shadowed variables in another scope. 
+3. **Insertion-Point Precision**: Degraded. While `serena` understands exactly where a class ends, an agent using `sed` or unified diffs must rely on line numbers or pattern matching that can easily break if the file is concurrently modified or if indentation is ambiguous.
+
+## 7. Recommendation
+**NARROW AND ACCEPT DEGRADATION**
+
+CLI-only is the right architectural constraint for reliable, cross-VM execution, but symbol-aware editing parity is not currently available without accepting degradation. We should **narrow** the toolset to the absolute baseline: **`ripgrep` + `sed`/`awk` + Universal Ctags**. 
+
+*Why?* Replacing complex MCP tools with complex CLI tools (`ast-grep`, `tree-sitter`) merely shifts the cognitive burden from the infrastructure to the agent's prompt generation. Agents frequently hallucinate AST pattern syntax but are pre-trained experts at standard Unix utilities (`grep`, `sed`, `patch`, standard diffs). 
 
 **What to keep/demote:**
-- **Keep**: `ripgrep` (discovery), `sed`/standard unified diffs (editing).
+- **Keep**: `ripgrep` (discovery), `sed`/standard unified diffs (editing). We explicitly accept the degradation in editing precision.
 - **Add**: Universal Ctags (low-token repo mapping to replace `llm-tldr` context generation).
 - **Remove**: `llm-tldr` and `serena` from the default contract.
 - **Remove**: `cass-memory`. Session memory should be handled entirely via flat markdown files in a `.agents/memory` directory.
 
-## 6. What the First Memo is Likely to Get Wrong
+## 8. What the First Memo is Likely to Get Wrong
 The initial analysis is likely to recommend `ast-grep` or `tree-sitter` to achieve "parity" with `serena`'s structural editing capabilities. 
 *The flaw:* Agents frequently hallucinate AST pattern syntax. Our inspection of `ast-grep/crates/cli/src/main.rs` shows it is a strict pattern matcher; an agent can write a functional `sed` replacement or python script to modify a file much faster and more reliably than it can debug a failing `ast-grep` pattern substitution. 
 
 The first memo will also likely overvalue "semantic search" as a distinct tool. LLMs don't need vector search if they have a highly compressed `ctags` map (like the output of `ctags --output-format=json`); they can just read the map and `cat` the relevant files.
 
-## 7. What Not to Build
-- **Do not build** a wrapper CLI around `ast-grep` to make it "easier" for agents. This creates a wrapper tax.
-- **Do not build** a custom SQLite memory store. File I/O is universally understood by agents.
-- **Do not build** a background indexer (like Zoekt). Rely on ephemeral, on-the-fly indexing (`ctags` takes milliseconds).
-
-## 8. Explicit Uncertainty and Follow-up Experiments
-- **Uncertainty**: Can `ctags` + `rg` adequately replace the complex call-graph tracing of `llm-tldr`? Deeply nested impact analysis might require too many sequential `rg` loops.
-- **Follow-up Experiment**: Benchmark an agent fixing a cross-file TypeScript typing bug using only `rg` and `sed` vs. `ast-grep` to measure token usage and execution time.
-- **Is CLI-only the right constraint?** Yes, for deterministic execution. However, we must accept that some "magic" (like automatic refactoring of all references) will be slower or require more agent turns than an LSP-backed tool would provide.
-
 ## 9. Conclusion
-We should **NARROW** to the simplest, most globally understood Unix primitives, supplemented only by `ctags` for token-efficient repo mapping. We accept the loss of complex semantic features in exchange for zero-maintenance, perfectly deterministic execution.
+CLI-only is the right constraint. We should **NARROW** to the simplest, most globally understood Unix primitives, supplemented only by `ctags` for token-efficient repo mapping. We must explicitly accept the loss of complex semantic editing features in exchange for zero-maintenance, perfectly deterministic execution.
