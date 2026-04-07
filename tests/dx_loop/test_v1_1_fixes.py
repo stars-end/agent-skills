@@ -1329,9 +1329,7 @@ def test_explain_missing_wave_for_first_use_beads_task_is_actionable(
     original_artifact_base = cmd_explain.__globals__["ARTIFACT_BASE"]
     cmd_explain.__globals__["ARTIFACT_BASE"] = tmp_path
     try:
-        rc = cmd_explain(
-            SimpleNamespace(wave_id=None, epic=None, beads_id="bd-epyeg")
-        )
+        rc = cmd_explain(SimpleNamespace(wave_id=None, epic=None, beads_id="bd-epyeg"))
     finally:
         cmd_explain.__globals__["ARTIFACT_BASE"] = original_artifact_base
 
@@ -1759,7 +1757,10 @@ def test_explain_reports_closed_epic_as_retired(tmp_path, monkeypatch, capsys):
     captured = capsys.readouterr()
     assert rc == 0
     assert "State: completed" in captured.out
-    assert "Reason: Epic bd-bkco is closed in Beads; stale wave cache retired" in captured.out
+    assert (
+        "Reason: Epic bd-bkco is closed in Beads; stale wave cache retired"
+        in captured.out
+    )
     assert (
         "Next Action: No action required: epic is already closed and this wave is retired."
         in captured.out
@@ -2468,9 +2469,11 @@ def test_run_loop_persists_truthful_state_when_initial_dispatch_fails(tmp_path):
     print("✓ Failed initial dispatch persists blocked state")
 
 
-def test_run_loop_exits_when_initial_dispatch_blocked_by_dependency_artifacts(tmp_path):
-    """If first dispatch blocks before runner start, loop should exit with truthful blocked state."""
-    wave_id = "wave-dispatch-artifact-block"
+def test_run_loop_allows_dispatch_for_terminal_deps_without_pr_artifacts(
+    tmp_path, monkeypatch
+):
+    """Bug C fix: deps with terminal status in cache should not block on missing PR artifacts."""
+    wave_id = "wave-dispatch-terminal-dep"
     loop = DxLoop(wave_id, config={"cadence_seconds": 0})
     loop.wave_dir = tmp_path / "waves" / wave_id
     loop.state_file = loop.wave_dir / "loop_state.json"
@@ -2502,19 +2505,19 @@ def test_run_loop_exits_when_initial_dispatch_blocked_by_dependency_artifacts(tm
         "close_reason": "",
     }
 
-    assert loop.run_loop(max_iterations=1) is False
-
-    state = json.loads(loop.state_file.read_text())
-    assert state["scheduler_state"]["dispatch_count"] == 0
-    assert state["wave_status"]["state"] == "waiting_on_dependency"
-    assert state["wave_status"]["blocker_code"] == "waiting_on_dependency"
-    assert "exiting without resident loop" in state["wave_status"]["reason"]
-    assert (
-        state["wave_status"]["blocked_details"][0]["reason_code"]
-        == "dx_dependency_artifacts_missing"
+    monkeypatch.setattr(
+        loop.implement_runner,
+        "start",
+        lambda **kwargs: MagicMock(state="exited_err", reason_code="test_inject"),
+    )
+    monkeypatch.setattr(
+        loop.implement_runner, "check", lambda beads_id: MagicMock(state="missing")
     )
 
-    print("✓ first-dispatch artifact blocks exit with truthful blocked state")
+    dep_block = loop._check_dependency_artifacts("bd-hfk0")
+    assert dep_block is None, "Terminal-status deps should not block dispatch"
+
+    print("✓ terminal-status deps allow dispatch without PR artifacts")
 
 
 def test_recover_closed_dependency_artifact_uses_default_repo_when_repo_missing(

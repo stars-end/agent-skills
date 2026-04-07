@@ -300,6 +300,56 @@ def test_rehydration_unblocks_fork_join_after_timeout_fix(monkeypatch):
     assert readiness.ready == ["bd-ep.1"]
 
 
+def test_pre_closed_deps_do_not_block_dispatch_without_pr_artifacts():
+    """
+    Bug C regression: a task whose upstream deps are pre-closed (not dispatched
+    by this wave) should still be dispatchable even when PR artifacts cannot be
+    recovered. Terminal status in dependency_status_cache is sufficient.
+    """
+    loop = DxLoop("wave-test-bug-c")
+    loop.beads_manager.tasks["bd-child"] = BeadsTask(
+        beads_id="bd-child",
+        title="Join task",
+        dependencies=["bd-parent-a", "bd-parent-b"],
+    )
+    loop.beads_manager.completed = {"bd-parent-a", "bd-parent-b"}
+    loop.beads_manager.dependency_status_cache["bd-parent-a"] = "closed"
+    loop.beads_manager.dependency_status_cache["bd-parent-b"] = "closed"
+    loop.beads_manager.dependency_metadata_cache["bd-parent-a"] = {
+        "title": "Parent A",
+        "repo": "agent-skills",
+        "status": "closed",
+        "close_reason": "Manually closed",
+    }
+    loop.beads_manager.dependency_metadata_cache["bd-parent-b"] = {
+        "title": "Parent B",
+        "repo": "agent-skills",
+        "status": "closed",
+        "close_reason": "Manually closed",
+    }
+
+    result = loop._check_dependency_artifacts("bd-child")
+
+    assert result is None
+
+
+def test_non_terminal_completed_dep_still_blocks():
+    """A completed dep with non-terminal cached status should still block."""
+    loop = DxLoop("wave-test-non-terminal")
+    loop.beads_manager.tasks["bd-child"] = BeadsTask(
+        beads_id="bd-child",
+        title="Child task",
+        dependencies=["bd-parent"],
+    )
+    loop.beads_manager.completed = {"bd-parent"}
+    loop.beads_manager.dependency_status_cache["bd-parent"] = "open"
+
+    result = loop._check_dependency_artifacts("bd-child")
+
+    assert result is not None
+    assert "bd-parent" in result["missing_dependencies"]
+
+
 if __name__ == "__main__":
     import pytest
 

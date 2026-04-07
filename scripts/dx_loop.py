@@ -1957,7 +1957,11 @@ class DxLoop:
             if dep_id in self.beads_manager.completed:
                 self._recover_closed_dependency_artifact(dep_id)
                 if not self.pr_enforcer.has_valid_artifact(dep_id):
-                    missing.append(dep_id)
+                    dep_status = self.beads_manager.dependency_status_cache.get(dep_id)
+                    if not self.beads_manager._is_terminal_dependency_status(
+                        dep_status
+                    ):
+                        missing.append(dep_id)
             elif dep_id in self.beads_manager.tasks:
                 if not self.pr_enforcer.has_valid_artifact(dep_id):
                     task_status = self.beads_manager.tasks[dep_id].status
