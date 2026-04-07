@@ -341,7 +341,9 @@ def _missing_wave_diagnostics(
                         f"{registry_wave_id} ({registry_state})"
                     )
         epic_matches = [
-            wid for wid, _state_file, state in all_states if state.get("epic_id") == epic_id
+            wid
+            for wid, _state_file, state in all_states
+            if state.get("epic_id") == epic_id
         ]
         if epic_matches:
             lines.append(
@@ -369,9 +371,7 @@ def _missing_wave_diagnostics(
         else:
             parent_epic = _resolve_parent_epic_from_beads(beads_id)
             lines.append("Blocker Class: control_plane_missing_wave_state")
-            lines.append(
-                f"No persisted wave currently tracks task {beads_id}."
-            )
+            lines.append(f"No persisted wave currently tracks task {beads_id}.")
             if parent_epic:
                 lines.append(f"Resolved parent epic: {parent_epic}")
                 lines.append(
@@ -574,7 +574,13 @@ class DxLoop:
 
         print(f"Found {len(tasks)} tasks")
 
-        # Compute execution layers
+        unhydrated = [t for t in tasks if not t.details_loaded]
+        if unhydrated:
+            print(
+                f"Retrying {len(unhydrated)} unhydrated task(s) with extended timeout..."
+            )
+            self.beads_manager.refresh_unhydrated_tasks(timeout_seconds=15)
+
         layers = self.beads_manager.compute_layers()
         print(f"Computed {len(layers)} execution layers")
 
@@ -1565,6 +1571,16 @@ class DxLoop:
                     ].phase = BatonPhase.COMPLETE
                     self.beads_manager.mark_completed(beads_id)
                     self.scheduler.state.mark_completed(beads_id)
+                    closed_ok = self.beads_manager.close_beads_task(
+                        beads_id,
+                        reason=f"dx-loop: implement complete (no review)",
+                    )
+                    if not closed_ok:
+                        print(
+                            f"WARNING: bd close failed for {beads_id}; "
+                            "wave truth is complete but Beads may still show open",
+                            file=sys.stderr,
+                        )
                     print(f"Implement complete for {beads_id} (no review required)")
             else:
                 reason = task_state.reason_code or "missing_implementation_return"
@@ -1745,6 +1761,16 @@ class DxLoop:
                 if baton_state.phase == BatonPhase.COMPLETE:
                     self.beads_manager.mark_completed(beads_id)
                     self.scheduler.state.mark_completed(beads_id)
+                    closed_ok = self.beads_manager.close_beads_task(
+                        beads_id,
+                        reason=f"dx-loop: review approved",
+                    )
+                    if not closed_ok:
+                        print(
+                            f"WARNING: bd close failed for {beads_id}; "
+                            "wave truth is complete but Beads may still show open",
+                            file=sys.stderr,
+                        )
                     print(f"Review APPROVED for {beads_id}, task complete")
 
                     # Emit merge_ready notification with handoff context
@@ -1865,7 +1891,9 @@ class DxLoop:
                     break
 
         if repo:
-            dep_meta = dict(self.beads_manager.dependency_metadata_cache.get(dep_id, {}))
+            dep_meta = dict(
+                self.beads_manager.dependency_metadata_cache.get(dep_id, {})
+            )
             dep_meta["repo"] = repo
             self.beads_manager.dependency_metadata_cache[dep_id] = dep_meta
 

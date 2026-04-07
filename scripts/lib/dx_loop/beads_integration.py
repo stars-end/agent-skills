@@ -212,7 +212,7 @@ class BeadsWaveManager:
                         self.dependency_status_cache[task.beads_id] = task.status
                         continue
                     # Load full task details to get dependencies
-                    timeout_seconds = 10 if first_open_child else 3
+                    timeout_seconds = 10
                     task = self._load_task_details(
                         task, timeout_seconds=timeout_seconds
                     )
@@ -289,7 +289,7 @@ class BeadsWaveManager:
             task.detail_load_error = "decode_error"
             return task
 
-    def refresh_unhydrated_tasks(self, timeout_seconds: int = 3):
+    def refresh_unhydrated_tasks(self, timeout_seconds: int = 10):
         """Retry dependency hydration for tasks whose details were not loaded yet."""
         for task in self.tasks.values():
             if task.details_loaded:
@@ -297,6 +297,29 @@ class BeadsWaveManager:
             if self._is_terminal_dependency_status(task.status):
                 continue
             self._load_task_details(task, timeout_seconds=timeout_seconds)
+
+    def close_beads_task(self, beads_id: str, reason: str = "") -> bool:
+        """Close a task in Beads and update local status. Returns True on success."""
+        try:
+            cmd = ["bd", "close", beads_id]
+            if reason:
+                cmd += ["--reason", reason]
+            result = subprocess.run(
+                cmd,
+                cwd=str(self.beads_repo_path),
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                task = self.tasks.get(beads_id)
+                if task:
+                    task.status = "closed"
+                self.dependency_status_cache[beads_id] = "closed"
+                return True
+            return False
+        except (subprocess.TimeoutExpired, OSError):
+            return False
 
     def refresh_task_status(
         self, beads_id: str, timeout_seconds: int = 5
@@ -540,7 +563,7 @@ class BeadsWaveManager:
                 return ready
         return None
 
-    def describe_wave_readiness(self, timeout_seconds: int = 3) -> WaveReadiness:
+    def describe_wave_readiness(self, timeout_seconds: int = 10) -> WaveReadiness:
         """
         Describe why the next wave is or is not dispatchable.
 
