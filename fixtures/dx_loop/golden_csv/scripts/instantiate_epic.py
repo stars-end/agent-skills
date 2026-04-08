@@ -13,6 +13,7 @@ Requires: bd CLI in PATH, active Beads Dolt session.
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -39,6 +40,13 @@ def bd(*args: str) -> subprocess.CompletedProcess:
         text=True,
         timeout=30,
     )
+
+
+def _parse_created_id(output: str) -> str:
+    m = re.search(r"Created issue: (bd-\S+)", output)
+    if not m:
+        return ""
+    return m.group(1)
 
 
 def instantiate_epic(dry_run: bool = False) -> str:
@@ -71,7 +79,7 @@ def instantiate_epic(dry_run: bool = False) -> str:
         print(f"ERROR: bd create epic failed: {r.stderr.strip()}", file=sys.stderr)
         sys.exit(1)
 
-    epic_id = r.stdout.strip().split("\n")[-1].strip()
+    epic_id = _parse_created_id(r.stdout)
     if not epic_id:
         print(
             f"ERROR: could not parse epic id from: {r.stdout.strip()}", file=sys.stderr
@@ -105,7 +113,13 @@ def instantiate_epic(dry_run: bool = False) -> str:
             )
             sys.exit(1)
 
-        child_id = cr.stdout.strip().split("\n")[-1].strip()
+        child_id = _parse_created_id(cr.stdout)
+        if not child_id:
+            print(
+                f"ERROR: could not parse task id from: {cr.stdout.strip()}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         child_ids[t["index"]] = child_id
         print(f"Created task {t['index']}: {child_id} ({t['title']})", file=sys.stderr)
 
