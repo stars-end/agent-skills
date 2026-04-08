@@ -1,6 +1,6 @@
 ---
 name: bd-doctor
-description: Diagnose and repair Beads reliability issues in canonical Dolt server mode (`~/bd`) across hosts.
+description: Diagnose and repair Beads reliability issues in canonical Dolt server mode (`~/bd` control-plane + `~/.beads-runtime/.beads` runtime) across hosts.
 tags: [health, beads, dolt, reliability, fleet]
 allowed-tools:
   - Bash(bd:*)
@@ -19,6 +19,7 @@ Health check and deterministic recovery for Beads in centralized Dolt mode.
 
 This skill assumes:
 - canonical Beads repo: `~/bd`
+- active Beads runtime: `~/.beads-runtime/.beads`
 - backend: Dolt server mode
 - multi-host operation (macmini/epyc12/epyc6/homedesktop-wsl)
 
@@ -36,6 +37,7 @@ Run from `~/bd`:
 ```bash
 export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
+export BEADS_DIR="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
 
 beads-dolt dolt test --json
 beads-dolt status --json
@@ -59,7 +61,7 @@ Immediate response:
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 export BD_BIN="$HOME/.local/bin/bd"
-export BEADS_DIR="$HOME/bd/.beads"
+export BEADS_DIR="$HOME/.beads-runtime/.beads"
 export BEADS_DOLT_SERVER_HOST=100.107.173.83
 export BEADS_DOLT_SERVER_PORT=3307
 hash -r
@@ -108,7 +110,7 @@ beads-dolt status --json
 
 ### 2) Lock contention (`database ... is locked by another dolt process`)
 
-- Ensure one Dolt server process per host for `~/bd/.beads/dolt`
+- Ensure one Dolt server process per host for `~/.beads-runtime/.beads/dolt` (hub only)
 - Stop unmanaged process and restart managed service
 
 Linux logs:
@@ -118,8 +120,8 @@ journalctl --user -u beads-dolt.service -n 100 --no-pager
 
 macOS logs:
 ```bash
-if [[ -f ~/bd/.beads/dolt-launchd.err.log ]]; then
-  tail -n 100 ~/bd/.beads/dolt-launchd.err.log
+if [[ -f ~/.beads-runtime/.beads/dolt-launchd.err.log ]]; then
+  tail -n 100 ~/.beads-runtime/.beads/dolt-launchd.err.log
 fi
 ```
 
@@ -127,7 +129,7 @@ fi
 
 1. Choose source host (default `epyc12`)
 2. Stop source + target services
-3. Copy source `~/bd/.beads/dolt` to target
+3. Copy source `~/.beads-runtime/.beads/dolt` to target
 4. Restart services
 5. Compare summaries on all hosts
 6. Use this only when service-level failover or backup restore is unavoidable.
@@ -183,7 +185,7 @@ beads-dolt dolt test --json
 ```bash
 # Linux example
 systemctl --user stop beads-dolt.service
-cd ~/bd/.beads
+cd ~/.beads-runtime/.beads
 mv dolt dolt.bad.$(date +%Y%m%d%H%M%S)
 # restore known-good snapshot into ./dolt
 systemctl --user start beads-dolt.service
@@ -207,6 +209,7 @@ ssh epyc6 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/
 - Do not run ad hoc `dolt sql-server` during active waves.
 - Prefer managed services (`systemd --user` or `launchd`) for uptime.
 - Use `beads-dolt dolt test --json` + `beads-dolt status --json` as source of truth.
+- Do not infer Beads runtime health from `~/bd` git cleanliness.
 
 ## Dolt truth guardrail (required)
 
@@ -218,8 +221,10 @@ Run this first when diagnosing issue visibility or data drift:
 
 When Dolt mode is reported, do not use these files as live truth:
 
-- `~/bd/.beads/issues.jsonl`
-- `~/bd/.beads/backup/issues.jsonl`
+- `$HOME/.beads-runtime/.beads/issues.jsonl`
+- `$HOME/.beads-runtime/.beads/backup/issues.jsonl`
+- `~/bd/.beads/issues.jsonl` (legacy/rollback mirror)
+- `~/bd/.beads/backup/issues.jsonl` (legacy/rollback mirror)
 
 Use live checks instead:
 

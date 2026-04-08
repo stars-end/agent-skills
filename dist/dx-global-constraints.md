@@ -23,11 +23,17 @@ cd /tmp/agents/bd-xxxx/repo-name
 ## 1.5) Canonical Beads Contract (V8.4)
 - **Canonical Beads repo is always \`~/bd\`** (remote must be \`stars-end/bd\`).
 - **Run \`dx-runner\` / \`dx-batch\` control-plane commands from \`~/bd\`**.
+- **Active Beads runtime path is \`~/.beads-runtime/.beads\`**.
+- **Set \`BEADS_DIR=~/.beads-runtime/.beads\` in normal agent shells**.
+- **Treat \`~/bd/.beads\` as legacy/rollback state, not active runtime truth**.
 - **Never run mutating Beads commands from app repos** (\`~/prime-radiant-ai\`, \`~/agent-skills\`, etc.) unless explicitly using a documented override.
 - **Backend must be Dolt server mode** for multi-VM/multi-agent reliability.
+- **\`epyc12\` is the central Dolt server host**.
+- **Client hosts must not rely on local \`~/bd/.beads/dolt\` data directories**.
 - **Legacy macOS \`io.agentskills.ru\` LaunchAgent is disabled by policy** (use cron/systemd schedules only).
 - **Before dispatch**: verify \`bd dolt test --json\` succeeds and Beads service is active on the host.
 - **\`beads.role\` self-heal**: if mutating \`bd\` commands warn \`beads.role not configured\` while \`bd dolt test --json\` passes, run \`bd config set beads.role maintainer\` before escalating. This is local config drift, not a hub outage.
+- **Do not infer runtime health from \`~/bd\` git cleanliness**; use live Beads checks.
 - **Host service contract**:
   - Linux canonical VMs: \`systemctl --user is-active beads-dolt.service\`
   - macOS canonical host: \`launchctl print gui/\$(id -u)/com.starsend.beads-dolt\`

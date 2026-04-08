@@ -3,7 +3,8 @@ name: beads-guard
 description: |
   Safe Beads workflow helper (warning-only). Use before Beads mutations to
   avoid Beads conflict. Ensures you are on a feature branch, up to date with
-  origin/master, and executes Beads operations against the canonical `~/bd` Dolt backend.
+  origin/master, and executes Beads operations against canonical `~/bd` control-plane context
+  with runtime pinned at `~/.beads-runtime/.beads`.
 tags: [beads, dx, guardrail]
 ---
 
@@ -21,7 +22,8 @@ git status -sb
 git fetch origin master
 git rebase origin/master
 
-# 2) Verify Beads connectivity (server mode)
+# 2) Pin dedicated runtime + verify Beads connectivity (server mode)
+export BEADS_DIR="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
 beads-dolt dolt test --json
 # If this fails, run `bd-doctor` before proceeding
 
@@ -41,3 +43,4 @@ git push
 - Warning-only flow; no hard blocks.
 - If branch is behind master and Beads changed, rebase before committing.
 - Keep Beads ops off master to avoid hook warnings.
+- Do not treat `~/bd` git status as runtime health; use `bd`/`beads-dolt` live checks.
