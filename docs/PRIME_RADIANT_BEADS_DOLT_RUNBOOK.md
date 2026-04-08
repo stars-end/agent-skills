@@ -2,7 +2,7 @@
 
 ## Scope
 
-This is the operating contract for agents working in `~/prime-radiant-ai` with centralized Beads on `~/bd`.
+This is the operating contract for agents working in `~/prime-radiant-ai` with Beads control-plane in `~/bd` and dedicated runtime at `~/.beads-runtime/.beads`.
 
 - Canonical Beads repo: `~/bd` (`git@github.com:stars-end/bd.git`)
 - Canonical backend: Dolt SQL server mode
@@ -20,7 +20,7 @@ Fail-fast contract (no silent fallback):
 - Do not run `bd init --prefix`, `bd --db`, or `bd sync --no-daemon` as recovery for fleet mode.
 - Required runtime pins:
   - `BD_BIN=$HOME/.local/bin/bd`
-  - `BEADS_DIR=$HOME/bd/.beads`
+  - `BEADS_DIR=$HOME/.beads-runtime/.beads`
   - `BEADS_DOLT_SERVER_HOST=100.107.173.83`
   - `BEADS_DOLT_SERVER_PORT=3307`
 
@@ -86,7 +86,7 @@ If preflight fails with SQLite/legacy signatures:
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 export BD_BIN="$HOME/.local/bin/bd"
-export BEADS_DIR="$HOME/bd/.beads"
+export BEADS_DIR="$HOME/.beads-runtime/.beads"
 export BEADS_DOLT_SERVER_HOST=100.107.173.83
 export BEADS_DOLT_SERVER_PORT=3307
 hash -r
@@ -144,9 +144,10 @@ On `macmini`, avoid using `bd ready --json` as an interactive health probe. Broa
 Operator note for file-based inspection on Dolt-backed hosts:
 
 - Treat live `bd` queries (`bd show`, `beads-dolt status --json`, `beads-dolt dolt test --json`) as the source of truth.
-- Do **not** assume `~/bd/.beads/issues.jsonl` is current. On this fleet it can be a stale legacy export even when live Dolt-backed reads are correct.
-- `~/bd/.beads/backup/issues.jsonl` may be a fresher mirror than the top-level `issues.jsonl`, but it is still only a file mirror, not the primary truth source.
-- If a Beads id is visible in `bd show` but missing from `~/bd/.beads/issues.jsonl`, classify that as stale file export drift, not as a missing issue in live Beads.
+- Do **not** assume `$BEADS_DIR/issues.jsonl` is current. It can be stale even when live Dolt-backed reads are correct.
+- `$BEADS_DIR/backup/issues.jsonl` may be a fresher mirror than the top-level `issues.jsonl`, but it is still only a file mirror, not the primary truth source.
+- Legacy `~/bd/.beads/*` files are rollback artifacts; do not use them as active runtime truth.
+- If a Beads id is visible in `bd show` but missing from `$BEADS_DIR/issues.jsonl`, classify that as stale file export drift, not as a missing issue in live Beads.
 
 Fleet checks from macmini:
 
@@ -193,7 +194,7 @@ fi
 
 ### B) `database ... is locked`
 
-- Ensure no extra `dolt sql-server` instances are running for `~/bd/.beads/dolt`
+- Ensure no extra `dolt sql-server` instances are running for `~/.beads-runtime/.beads/dolt` on `epyc12`
 - Stop unmanaged process on the host, then restart managed service
 
 ```bash
@@ -271,7 +272,7 @@ Linux example:
 
 ```bash
 systemctl --user stop beads-dolt.service
-cd ~/bd/.beads
+cd ~/.beads-runtime/.beads
 mv dolt dolt.bad.$(date +%Y%m%d%H%M%S)
 # restore copied snapshot into ./dolt
 systemctl --user start beads-dolt.service
@@ -285,12 +286,13 @@ There is no per-host local Git/Dolt pull-push sync in active operation.
 ```text
 Hub:    epyc12
 Spokes: macmini, homedesktop-wsl, epyc6
-Data:   epyc12:/home/$USER/bd/.beads/dolt
+Data:   epyc12:/home/$USER/.beads-runtime/.beads/dolt
+Runtime: all hosts use BEADS_DIR=/home/$USER/.beads-runtime/.beads
 ```
 
 ### Deployment Contract
 
-- Hub runs `dolt sql-server --data-dir ~/bd/.beads/dolt --host 100.107.173.83 --port 3307`
+- Hub runs `dolt sql-server --data-dir ~/.beads-runtime/.beads/dolt --host 100.107.173.83 --port 3307`
 - Spokes connect via `BEADS_DOLT_SERVER_HOST=100.107.173.83`
 - `BEADS_DOLT_SERVER_PORT` is fixed to `3307`
 - `bd` commands run against the SQL endpoint from all hosts
@@ -326,6 +328,7 @@ done
 
 ```bash
 cd ~/bd
+export BEADS_DIR="$HOME/.beads-runtime/.beads"
 export BEADS_DOLT_SERVER_HOST=100.107.173.83
 export BEADS_DOLT_SERVER_PORT=3307
 cd ~/bd
@@ -352,7 +355,7 @@ ssh homedesktop-wsl 'grep -q "BEADS_DOLT_SERVER_HOST" ~/.zshrc ~/.bashrc'
 - spoke target host is not set or not reachable
 - network path to epyc12 fails
 - more than one local listener on hub DB port
-- listener command does not match `dolt sql-server --data-dir ~/bd/.beads/dolt`
+- listener command does not match `dolt sql-server --data-dir ~/.beads-runtime/.beads/dolt`
 
 ## 8) Operator Rules
 
@@ -389,8 +392,10 @@ Use the helper below before any manual Beads data inspection:
 
 If it reports Dolt mode, do not treat these files as source of truth:
 
-- `~/bd/.beads/issues.jsonl`
-- `~/bd/.beads/backup/issues.jsonl`
+- `$HOME/.beads-runtime/.beads/issues.jsonl`
+- `$HOME/.beads-runtime/.beads/backup/issues.jsonl`
+- `~/bd/.beads/issues.jsonl` (legacy/rollback mirror)
+- `~/bd/.beads/backup/issues.jsonl` (legacy/rollback mirror)
 
 Canonical truth commands:
 

@@ -1,6 +1,6 @@
 ---
 name: beads-dolt-fleet
-description: Fleet-level Beads Dolt operations for canonical hosts (verify, converge, and recover shared `~/bd` state).
+description: Fleet-level Beads Dolt operations for canonical hosts (verify, converge, and recover shared `~/.beads-runtime/.beads` runtime state).
 tags: [health, beads, dolt, fleet, vm]
 allowed-tools:
   - Bash(ssh:*)
@@ -51,7 +51,7 @@ If summaries differ unexpectedly, converge from source host (`epyc12` by default
 ## Converge From Source Host
 
 1. Stop Beads service on source and targets
-2. Backup target `~/bd/.beads/dolt`
+2. Backup target `~/.beads-runtime/.beads/dolt`
 3. Copy source `dolt` directory to targets
 4. Restart services
 5. Verify identical summaries
@@ -60,8 +60,8 @@ If summaries differ unexpectedly, converge from source host (`epyc12` by default
 Use this transfer pattern:
 
 ```bash
-ssh epyc12 'cd ~/bd/.beads && tar -cf - dolt' | ssh homedesktop-wsl 'cd ~/bd/.beads && tar -xf -'
-ssh epyc12 'cd ~/bd/.beads && tar -cf - dolt' | ssh epyc6 'cd ~/bd/.beads && tar -xf -'
+ssh epyc12 'cd ~/.beads-runtime/.beads && tar -cf - dolt' | ssh homedesktop-wsl 'cd ~/.beads-runtime/.beads && tar -xf -'
+ssh epyc12 'cd ~/.beads-runtime/.beads && tar -cf - dolt' | ssh epyc6 'cd ~/.beads-runtime/.beads && tar -xf -'
 ```
 
 ## Service Controls
@@ -85,3 +85,4 @@ launchctl print gui/$(id -u)/com.starsend.beads-dolt
 - Stop source service before snapshotting to avoid partial/corrupt copies.
 - Always keep timestamped `dolt.pre-sync-*` backups before replacement.
 - Never run two Dolt servers against the same data-dir on one host.
+- Hub data-dir is `~/.beads-runtime/.beads/dolt`; spokes should not run local Dolt listeners in steady state.

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# bd-doctor check - canonical Beads health checks for Dolt + ~/bd workflow
+# bd-doctor check - canonical Beads health checks for Dolt + dedicated runtime workflow
 
 set -euo pipefail
 
 BEADS_REPO="${BEADS_REPO_PATH:-$HOME/bd}"
+BEADS_RUNTIME="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
 EXPECTED_REMOTE_SUBSTR="${BEADS_REPO_REMOTE_SUBSTR:-stars-end/bd}"
 MIN_BD_VERSION="${DX_MIN_BD_VERSION:-0.49.4}"
 
@@ -24,6 +25,7 @@ pass() {
 
 echo "🔍 Beads Doctor (canonical mode)"
 echo "repo: $BEADS_REPO"
+echo "runtime: $BEADS_RUNTIME"
 
 if [[ ! -d "$BEADS_REPO/.git" ]]; then
   fail "Canonical repo missing at $BEADS_REPO"
@@ -81,11 +83,11 @@ else
   pass "origin remote OK: $REMOTE_URL"
 fi
 
-if [[ -f "$BEADS_REPO/.beads/beads.db" && -f "$BEADS_REPO/.beads/bd.db" ]]; then
-  fail "DB ambiguity detected: both .beads/beads.db and .beads/bd.db exist"
-  echo "   Remediation: archive/remove .beads/beads.db"
+if [[ -f "$BEADS_RUNTIME/beads.db" && -f "$BEADS_RUNTIME/bd.db" ]]; then
+  fail "DB ambiguity detected in runtime: both beads.db and bd.db exist"
+  echo "   Remediation: archive/remove $BEADS_RUNTIME/beads.db"
 else
-  pass "No DB ambiguity (Dolt data path in ~/bd/.beads/dolt is canonical for active fleet ops)"
+  pass "No DB ambiguity in active runtime ($BEADS_RUNTIME)"
 fi
 
 if command -v bd >/dev/null 2>&1; then
