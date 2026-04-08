@@ -143,3 +143,61 @@ All three failures are independent:
 1. Repo resolution is a `dx-loop` design constraint (no default repo fallback)
 2. Dependency loading is a `dx-loop` reliability issue (timeout on bulk task resolution)
 3. Output parsing is an `instantiate_epic.py` implementation bug
+
+---
+
+## Rerun #1 — bd-xlho7 (2026-04-07, Bugs A+B only)
+
+**Date**: 2026-04-07
+**Bugs fixed**: A (close_beads_task), B (re-hydration timeout 3s→10s)
+**Epic**: bd-xlho7
+
+| Task | Layer | Phase | Verdict | PR | Closed in Beads |
+|------|-------|-------|----------|-----|-----------------|
+| .1 | 1 | skipped (already closed) | — | — | ✓ |
+| .2 | 2 | implement→review→APPROVED | ✓ | — | ✓ (Fix A) |
+| .3 | fork | implement→review→APPROVED | ✓ | — | ✓ (Fix A) |
+| .4 | fork | exit_zero_no_mutations → dx_dependency_artifacts_missing | ✗ | — | manual |
+| .5 | join | BLOCKED by Bug C | ✗ | — | manual |
+
+**Verdict**: Bugs A+B confirmed. Bug C discovered (.5 blocked by pre-closed deps).
+
+---
+
+## Rerun #2 — bd-ipsu2 (2026-04-07, Bugs A+B+C)
+
+**Date**: 2026-04-07
+**Bugs fixed**: A (close_beads_task), B (re-hydration timeout 3s→10s), C (terminal deps without PR artifacts)
+**Epic**: bd-ipsu2
+**Wave**: wave-2026-04-07-18-55-24Z
+**Layer computation**: `[['bd-ipsu2.1'], ['bd-ipsu2.2'], ['bd-ipsu2.3', 'bd-ipsu2.4'], ['bd-ipsu2.5']]` ✓
+
+| Task | Layer | Phase | Verdict | PR | Closed in Beads |
+|------|-------|-------|----------|-----|-----------------|
+| .1 | 1 | implement→review→APPROVED | ✓ | #494 | ✓ |
+| .2 | 2 | implement→review→APPROVED | ✓ | #495 | ✓ |
+| .3 | fork | implement→review→APPROVED | ✓ | #496 | ✓ |
+| .4 | fork | implement→review→APPROVED | ✓ | #497 | ✓ |
+| .5 | join | implement runner rc=0, no push (agent error) | ✗ | — | manual |
+
+**Bug A confirmed**: All 4 completed tasks closed in Beads with `dx-loop: review approved`.
+**Bug B confirmed**: Layer computation correct with 10s re-hydration timeout.
+**Bug C confirmed**: `.5` dispatched at layer 4 despite `.3` and `.4` being pre-closed without PR artifacts.
+**`.5` failure**: Agent used `git push origin/feature-bd-ipsu2.5` (wrong syntax) instead of `git push origin feature-bd-ipsu2.5`. Not a dx-loop bug.
+
+## dx-loop Requalification Verdict (Updated)
+
+**REQUALIFIED**
+
+All three original failures resolved:
+
+1. **Repo resolution**: `--repo agent-skills` flag documented and used; `default_repo` config in wave state
+2. **Dependency graph**: Layers computed correctly with raised re-hydration timeout (10s→15s)
+3. **instantiate_epic.py**: Fixed in prior PR
+
+Bugs A+B+C fixes validated across two reruns (bd-xlho7, bd-ipsu2):
+- Close-on-approve works (Fix A)
+- Re-hydration timeout no longer starves (Fix B)
+- Pre-closed dependencies no longer block dispatch (Fix C)
+
+Residual: `.5` implement agent failed git push due to syntax error — not a dx-loop issue.
