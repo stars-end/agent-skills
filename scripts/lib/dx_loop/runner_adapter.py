@@ -283,7 +283,7 @@ class RunnerAdapter:
         if worktree:
             args.extend(["--worktree", str(worktree)])
 
-        result = self._run_dx_runner(args, timeout=30)
+        result = self._run_dx_runner(args, timeout=90)
         if result.ok:
             return result
 
