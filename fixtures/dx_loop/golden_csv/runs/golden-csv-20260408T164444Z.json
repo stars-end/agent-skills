@@ -3,6 +3,6 @@
   "run_dir": "/tmp/dx-loop-fixtures/golden-csv/golden-csv-20260408T164444Z",
   "beads_epic": "bd-6u95f",
   "created_at": "2026-04-08T16:44:44.797168+00:00",
-  "completed_tasks": [1],
+  "completed_tasks": [1, 2],
   "status": "in-progress"
 }
