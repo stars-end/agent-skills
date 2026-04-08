@@ -450,6 +450,13 @@ check_op_auth_readiness() {
     echo "pass|low|OP service-account token resolved"
     return
   fi
+  # In unattended cron, DX_AUTH_CACHE_ONLY=1 blocks live OP verification.
+  # Allow a scoped live probe only for this readiness check.
+  if command -v agent_coordination_load_op_token >/dev/null 2>&1 && command -v op >/dev/null 2>&1 \
+    && (export DX_AUTH_CACHE_ONLY=0; agent_coordination_load_op_token >/dev/null 2>&1; op whoami >/dev/null 2>&1); then
+    echo "pass|low|OP service-account token verified (readiness probe)"
+    return
+  fi
   if command -v op >/dev/null 2>&1 && [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && op whoami >/dev/null 2>&1; then
     echo "pass|low|OP service-account token verified"
     return
