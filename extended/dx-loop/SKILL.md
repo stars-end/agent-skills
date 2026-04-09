@@ -242,3 +242,17 @@ Override with `--config` flag or environment variables.
 
 Base directory for this skill: file:///home/fengning/.agents/skills/dx-loop
 Relative paths in this skill (e.g., scripts/, configs/) are relative to this base directory.
+
+## Installation
+
+`dx-loop` is installed to `~/bin` via `dx-ensure-bins.sh`, consistent with other dx-* tools:
+
+```bash
+dx-ensure-bins.sh  # Creates symlink: ~/bin/dx-loop -> ~/agent-skills/scripts/dx-loop
+```
+
+Verify installation:
+```bash
+which dx-loop      # Should show: /home/<user>/bin/dx-loop
+dx-loop --version  # Should show: dx-loop 1.1.0
+```
