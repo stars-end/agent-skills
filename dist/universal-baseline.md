@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: d8c5e667aaa559c76b284d9ec6a3b31ed4e80490 -->
-<!-- Last updated: 2026-04-08 07:50:47 UTC -->
+<!-- Source SHA: 40513fc71c05b36dcfbf0e5f4c274035f72f7a78 -->
+<!-- Last updated: 2026-04-10 09:11:37 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -289,19 +289,29 @@ If a named skill contains an explicit `BLOCKED` contract:
 
 - **Canonical active assistant stack**:
   - \`llm-tldr\`: semantic discovery + exact static analysis / trace / impact
-  - \`serena\`: symbol-aware edits / persistent assistant memory
+  - \`serena\`: explicit symbol-aware edits
 - **Canonical non-default memory surface**:
   - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
 
-For qualifying tasks, agents MUST route the first discovery action through the matching MCP tool before broad shell search or repeated file traversal:
+Agents should think in terms of **capability**, not transport:
+- analysis/discovery/trace -> \`llm-tldr\`
+- explicit symbol operation -> \`serena\`
+- ordinary edit -> patch/diff-first CLI workflow
+
+For qualifying tasks, agents MUST route the first discovery action through the matching tool before broad shell search or repeated file traversal:
 - semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`llm-tldr\` (semantic tool, requires \`tldr warm\` first)
 - exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> \`llm-tldr\`
 - "understand this function and its dependencies" -> \`llm-tldr\` (context tool, 95% token savings)
 - "what tests need to run" -> \`llm-tldr\` (change_impact tool)
-- symbol-aware edits, rename/refactor, insertion, project memory, or prior-session continuity -> \`serena\`
+- rename/refactor, insert-before/after-symbol, replace known symbol body/signature, or symbol lookup directly tied to an edit -> \`serena\`
 
-Fallback to shell/file reads is allowed only when:
-- the MCP tool is unavailable in the current runtime
+Transport handling rule:
+- prefer the MCP surface when the tool is available in the current runtime
+- if \`llm-tldr\` MCP is unavailable, use the canonical local fallback instead of inventing a new analysis path
+- agents should not manually choose among MCP vs daemon vs raw CLI surfaces beyond this fallback rule
+
+Fallback to shell/file reads or ordinary patch editing is allowed only when:
+- the MCP tool is unavailable in the current runtime and no canonical fallback exists
 - the MCP tool cannot answer the question after one reasonable attempt
 - the task is trivially faster with direct file access
 
@@ -547,13 +557,13 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **impeccable** | Design skills for AI coding tools. Create distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Includes 7 reference guides and 17 design commands. Use when building web components, pages, artifacts, posters, or applications. Keywords: frontend, design, UI, UX, typography, color, motion, interaction, responsive, audit, polish | — | design, frontend, ui, ux, typography, color, motion, accessibility |
 | **implementation-planner** | Create self-contained implementation specs with canonical Beads epic/subtask/dependency structure. MUST BE USED when the user asks for an implementation plan, tech spec, rollout plan, migration plan, or explicitly asks for "a comprehensive implementation plan with Beads epic, dependencies, and subtasks". Use for new systems, multi-phase refactors, cross-repo work, infra changes, or any work that needs a reviewable plan before execution. | `bd create --title "<epic title>" --type epic --priority 1` | planning, beads, specification, workflow, architecture |
 | **lint-check** | Run quick linting checks on changed files. MUST BE USED when user wants to check code quality. Fast validation (<5s) following V3 trust-environments philosophy. Use when user says "lint my code", "check formatting", or "run linters", or when user mentions uncommitted changes, pre-commit state, formatting issues, code quality, style checks, validation, prettier, eslint, pylint, or ruff. | — | workflow, quality, linting, validation |
-| **llm-tldr** | MCP-native semantic discovery and static analysis for precise, low-token task context extraction. Canonical default for both semantic code search and exact structural analysis (V8.6). | — |  |
+| **llm-tldr** | Canonical analysis tool for semantic discovery and exact static analysis with low-token context extraction. Prefer the MCP surface when available; otherwise use the canonical local fallback. | — |  |
 | **loop-orchestration** | Orchestrate Codex-first implementation loops built around `dx-runner` dispatch, bounded sleep intervals, status checks, review passes, and deterministic re-dispatch. Use when a live session should repeatedly dispatch work, wait, inspect `dx-runner` state, review outcomes, and continue until merge-ready or blocked. Invoke when users mention "poll every 5m", "check this runner repeatedly", "sleep loop", "babysit this PR", "re-dispatch round N", "keep checking until merge-ready", or "build a loop orchestrator". `/loop` is only a prototype model for the desired behavior, not the required runtime surface. | — |  |
 | **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | `dx-runner start --provider opencode --beads bd-xxx --prompt-` | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |
 | **plan-refine** | Iteratively refine implementation plans using the "Convexity" pattern. Simulates a multi-round architectural critique to converge on a secure, robust specification. Use when you have a draft plan that needs deep architectural review or "APR" style optimization. | — | architecture, planning, review, refinement, apr |
 | **prompt-writing** | Draft self-contained prompts for delegated agents with cross-VM-safe context. MUST BE USED when assigning work to another agent (implementation, QA, rollout, or audit). Enforces: worktree-first, no canonical writes, Beads traceability (epic/subtask/dependencies), MCP routing expectations, and required PR artifacts (PR_URL + PR_HEAD_SHA). Trigger phrases include: "assign to another agent", "write a one-shot prompt", "dispatch this", "prepare autonomous prompt", "QA agent prompt", "parallelize work to cloud", and "assign to jules". | — | workflow, prompts, orchestration, dx, safety |
 | **reactcomponents** | Converts Stitch designs into modular Vite and React components using system-level networking and AST-based validation. | — |  |
-| **serena** | MCP-native AI assistant memory for persistent context across sessions. | — |  |
+| **serena** | MCP-native symbol-aware editing for precise rename/refactor/insertion workflows; assistant memory is secondary. | — |  |
 | **skill-creator** | Deprecated compatibility shim for legacy skill creation requests. Use when the user still says "skill-creator" or asks to create a skill, then route canonical `~/agent-skills` work to `agent-skills-creator`. Route implementation-plan/spec requests with Beads epic+dependencies+subtasks to `implementation-planner`. | — | meta, skill-creation, compatibility, deprecation |
 | **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lightweight locking). Uses direct Slack Web API calls and/or the slack-coordinator systemd service. Does not require MCP. | — | slack, coordination, workflow, optional |
 | **spark-prompt-writer** | Write tightly scoped, execution-ready prompts optimized for `gpt-5.3-codex-spark` implementation batches and short verification passes. Use when the user wants a Spark-specific overnight batch prompt, a large grouped-fix prompt, or a follow-on integrated verification prompt after fix waves. Preserve the `prompt-writing` DX contract: worktree-first, no canonical writes, Beads traceability, cross-VM-safe context, and required `PR_URL` + `PR_HEAD_SHA`. | — | workflow, prompts, orchestration, spark, dx |

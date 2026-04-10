@@ -180,19 +180,29 @@ If a named skill contains an explicit `BLOCKED` contract:
 
 - **Canonical active assistant stack**:
   - \`llm-tldr\`: semantic discovery + exact static analysis / trace / impact
-  - \`serena\`: symbol-aware edits / persistent assistant memory
+  - \`serena\`: explicit symbol-aware edits
 - **Canonical non-default memory surface**:
   - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
 
-For qualifying tasks, agents MUST route the first discovery action through the matching MCP tool before broad shell search or repeated file traversal:
+Agents should think in terms of **capability**, not transport:
+- analysis/discovery/trace -> \`llm-tldr\`
+- explicit symbol operation -> \`serena\`
+- ordinary edit -> patch/diff-first CLI workflow
+
+For qualifying tasks, agents MUST route the first discovery action through the matching tool before broad shell search or repeated file traversal:
 - semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`llm-tldr\` (semantic tool, requires \`tldr warm\` first)
 - exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> \`llm-tldr\`
 - "understand this function and its dependencies" -> \`llm-tldr\` (context tool, 95% token savings)
 - "what tests need to run" -> \`llm-tldr\` (change_impact tool)
-- symbol-aware edits, rename/refactor, insertion, project memory, or prior-session continuity -> \`serena\`
+- rename/refactor, insert-before/after-symbol, replace known symbol body/signature, or symbol lookup directly tied to an edit -> \`serena\`
 
-Fallback to shell/file reads is allowed only when:
-- the MCP tool is unavailable in the current runtime
+Transport handling rule:
+- prefer the MCP surface when the tool is available in the current runtime
+- if \`llm-tldr\` MCP is unavailable, use the canonical local fallback instead of inventing a new analysis path
+- agents should not manually choose among MCP vs daemon vs raw CLI surfaces beyond this fallback rule
+
+Fallback to shell/file reads or ordinary patch editing is allowed only when:
+- the MCP tool is unavailable in the current runtime and no canonical fallback exists
 - the MCP tool cannot answer the question after one reasonable attempt
 - the task is trivially faster with direct file access
 
