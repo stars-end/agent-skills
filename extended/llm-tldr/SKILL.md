@@ -1,8 +1,8 @@
 ---
 name: llm-tldr
 description: |
-  MCP-native semantic discovery and static analysis for precise, low-token task context extraction.
-  Canonical default for both semantic code search and exact structural analysis (V8.6).
+  Canonical analysis tool for semantic discovery and exact static analysis with low-token context extraction.
+  Prefer the MCP surface when available; otherwise use the canonical local fallback.
 tags:
   - mcp
   - static-analysis
@@ -15,17 +15,28 @@ tags:
 
 # llm-tldr (Fleet Sync V2.3)
 
-MCP-native semantic discovery and static analysis for surgical context extraction and reduced token overhead.
+Canonical analysis tool for semantic discovery and exact static analysis with reduced token overhead.
 
 ## Tool Class
 
-**`integration_mode: mcp`**
+**`integration_mode: mcp + canonical local fallback`**
 
-llm-tldr is rendered to IDE MCP configs and provides MCP server functionality.
+llm-tldr is rendered to IDE MCP configs and also exposes a canonical local
+fallback path. Agents should treat this as one analysis tool; transport is an
+implementation detail, not a routing decision.
 
 ## Routing Status
 
 **Canonical default** for semantic discovery and exact static analysis (V8.6 routing contract).
+
+### Agent-Facing Routing Rule
+
+Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
+
+- Preferred surface: MCP when the `llm-tldr` tool is visible in the active runtime
+- Canonical fallback: the contained local helper when MCP is unavailable in the current runtime
+- Do not manually choose between MCP, daemon, or plain CLI paths
+- Do not substitute a different analysis stack unless `llm-tldr` is unavailable or fails after one reasonable attempt
 
 ## Installation
 
@@ -126,8 +137,8 @@ The contained MCP server ensures the daemon's state is always redirected to
 
 ### Codex MCP Hydration Fallback (Daemon-Backed)
 
-If Codex desktop exposes no `llm-tldr` MCP tool in the active thread, use the
-local contained daemon helper instead of plain `python -m tldr.cli`:
+If the active runtime exposes no `llm-tldr` MCP tool, use the local contained
+daemon helper as the canonical fallback instead of plain `python -m tldr.cli`:
 
 ```bash
 ~/agent-skills/scripts/tldr-daemon-fallback.sh context \
@@ -212,7 +223,7 @@ Every MCP tool accepts `project` (default `"."`):
 
 ## Required Trigger Contract
 
-Use `llm-tldr` first for ALL of the following:
+Use `llm-tldr` first for ALL of the following analysis tasks:
 
 **Semantic discovery (V8.6):**
 - locating the part of the repo responsible for a concept or feature

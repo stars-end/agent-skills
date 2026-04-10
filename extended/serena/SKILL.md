@@ -1,16 +1,17 @@
 ---
 name: serena
-description: MCP-native AI assistant memory for persistent context across sessions.
+description: MCP-native symbol-aware editing for precise rename/refactor/insertion workflows; assistant memory is secondary.
 tags:
   - mcp
   - memory
   - fleet-sync
   - ai-assistant
+  - refactor
 ---
 
 # Serena (Fleet Sync V2.2)
 
-MCP-native AI assistant memory for persistent context across sessions.
+MCP-native symbol-aware editing for precise rename/refactor/insertion workflows.
 
 ## Tool Class
 
@@ -81,17 +82,21 @@ serena start-mcp-server --project my-project
 
 ### Via MCP Client
 - Use via MCP-capable IDE
-- Provides persistent memory and context across sessions
+- Provides symbol-aware edit tools and optional project continuity
 
 ## Required Trigger Contract
 
-Use `serena` first when the task is primarily about symbol-aware editing or assistant continuity:
+Use `serena` first only when the task is an explicit symbol operation:
 - rename/refactor of known symbols
 - insert-before/after-symbol edits
-- retrieving or recording persistent project memory
-- structured symbol lookup before editing a known target
+- replace the body or signature of a known symbol safely
+- structured symbol lookup or reference gathering before editing a known target
 
-If the task is "edit this exact symbol safely," `serena` is the default first tool.
+Default to patch/diff-first CLI editing for ordinary file edits, small textual
+changes, and search-driven edits that do not require symbol-aware operations.
+
+Project memory or session continuity is secondary. Do not reach for `serena`
+just to preserve context unless continuity itself is the task.
 
 ## Key Commands
 
