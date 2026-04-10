@@ -201,6 +201,12 @@ Transport handling rule:
 - if \`llm-tldr\` MCP is unavailable, use the canonical local fallback instead of inventing a new analysis path
 - agents should not manually choose among MCP vs daemon vs raw CLI surfaces beyond this fallback rule
 
+Codex desktop hydration check:
+1. run \`codex mcp list\` and confirm the tool is configured
+2. restart Codex desktop once after MCP config or baseline changes
+3. retry one real in-thread MCP call
+4. only then escalate to fallback scripts, daemon debugging, or \`Tool routing exception\`
+
 Fallback to shell/file reads or ordinary patch editing is allowed only when:
 - the MCP tool is unavailable in the current runtime and no canonical fallback exists
 - the MCP tool cannot answer the question after one reasonable attempt

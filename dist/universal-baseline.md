@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 40513fc71c05b36dcfbf0e5f4c274035f72f7a78 -->
-<!-- Last updated: 2026-04-10 09:11:37 UTC -->
+<!-- Source SHA: 60e7d108bc9571898086f1820354fa5102c7f870 -->
+<!-- Last updated: 2026-04-10 09:59:28 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -309,6 +309,12 @@ Transport handling rule:
 - prefer the MCP surface when the tool is available in the current runtime
 - if \`llm-tldr\` MCP is unavailable, use the canonical local fallback instead of inventing a new analysis path
 - agents should not manually choose among MCP vs daemon vs raw CLI surfaces beyond this fallback rule
+
+Codex desktop hydration check:
+1. run \`codex mcp list\` and confirm the tool is configured
+2. restart Codex desktop once after MCP config or baseline changes
+3. retry one real in-thread MCP call
+4. only then escalate to fallback scripts, daemon debugging, or \`Tool routing exception\`
 
 Fallback to shell/file reads or ordinary patch editing is allowed only when:
 - the MCP tool is unavailable in the current runtime and no canonical fallback exists

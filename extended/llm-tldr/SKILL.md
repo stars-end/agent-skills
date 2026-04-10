@@ -38,6 +38,21 @@ Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
 - Do not manually choose between MCP, daemon, or plain CLI paths
 - Do not substitute a different analysis stack unless `llm-tldr` is unavailable or fails after one reasonable attempt
 
+### Codex Desktop Hydration Check
+
+Before escalating to fallback scripts, daemon debugging, or replacement-tool
+research for a Codex desktop visibility problem, do this cheap check first:
+
+1. Run `codex mcp list` and confirm `llm-tldr` is configured
+2. Restart Codex desktop once so the client reloads MCP server state
+3. Retry one real in-thread `llm-tldr` call
+4. Only then use the canonical fallback or report `Tool routing exception: ...`
+
+This separates:
+- config visible but stale client state
+- tool hydrated in-thread
+- actual `llm-tldr` runtime failure
+
 ## Installation
 
 ```bash
