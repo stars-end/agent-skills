@@ -35,6 +35,9 @@ BEADS_RUNTIME_PATH = Path(
 BEADS_COMMAND_CWD = Path(
     os.environ.get("BEADS_REPO_PATH", str(BEADS_RUNTIME_PATH.parent))
 ).expanduser()
+# Backward-compatible alias for older tests/plugins that monkeypatch the
+# previous name while runtime code uses the clearer command-CWD constant.
+BEADS_REPO_PATH = BEADS_COMMAND_CWD
 BEADS_LOCK_FILE = BEADS_RUNTIME_PATH / ".dx-bd-mutation.lock"
 MIN_BD_VERSION = os.environ.get("DX_MIN_BD_VERSION", "0.49.4")
 
