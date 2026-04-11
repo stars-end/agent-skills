@@ -5,8 +5,8 @@ Wave-based parallel dispatch with OpenCode (GLM-5) + Gemini.
 ## Quick Reference
 
 ```bash
-# Canonical control-plane cwd (required)
-cd ~/bd
+# Required Beads runtime
+export BEADS_DIR="$HOME/.beads-runtime/.beads"
 
 # Mutating runs should name the repo worktree explicitly.
 REPO_WORKTREE=/tmp/agents/<beads-id>/<repo>
@@ -35,17 +35,17 @@ dx-runner stop --beads bd-xxx
 dx-runner finalize --beads bd-xxx --reason stalled --exit-code 1
 ```
 
-## Canonical Cwd + Repo Worktree Contract
+## Runtime + Repo Worktree Contract
 
-Run the control plane from canonical `~/bd`, but pass a repo worktree explicitly for any mutating job:
+Run the control plane with the central Beads runtime, and pass a repo worktree explicitly for any mutating job:
 
 ```bash
-cd ~/bd
+export BEADS_DIR="$HOME/.beads-runtime/.beads"
 dx-runner start --beads bd-xxx --provider cc-glm --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/p.prompt
 ```
 
 Rules:
-- `preflight`, `start`, `check`, and `report` run from canonical `~/bd`.
+- `preflight`, `start`, `check`, and `report` require `BEADS_DIR=~/.beads-runtime/.beads`.
 - `--worktree` is the primary mutating-run contract and should be passed explicitly.
 - `DX_RUNNER_DEFAULT_WORKTREE` is fallback-only for legacy wrappers or previously recorded runs.
 - If a run records the wrong worktree, prune stale artifacts and relaunch with explicit `--worktree`.
@@ -105,9 +105,9 @@ dx-runner beads-gate --repo /path/to/worktree --probe-id bd-xxx
 dx-runner beads-gate --repo /path/to/worktree --probe-id bd-xxx --write-probe
 ```
 
-By default, the gate also enforces external Beads repo governance:
-- Repo path: `~/bd` (override with `BEADS_REPO_PATH`)
-- Origin remote contains: `stars-end/bd` (override with `BEADS_REPO_REMOTE_SUBSTR`)
+By default, the gate also enforces active Beads runtime governance:
+- Runtime path: `~/.beads-runtime/.beads` (override with `BEADS_DIR`)
+- Runtime metadata must point at the epyc12 Dolt SQL hub.
 
 **Exit code 24** = Beads gate failed. See reason_code in output.
 
@@ -117,8 +117,7 @@ By default, the gate also enforces external Beads repo governance:
 |------|---------|--------|
 | `beads_ok` | Gate passed | Proceed with dispatch |
 | `beads_unavailable` | `bd` CLI not found | Install beads CLI |
-| `beads_external_repo_missing` | External repo missing at `~/bd` | Clone/sync `~/bd` |
-| `beads_external_remote_mismatch` | External repo origin is not `stars-end/bd` | Fix `~/bd` origin URL |
+| `beads_runtime_missing` | Active runtime metadata is missing | Hydrate `~/.beads-runtime/.beads` |
 | `beads_db_error` | DB connectivity failed | Check DB URL, network |
 | `beads_repo_mismatch` | Repo ID mismatch | Reinitialize repo binding |
 | `beads_write_blocked` | Write probe failed | Check DB permissions |
@@ -339,8 +338,8 @@ export DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES=30
 | `GOOGLE_API_KEY` | gemini | Alternative API key |
 | `DX_RUNNER_MAX_RUNTIME_MINUTES` | all | Max job runtime before force-finalize |
 | `DX_RUNNER_NO_MUTATION_TIMEOUT_MINUTES` | all | No-mutation timeout |
-| `BEADS_REPO_PATH` | all | External Beads repo path (default: `~/bd`) |
-| `BEADS_REPO_REMOTE_SUBSTR` | all | Expected external repo origin substring (default: `stars-end/bd`) |
+| `BEADS_DIR` | all | Active Beads runtime path (default: `~/.beads-runtime/.beads`) |
+| `BEADS_REPO_PATH` | all | Optional command cwd override for legacy wrappers (default: parent of `BEADS_DIR`) |
 | `BEADS_FLUSH_STRICT` | commit hooks | `1` makes Beads JSONL flush failures blocking |
 
 ## Exit Codes

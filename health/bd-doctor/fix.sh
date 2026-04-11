@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# bd-doctor fix - deterministic remediation for canonical ~/bd workflow
+# bd-doctor fix - deterministic remediation for centralized Beads runtime workflow
 
 set -euo pipefail
 
-BEADS_REPO="${BEADS_REPO_PATH:-$HOME/bd}"
-LOCK_FILE="$BEADS_REPO/.beads/.dx-bd-mutation.lock"
+BEADS_RUNTIME="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
+LOCK_FILE="$BEADS_RUNTIME/.dx-bd-mutation.lock"
 LOCK_DIR="${LOCK_FILE}.d"
 HOST="${BEADS_DOLT_SERVER_HOST:-${EPYC12_BEADS_HOST:-100.107.173.83}}"
 PORT="${BEADS_DOLT_SERVER_PORT:-${BEADS_DOLT_PORT:-3307}}"
-DATA_DIR="$BEADS_REPO/.beads/dolt"
+DATA_DIR="$BEADS_RUNTIME/dolt"
 DB_REPO_DIR="$DATA_DIR/beads_bd"
 
 echo "🔧 Beads Doctor Fix (canonical mode)"
-echo "repo: $BEADS_REPO"
+echo "runtime: $BEADS_RUNTIME"
 echo "server: ${HOST}:${PORT}"
 
-if [[ ! -d "$BEADS_REPO/.git" ]]; then
-  echo "❌ Canonical repo missing: $BEADS_REPO"
+if [[ ! -d "$BEADS_RUNTIME" ]]; then
+  echo "❌ Active runtime missing: $BEADS_RUNTIME"
   exit 1
 fi
 
-cd "$BEADS_REPO"
-mkdir -p "$BEADS_REPO/.beads"
+cd "$(dirname "$BEADS_RUNTIME")"
+mkdir -p "$BEADS_RUNTIME"
 
 acquire_lock() {
   if command -v flock >/dev/null 2>&1; then

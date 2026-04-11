@@ -3,9 +3,7 @@
 
 set -euo pipefail
 
-BEADS_REPO="${BEADS_REPO_PATH:-$HOME/bd}"
 BEADS_RUNTIME="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
-EXPECTED_REMOTE_SUBSTR="${BEADS_REPO_REMOTE_SUBSTR:-stars-end/bd}"
 MIN_BD_VERSION="${DX_MIN_BD_VERSION:-0.49.4}"
 
 ISSUES=0
@@ -24,19 +22,16 @@ pass() {
 }
 
 echo "🔍 Beads Doctor (canonical mode)"
-echo "repo: $BEADS_REPO"
 echo "runtime: $BEADS_RUNTIME"
 
-if [[ ! -d "$BEADS_REPO/.git" ]]; then
-  fail "Canonical repo missing at $BEADS_REPO"
-  echo "   Remediation: git clone git@github.com:stars-end/bd.git $BEADS_REPO"
-fi
-
-if [[ "$(pwd -P)" != "$(cd "$BEADS_REPO" 2>/dev/null && pwd -P || echo MISSING)" ]]; then
-  fail "Must run from canonical Beads repo"
-  echo "   Remediation: cd $BEADS_REPO"
+if [[ ! -d "$BEADS_RUNTIME" ]]; then
+  fail "Active runtime missing at $BEADS_RUNTIME"
+  echo "   Remediation: hydrate $BEADS_RUNTIME with epyc12 Dolt SQL metadata/config"
+elif [[ ! -f "$BEADS_RUNTIME/metadata.json" || ! -f "$BEADS_RUNTIME/config.yaml" ]]; then
+  fail "Active runtime is missing metadata.json or config.yaml"
+  echo "   Remediation: hydrate $BEADS_RUNTIME with epyc12 Dolt SQL metadata/config"
 else
-  pass "Running from canonical repo"
+  pass "Active runtime metadata/config present"
 fi
 
 if command -v bd >/dev/null 2>&1; then
@@ -52,7 +47,7 @@ if command -v bd >/dev/null 2>&1; then
     echo "   Remediation: unset BD_BIN"
     echo "   Remediation: export BD_BIN=\"$HOME/.local/bin/bd\""
   fi
-  BD_VERSION="$(bd --version 2>/dev/null | awk '{print $NF}' | head -1 || true)"
+  BD_VERSION="$(bd version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
   if [[ -n "$BD_VERSION" ]]; then
     if [[ "$(printf '%s\n' "$MIN_BD_VERSION" "$BD_VERSION" | sort -V | head -1)" != "$MIN_BD_VERSION" ]]; then
       fail "bd version too old: $BD_VERSION (minimum $MIN_BD_VERSION)"
@@ -73,16 +68,6 @@ else
   fail "bd CLI not found in PATH"
 fi
 
-REMOTE_URL="$(git -C "$BEADS_REPO" remote get-url origin 2>/dev/null || true)"
-if [[ -z "$REMOTE_URL" ]]; then
-  fail "origin remote missing in $BEADS_REPO"
-elif [[ "$REMOTE_URL" != *"$EXPECTED_REMOTE_SUBSTR"* ]]; then
-  fail "origin remote mismatch: $REMOTE_URL"
-  echo "   Expected to contain: $EXPECTED_REMOTE_SUBSTR"
-else
-  pass "origin remote OK: $REMOTE_URL"
-fi
-
 if [[ -f "$BEADS_RUNTIME/beads.db" && -f "$BEADS_RUNTIME/bd.db" ]]; then
   fail "DB ambiguity detected in runtime: both beads.db and bd.db exist"
   echo "   Remediation: archive/remove $BEADS_RUNTIME/beads.db"
@@ -91,7 +76,12 @@ else
 fi
 
 if command -v bd >/dev/null 2>&1; then
-  if bd doctor --json 2>/dev/null | grep -q '"status":"error"'; then
+  if (cd "$(dirname "$BEADS_RUNTIME")" && BEADS_DIR="$BEADS_RUNTIME" bd dolt test --json >/dev/null 2>&1); then
+    pass "bd dolt connectivity OK"
+  else
+    fail "bd dolt connectivity failed"
+  fi
+  if (cd "$(dirname "$BEADS_RUNTIME")" && BEADS_DIR="$BEADS_RUNTIME" bd doctor --json 2>/dev/null | grep -q '"status":"error"'); then
     fail "bd doctor reports hard errors"
     echo "   Remediation: run ~/.agent/skills/health/bd-doctor/fix.sh"
   else

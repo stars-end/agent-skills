@@ -953,17 +953,17 @@ test_beads_gate() {
         fi
     fi
 
-    # Enforce external beads repo validation (~/bd by default) with deterministic failure
+    # Enforce active runtime validation with deterministic failure
     local missing_ext_result missing_ext_rc missing_ext_reason
     set +e
-    missing_ext_result="$(BEADS_REPO_PATH="/tmp/nonexistent-bd-$$" "$DX_RUNNER" beads-gate --json 2>&1)"
+    missing_ext_result="$(BEADS_DIR="/tmp/nonexistent-beads-runtime-$$" "$DX_RUNNER" beads-gate --json 2>&1)"
     missing_ext_rc=$?
     set -e
     missing_ext_reason="$(echo "$missing_ext_result" | jq -r '.reason_code' 2>/dev/null || echo "unknown")"
-    if [[ "$missing_ext_rc" -eq 24 && "$missing_ext_reason" == "beads_external_repo_missing" ]]; then
-        pass "beads-gate enforces external beads repo path and returns exit 24"
+    if [[ "$missing_ext_rc" -eq 24 && "$missing_ext_reason" == "beads_runtime_missing" ]]; then
+        pass "beads-gate enforces active beads runtime path and returns exit 24"
     else
-        fail "beads-gate external repo enforcement failed (rc=$missing_ext_rc reason=$missing_ext_reason)"
+        fail "beads-gate runtime enforcement failed (rc=$missing_ext_rc reason=$missing_ext_reason)"
     fi
 }
 
@@ -977,7 +977,7 @@ test_beads_gate_json_schema() {
 
     # Test 1: Deterministic IDs even when bd is missing
     local result
-    result="$(BEADS_REPO_PATH="/tmp/nonexistent-bd-$$" "$DX_RUNNER" beads-gate --repo "$temp_repo" --json 2>&1)" || true
+    result="$(BEADS_DIR="/tmp/nonexistent-beads-runtime-$$" "$DX_RUNNER" beads-gate --repo "$temp_repo" --json 2>&1)" || true
     
     local repo_id_local reason_code repo_id_db
     repo_id_local="$(echo "$result" | jq -r '.repo_id_local')"
@@ -990,13 +990,13 @@ test_beads_gate_json_schema() {
         fail "JSON failed to report local repo ID (got: $repo_id_local)"
     fi
 
-    if [[ "$repo_id_db" == "unavailable:beads_missing" || "$repo_id_db" == "unavailable:beads_repo_missing" ]]; then
+    if [[ "$repo_id_db" == "unavailable:beads_missing" || "$repo_id_db" == "unavailable:beads_runtime_missing" ]]; then
         pass "JSON reports deterministic sentinel for missing DB ID"
     else
         fail "JSON missing deterministic sentinel for DB ID (got: $repo_id_db)"
     fi
 
-    if [[ "$reason_code" == "beads_external_repo_missing" || "$reason_code" == "beads_unavailable" ]]; then
+    if [[ "$reason_code" == "beads_runtime_missing" || "$reason_code" == "beads_unavailable" ]]; then
         pass "JSON reports correct failure reason code"
     else
         fail "JSON reports unexpected reason code: $reason_code"
@@ -1004,7 +1004,7 @@ test_beads_gate_json_schema() {
 
     # Test 2: Field missing in config
     echo "something_else=v" > "$temp_repo/.beads/config"
-    result="$(BEADS_REPO_PATH="/tmp/nonexistent-bd-$$" "$DX_RUNNER" beads-gate --repo "$temp_repo" --json 2>&1)" || true
+    result="$(BEADS_DIR="/tmp/nonexistent-beads-runtime-$$" "$DX_RUNNER" beads-gate --repo "$temp_repo" --json 2>&1)" || true
     repo_id_local="$(echo "$result" | jq -r '.repo_id_local')"
     if [[ "$repo_id_local" == "unavailable:field_missing" ]]; then
         pass "JSON reports sentinel for missing field in config"
@@ -1135,7 +1135,7 @@ EOF
     fi
 
     local check_json
-    check_json="$(cd /Users/fengning/bd && "$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
+    check_json="$(cd "$(dirname "${BEADS_DIR:-$HOME/.beads-runtime/.beads}")" && "$DX_RUNNER" check --beads "$beads" --json 2>/dev/null || true)"
     if echo "$check_json" | jq -e '.provider=="opencode"' >/dev/null 2>&1; then
         pass "check resolves to latest provider instance after switch"
     else
@@ -1396,7 +1396,7 @@ EOF
     echo "recent output" > "$dir/${beads}.log"
 
     local check_json check_rc=0
-    check_json="$(cd /Users/fengning/bd && "$DX_RUNNER" check --beads "$beads" --json 2>/dev/null)" || check_rc=$?
+    check_json="$(cd "$(dirname "${BEADS_DIR:-$HOME/.beads-runtime/.beads}")" && "$DX_RUNNER" check --beads "$beads" --json 2>/dev/null)" || check_rc=$?
     if echo "$check_json" | jq -e '.state=="exited_err" and .reason_code=="opencode_rate_limited"' >/dev/null 2>&1; then
         pass "outcome file wins over lingering pid/log freshness"
     else
