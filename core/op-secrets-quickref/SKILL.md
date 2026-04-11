@@ -36,7 +36,7 @@ Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and 
 
 | Context | Canonical mode | Allowed live `op` source |
 |---------|----------------|--------------------------|
-| Human in a macOS terminal | GUI-backed `op` | Yes, after 1Password app sign-in and CLI integration |
+| Human in a macOS terminal | GUI-backed `op` | Yes, after 1Password app sign-in, CLI integration, and `op signin` for the current unlock/session |
 | Agent on macOS | synced cache first; service-account artifact if explicitly configured | No GUI dependency |
 | macOS cron/LaunchAgent | synced cache only | No |
 | Linux VM agent | synced cache or service-account artifact | No GUI |
@@ -157,11 +157,14 @@ Use this only when a human is actively setting up or repairing a Mac:
 
 1. Open 1Password and sign in/unlock.
 2. Enable 1Password CLI integration in the app's Developer settings.
-3. Run `op whoami`.
-4. Use GUI-backed `op` to create/sync the agent-safe cache or credential.
+3. Run `op signin` once for the current 1Password unlock/session.
+4. Run `op whoami`.
+5. Use GUI-backed `op` to create/sync the agent-safe cache or credential.
 
 Do not put GUI-backed `op read` calls in cron, LaunchAgents, shell startup, or
-agent bootstrap scripts.
+agent bootstrap scripts. Because the GUI-backed session can require re-signing
+after device lock or 1Password lock, it is a human convenience path, not an
+agent readiness signal.
 
 ### Windmill CLI Auth
 
@@ -182,7 +185,10 @@ export WINDMILL_API_TOKEN="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-
 Treat these as different problems:
 
 - `No accounts configured`, `not signed in`, `Unauthorized`
-  - service-account auth is missing or the token was not loaded in the same invocation
+  - for agent-safe auth: service-account/cache auth is missing or the token was
+    not loaded in the same invocation
+  - for macOS human GUI auth: run `op signin` after unlocking 1Password, then
+    retry `op whoami`
 - `Too many requests`
   - service-account auth succeeded, but 1Password is rate-limiting the client
 

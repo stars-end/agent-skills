@@ -19,6 +19,8 @@ that should be deprecated or converted to shims.
 - Remote access: prefer Tailscale SSH for canonical host work.
 - 1Password auth:
   - macOS GUI-backed `op` is for human bootstrap/recovery only.
+  - Human macOS shells may need `op signin` once after each device/1Password
+    unlock before `op whoami` works.
   - agents, cron, and fleet scripts must use synced OP cache artifacts or a
     service-account credential.
   - `epyc12` is the unattended OP cache refresh hub; consumer hosts should be
@@ -80,7 +82,7 @@ The entrypoint should run these phases explicitly:
   `agent_ready_service_account` for agent work.
 - macOS `op whoami` may be verified for human bootstrap, but no cron,
   LaunchAgent, shell startup, or agent bootstrap path depends on GUI unlock
-  state.
+  state or a prior `op signin`.
 - Opening a new shell does not run `dx-status`, spawn MCP servers, or open a
   Serena dashboard.
 - `crontab -l` or `systemctl --user list-timers` matches the host role.

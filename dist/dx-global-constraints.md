@@ -84,6 +84,8 @@ New agents MUST complete these steps before any other work:
 #   mode=human_interactive_only means 1Password GUI-backed op works for a
 #   person, but agents/cron still need synced cache or a service-account
 #   artifact.
+#   If op whoami says "no account found" after unlocking 1Password, run
+#   op signin once for that unlock/session.
 
 # Fallback search order if manual recovery is needed:
 #   1. ~/.config/systemd/user/op-<canonical-host-key>-token
@@ -106,7 +108,7 @@ railway status  # Should show project context when run in a linked repo/context
 **Common Issues:**
 - \`dx-op-auth-status.sh\` returns \`human_interactive_only\` → macOS GUI is linked, but agent-safe cache/service-account auth is still missing
 - \`dx-op-auth-status.sh\` returns \`blocked\` → sync OP cache from \`epyc12\` or create a service-account credential
-- \`op whoami\` says \`no account found\` on macOS → sign in to 1Password GUI and enable CLI integration; this is human bootstrap only
+- \`op whoami\` says \`no account found\` on macOS → unlock 1Password, run \`op signin\`, and verify CLI integration; this is human bootstrap only
 - \`railway whoami\` shows "Unauthorized" → Load OP + Railway auth in the same invocation (not separate tool calls)
 - repeated auth failures across shell/tool calls → Use \`~/agent-skills/scripts/dx-load-railway-auth.sh -- <command>\`
 - cache missing on a consumer host → sync OP cache artifacts from \`epyc12\` before retrying

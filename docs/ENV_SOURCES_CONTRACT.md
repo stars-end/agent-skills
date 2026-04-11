@@ -45,6 +45,8 @@ directly.
 - macOS unattended cron paths must not invoke live `op` refreshes.
 - macOS GUI-backed `op` is allowed for a human bootstrap terminal only; it is
   not an agent or cron dependency.
+- Human macOS terminals may require `op signin` after each device/1Password
+  unlock before `op whoami` or `op read` succeeds.
 - Agent readiness is checked with
   `~/agent-skills/scripts/dx-op-auth-status.sh --json`.
 
