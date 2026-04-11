@@ -43,6 +43,10 @@ directly.
 - `epyc12` is the canonical unattended refresh hub for OP-derived cache files.
 - Other canonical VMs must consume synced cache artifacts in cache-only mode.
 - macOS unattended cron paths must not invoke live `op` refreshes.
+- macOS GUI-backed `op` is allowed for a human bootstrap terminal only; it is
+  not an agent or cron dependency.
+- Agent readiness is checked with
+  `~/agent-skills/scripts/dx-op-auth-status.sh --json`.
 
 ### 2. Railway CLI Login (Authenticated Session)
 **Definition**: Railway access via interactive CLI authentication session

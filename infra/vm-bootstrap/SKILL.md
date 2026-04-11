@@ -66,9 +66,9 @@ replaces the legacy scripts.
 1. **Never print tokens** to logs or stdout
 2. **Never store secrets** in YAML, `.env` files, or repo
 3. **Railway vars** are for app runtime only (not runner/gh/tailscale credentials)
-4. **gh auth** and **railway login** use interactive prompts or GitHub secrets
-   only for human setup; automation should use the OP service-account cache
-   helpers and explicit Railway context.
+4. **gh auth**, **railway login**, and macOS GUI-backed **op** are human setup
+   paths only; automation should use synced OP cache/service-account helpers
+   and explicit Railway context.
 
 ## Dirty Repo Safety
 

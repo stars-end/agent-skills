@@ -12,9 +12,14 @@ Usage:
   dx-load-railway-auth.sh -- <command> [args...]
 
 Behavior:
-  - loads OP_SERVICE_ACCOUNT_TOKEN using canonical fallback paths
-  - loads RAILWAY_API_TOKEN from 1Password in the same invocation
-  - executes the requested command with both variables exported
+  - loads OP_SERVICE_ACCOUNT_TOKEN when a canonical unattended token is available
+  - loads RAILWAY_API_TOKEN from the synced cache or 1Password in the same invocation
+  - executes the requested command with resolved variables exported
+
+Policy:
+  - macOS GUI-backed op is for human bootstrap only
+  - agent/cron paths should succeed from cache or service-account auth
+  - use dx-op-auth-status.sh to distinguish GUI, cache, and service-account modes
 EOF
 }
 
@@ -29,9 +34,18 @@ case "${1:-}" in
     exit 0
     ;;
   --check)
-    dx_auth_load_op_service_account_token
+    op_service_loaded=0
+    if dx_auth_load_op_service_account_token >/dev/null 2>&1; then
+      op_service_loaded=1
+    else
+      unset OP_SERVICE_ACCOUNT_TOKEN DX_AUTH_OP_TOKEN_VERIFIED
+    fi
     dx_auth_load_railway_api_token
-    op whoami
+    if [[ "$op_service_loaded" == "1" ]]; then
+      op whoami
+    else
+      echo "OP: cache-only/no-service-account-token"
+    fi
     railway whoami
     exit 0
     ;;
@@ -45,15 +59,14 @@ esac
   exit 2
 }
 
-dx_auth_load_op_service_account_token || {
-  echo "BLOCKED: missing_op_service_account_token" >&2
-  echo "NEEDS: readable OP service-account credential file or OP_SERVICE_ACCOUNT_TOKEN_FILE" >&2
-  exit 1
-}
+if ! dx_auth_load_op_service_account_token >/dev/null 2>&1; then
+  unset OP_SERVICE_ACCOUNT_TOKEN DX_AUTH_OP_TOKEN_VERIFIED
+fi
 
 dx_auth_load_railway_api_token || {
   echo "BLOCKED: missing_railway_api_token" >&2
-  echo "NEEDS: op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN access in same shell invocation" >&2
+  echo "NEEDS: synced OP cache with RAILWAY_API_TOKEN or service-account refresh access" >&2
+  echo "CHECK: ~/agent-skills/scripts/dx-op-auth-status.sh --json" >&2
   exit 1
 }
 

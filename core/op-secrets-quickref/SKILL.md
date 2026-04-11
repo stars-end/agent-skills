@@ -1,8 +1,8 @@
 ---
 name: op-secrets-quickref
 description: |
-  Quick reference for 1Password service account auth and secret management.
-  Use for: API keys, tokens, service accounts, op:// references, or auth failures in non-interactive contexts (cron, systemd, CI).
+  Quick reference for 1Password auth and secret management across macOS GUI, cache-only agent mode, and service-account automation.
+  Use for: API keys, tokens, service accounts, op:// references, 1Password GUI/CLI confusion, or auth failures in non-interactive contexts (cron, systemd, CI).
   Triggers: ZAI_API_KEY, OP_SERVICE_ACCOUNT_TOKEN, 1Password, "where do secrets live", auth failure, 401, permission denied.
 tags: [secrets, auth, token, 1password, op-cli, dx, env, railway]
 allowed-tools:
@@ -13,17 +13,41 @@ allowed-tools:
 
 ## Goal
 
-Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and runtime resolution (`op read`, `op run --`) with **cached service-account auth by default** (not interactive biometric).
+Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and runtime resolution with **agent-safe cache/service-account auth by default**. GUI-backed `op` on macOS is a human bootstrap/recovery path, not a dependency for agents or cron.
 
 ## Critical Rule
 
-- Tool calls do **not** share shell exports reliably. If auth needs to survive across tool calls, prefer cached service-account mode from `scripts/lib/dx-auth.sh` and keep OP/Railway auth inside the same shell invocation.
-- If you need `op read` and `railway` in automation, load `OP_SERVICE_ACCOUNT_TOKEN` and `RAILWAY_API_TOKEN` in the **same command invocation**.
+- Tool calls do **not** share shell exports reliably. If auth needs to survive across tool calls, prefer cache/service-account mode from `scripts/lib/dx-auth.sh` and keep OP/Railway auth inside the same shell invocation.
+- If you need Railway in automation, load `RAILWAY_API_TOKEN` from the synced cache or service-account refresh in the **same command invocation**.
+- Do not treat macOS 1Password GUI unlock as agent readiness. It proves only `human_interactive_only`.
+- Prefer the canonical status helper before diagnosing:
+
+```bash
+~/agent-skills/scripts/dx-op-auth-status.sh --json
+```
+
 - Prefer the canonical helper for Railway-linked shells:
 
 ```bash
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 ```
+
+## Auth Mode Matrix
+
+| Context | Canonical mode | Allowed live `op` source |
+|---------|----------------|--------------------------|
+| Human in a macOS terminal | GUI-backed `op` | Yes, after 1Password app sign-in and CLI integration |
+| Agent on macOS | synced cache first; service-account artifact if explicitly configured | No GUI dependency |
+| macOS cron/LaunchAgent | synced cache only | No |
+| Linux VM agent | synced cache or service-account artifact | No GUI |
+| `epyc12` maintenance | service-account refresh hub | Yes, via service account |
+
+`dx-op-auth-status.sh --json` reports one of:
+
+- `agent_ready_cache`: preferred on consumer hosts; synced cache can satisfy agent secrets.
+- `agent_ready_service_account`: acceptable on refresh-capable hosts.
+- `human_interactive_only`: GUI-backed `op` works, but agents/cron must still be fixed.
+- `blocked`: no usable agent-safe auth path is available.
 
 ## Canonical Fleet Rule
 
@@ -68,9 +92,19 @@ Implementation uses these tokens via:
 
 **Note:** ZAI_API_KEY is used as ANTHROPIC_AUTH_TOKEN (Z.ai routes to Anthropic-compatible API).
 
-## Service-Account-First Auth (Default)
+## Agent-Safe Auth (Default)
 
-### Step 1: Verify/Create Service Account Token
+### Step 1: Check Agent Readiness
+
+```bash
+~/agent-skills/scripts/dx-op-auth-status.sh --json
+```
+
+Accept `agent_ready_cache` or `agent_ready_service_account` for agent work.
+On macOS, `human_interactive_only` means the GUI path works for the human but
+the agent-safe cache still needs to be synced or created.
+
+### Step 2: Verify/Create Service Account Token When Needed
 
 Check if credential exists:
 ```bash
@@ -82,7 +116,7 @@ Create protected service-account token file (requires human to paste token):
 ~/agent-skills/scripts/create-op-credential.sh
 ```
 
-### Step 2: Export Token for Current Shell
+### Step 3: Export Token for Current Shell
 
 Fallback order for service-account credentials:
 
@@ -92,9 +126,9 @@ Fallback order for service-account credentials:
 4. legacy fallback: `~/.config/systemd/user/op_token`
 5. legacy fallback: `~/.config/systemd/user/op_token.cred`
 
-**Linux/macOS same-invocation helper (recommended):**
+**Same-invocation helper for automation:**
 ```bash
-~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 ```
 
 **Linux (systemd-creds encrypted):**
@@ -102,18 +136,32 @@ Fallback order for service-account credentials:
 export OP_SERVICE_ACCOUNT_TOKEN="$(systemd-creds decrypt ~/.config/systemd/user/op-epyc6-token.cred)"
 ```
 
-**macOS (plaintext fallback):**
+**macOS service-account fallback (not the GUI path):**
 ```bash
 export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-macmini-token)"
 ```
 
-### Step 3: Verify Auth
+### Step 4: Verify Auth
 
 ```bash
 op whoami
 ```
 
-Expected output: `ServiceAccount: ...` (not interactive user account)
+For agent-safe service-account mode, expected output is `ServiceAccount: ...`.
+For macOS human setup, `op whoami` may show an interactive account; that is
+valid for manual bootstrap only.
+
+### macOS GUI Bootstrap
+
+Use this only when a human is actively setting up or repairing a Mac:
+
+1. Open 1Password and sign in/unlock.
+2. Enable 1Password CLI integration in the app's Developer settings.
+3. Run `op whoami`.
+4. Use GUI-backed `op` to create/sync the agent-safe cache or credential.
+
+Do not put GUI-backed `op read` calls in cron, LaunchAgents, shell startup, or
+agent bootstrap scripts.
 
 ### Windmill CLI Auth
 
@@ -154,9 +202,9 @@ for delay in 5 15 30; do
 done
 ```
 
-### Interactive Auth (Fallback Only)
+### Interactive Auth (Human Fallback Only)
 
-Use only when service account unavailable:
+Use only for a human terminal recovery flow, not for agents:
 ```bash
 eval $(op signin)
 ```
@@ -190,7 +238,7 @@ For occasional manual use, `op read` is fine:
 op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
 ```
 
-### Cached Secret Resolution (standard for automation / repeated reads)
+### Cached Secret Resolution (standard for agents / automation / repeated reads)
 
 For cron, systemd, scripts, or any path that reads secrets repeatedly, use the
 cached helpers from `scripts/lib/dx-auth.sh`.  These avoid hitting 1Password on
@@ -334,7 +382,8 @@ BACKEND_URL="${RAILWAY_SERVICE_BACKEND_URL:-http://localhost:3000}"
 ## Rules
 
 - Never hardcode secrets in repos.
-- Prefer service account auth over interactive biometric auth.
+- Prefer synced cache or service-account auth over interactive biometric auth
+  for agents, cron, systemd, and LaunchAgents.
 - **Prefer cached secret helpers** (`dx_auth_read_secret_cached`, `dx_auth_load_zai_api_key`, etc.) for cron, systemd, automation, and any repeated secret reads. Use raw `op read` only for occasional manual one-shot use.
 - Prefer `op://...` references in env templates and resolve at runtime via `op run --env-file=... -- <command>`.
 - Avoid printing secrets in logs. If you must verify, do it once and then stop output.

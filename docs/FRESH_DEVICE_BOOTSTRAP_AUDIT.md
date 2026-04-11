@@ -17,6 +17,12 @@ that should be deprecated or converted to shims.
   the worktree. If compute must happen on `epyc12`, create or mirror the
   worktree there first.
 - Remote access: prefer Tailscale SSH for canonical host work.
+- 1Password auth:
+  - macOS GUI-backed `op` is for human bootstrap/recovery only.
+  - agents, cron, and fleet scripts must use synced OP cache artifacts or a
+    service-account credential.
+  - `epyc12` is the unattended OP cache refresh hub; consumer hosts should be
+    cache-only whenever possible.
 - Schedules: cron/systemd by host role; no LaunchAgent `ru` policy on macOS.
 - Shell startup: no health checks, MCP checks, browser dashboards, or service
   starts from `.zshrc`, `.zshenv`, `.bashrc`, or `.bash_profile`.
@@ -53,8 +59,9 @@ The entrypoint should run these phases explicitly:
 1. `dx-link-bins`: install links into `~/.local/bin` or `~/bin`.
 2. `dx-bootstrap-beads`: create `~/.beads-runtime/.beads` metadata/config and
    verify `bd dolt test --json`.
-3. `dx-bootstrap-auth`: verify OP CLI/service-account cache without printing
-   secrets.
+3. `dx-bootstrap-auth`: run `dx-op-auth-status.sh --json` and require
+   `agent_ready_cache` or `agent_ready_service_account` for agent/cron work;
+   `human_interactive_only` is acceptable only during Mac human bootstrap.
 4. `dx-render-mcp`: render MCP configs appropriate for the host/client role.
 5. `dx-install-schedules`: install only the schedules for the detected host
    role.
@@ -69,6 +76,11 @@ The entrypoint should run these phases explicitly:
 - `llm-tldr` MCP is local-contained and tested against a host-local worktree.
 - A Mac-local worktree analysis never routes through an `epyc12` MCP process
   unless the worktree is mirrored or mounted there.
+- `dx-op-auth-status.sh --json` returns `agent_ready_cache` or
+  `agent_ready_service_account` for agent work.
+- macOS `op whoami` may be verified for human bootstrap, but no cron,
+  LaunchAgent, shell startup, or agent bootstrap path depends on GUI unlock
+  state.
 - Opening a new shell does not run `dx-status`, spawn MCP servers, or open a
   Serena dashboard.
 - `crontab -l` or `systemctl --user list-timers` matches the host role.
