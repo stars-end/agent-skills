@@ -26,6 +26,12 @@ Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and 
 ~/agent-skills/scripts/dx-op-auth-status.sh --json
 ```
 
+- Prefer the canonical repair helper on fresh devices:
+
+```bash
+~/agent-skills/scripts/dx-bootstrap-auth.sh --json
+```
+
 - Prefer the canonical helper for Railway-linked shells:
 
 ```bash
@@ -97,7 +103,7 @@ Implementation uses these tokens via:
 ### Step 1: Check Agent Readiness
 
 ```bash
-~/agent-skills/scripts/dx-op-auth-status.sh --json
+~/agent-skills/scripts/dx-bootstrap-auth.sh --json
 ```
 
 Accept `agent_ready_cache` or `agent_ready_service_account` for agent work.
@@ -284,6 +290,16 @@ token="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/ZAI_API_K
 DX_AUTH_CACHE_ONLY=1
 2,17,32,47 * * * * ~/agent-skills/scripts/dx-job-wrapper.sh sync-op-cache -- ~/agent-skills/scripts/dx-sync-op-caches.sh
 ```
+
+**Fresh-device repair:**
+
+```bash
+~/agent-skills/scripts/dx-bootstrap-auth.sh --json
+```
+
+This checks local agent auth first, syncs OP cache artifacts from `epyc12` on
+cache miss, then checks again. It does not use macOS GUI `op signin` as an
+agent readiness signal.
 
 **Example — script preamble:**
 

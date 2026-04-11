@@ -74,7 +74,7 @@ New agents MUST complete these steps before any other work:
 **Step 1: Verify Agent-Safe 1Password Auth**
 \`\`\`bash
 # Classifies local auth without printing secrets.
-~/agent-skills/scripts/dx-op-auth-status.sh --json
+~/agent-skills/scripts/dx-bootstrap-auth.sh --json
 
 # Accept for agents/cron:
 #   mode=agent_ready_cache
