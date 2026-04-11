@@ -14,7 +14,13 @@ tags: [dx, tooling, setup, linux]
 
 # Linux VM Bootstrap Verification
 
-Verify and optionally install required tools for a standardized Linux development VM.
+Verify and optionally install required tools for a standardized Linux
+development VM.
+
+This is a Linux adapter, not the universal fresh-device bootstrap surface. For
+macOS clients or cross-host setup decisions, follow
+`docs/FRESH_DEVICE_BOOTSTRAP_AUDIT.md` until the role-aware bootstrap entrypoint
+replaces the legacy scripts.
 
 ## Modes
 
@@ -41,7 +47,7 @@ Verify and optionally install required tools for a standardized Linux developmen
 | `gh` | PRs + auth | brew | `gh --version && gh auth status` |
 | `railway` | env/shell/deploy | mise (`@railway/cli`) | `mise exec -- railway --version` + `railway status` + version >= 3.0.0 |
 | `op` | secrets + service auth | brew | `op --version` |
-| `bd` | Beads tasks | Beads installer | `bd --version` |
+| `bd` | Beads tasks | Beads installer | `bd --version` + `bd dolt test --json` |
 | `dcg` | destructive command guard | installer | `dcg explain "rm -rf /"` |
 | `ru` | repo sync | installer | `ru --version` |
 
@@ -61,6 +67,8 @@ Verify and optionally install required tools for a standardized Linux developmen
 2. **Never store secrets** in YAML, `.env` files, or repo
 3. **Railway vars** are for app runtime only (not runner/gh/tailscale credentials)
 4. **gh auth** and **railway login** use interactive prompts or GitHub secrets
+   only for human setup; automation should use the OP service-account cache
+   helpers and explicit Railway context.
 
 ## Dirty Repo Safety
 
@@ -125,7 +133,8 @@ Note: `check.sh` is a wrapper for `verify.sh check`. `install.sh` provides inter
 
 ## Integration
 
-DX entrypoints should call `vm-bootstrap check` as first step:
+DX entrypoints that are Linux-only may call `vm-bootstrap check` as a first
+step:
 
 ```bash
 # In bd-context or dx-doctor

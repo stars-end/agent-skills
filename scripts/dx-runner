@@ -255,7 +255,8 @@ provider_running_count() {
 }
 
 canonical_beads_repo_path() {
-    local path="${BEADS_REPO_PATH:-$HOME/bd}"
+    local runtime="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
+    local path="${BEADS_REPO_PATH:-$(dirname "$runtime")}"
     # Expand leading ~ for deterministic comparisons.
     if [[ "$path" == "~/"* ]]; then
         path="$HOME/${path#~/}"
@@ -277,41 +278,50 @@ require_canonical_beads_cwd() {
     if is_truthy "${DX_ALLOW_NON_CANONICAL_BD_CWD:-0}"; then
         return 0
     fi
-    local canonical_repo
-    canonical_repo="$(canonical_beads_repo_path)"
-    local canonical_pwd_now canonical_repo_abs
-    canonical_pwd_now="$(canonical_pwd ".")"
-    canonical_repo_abs="$(canonical_pwd "$canonical_repo")"
-
-    if [[ -z "$canonical_repo_abs" || ! -d "$canonical_repo_abs" ]]; then
-        echo "beads cwd gate failed: canonical repo missing at ${canonical_repo}" >&2
-        echo "Remediation: clone/fix Beads repo at ${canonical_repo}" >&2
-        return 1
-    fi
-
-    if [[ "$canonical_pwd_now" != "$canonical_repo_abs" ]]; then
-        echo "beads cwd gate failed: command '${command}' must run from canonical Beads repo" >&2
-        echo "Current cwd: $canonical_pwd_now" >&2
-        echo "Required cwd: $canonical_repo_abs" >&2
-        echo "Remediation: cd \"$canonical_repo_abs\" && dx-runner ${command} ..." >&2
+    local beads_runtime="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
+    if [[ ! -d "$beads_runtime" || ! -f "$beads_runtime/metadata.json" ]]; then
+        echo "beads runtime gate failed for command '${command}': missing runtime metadata at ${beads_runtime}" >&2
+        echo "Remediation: hydrate ${beads_runtime} with epyc12 Dolt SQL metadata/config" >&2
         return 1
     fi
     return 0
 }
 
 run_bd_locked() {
-    local beads_repo
-    beads_repo="$(canonical_beads_repo_path)"
-    local lock_dir="$beads_repo/.beads"
+    local beads_runtime="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
+    local lock_dir="$beads_runtime"
     local lock_file="$lock_dir/.dx-bd-mutation.lock"
     mkdir -p "$lock_dir"
-    (
-        flock -w "${DX_BEADS_LOCK_WAIT_SEC:-10}" 9 || {
-            echo "failed to acquire Beads lock: $lock_file" >&2
-            exit 1
-        }
-        cd "$beads_repo" && bd "$@"
-    ) 9>"$lock_file"
+    if command -v flock >/dev/null 2>&1; then
+        (
+            flock -w "${DX_BEADS_LOCK_WAIT_SEC:-10}" 9 || {
+                echo "failed to acquire Beads lock: $lock_file" >&2
+                exit 1
+            }
+            cd "$(dirname "$beads_runtime")" && BEADS_DIR="$beads_runtime" bd "$@"
+        ) 9>"$lock_file"
+        return $?
+    fi
+
+    local lock_fallback="${lock_file}.d"
+    local acquired=0
+    local i
+    for i in $(seq 1 "${DX_BEADS_LOCK_WAIT_SEC:-10}"); do
+        if mkdir "$lock_fallback" 2>/dev/null; then
+            acquired=1
+            break
+        fi
+        sleep 1
+    done
+    if [[ "$acquired" != "1" ]]; then
+        echo "failed to acquire Beads lock: $lock_fallback" >&2
+        return 1
+    fi
+
+    local rc=0
+    (cd "$(dirname "$beads_runtime")" && BEADS_DIR="$beads_runtime" bd "$@") || rc=$?
+    rmdir "$lock_fallback" 2>/dev/null || true
+    return "$rc"
 }
 
 strip_ansi() {
@@ -1224,9 +1234,13 @@ validate_worktree_path() {
     local path="$1"
     local allowed_prefixes=(
         "/tmp/agents"
+        "/private/tmp/agents"
         "/tmp/dx-runner"
+        "/private/tmp/dx-runner"
         "/tmp/dxbench"
+        "/private/tmp/dxbench"
         "/tmp/dxbench_epyc6"
+        "/private/tmp/dxbench_epyc6"
         "$HOME/agent-skills"
     )
     local extra_prefixes="${DX_RUNNER_EXTRA_ALLOWED_PREFIXES:-}"
@@ -3730,8 +3744,7 @@ beads_gate_eval() {
     local db_status="unknown"
     local repo_id_db="unavailable:not_checked"
     local repo_id_local="unavailable:not_checked"
-    local external_beads_repo="${BEADS_REPO_PATH:-$HOME/bd}"
-    local external_beads_remote_expected="${BEADS_REPO_REMOTE_SUBSTR:-stars-end/bd}"
+    local external_beads_repo="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
     local external_beads_remote_actual=""
 
     # 1. Local Repo ID discovery (doesn't require bd CLI)
@@ -3755,24 +3768,15 @@ beads_gate_eval() {
         return 1
     fi
 
-    if [[ ! -d "$external_beads_repo/.git" ]]; then
-        reason_code="beads_external_repo_missing"
-        details="External Beads repo not found at $external_beads_repo"
+    if [[ ! -d "$external_beads_repo" || ! -f "$external_beads_repo/metadata.json" ]]; then
+        reason_code="beads_runtime_missing"
+        details="Active Beads runtime metadata not found at $external_beads_repo"
         db_status="unavailable"
-        repo_id_db="unavailable:beads_repo_missing"
+        repo_id_db="unavailable:beads_runtime_missing"
         printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
         return 1
     fi
-
-    external_beads_remote_actual="$(git -C "$external_beads_repo" remote get-url origin 2>/dev/null || true)"
-    if [[ -z "$external_beads_remote_actual" || "$external_beads_remote_actual" != *"$external_beads_remote_expected"* ]]; then
-        reason_code="beads_external_remote_mismatch"
-        details="External Beads remote mismatch: expected '$external_beads_remote_expected', got '${external_beads_remote_actual:-<none>}'"
-        db_status="error"
-        repo_id_db="unavailable:remote_mismatch"
-        printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$passed" "$reason_code" "$db_status" "$repo_id_local" "$repo_id_db" "$details" "$external_beads_repo" "$external_beads_remote_actual"
-        return 1
-    fi
+    external_beads_remote_actual="not_applicable:central_dolt_runtime"
     
     # 3. DB connectivity check
     local status_output
@@ -3846,8 +3850,7 @@ beads_gate_cmd() {
     IFS='|' read -r gate_pass gate_reason gate_db_status gate_repo_local gate_repo_db gate_details gate_external_repo gate_external_remote <<< "$result"
     case "$gate_reason" in
         beads_repo_mismatch) gate_next_action="run_bd_migrate_update_repo_id" ;;
-        beads_external_remote_mismatch) gate_next_action="fix_beads_external_origin" ;;
-        beads_external_repo_missing) gate_next_action="clone_or_restore_external_beads_repo" ;;
+        beads_runtime_missing) gate_next_action="hydrate_beads_runtime_metadata" ;;
         beads_db_error) gate_next_action="check_beads_db_connectivity" ;;
         *) gate_next_action="-" ;;
     esac
@@ -3876,7 +3879,7 @@ beads_gate_cmd() {
 # ============================================================================
 
 case "$CMD" in
-    start|status|check|health|stop|restart|prune|report|preflight|watchdog|finalize|beads-gate|baseline-gate|integrity-gate|feature-key-gate|evidence-gate|scope-gate)
+    start|status|check|health|stop|restart|prune|report|preflight|watchdog|finalize|baseline-gate|integrity-gate|feature-key-gate|evidence-gate|scope-gate)
         if ! require_canonical_beads_cwd "$CMD"; then
             exit 24
         fi

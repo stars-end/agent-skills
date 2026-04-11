@@ -4,7 +4,7 @@ dx-batch - Deterministic orchestration over dx-runner for autonomous implement->
 """
 
 from __future__ import annotations
-import argparse, fcntl, json, os, shlex, shutil, signal, subprocess, sys, time, uuid
+import argparse, fcntl, json, os, re, shlex, shutil, signal, subprocess, sys, time, uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from enum import Enum
@@ -29,10 +29,16 @@ ARTIFACT_BASE = Path("/tmp/dx-batch")
 DX_RUNNER_LOG_BASE = Path("/tmp/dx-runner")
 CONFIG_BASE = Path(__file__).parent.parent / "configs" / "dx-batch"
 SCHEMAS_DIR = CONFIG_BASE / "schemas"
-BEADS_REPO_PATH = Path(
-    os.environ.get("BEADS_REPO_PATH", str(Path.home() / "bd"))
+BEADS_RUNTIME_PATH = Path(
+    os.environ.get("BEADS_DIR", str(Path.home() / ".beads-runtime" / ".beads"))
 ).expanduser()
-BEADS_LOCK_FILE = BEADS_REPO_PATH / ".beads" / ".dx-bd-mutation.lock"
+BEADS_COMMAND_CWD = Path(
+    os.environ.get("BEADS_REPO_PATH", str(BEADS_RUNTIME_PATH.parent))
+).expanduser()
+# Backward-compatible alias for older tests/plugins that monkeypatch the
+# previous name while runtime code uses the clearer command-CWD constant.
+BEADS_REPO_PATH = BEADS_COMMAND_CWD
+BEADS_LOCK_FILE = BEADS_RUNTIME_PATH / ".dx-bd-mutation.lock"
 MIN_BD_VERSION = os.environ.get("DX_MIN_BD_VERSION", "0.49.4")
 
 CANONICAL_REPOS = [
@@ -46,9 +52,13 @@ WORKSPACE_BASE = Path("/tmp/agents")
 
 ALLOWED_WORKSPACE_PREFIXES = [
     WORKSPACE_BASE,
+    Path("/private/tmp/agents"),
     Path("/tmp/dx-runner"),
+    Path("/private/tmp/dx-runner"),
     Path("/tmp/dxbench"),
+    Path("/private/tmp/dxbench"),
     Path("/tmp/dxbench_epyc6"),
+    Path("/private/tmp/dxbench_epyc6"),
 ]
 
 WORKSPACE_VIOLATION_EXIT_CODE = 22
@@ -961,9 +971,8 @@ def _check_bd_version() -> tuple[bool, str]:
         msg = result.stderr.strip() or result.stdout.strip() or "unknown"
         return False, f"bd_version_command_failed:{msg}"
 
-    version = (
-        result.stdout.strip().split()[-1] if result.stdout.strip() else ""
-    ).strip()
+    match = re.search(r"\d+\.\d+\.\d+", result.stdout)
+    version = match.group(0) if match else ""
     if _parse_semver(version) < _parse_semver(MIN_BD_VERSION):
         return False, f"bd_version_too_old:{version}<min:{MIN_BD_VERSION}"
     return True, version
@@ -976,15 +985,11 @@ def ensure_canonical_beads_cwd() -> tuple[bool, str]:
         "yes",
     ):
         return True, ""
-    required = BEADS_REPO_PATH.resolve()
-    current = Path.cwd().resolve()
+    required = BEADS_RUNTIME_PATH.resolve()
     if not required.exists():
-        return False, f"beads_repo_missing:{required}"
-    if current != required:
-        return (
-            False,
-            f"beads_non_canonical_cwd: current={current} required={required}. Run: cd {required}",
-        )
+        return False, f"beads_runtime_missing:{required}"
+    if not (required / "metadata.json").exists():
+        return False, f"beads_runtime_metadata_missing:{required / 'metadata.json'}"
     return True, ""
 
 
@@ -1012,7 +1017,7 @@ def bd_command(args, check=False):
             fcntl.flock(lockf.fileno(), fcntl.LOCK_EX)
             result = subprocess.run(
                 ["bd"] + args,
-                cwd=str(BEADS_REPO_PATH),
+                cwd=str(BEADS_COMMAND_CWD),
                 capture_output=True,
                 text=True,
                 timeout=60,
@@ -1844,8 +1849,8 @@ class Doctor:
                 }
             )
 
-        legacy_db = BEADS_REPO_PATH / ".beads" / "beads.db"
-        canonical_db = BEADS_REPO_PATH / ".beads" / "bd.db"
+        legacy_db = BEADS_RUNTIME_PATH / "beads.db"
+        canonical_db = BEADS_RUNTIME_PATH / "bd.db"
         if legacy_db.exists() and canonical_db.exists():
             result["issues"].append(
                 {

@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: b2af38112ca97d1d8a8b915169ac757b0faa50d9 -->
-<!-- Last updated: 2026-04-11 06:42:37 UTC -->
+<!-- Source SHA: 28fa4affb90039fdbe02a1e8748d9d053634b448 -->
+<!-- Last updated: 2026-04-11 07:06:40 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -154,20 +154,20 @@ cd /tmp/agents/bd-xxxx/repo-name
 # Work here
 \`\`\`
 
-## 1.5) Canonical Beads Contract (V8.4)
-- **Canonical Beads repo is always \`~/bd\`** (remote must be \`stars-end/bd\`).
-- **Run \`dx-runner\` / \`dx-batch\` control-plane commands from \`~/bd\`**.
-- **Active Beads runtime path is \`~/.beads-runtime/.beads\`**.
+## 1.5) Canonical Beads Contract (V8.6)
+- **Active Beads runtime path is always \`~/.beads-runtime/.beads\`**.
+- **\`~/beads\` is the Beads CLI source/build checkout, not runtime state**.
+- **\`~/bd\` is legacy/rollback Git-backed state, not active runtime truth**.
+- **Run \`dx-runner\` / \`dx-batch\` control-plane commands from any non-app directory with \`BEADS_DIR=~/.beads-runtime/.beads\`**.
 - **Set \`BEADS_DIR=~/.beads-runtime/.beads\` in normal agent shells**.
-- **Treat \`~/bd/.beads\` as legacy/rollback state, not active runtime truth**.
 - **Never run mutating Beads commands from app repos** (\`~/prime-radiant-ai\`, \`~/agent-skills\`, etc.) unless explicitly using a documented override.
 - **Backend must be Dolt server mode** for multi-VM/multi-agent reliability.
 - **\`epyc12\` is the central Dolt server host**.
 - **Client hosts must not rely on local \`~/bd/.beads/dolt\` data directories**.
 - **Legacy macOS \`io.agentskills.ru\` LaunchAgent is disabled by policy** (use cron/systemd schedules only).
 - **Before dispatch**: verify \`bd dolt test --json\` succeeds and Beads service is active on the host.
-- **\`beads.role\` self-heal**: if mutating \`bd\` commands warn \`beads.role not configured\` while \`bd dolt test --json\` passes, run \`bd config set beads.role maintainer\` before escalating. This is local config drift, not a hub outage.
-- **Do not infer runtime health from \`~/bd\` git cleanliness**; use live Beads checks.
+- **\`beads.role\` self-heal**: if mutating \`bd\` commands warn \`beads.role not configured\` while \`bd dolt test --json\` passes, run \`bd config set beads.role maintainer\`; if that fails outside a Git repo, run \`git config --global beads.role maintainer\` before escalating. This is local config drift, not a hub outage.
+- **Do not infer runtime health from \`~/bd\` git cleanliness or Git sync**; use live Beads checks.
 - **Host service contract**:
   - Linux canonical VMs: \`systemctl --user is-active beads-dolt.service\`
   - macOS canonical host: \`launchctl print gui/\$(id -u)/com.starsend.beads-dolt\`
@@ -317,8 +317,9 @@ For qualifying tasks, agents MUST route the first discovery action through the m
 - rename/refactor, insert-before/after-symbol, replace known symbol body/signature, or symbol lookup directly tied to an edit -> \`serena\`
 
 Transport handling rule:
-- prefer the MCP surface when the tool is available in the current runtime
-- if \`llm-tldr\` MCP is unavailable, use the canonical local fallback instead of inventing a new analysis path
+- prefer the local contained MCP surface when the tool is available in the current runtime
+- \`llm-tldr\` is filesystem-local: the MCP server process must run on a host that can read the requested project path
+- if \`llm-tldr\` MCP is unavailable in the current runtime, use the canonical local fallback instead of inventing a new analysis path
 - agents should not manually choose among MCP vs daemon vs raw CLI surfaces beyond this fallback rule
 
 Codex desktop hydration check:
@@ -330,6 +331,7 @@ Codex desktop hydration check:
 Fallback to shell/file reads or ordinary patch editing is allowed only when:
 - the MCP tool is unavailable in the current runtime and no canonical fallback exists
 - the MCP tool cannot answer the question after one reasonable attempt
+- the MCP server process cannot read the host-local project path and the local contained fallback is unavailable or insufficient
 - the task is trivially faster with direct file access
 
 If the agent does not use the matching MCP tool on a qualifying task, it MUST state \`Tool routing exception: <reason>\` in the final response or handoff.
@@ -593,7 +595,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-| **bd-doctor** | Diagnose and repair Beads reliability issues in canonical Dolt server mode (`~/bd` control-plane + `~/.beads-runtime/.beads` runtime) across hosts. | `bd config set beads.role maintainer` | health, beads, dolt, reliability, fleet |
+| **bd-doctor** | Diagnose and repair Beads reliability issues in canonical Dolt server mode (`~/.beads-runtime/.beads` runtime, epyc12 hub) across hosts. | `bd config set beads.role maintainer` | health, beads, dolt, reliability, fleet |
 | **beads-dolt-fleet** | Fleet-level Beads Dolt operations for canonical hosts (verify, converge, and recover shared `~/.beads-runtime/.beads` runtime state). | — | health, beads, dolt, fleet, vm |
 | **dx-cron** | Monitor and manage dx-* system cron jobs and their logs. MUST BE USED when user asks "is the cron running", "show me cron logs", or "status of dx jobs". | — | health, auth, audit, cron, monitoring |
 | **lockfile-doctor** | Check and fix lockfile drift across Poetry (Python) and pnpm (Node.js) projects. | — |  |

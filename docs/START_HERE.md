@@ -2,11 +2,21 @@
 
 This repo standardizes your agent environment across canonical VMs.
 
-## Quick Start (Choose One)
+## Current Status
 
-### Option A: Fresh VM - Need Tools Installed
+The fresh-device bootstrap surface is under cleanup. Do not use
+`scripts/bootstrap-agent.sh` or `scripts/dx-hydrate.sh` as a fresh-device
+one-liner until they are converted into role-aware shims.
 
-**Use this for:** New VMs, systems missing required tools
+Use the active contract in `docs/FRESH_DEVICE_BOOTSTRAP_AUDIT.md` when setting
+up a new host.
+
+## Quick Start (Current Safe Path)
+
+### Linux VM - Need Tools Installed
+
+**Use this for:** Linux VMs missing required tools. This is not the macOS
+bootstrap path.
 
 ```bash
 # Interactive tool installer (prompts before each install)
@@ -20,37 +30,33 @@ cd ~/agent-skills/infra/vm-bootstrap
 
 ---
 
-### Option B: Quick Bootstrap - Tools Already Installed
-
-**Use this for:** Existing systems, quick refresh
+### Existing Host - Verify, Then Repair Explicitly
 
 ```bash
-# One-line bootstrap
-curl -fsSL https://raw.githubusercontent.com/stars-end/agent-skills/master/scripts/bootstrap-agent.sh | bash
+~/agent-skills/health/bd-doctor/check.sh
+~/agent-skills/health/mcp-doctor/check.sh
+~/agent-skills/scripts/dx-fleet-check.sh --local-only --json
 ```
 
-**What it does:** Clones agent-skills, runs dx-hydrate, runs dx-check
+Run targeted repair scripts only for the failed surface. Do not source shell RC
+files as part of bootstrap.
 
 ---
 
 ## One-Time Setup (per VM)
 
-After running either option above:
+After running setup or repair:
 
 ```bash
-# Restart shell or source
-source ~/.bashrc  # or source ~/.zshrc
-
 # Verify installation
-dx-check
+bd dolt test --json
 ```
-
-`dx-hydrate` installs control-plane commands into `~/bin` and applies baseline host bootstrap settings.
 
 DX command contract:
 - `dx-check` is the default health + fix entrypoint.
 - `dx-status` is read-only diagnostics.
-- `dx-hydrate` is bootstrap/repair, usually called by `dx-check` when needed.
+- `dx-hydrate` is legacy broad bootstrap/repair and should not be used as a
+  fresh-device one-liner.
 - There is no separate `dx-health` command.
 
 ---
@@ -106,5 +112,6 @@ cd ~/agent-skills/infra/vm-bootstrap
 | Topic | Location |
 |--------|----------|
 | Full tool reference | `AGENTS.md` |
+| Fresh-device bootstrap audit | `docs/FRESH_DEVICE_BOOTSTRAP_AUDIT.md` |
 | VM bootstrap details | `infra/vm-bootstrap/SKILL.md` |
 | Archived docs | `docs/archive/` |

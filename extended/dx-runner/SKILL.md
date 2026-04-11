@@ -37,7 +37,7 @@ OpenCode behavior in this skill is grounded in official docs and live CLI help:
 
 ```bash
 # Canonical control-plane cwd
-cd ~/bd
+export BEADS_DIR="$HOME/.beads-runtime/.beads"
 
 # Start a job with cc-glm provider and explicit repo worktree
 dx-runner start --beads bd-xxx --provider cc-glm --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/task.prompt
@@ -71,7 +71,7 @@ Options:
 ```
 
 Operator contract:
-- Run control-plane commands from canonical `~/bd`.
+- Run control-plane commands with `BEADS_DIR=~/.beads-runtime/.beads` from a non-app directory.
 - Pass `--worktree /tmp/agents/<beads>/<repo>` explicitly for mutating jobs.
 - Use `DX_RUNNER_DEFAULT_WORKTREE` only as fallback for legacy wrappers or previously recorded runs.
 

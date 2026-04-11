@@ -2,9 +2,11 @@
 
 ## Scope
 
-This is the operating contract for agents working in `~/prime-radiant-ai` with Beads control-plane in `~/bd` and dedicated runtime at `~/.beads-runtime/.beads`.
+This is the operating contract for agents working in `~/prime-radiant-ai` with Beads control-plane commands using the dedicated runtime at `~/.beads-runtime/.beads`.
 
-- Canonical Beads repo: `~/bd` (`git@github.com:stars-end/bd.git`)
+- Active Beads runtime: `~/.beads-runtime/.beads`
+- Beads CLI source/build checkout: `~/beads`
+- Legacy rollback mirror: `~/bd`
 - Canonical backend: Dolt SQL server mode
 - Canonical fleet: `epyc12` hub, `macmini`, `homedesktop-wsl`, `epyc6` spokes
 
@@ -223,6 +225,8 @@ fi
 
 ```bash
 bd config set beads.role maintainer
+# If outside a Git repo and the command reports git config exit 128:
+git config --global beads.role maintainer
 ```
 
 **Retry after fix:**
@@ -327,11 +331,9 @@ done
 4. Validate end-to-end status from each host:
 
 ```bash
-cd ~/bd
 export BEADS_DIR="$HOME/.beads-runtime/.beads"
 export BEADS_DOLT_SERVER_HOST=100.107.173.83
 export BEADS_DOLT_SERVER_PORT=3307
-cd ~/bd
 beads-dolt dolt test --json
 beads-dolt status --json | jq -c .summary
 ssh epyc12 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c .summary"
@@ -359,7 +361,8 @@ ssh homedesktop-wsl 'grep -q "BEADS_DOLT_SERVER_HOST" ~/.zshrc ~/.bashrc'
 
 ## 8) Operator Rules
 
-- Do not run mutating `bd` commands from non-`~/bd` repos.
+- Do not rely on app-repo `.beads` directories for fleet Beads operations.
+- Prefer `BEADS_DIR=~/.beads-runtime/.beads` and run control-plane commands from `$HOME` or `~/.beads-runtime`, not from app repositories.
 - Do not launch unmanaged Dolt servers during active waves.
 - Keep one managed service per host and validate before dispatch.
 - Treat `beads-dolt status --json` + `beads-dolt dolt test --json` as source of truth.
