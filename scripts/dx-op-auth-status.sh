@@ -18,7 +18,7 @@ Classifies local 1Password readiness without printing secrets.
 Modes:
   agent_ready_cache            synced cache can satisfy agent secrets
   agent_ready_service_account  service-account auth can refresh/read secrets
-  human_interactive_only       GUI-backed op works, but agents should not rely on it
+  human_interactive_only       GUI-backed op works after op signin; agents should not rely on it
   blocked                     no agent-safe auth path is available
 EOF
   exit 0

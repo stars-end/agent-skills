@@ -127,6 +127,7 @@ Acceptable agent modes:
 
 `human_interactive_only` means 1Password GUI-backed `op` works for a human on
 macOS, but the agent-safe cache/service-account path still needs to be fixed.
+This path can require `op signin` again after the device or 1Password locks.
 
 ### One-Time Service-Account Setup (When Cache Is Not Enough)
 
@@ -152,11 +153,13 @@ This creates:
 ### Human macOS Bootstrap Verification
 
 ```bash
+op signin
 op whoami
 ```
 
 This may show a normal interactive 1Password account. That is valid only for
-human setup/recovery. It is not agent readiness.
+human setup/recovery. It is not agent readiness because it depends on local
+unlock/session state.
 
 ```bash
 # List available items after GUI-backed CLI integration is enabled.

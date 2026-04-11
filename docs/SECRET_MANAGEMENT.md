@@ -198,6 +198,8 @@ For the canonical dev/staging VM fleet, unattended `op` access is centralized on
 
 - macOS 1Password GUI + `op` CLI integration is a human bootstrap and recovery
   path.
+- GUI-backed `op` may require `op signin` again after device lock or 1Password
+  lock.
 - Agents, cron jobs, and LaunchAgents must not rely on GUI unlock state.
 - A Mac is agent-ready only when `~/agent-skills/scripts/dx-op-auth-status.sh
   --json` reports `agent_ready_cache` or `agent_ready_service_account`.
