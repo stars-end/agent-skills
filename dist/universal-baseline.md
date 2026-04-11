@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 60e7d108bc9571898086f1820354fa5102c7f870 -->
-<!-- Last updated: 2026-04-10 09:59:28 UTC -->
+<!-- Source SHA: b2af38112ca97d1d8a8b915169ac757b0faa50d9 -->
+<!-- Last updated: 2026-04-11 06:42:37 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -292,6 +292,20 @@ If a named skill contains an explicit `BLOCKED` contract:
   - \`serena\`: explicit symbol-aware edits
 - **Canonical non-default memory surface**:
   - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
+
+### 5.5) Beads Memory Convention (V8.6)
+
+Use existing Beads primitives as the default durable memory layer before adding
+any new memory service or wrapper.
+
+- **Short facts**: use \`bd remember\`, \`bd memories\`, \`bd recall\`, and \`bd forget\`.
+- **Structured memory**: create normal Beads issues with \`--type decision\` or an appropriate custom type, plus the \`memory\` label.
+- **Memory body**: put the durable fact, decision, gotcha, runbook, or handoff in \`description\` / \`notes\`; use \`bd comments add\` for provenance and follow-up history.
+- **Required metadata for structured memory**: \`mem.kind\`, \`mem.repo\`, \`mem.maturity\`, \`mem.confidence\`, \`mem.source_issue\`, and source grounding such as \`mem.source_commit\`, \`mem.paths\`, or \`mem.stale_if_paths\` when known.
+- **Retrieval**: search short facts with \`bd memories <keyword>\`; search structured records with \`bd search <keyword> --label memory --status all\` and metadata filters such as \`bd search memory --label memory --metadata-field mem.repo=agent-skills --status all\`.
+- **Source of truth**: memory is a lead, not proof. Verify source-grounded claims with \`llm-tldr\` or direct source inspection before acting.
+- **Wrapper threshold**: add a dedicated \`bd-mem\` helper only if agents repeatedly fail to follow this convention.
+- **Detailed convention**: \`~/agent-skills/docs/BEADS_MEMORY_CONVENTION.md\`.
 
 Agents should think in terms of **capability**, not transport:
 - analysis/discovery/trace -> \`llm-tldr\`

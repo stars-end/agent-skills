@@ -156,6 +156,20 @@ If a named skill contains an explicit `BLOCKED` contract:
 - **Canonical non-default memory surface**:
   - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
 
+### 5.5) Beads Memory Convention (V8.6)
+
+Use existing Beads primitives as the default durable memory layer before adding
+any new memory service or wrapper.
+
+- **Short facts**: use \`bd remember\`, \`bd memories\`, \`bd recall\`, and \`bd forget\`.
+- **Structured memory**: create normal Beads issues with \`--type decision\` or an appropriate custom type, plus the \`memory\` label.
+- **Memory body**: put the durable fact, decision, gotcha, runbook, or handoff in \`description\` / \`notes\`; use \`bd comments add\` for provenance and follow-up history.
+- **Required metadata for structured memory**: \`mem.kind\`, \`mem.repo\`, \`mem.maturity\`, \`mem.confidence\`, \`mem.source_issue\`, and source grounding such as \`mem.source_commit\`, \`mem.paths\`, or \`mem.stale_if_paths\` when known.
+- **Retrieval**: search short facts with \`bd memories <keyword>\`; search structured records with \`bd search <keyword> --label memory --status all\` and metadata filters such as \`bd search memory --label memory --metadata-field mem.repo=agent-skills --status all\`.
+- **Source of truth**: memory is a lead, not proof. Verify source-grounded claims with \`llm-tldr\` or direct source inspection before acting.
+- **Wrapper threshold**: add a dedicated \`bd-mem\` helper only if agents repeatedly fail to follow this convention.
+- **Detailed convention**: \`~/agent-skills/docs/BEADS_MEMORY_CONVENTION.md\`.
+
 Agents should think in terms of **capability**, not transport:
 - analysis/discovery/trace -> \`llm-tldr\`
 - explicit symbol operation -> \`serena\`
