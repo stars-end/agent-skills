@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 28fa4affb90039fdbe02a1e8748d9d053634b448 -->
-<!-- Last updated: 2026-04-11 07:06:40 UTC -->
+<!-- Source SHA: dddbd900bd822628eed7c7202563548024517fc5 -->
+<!-- Last updated: 2026-04-11 07:12:34 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -205,19 +205,25 @@ cd /tmp/agents/bd-xxxx/repo-name
 
 New agents MUST complete these steps before any other work:
 
-**Step 1: Load 1Password Service Account**
+**Step 1: Verify Agent-Safe 1Password Auth**
 \`\`\`bash
-# Recommended helper
-~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami
+# Classifies local auth without printing secrets.
+~/agent-skills/scripts/dx-op-auth-status.sh --json
+
+# Accept for agents/cron:
+#   mode=agent_ready_cache
+#   mode=agent_ready_service_account
+#
+# macOS-only human bootstrap:
+#   mode=human_interactive_only means 1Password GUI-backed op works for a
+#   person, but agents/cron still need synced cache or a service-account
+#   artifact.
 
 # Fallback search order if manual recovery is needed:
 #   1. ~/.config/systemd/user/op-<canonical-host-key>-token
 #   2. ~/.config/systemd/user/op-<canonical-host-key>-token.cred
 #   3. ~/.config/systemd/user/op_token
 #   4. ~/.config/systemd/user/op_token.cred
-
-# Verify
-op whoami  # Must show: User Type: SERVICE_ACCOUNT
 \`\`\`
 
 **Step 2: Authenticate Railway CLI**
@@ -227,15 +233,17 @@ op whoami  # Must show: User Type: SERVICE_ACCOUNT
 
 **Step 3: Verify Full Stack**
 \`\`\`bash
-op item list --vault dev  # Should list items
-railway status            # Should show project context
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
+railway status  # Should show project context when run in a linked repo/context
 \`\`\`
 
 **Common Issues:**
-- \`op whoami\` shows "account is not signed in" → Load OP_SERVICE_ACCOUNT_TOKEN
+- \`dx-op-auth-status.sh\` returns \`human_interactive_only\` → macOS GUI is linked, but agent-safe cache/service-account auth is still missing
+- \`dx-op-auth-status.sh\` returns \`blocked\` → sync OP cache from \`epyc12\` or create a service-account credential
+- \`op whoami\` says \`no account found\` on macOS → sign in to 1Password GUI and enable CLI integration; this is human bootstrap only
 - \`railway whoami\` shows "Unauthorized" → Load OP + Railway auth in the same invocation (not separate tool calls)
 - repeated auth failures across shell/tool calls → Use \`~/agent-skills/scripts/dx-load-railway-auth.sh -- <command>\`
-- Token file not found → Run \`~/agent-skills/scripts/create-op-credential.sh\`
+- cache missing on a consumer host → sync OP cache artifacts from \`epyc12\` before retrying
 
 ### 5.2) Railway Link Non-Interactive Usage (CRITICAL)
 
@@ -544,7 +552,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **fix-pr-feedback** | Address PR feedback with iterative refinement. MUST BE USED when fixing PR issues. Supports auto-detection (CI failures, code review) and manual triage (user reports bugs). Creates Beads issues for all problems, fixes systematically. Use when user says "fix the PR", "i noticed bugs", "ci failures", or "codex review found issues", or when user mentions CI failures, review comments, failing tests, PR iterations, bug fixes, feedback loops, or systematic issue resolution. | `bd show <FEATURE_KEY>` | workflow, pr, beads, debugging, iteration |
 | **issue-first** | Enforce Issue-First pattern by creating Beads tracking issue BEFORE implementation. MUST BE USED for all implementation work. Classifies work type (epic/feature | — |  |
 | **merge-pr** | Prepare PR for merge and guide human to merge via GitHub web UI. MUST BE USED when user wants to merge a PR. Verifies CI passing, verifies Beads issue already closed (from PR creation), and provides merge instructions. Issue closure happens at PR creation time (create-pull-request skill), NOT at merge time. Use when user says "merge the PR", "merge it", "merge this", "ready to merge", "merge to master", or when user mentions CI passing, approved reviews, ready-to-merge state, ready to ship, merge, deployment, PR completion, or shipping code. | `bd close bd-xyz --reason 'Closing before merge in PR #200'` | workflow, pr, github, merge, deployment |
-| **op-secrets-quickref** | Quick reference for 1Password service account auth and secret management. Use for: API keys, tokens, service accounts, op:// references, or auth failures in non-interactive contexts (cron, systemd, CI). Triggers: ZAI_API_KEY, OP_SERVICE_ACCOUNT_TOKEN, 1Password, "where do secrets live", auth failure, 401, permission denied. | — | secrets, auth, token, 1password, op-cli, dx, env, railway |
+| **op-secrets-quickref** | Quick reference for 1Password auth and secret management across macOS GUI, cache-only agent mode, and service-account automation. Use for: API keys, tokens, service accounts, op:// references, 1Password GUI/CLI confusion, or auth failures in non-interactive contexts (cron, systemd, CI). Triggers: ZAI_API_KEY, OP_SERVICE_ACCOUNT_TOKEN, 1Password, "where do secrets live", auth failure, 401, permission denied. | — | secrets, auth, token, 1password, op-cli, dx, env, railway |
 | **session-end** | End Claude Code session with Beads health verification and summary. MUST BE USED when user says they're done, ending session, or logging off. Verifies canonical Beads connectivity, shows session stats, and suggests next ready work. Handles cleanup and context saving. Use when user says "goodbye", "bye", "done for now", "logging off", or when user mentions end-of-session, session termination, cleanup, context saving, Beads checks, Dolt status, or export operations. | — | workflow, beads, session, cleanup |
 | **sync-feature-branch** | Commit current work to feature branch with Beads metadata tracking and git integration. MUST BE USED for all commit operations. Handles Feature-Key trailers, Be | `bd create --title <FEATURE_KEY> --type feature --priority 2 ` |  |
 | **tech-lead-handoff** | Create comprehensive handoff for tech lead review with Beads sync, PR artifacts, and self-contained review package. MUST BE USED when returning completed work to a tech lead/orchestrator for review (investigation OR implementation return). Use when user says "handoff", "tech lead review", "review this", "create handoff", or after completing significant work. | `bd show <beads-id>` | workflow, handoff, review, beads, documentation |

@@ -110,11 +110,25 @@ op read "op://dev/prime-radiant-dev/EODHD_CRON_SHARED_SECRET"
 
 ---
 
-## 4. Service Account Setup Section
+## 4. Agent-Safe Auth Setup Section
 
-**REQUIRED for agents** - Never use interactive biometric authentication in headless/agent contexts.
+**REQUIRED for agents** - Never use macOS GUI unlock or interactive biometric
+authentication as an agent, cron, or headless dependency.
 
-### One-Time Setup (Per Machine)
+### Verify Current Mode
+
+```bash
+~/agent-skills/scripts/dx-op-auth-status.sh --json
+```
+
+Acceptable agent modes:
+- `agent_ready_cache`
+- `agent_ready_service_account`
+
+`human_interactive_only` means 1Password GUI-backed `op` works for a human on
+macOS, but the agent-safe cache/service-account path still needs to be fixed.
+
+### One-Time Service-Account Setup (When Cache Is Not Enough)
 
 ```bash
 # Create protected credential (will prompt for token paste)
@@ -128,20 +142,24 @@ This creates:
 - **Linux (with systemd-creds)**: `~/.config/systemd/user/op-<canonical-host-key>-token.cred` (encrypted)
 - **macOS (fallback)**: `~/.config/systemd/user/op-<canonical-host-key>-token` (chmod 600)
 
-### Every Session (Before Using op CLI)
+### Every Agent Session
 
 ```bash
-# Recommended helper
-~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami
+~/agent-skills/scripts/dx-op-auth-status.sh --json
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 ```
 
-### Verification
+### Human macOS Bootstrap Verification
 
 ```bash
-# Should show SERVICE_ACCOUNT, not biometric user
 op whoami
+```
 
-# List available items (confirms read access)
+This may show a normal interactive 1Password account. That is valid only for
+human setup/recovery. It is not agent readiness.
+
+```bash
+# List available items after GUI-backed CLI integration is enabled.
 op item list --vault dev
 ```
 
@@ -183,10 +201,7 @@ All services use `Agent-Secrets-Production` as their secrets source:
 ### "Permission Denied" on Secret Access
 
 ```bash
-# Verify service account is active
-op whoami
-
-~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami
+~/agent-skills/scripts/dx-op-auth-status.sh --json
 ```
 
 ### "Field Not Found" Error

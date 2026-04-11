@@ -194,6 +194,16 @@ This provides access to `Agent-Secrets-Production` for all agent and service wor
 For the canonical dev/staging VM fleet, unattended `op` access is centralized on
 `epyc12`.
 
+### macOS GUI vs Agent Auth
+
+- macOS 1Password GUI + `op` CLI integration is a human bootstrap and recovery
+  path.
+- Agents, cron jobs, and LaunchAgents must not rely on GUI unlock state.
+- A Mac is agent-ready only when `~/agent-skills/scripts/dx-op-auth-status.sh
+  --json` reports `agent_ready_cache` or `agent_ready_service_account`.
+- `human_interactive_only` means the human can use `op`, but the agent-safe
+  cache/service-account path still needs to be fixed.
+
 ### Topology
 
 - `epyc12` is the only canonical VM allowed to run unattended cache refreshes

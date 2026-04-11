@@ -35,6 +35,7 @@ cd ~/agent-skills/infra/vm-bootstrap
 ```bash
 ~/agent-skills/health/bd-doctor/check.sh
 ~/agent-skills/health/mcp-doctor/check.sh
+~/agent-skills/scripts/dx-op-auth-status.sh --json
 ~/agent-skills/scripts/dx-fleet-check.sh --local-only --json
 ```
 
