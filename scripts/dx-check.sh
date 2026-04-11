@@ -174,8 +174,8 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 echo -e "${BLUE}🩺 Running DX Health Check...${RESET}"
 
-# V5/V6 Preflight: Prefer centralized Beads state, but don't hard-fail if it's discoverable.
-DEFAULT_BEADS_DIR="$HOME/bd/.beads"
+# V8.6 Preflight: prefer centralized epyc12 Dolt SQL via a dedicated runtime dir.
+DEFAULT_BEADS_DIR="$HOME/.beads-runtime/.beads"
 if [[ -z "${BEADS_DIR:-}" ]]; then
     if [[ -d "$DEFAULT_BEADS_DIR" ]]; then
         echo -e "${YELLOW}⚠️  BEADS_DIR not set; defaulting to ${DEFAULT_BEADS_DIR} for this run.${RESET}"
@@ -184,16 +184,16 @@ if [[ -z "${BEADS_DIR:-}" ]]; then
         export BEADS_IGNORE_REPO_MISMATCH=1
     else
         echo -e "${RED}❌ FATAL: BEADS_DIR not set and default DB not found.${RESET}"
-        echo "   Expected Beads DB at: $DEFAULT_BEADS_DIR"
+        echo "   Expected Beads runtime at: $DEFAULT_BEADS_DIR"
         echo "   Action:"
-        echo "     1) Clone bd repo: git clone git@github.com:stars-end/bd.git ~/bd"
+        echo "     1) Create $DEFAULT_BEADS_DIR/metadata.json for epyc12 Dolt SQL"
         echo "     2) Persist: export BEADS_DIR=\"$DEFAULT_BEADS_DIR\""
-        echo "     3) Persist: export BEADS_IGNORE_REPO_MISMATCH=1"
+        echo "     3) Persist: export BEADS_DOLT_SERVER_HOST=\"100.107.173.83\""
         exit 1
     fi
 fi
 
-# Ensure mismatch bypass is set if using centralized DB
+# Ensure mismatch bypass is set if using centralized runtime
 if [[ "${BEADS_DIR}" == "${DEFAULT_BEADS_DIR}" ]]; then
     export BEADS_IGNORE_REPO_MISMATCH=1
 fi
@@ -277,19 +277,12 @@ if ! "${SCRIPT_DIR}/dx-status.sh"; then
     needs_fix=1
 fi
 
-# External Beads repo must be git-synced (durability across VMs)
+# Active Beads runtime must point at the centralized Dolt SQL service. The old
+# ~/bd git mirror is legacy rollback state, not a durability gate.
 if [[ "${BEADS_DIR}" == "${DEFAULT_BEADS_DIR}" ]]; then
-    if [[ ! -d "$HOME/bd/.git" ]]; then
-        echo -e "${RED}❌ FATAL: BEADS_DIR points at $DEFAULT_BEADS_DIR but ~/bd is not a git repo.${RESET}"
-        echo "   Action:"
-        echo "     1) Clone bd repo: git clone git@github.com:stars-end/bd.git ~/bd"
-        echo "     2) Configure remote sync: git -C ~/bd remote add origin git@github.com:stars-end/bd.git"
-        needs_fix=1
-    elif ! git -C "$HOME/bd" remote get-url origin >/dev/null 2>&1; then
-        echo -e "${RED}❌ FATAL: ~/bd has no 'origin' remote. Beads state will not sync across VMs.${RESET}"
-        echo "   Fix:"
-        echo "     git -C ~/bd remote add origin git@github.com:stars-end/bd.git"
-        echo "     git -C ~/bd push -u origin master"
+    if [[ ! -f "$BEADS_DIR/metadata.json" || ! -f "$BEADS_DIR/config.yaml" ]]; then
+        echo -e "${RED}❌ FATAL: BEADS_DIR points at $DEFAULT_BEADS_DIR but runtime metadata/config is missing.${RESET}"
+        echo "   Fix: hydrate $DEFAULT_BEADS_DIR with epyc12 Dolt SQL metadata/config."
         needs_fix=1
     fi
 fi

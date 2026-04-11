@@ -1,6 +1,6 @@
 ---
 name: bd-doctor
-description: Diagnose and repair Beads reliability issues in canonical Dolt server mode (`~/bd` control-plane + `~/.beads-runtime/.beads` runtime) across hosts.
+description: Diagnose and repair Beads reliability issues in canonical Dolt server mode (`~/.beads-runtime/.beads` runtime, epyc12 hub) across hosts.
 tags: [health, beads, dolt, reliability, fleet]
 allowed-tools:
   - Bash(bd:*)
@@ -18,7 +18,6 @@ allowed-tools:
 Health check and deterministic recovery for Beads in centralized Dolt mode.
 
 This skill assumes:
-- canonical Beads repo: `~/bd`
 - active Beads runtime: `~/.beads-runtime/.beads`
 - backend: Dolt server mode
 - multi-host operation (macmini/epyc12/epyc6/homedesktop-wsl)
@@ -32,7 +31,7 @@ This skill assumes:
 
 ## Quick Check
 
-Run from `~/bd`:
+Run from any non-application directory:
 
 ```bash
 export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
@@ -144,6 +143,8 @@ fi
 
 ```bash
 bd config set beads.role maintainer
+# If outside a Git repo and the command reports git config exit 128:
+git config --global beads.role maintainer
 ```
 
 **Verify after fix:**
@@ -153,7 +154,7 @@ beads-dolt dolt test --json   # should still pass
 bd create --title "test" --type task --dry-run  # should proceed without role warning
 ```
 
-**Rule:** Retry `bd config set beads.role maintainer` before escalating to hub/service diagnostics. If `beads-dolt dolt test --json` passes, the hub is healthy — the blocker is local.
+**Rule:** Retry `bd config set beads.role maintainer`, then `git config --global beads.role maintainer` if needed, before escalating to hub/service diagnostics. If `beads-dolt dolt test --json` passes, the hub is healthy — the blocker is local.
 
 ### 5) `bd ready --json` slow or timing out on `macmini`
 
@@ -205,7 +206,8 @@ ssh epyc6 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/
 
 ## Guardrails
 
-- Do not run mutating `bd` operations from non-`~/bd` repos.
+- Do not rely on app-repo `.beads` directories for fleet Beads operations.
+- Prefer `BEADS_DIR=~/.beads-runtime/.beads` and run control-plane commands from `$HOME` or `~/.beads-runtime`, not from app repositories.
 - Do not run ad hoc `dolt sql-server` during active waves.
 - Prefer managed services (`systemd --user` or `launchd`) for uptime.
 - Use `beads-dolt dolt test --json` + `beads-dolt status --json` as source of truth.

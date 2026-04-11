@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# dx-bootstrap.sh - Session start bootstrap for canonical repo detection
-# This script should be sourced from Claude Code SessionStart hooks
+# dx-bootstrap.sh - Session start warning shim for canonical repo detection
+# Deprecated as a bootstrap surface: session-start hooks must stay warning-only.
 
 CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
 
@@ -9,7 +9,7 @@ IS_CANONICAL=false
 CURRENT_DIR="${PWD}"
 
 for repo in "${CANONICAL_REPOS[@]}"; do
-    if [[ "$CURRENT_DIR" =~ /$repo(/|$) ]] && [[ ! "$CURRENT_DIR" =~ /tmp/agents/ ]]; then
+    if [[ "$CURRENT_DIR" =~ /$repo(/|$) ]] && [[ ! "$CURRENT_DIR" =~ /tmp/agents/ ]] && [[ ! "$CURRENT_DIR" =~ /private/tmp/agents/ ]]; then
         IS_CANONICAL=true
         CANONICAL_REPO="$repo"
         break

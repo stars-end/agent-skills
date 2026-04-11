@@ -1,6 +1,8 @@
 #!/bin/bash
 # dx-hydrate.sh
-# Universal bootstrap for the "Solo Dev + 5 Agents" Command Center.
+# Legacy broad bootstrap/repair for the "Solo Dev + 5 Agents" Command Center.
+# Do not use as a fresh-device one-liner; see
+# docs/FRESH_DEVICE_BOOTSTRAP_AUDIT.md for surfaces to split/deprecate.
 
 set -e
 

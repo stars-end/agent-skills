@@ -417,11 +417,12 @@ mcp_tools_sync_status() {
 
 check_beads_dolt() {
   local status="pass" severity="low" details="Beads runtime ready"
+  local beads_runtime="${BEADS_DIR:-${HOME}/.beads-runtime/.beads}"
   if ! command -v bd >/dev/null 2>&1; then
     status="fail"; severity="high"; details="bd binary missing"
-  elif [[ ! -d "${HOME}/bd/.git" ]]; then
-    status="fail"; severity="high"; details="canonical beads repo missing at ~/bd"
-  elif ! (cd "${HOME}/bd" && bd dolt test --json >/dev/null 2>&1); then
+  elif [[ ! -f "${beads_runtime}/metadata.json" ]]; then
+    status="fail"; severity="high"; details="active beads runtime missing metadata at ${beads_runtime}"
+  elif ! (cd "$(dirname "${beads_runtime}")" && BEADS_DIR="${beads_runtime}" bd dolt test --json >/dev/null 2>&1); then
     status="fail"; severity="high"; details="bd dolt test failed"
   fi
   echo "$status|$severity|$details"

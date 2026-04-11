@@ -1,5 +1,8 @@
 # Fleet Sync V2.3 tool manifest
-# Primary source for local-first MCP tool distribution and IDE rendering.
+# Primary source for host-local MCP tool distribution and IDE rendering.
+# llm-tldr is filesystem-local: run the MCP server on the host that can read
+# the target worktree path. epyc12 is central for Beads/Dolt, not for arbitrary
+# Mac/WSL/Linux worktree analysis.
 #
 # Tool Classes (integration_mode):
 #   - mcp: MCP server rendered into IDE configs (requires mcp.* block)
@@ -77,6 +80,10 @@ tools:
       command: "serena"
       args:
         - "start-mcp-server"
+        - "--enable-web-dashboard"
+        - "false"
+        - "--open-web-dashboard"
+        - "false"
     runtime: python
     upstream: "https://github.com/oraios/serena"
     docs: "https://github.com/oraios/serena#readme"
