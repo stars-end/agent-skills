@@ -1,5 +1,7 @@
 #!/bin/bash
-# Universal Agent Bootstrap & Health Check
+# Legacy universal Agent Bootstrap & Health Check.
+# Deprecated as a fresh-device bootstrap surface; see
+# docs/FRESH_DEVICE_BOOTSTRAP_AUDIT.md for the active contract.
 # Usage: curl -fsSL <URL> | bash
 
 set -e
@@ -24,4 +26,3 @@ source "$HOME/.bashrc" 2>/dev/null || true
 # 4. Run Health Check
 echo "🩺 Running DX Check..."
 "$HOME/agent-skills/scripts/dx-check.sh"
-

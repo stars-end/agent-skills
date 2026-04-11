@@ -2,6 +2,9 @@
 #
 # Claude Code SessionStart Hook: DX Bootstrap (V7.6)
 #
+# Deprecated as a bootstrap surface. Active session-start behavior should exec
+# session-start-hooks/dx-bootstrap.sh and remain warning-only.
+#
 # Installation:
 #   mkdir -p .claude/hooks/SessionStart
 #   cp ~/agent-skills/session-start-hooks/claude-code-dx-bootstrap.sh \

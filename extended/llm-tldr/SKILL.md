@@ -9,7 +9,8 @@ tags:
   - semantic
   - context
   - fleet-sync
-  - local-first
+  - epyc12-central
+  - local-fallback
   - canonical-default
 ---
 
@@ -19,11 +20,11 @@ Canonical analysis tool for semantic discovery and exact static analysis with re
 
 ## Tool Class
 
-**`integration_mode: mcp + canonical local fallback`**
+**`integration_mode: epyc12 MCP + canonical local fallback`**
 
-llm-tldr is rendered to IDE MCP configs and also exposes a canonical local
-fallback path. Agents should treat this as one analysis tool; transport is an
-implementation detail, not a routing decision.
+llm-tldr is exposed through the central MCP surface on `epyc12` and also exposes
+a canonical host-local fallback path. Agents should treat this as one analysis
+tool; transport is an implementation detail until path locality matters.
 
 ## Routing Status
 
@@ -34,7 +35,7 @@ implementation detail, not a routing decision.
 Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
 
 - Preferred surface: MCP when the `llm-tldr` tool is visible in the active runtime
-- Canonical fallback: the contained local helper when MCP is unavailable in the current runtime
+- Canonical fallback: the contained local helper when MCP is unavailable or when the target project path is not readable from the MCP host
 - Do not manually choose between MCP, daemon, or plain CLI paths
 - Do not substitute a different analysis stack unless `llm-tldr` is unavailable or fails after one reasonable attempt
 
@@ -97,7 +98,11 @@ worktrees, and nested subdirectories.
 
 ## MCP Configuration
 
-Rendered to IDE configs via Fleet Sync (contained):
+Codex desktop currently reaches the central `epyc12` MCP service. Other local
+IDE lanes may still render a host-local contained stdio launcher through Fleet
+Sync. Both are valid transports for the same tool.
+
+Rendered local stdio form:
 
 ```json
 {
@@ -114,6 +119,35 @@ Rendered to IDE configs via Fleet Sync (contained):
 Fleet Sync expands the launcher path to an absolute host-local path before
 writing client configs so direct stdio clients do not depend on shell `~`
 expansion.
+
+### Central MCP Path Locality
+
+The central `epyc12` MCP server can only analyze project paths that exist on
+`epyc12`. A Mac-local worktree such as `/tmp/agents/<beads-id>/<repo>` or
+`/private/tmp/agents/<beads-id>/<repo>` is not readable from the central host.
+
+Routing rule:
+
+1. If the project path is on `epyc12` or otherwise mounted/readable there, use
+   the MCP tool.
+2. If the project path is host-local only, use the local contained fallback on
+   that host:
+
+```bash
+~/agent-skills/scripts/tldr-daemon-fallback.sh tree --repo /tmp/agents/<beads-id>/<repo>
+~/agent-skills/scripts/tldr-daemon-fallback.sh semantic --repo /tmp/agents/<beads-id>/<repo> --query "where is setup handled?"
+```
+
+3. If compute must happen centrally, create or mirror the worktree on `epyc12`
+   first and pass the `epyc12` path to MCP. Prefer Tailscale SSH for remote
+   setup:
+
+```bash
+tailscale ssh fengning@epyc12 'dx-worktree create <beads-id> <repo>'
+```
+
+Do not retry central MCP repeatedly against a path that only exists on another
+host. That is a path-locality miss, not an MCP hydration failure.
 
 ## Operational Guidance
 
@@ -140,7 +174,8 @@ running `warm` from nested subdirectories.
 
 ### Worktree-Safe Project Usage
 
-llm-tldr accepts a `project` parameter on every MCP tool call:
+llm-tldr accepts a `project` parameter on every MCP tool call. With central MCP,
+that path must be readable from `epyc12`:
 
 ```bash
 semantic(project="/tmp/agents/bd-xxx/agent-skills", query="...")

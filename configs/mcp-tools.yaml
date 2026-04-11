@@ -1,5 +1,7 @@
 # Fleet Sync V2.3 tool manifest
-# Primary source for local-first MCP tool distribution and IDE rendering.
+# Primary source for host-local MCP tool distribution and IDE rendering.
+# Codex desktop may use the central epyc12 MCP surface instead; central
+# llm-tldr can only analyze paths readable from epyc12.
 #
 # Tool Classes (integration_mode):
 #   - mcp: MCP server rendered into IDE configs (requires mcp.* block)
@@ -8,7 +10,7 @@
 schema_version: 2
 strategy:
   distribution: git_pull
-  execution: local_stdio
+  execution: local_stdio_or_central_epyc12
   fallback: last_known_good_local
 
 tools:
