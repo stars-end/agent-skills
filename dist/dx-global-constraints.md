@@ -169,9 +169,9 @@ For qualifying tasks, agents MUST route the first discovery action through the m
 - rename/refactor, insert-before/after-symbol, replace known symbol body/signature, or symbol lookup directly tied to an edit -> \`serena\`
 
 Transport handling rule:
-- prefer the MCP surface when the tool is available in the current runtime and the requested project path is readable by that MCP host
-- Codex desktop may expose \`llm-tldr\` through the central \`epyc12\` MCP service; that service cannot analyze Mac-local \`/tmp/agents/...\` or \`/private/tmp/agents/...\` worktrees unless they are mirrored or created on \`epyc12\`
-- if \`llm-tldr\` MCP is unavailable, or the target path is host-local and not readable from the MCP host, use the canonical local fallback instead of inventing a new analysis path
+- prefer the local contained MCP surface when the tool is available in the current runtime
+- \`llm-tldr\` is filesystem-local: the MCP server process must run on a host that can read the requested project path
+- if \`llm-tldr\` MCP is unavailable in the current runtime, use the canonical local fallback instead of inventing a new analysis path
 - agents should not manually choose among MCP vs daemon vs raw CLI surfaces beyond this fallback rule
 
 Codex desktop hydration check:
@@ -183,7 +183,7 @@ Codex desktop hydration check:
 Fallback to shell/file reads or ordinary patch editing is allowed only when:
 - the MCP tool is unavailable in the current runtime and no canonical fallback exists
 - the MCP tool cannot answer the question after one reasonable attempt
-- central MCP cannot read the host-local project path and the local contained fallback is unavailable or insufficient
+- the MCP server process cannot read the host-local project path and the local contained fallback is unavailable or insufficient
 - the task is trivially faster with direct file access
 
 If the agent does not use the matching MCP tool on a qualifying task, it MUST state \`Tool routing exception: <reason>\` in the final response or handoff.

@@ -13,9 +13,9 @@ that should be deprecated or converted to shims.
   state only.
 - MCP discovery: `llm-tldr` is the canonical analysis tool and `serena` is the
   canonical symbol-aware edit tool.
-- `llm-tldr` path rule: central MCP on `epyc12` can only analyze paths readable
-  from `epyc12`; host-local worktrees use the contained local fallback or are
-  mirrored to `epyc12` first.
+- `llm-tldr` path rule: use host-local contained MCP on the machine that owns
+  the worktree. If compute must happen on `epyc12`, create or mirror the
+  worktree there first.
 - Remote access: prefer Tailscale SSH for canonical host work.
 - Schedules: cron/systemd by host role; no LaunchAgent `ru` policy on macOS.
 - Shell startup: no health checks, MCP checks, browser dashboards, or service
@@ -66,10 +66,9 @@ The entrypoint should run these phases explicitly:
 - `bd dolt test --json` passes and `BEADS_DIR` is `~/.beads-runtime/.beads`.
 - `codex mcp list` or runtime-equivalent visibility shows `llm-tldr` and
   `serena`.
-- A central `llm-tldr` call is tested only against a path readable from
-  `epyc12`.
-- A Mac-local worktree analysis uses `tldr-daemon-fallback.sh` or an `epyc12`
-  mirror, not repeated central MCP retries.
+- `llm-tldr` MCP is local-contained and tested against a host-local worktree.
+- A Mac-local worktree analysis never routes through an `epyc12` MCP process
+  unless the worktree is mirrored or mounted there.
 - Opening a new shell does not run `dx-status`, spawn MCP servers, or open a
   Serena dashboard.
 - `crontab -l` or `systemctl --user list-timers` matches the host role.
