@@ -11,6 +11,7 @@ TEST_DIR="/tmp/dx-canonical-evacuate-test-$$"
 HOME_DIR="$TEST_DIR/home"
 ORIGIN="$TEST_DIR/origin.git"
 SCRIPT_OUTPUT="$TEST_DIR/canonical-evacuate.out"
+TEST_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 cleanup() {
   cd / >/dev/null 2>&1 || true
@@ -91,6 +92,7 @@ dirty rescue content
 EOF
 
 HOME="$HOME_DIR" \
+PATH="$TEST_PATH" \
 DIRTY_EVICT_MINUTES=0 \
 DIRTY_WARN_MINUTES=0 \
 "$AGENTS_ROOT/scripts/canonical-evacuate-active.sh" >"$SCRIPT_OUTPUT"
