@@ -171,6 +171,13 @@ run_remote() {
 main() {
   [[ $# -gt 0 ]] || { usage; exit 2; }
 
+  case "${1:-}" in
+    help|-h|--help)
+      usage
+      exit 0
+      ;;
+  esac
+
   local mode
   mode="$(classify_command "$@")"
 

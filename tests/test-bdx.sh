@@ -135,6 +135,10 @@ test_remote_read_injection_safe() {
   assert_file_contains "$fake_bd_log" "arg=;touch $pwn2" "semicolon payload preserved literally"
 }
 
+test_help_exits_zero() {
+  "$BDX" --help >/dev/null 2>&1 && pass "help exits zero" || fail "help exits non-zero"
+}
+
 test_remote_write_uses_flock() {
   local case_dir="$tmpdir/case2"
   local fake_bin="$case_dir/bin"
@@ -416,6 +420,7 @@ test_remote_helper_revalidates_allowlist() {
 }
 
 main() {
+  test_help_exits_zero
   test_remote_read_injection_safe
   test_remote_write_uses_flock
   test_remote_write_mkdir_fallback
