@@ -10,7 +10,7 @@ This validation runner executes 6 parallel jobs (2 per provider: opencode, cc-gl
 
 - Two consecutive clean rounds (100% success rate per round)
 - No failures across any provider
-- OpenCode provider uses `zhipuai-coding-plan/glm-5` (no `zai-coding-plan` fallback)
+- OpenCode provider uses the exact current model ID: `zhipuai/glm-5.1`
 
 ## Quick Start
 
@@ -104,7 +104,7 @@ Human-readable report with:
 
 ### OpenCode
 
-- Canonical model: `zhipuai-coding-plan/glm-5`
+- Canonical model: `zhipuai/glm-5.1`
 - Override via `OPENCODE_MODEL` environment variable
 
 ### cc-glm

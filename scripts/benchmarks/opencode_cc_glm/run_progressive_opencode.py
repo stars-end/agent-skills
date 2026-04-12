@@ -138,7 +138,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--phase", required=True, choices=list(PHASES.keys()))
     parser.add_argument(
         "--model",
-        default="zai-coding-plan/glm-5",
+        default="zhipuai/glm-5.1",
         help="OpenCode model in provider/model format",
     )
     parser.add_argument(

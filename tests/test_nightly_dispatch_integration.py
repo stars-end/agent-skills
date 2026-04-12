@@ -295,7 +295,7 @@ class TestProviderSelection:
         provider, model, results = dispatcher.select_provider()
 
         assert provider == "opencode"
-        assert model == "zhipuai-coding-plan/glm-5"
+        assert model == "zhipuai/glm-5.1"
         assert results["opencode"].available is True
 
     def test_fallback_to_cc_glm(self):

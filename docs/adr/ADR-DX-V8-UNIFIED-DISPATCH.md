@@ -1,8 +1,8 @@
 # ADR: DX V8 Unified Dispatch (dx-runner)
 
 ## Status
-**Status:** ACCEPTED  
-**Date:** 2026-02-19  
+**Status:** ACCEPTED
+**Date:** 2026-02-19
 **Epoch:** DX V8
 
 ## Context and Pain Points
@@ -50,11 +50,11 @@ Additional reliability contract (2026-02-21 hardening):
 
 ## Provider Policy
 
-1. **Canonical Model Constraints**: 
-   - Providers (especially OpenCode) MUST enforce strict canonical model usage (e.g., `zhipuai-coding-plan/glm-5`) to ensure result quality and reliability. 
+1. **Canonical Model Constraints**:
+   - Providers (especially OpenCode) MUST enforce strict canonical model usage (e.g., `zhipuai/glm-5.1`) to ensure result quality and reliability.
    - If the preferred model is unavailable, the runner MUST fail-fast rather than silently falling back to a weaker model.
-2. **Fail-Fast Behavior**: 
-   - Preflight failures are blocking. 
+2. **Fail-Fast Behavior**:
+   - Preflight failures are blocking.
    - Permission violations (non-worktree paths) are blocking (Exit 22).
    - No-op detection (no mutation + no log activity) triggers a fail-fast exit (Exit 23).
 3. **Capability-Aware Preflight**:
@@ -82,10 +82,10 @@ All jobs managed by `dx-runner` produce a standardized set of artifacts in `/tmp
 
 ### Starting a Job
 ```bash
-./scripts/dx-runner start 
-  --beads bd-xga8.14 
-  --provider opencode 
-  --prompt-file /tmp/p.prompt 
+./scripts/dx-runner start
+  --beads bd-xga8.14
+  --provider opencode
+  --prompt-file /tmp/p.prompt
   --worktree /tmp/agents/bd-xga8.14/agent-skills
 ```
 

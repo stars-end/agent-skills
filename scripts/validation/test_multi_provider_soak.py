@@ -41,14 +41,14 @@ class TestJobSpec(unittest.TestCase):
             prompt_id="echo_ok",
             prompt="Return OK",
             success_hint="OK",
-            model="zhipuai-coding-plan/glm-5",
+            model="zhipuai/glm-5.1",
             worktree=pathlib.Path("/tmp/test"),
             round_num=1,
             job_index=0,
         )
         self.assertEqual(spec.beads_id, "test-123")
         self.assertEqual(spec.provider, "opencode")
-        self.assertEqual(spec.model, "zhipuai-coding-plan/glm-5")
+        self.assertEqual(spec.model, "zhipuai/glm-5.1")
 
     def test_job_spec_to_dict(self) -> None:
         spec = JobSpec(
@@ -75,7 +75,7 @@ class TestJobResult(unittest.TestCase):
             prompt_id="echo_ok",
             prompt="Return OK",
             success_hint="OK",
-            model="zhipuai-coding-plan/glm-5",
+            model="zhipuai/glm-5.1",
             worktree=pathlib.Path("/tmp"),
             round_num=1,
             job_index=0,
@@ -85,7 +85,7 @@ class TestJobResult(unittest.TestCase):
             success=True,
             status="exited_ok",
             reason_code=None,
-            selected_model="zhipuai-coding-plan/glm-5",
+            selected_model="zhipuai/glm-5.1",
             latency_ms=1500,
             completion=True,
             retries=0,
@@ -168,7 +168,7 @@ class TestRoundResult(unittest.TestCase):
             prompt_id="echo_ok",
             prompt="Return OK",
             success_hint="OK",
-            model="zhipuai-coding-plan/glm-5",
+            model="zhipuai/glm-5.1",
             worktree=pathlib.Path("/tmp"),
             round_num=1,
             job_index=0,
@@ -178,7 +178,7 @@ class TestRoundResult(unittest.TestCase):
             success=success,
             status="exited_ok" if success else "exited_err",
             reason_code=None if success else "failed",
-            selected_model="zhipuai-coding-plan/glm-5",
+            selected_model="zhipuai/glm-5.1",
             latency_ms=1000,
             completion=True,
             retries=0,
@@ -314,7 +314,7 @@ class TestSoakResult(unittest.TestCase):
             prompt_id="echo_ok",
             prompt="Return OK",
             success_hint="OK",
-            model="zhipuai-coding-plan/glm-5",
+            model="zhipuai/glm-5.1",
             worktree=pathlib.Path("/tmp"),
             round_num=1,
             job_index=0,
@@ -324,7 +324,7 @@ class TestSoakResult(unittest.TestCase):
             success=True,
             status="exited_ok",
             reason_code=None,
-            selected_model="zhipuai-coding-plan/glm-5",
+            selected_model="zhipuai/glm-5.1",
             latency_ms=1000,
             completion=True,
             retries=0,
@@ -368,7 +368,7 @@ class TestSoakResult(unittest.TestCase):
             prompt_id="echo_ok",
             prompt="Return OK",
             success_hint="OK",
-            model="zhipuai-coding-plan/glm-5",
+            model="zhipuai/glm-5.1",
             worktree=pathlib.Path("/tmp"),
             round_num=1,
             job_index=0,
@@ -378,7 +378,7 @@ class TestSoakResult(unittest.TestCase):
             success=True,
             status="exited_ok",
             reason_code=None,
-            selected_model="zhipuai-coding-plan/glm-5",
+            selected_model="zhipuai/glm-5.1",
             latency_ms=1000,
             completion=True,
             retries=0,
@@ -428,7 +428,7 @@ class TestMarkdownReport(unittest.TestCase):
             prompt_id="echo_ok",
             prompt="Return OK",
             success_hint="OK",
-            model="zhipuai-coding-plan/glm-5",
+            model="zhipuai/glm-5.1",
             worktree=pathlib.Path("/tmp"),
             round_num=1,
             job_index=0,
@@ -438,7 +438,7 @@ class TestMarkdownReport(unittest.TestCase):
             success=True,
             status="exited_ok",
             reason_code=None,
-            selected_model="zhipuai-coding-plan/glm-5",
+            selected_model="zhipuai/glm-5.1",
             latency_ms=1000,
             completion=True,
             retries=0,
@@ -562,7 +562,7 @@ class TestConstants(unittest.TestCase):
         self.assertEqual(JOBS_PER_PROVIDER, 2)
 
     def test_opencode_canonical_model(self) -> None:
-        self.assertEqual(OPENCODE_CANONICAL_MODEL, "zhipuai-coding-plan/glm-5")
+        self.assertEqual(OPENCODE_CANONICAL_MODEL, "zhipuai/glm-5.1")
 
 
 if __name__ == "__main__":

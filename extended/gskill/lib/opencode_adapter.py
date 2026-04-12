@@ -12,7 +12,7 @@ from dataclasses import dataclass
 @dataclass
 class OpenCodeConfig:
     """Configuration for OpenCode adapter."""
-    model: str = "zhipuai-coding-plan/glm-5"
+    model: str = "zhipuai/glm-5.1"
     timeout: int = 120  # seconds
     max_retries: int = 2
     format: str = "default"  # "default" or "json"
@@ -85,6 +85,6 @@ class OpenCodeAdapter:
         return "\n\n".join(parts)
 
 
-def make_opencode_lm(model: str = "zhipuai-coding-plan/glm-5") -> callable:
+def make_opencode_lm(model: str = "zhipuai/glm-5.1") -> callable:
     """Factory function for GEPA compatibility."""
     return OpenCodeAdapter(OpenCodeConfig(model=model))

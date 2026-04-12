@@ -9,7 +9,7 @@ Usage:
     scripts/validation/multi_provider_soak.py [--dry-run] [--rounds N] [--parallel N]
 
 The runner uses dx-runner as the canonical command surface and enforces:
-- OpenCode provider uses zhipuai-coding-plan/glm-5 (no zai-coding-plan fallback)
+- OpenCode provider uses the exact current model ID: zhipuai/glm-5.1
 - Two consecutive clean rounds with aggregate pass/fail gate
 - Machine-readable JSON + human-readable Markdown artifacts
 """
@@ -35,7 +35,7 @@ DEFAULT_ROUNDS = 2
 DEFAULT_TIMEOUT_SEC = 300.0
 ARTIFACTS_DIR = pathlib.Path("artifacts/multi-provider-soak")
 
-OPENCODE_CANONICAL_MODEL = "zhipuai-coding-plan/glm-5"
+OPENCODE_CANONICAL_MODEL = "zhipuai/glm-5.1"
 CC_GLM_DEFAULT_MODEL = "glm-5"
 GEMINI_DEFAULT_MODEL = "gemini-3-flash-preview"
 
