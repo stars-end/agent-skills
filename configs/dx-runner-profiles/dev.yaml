@@ -8,7 +8,7 @@ profile:
 
 provider:
   name: opencode
-  model: zhipuai-coding-plan/glm-5
+  model: zhipuai/glm-5.1
   allow_model_override: true
   execution_mode: run
   fallback_provider: cc-glm

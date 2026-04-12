@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: d91c21dac4192d61f50ea8dfa38f721d7ad577b3 -->
-<!-- Last updated: 2026-04-12 05:47:21 UTC -->
+<!-- Source SHA: 10ea8430e25e6927c6ee654f18cb17edd1eccf37 -->
+<!-- Last updated: 2026-04-12 06:48:31 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -398,11 +398,11 @@ dx-batch doctor --wave-id <wave-id> --json
 
 \`\`\`bash
 # Headless single-run lane
-opencode run -m zhipuai-coding-plan/glm-5 "Implement task T1 from plan.md"
+opencode run -m zhipuai/glm-5.1 "Implement task T1 from plan.md"
 
 # Legacy server lane for parallel clients (opt-in only)
 opencode serve --hostname 127.0.0.1 --port 4096
-opencode run --attach http://127.0.0.1:4096 -m zhipuai-coding-plan/glm-5 "Implement task T2 from plan.md"
+opencode run --attach http://127.0.0.1:4096 -m zhipuai/glm-5.1 "Implement task T2 from plan.md"
 \`\`\`
 
 **Reliability backstop: cc-glm via dx-runner**
@@ -447,7 +447,7 @@ Task:
 - Use \`report --format json\` as the source of truth for outcome and metrics.
 - Prefer one controlled restart max; then escalate using failure taxonomy.
 - Run \`dx-runner prune\` periodically to clear stale PID ghosts.
-- For OpenCode, enforce canonical model \`zhipuai-coding-plan/glm-5\`; fallback provider if unavailable.
+- For OpenCode, enforce canonical model \`zhipuai/glm-5.1\`; fallback provider if unavailable.
 
 ### Monitoring (Simplified)
 

@@ -250,7 +250,7 @@ dx-runner start --beads bd-xxx --provider opencode --prompt-file /tmp/task.promp
 ```
 
 **Model policy:**
-- Required: `zhipuai-coding-plan/glm-5`
+- Review/default required: `zhipuai/glm-5.1`
 - If unavailable: fail fast and dispatch via `cc-glm` or `gemini`
 
 ### gemini (Operational Lane)
@@ -278,6 +278,9 @@ Profiles provide pre-configured settings for common workflows:
 # Use production profile (strict governance)
 dx-runner start --beads bd-xxx --profile opencode-prod --prompt-file /tmp/task.prompt
 
+# Use explicit review profile
+dx-runner start --beads bd-xxx --profile opencode-review --prompt-file /tmp/review.prompt
+
 # List available profiles
 dx-runner profiles
 ```
@@ -287,6 +290,7 @@ dx-runner profiles
 | Profile | Provider | Description |
 |---------|----------|-------------|
 | `opencode-prod` | opencode | Production: strict governance, canonical model only |
+| `opencode-review` | opencode | Review: strict governance, `zhipuai/glm-5.1` |
 | `cc-glm-fallback` | cc-glm | Reliability backstop for critical waves |
 | `gemini-burst` | gemini | Burst capacity with relaxed constraints |
 | `dev` | opencode | Development: permissive, allows model override |
@@ -309,7 +313,7 @@ Profile priority: CLI flags > profile settings > defaults
 
 ## Model Drift Blocking (bd-8wdg.2)
 
-OpenCode adapter enforces canonical model `zhipuai-coding-plan/glm-5`. The `OPENCODE_MODEL` environment variable is **ignored** by default.
+OpenCode adapter enforces canonical model `zhipuai/glm-5.1` by default. The `OPENCODE_MODEL` environment variable is **ignored** by default.
 
 ### Override Policy
 

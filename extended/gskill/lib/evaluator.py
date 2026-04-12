@@ -76,7 +76,7 @@ class SkillEvaluator:
                 result = subprocess.run(
                     [
                         "opencode", "run",
-                        "-m", "zhipuai-coding-plan/glm-5",
+                        "-m", "zhipuai/glm-5.1",
                         "--format", "default",
                         "--dir", str(eval_repo),
                         prompt

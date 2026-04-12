@@ -84,12 +84,12 @@ LOG_DIR="/tmp/dx-runner"
 # Provider configuration
 declare -A PROVIDER_DEFAULT_MODEL=(
     ["cc-glm"]="glm-5"
-    ["opencode"]="zai-coding-plan/glm-5"
+    ["opencode"]="zhipuai/glm-5.1"
     ["gemini"]="gemini-3-flash-preview"
 )
 
 declare -A PROVIDER_FALLBACK_CHAIN=(
-    ["opencode"]="zai-coding-plan/glm-5"
+    ["opencode"]="zhipuai/glm-5.1"
 )
 
 # bd-8wdg.10: Startup-aware health thresholds
@@ -449,6 +449,9 @@ load_profile() {
     fi
     if [[ -n "${PROFILE_CONFIG[provider_model]:-}" ]]; then
         export OPENCODE_MODEL="${PROFILE_CONFIG[provider_model]}"
+        if [[ "${PROFILE_CONFIG[provider_name]:-}" == "opencode" ]]; then
+            export OPENCODE_CANONICAL_MODEL="${PROFILE_CONFIG[provider_model]}"
+        fi
     fi
     if [[ "${PROFILE_CONFIG[provider_allow_model_override]:-false}" == "true" ]]; then
         export DX_RUNNER_ALLOW_MODEL_OVERRIDE=1
@@ -2332,11 +2335,12 @@ Usage:
 
 Providers:
   cc-glm    Claude via Z.ai (reliability backstop)
-  opencode  OpenCode headless (primary throughput, strict canonical GLM-5)
+  opencode  OpenCode headless (primary throughput, strict canonical zhipuai/glm-5.1)
   gemini    Gemini CLI (parallel capacity)
 
 Built-in Profiles (bd-8wdg.1):
   opencode-prod    Production-safe OpenCode with strict governance
+  opencode-review  Review-safe OpenCode with zhipuai/glm-5.1
   cc-glm-fallback  Reliability backstop profile
   gemini-burst     Burst capacity using Gemini CLI
   dev              Permissive development profile

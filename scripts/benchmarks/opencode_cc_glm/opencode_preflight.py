@@ -8,10 +8,9 @@ Deterministic preflight checks for OpenCode dispatch environments:
 - mise trust state
 - node + pnpm presence
 
-Model policy with host-aware fallbacks:
-- preferred: zai-coding-plan/glm-5
-- host-aware fallback map for epyc12: zai/glm-5 -> opencode/glm-5-free
-- fail fast if neither exists
+Model policy:
+- preferred: zhipuai/glm-5.1
+- fail fast if unavailable; route to the next provider instead of silently changing models
 
 Outputs machine-readable JSON with:
 - selected_model
@@ -54,19 +53,10 @@ class PreflightResult:
         return dataclasses.asdict(self)
 
 
-HOST_FALLBACK_MAPS: dict[str, dict[str, str]] = {
-    "epyc12": {
-        "zai-coding-plan/glm-5": "zai/glm-5",
-        "zai/glm-5": "opencode/glm-5-free",
-    },
-    "epyc6": {
-        "zai-coding-plan/glm-5": "zai/glm-5",
-        "zai/glm-5": "opencode/glm-5-free",
-    },
-}
+HOST_FALLBACK_MAPS: dict[str, dict[str, str]] = {}
 
-PREFERRED_MODEL = "zai-coding-plan/glm-5"
-FALLBACK_CHAIN = ["zai/glm-5", "opencode/glm-5-free"]
+PREFERRED_MODEL = "zhipuai/glm-5.1"
+FALLBACK_CHAIN: list[str] = []
 
 
 def run_cmd(
@@ -201,7 +191,7 @@ def resolve_model(
     for fallback_model in FALLBACK_CHAIN:
         if fallback_model not in seen and fallback_model in available:
             return fallback_model, "fallback", f"preferred {preferred} not available"
-    return "", "unavailable", f"no available model in fallback chain: {chain}"
+    return "", "unavailable", f"required model unavailable: {preferred}"
 
 
 def run_preflight(
@@ -312,7 +302,7 @@ def parse_args() -> argparse.Namespace:
         help="Preferred model in provider/model format",
     )
     parser.add_argument(
-        "--host", default=None, help="Override hostname for fallback map"
+        "--host", default=None, help="Override hostname for reporting"
     )
     parser.add_argument("--json", action="store_true", help="Output JSON to stdout")
     return parser.parse_args()

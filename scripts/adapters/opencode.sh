@@ -24,7 +24,7 @@
 #   25 - Model unavailable (canonical model not found)
 #   28 - Model override blocked (drift protection)
 
-CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zai-coding-plan/glm-5}"
+CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zhipuai/glm-5.1}"
 OPENCODE_EXECUTION_MODE="${OPENCODE_EXECUTION_MODE:-run}"
 
 # bd-8wdg.2: Model override policy
@@ -36,6 +36,14 @@ MODEL_OVERRIDE_AUDIT_LOG=""
 adapter_canonical_model_aliases() {
     local model="$1"
     case "$model" in
+        zhipuai/glm-5.1)
+            printf '%s\n' "zhipuai-coding-plan/glm-5.1"
+            printf '%s\n' "zai-coding-plan/glm-5.1"
+            ;;
+        zhipuai-coding-plan/glm-5.1)
+            printf '%s\n' "zhipuai/glm-5.1"
+            printf '%s\n' "zai-coding-plan/glm-5.1"
+            ;;
         zai-coding-plan/glm-5-turbo)
             printf '%s\n' "zhipuai-coding-plan/glm-5-turbo"
             ;;
@@ -46,6 +54,7 @@ adapter_canonical_model_aliases() {
             printf '%s\n' "zhipuai-coding-plan/glm-5"
             ;;
         zai-coding-plan/glm-5.1)
+            printf '%s\n' "zhipuai/glm-5.1"
             printf '%s\n' "zhipuai-coding-plan/glm-5.1"
             ;;
         zhipuai-coding-plan/glm-5)
@@ -57,9 +66,7 @@ adapter_canonical_model_aliases() {
 adapter_is_allowed_phase_model() {
     local model="$1"
     case "$model" in
-        zai-coding-plan/glm-5-turbo|zhipuai-coding-plan/glm-5-turbo) return 0 ;;
-        zai-coding-plan/glm-5.1|zhipuai-coding-plan/glm-5.1) return 0 ;;
-        zai-coding-plan/glm-5|zhipuai-coding-plan/glm-5) return 0 ;;
+        zhipuai/glm-5.1|zai-coding-plan/glm-5.1|zhipuai-coding-plan/glm-5.1) return 0 ;;
         *) return 1 ;;
     esac
 }

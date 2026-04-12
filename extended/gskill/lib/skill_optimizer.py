@@ -46,7 +46,7 @@ class SkillOptimizer:
     def __init__(
         self,
         repo_path: Path,
-        reflection_model: str = "zhipuai-coding-plan/glm-5",
+        reflection_model: str = "zhipuai/glm-5.1",
         max_metric_calls: int = 100,
         reflection_template_path: Path | None = None,
     ):
