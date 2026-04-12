@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: f860c093db2989429cfdacec8ddc825d65aef645 -->
-<!-- Last updated: 2026-04-12 07:18:33 UTC -->
+<!-- Source SHA: e26236a9c6928a79cbaa574f3d2ae624b4fa06f0 -->
+<!-- Last updated: 2026-04-12 07:46:56 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -594,7 +594,8 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **dx-batch** | Deterministic orchestration over dx-runner for autonomous implement->review waves. Orchestrates 2-3 parallel tasks across 15-20 Beads items with strict lease locking, persistent ledger, and machine-readable contracts. Use for batch execution of implementation tasks with automatic review cycles. | `dx-batch start --items bd-aaa,bd-bbb,bd-ccc [--max-parallel ` | workflow, orchestration, batch, dx-runner, governance, parallel |
 | **dx-loop-review-contract** | Deterministic review contract for dx-loop reviewer runs. Enforces findings-first review style, concrete verdicts, and machine-actionable end states for baton automation. | — | workflow, review, dx-loop, baton |
 | **dx-loop** | `dx-loop` is the default execution surface for chained Beads work, multi-step outcomes, and implement/review baton flows. It is a PR-aware orchestration surface that reuses Ralph's proven patterns (baton, topological dependencies, checkpoint/resume) while replacing the control plane with governed `dx-runner` dispatch and enforcing PR artifact contracts. | `dx-ensure-bins.sh` |  |
-| **dx-runner** | Canonical unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, or gemini providers with unified preflight, gates, and failure taxonomy. Use when dispatching agent tasks, running headless jobs, or managing parallel agent sessions. | `dx-runner start --beads bd-xxx --provider cc-glm --worktree ` | workflow, dispatch, governance, multi-provider, automation |
+| **dx-review** | Dispatch a low-friction review quorum through dx-review: native Claude Code Opus plus OpenCode GLM-5.1, with optional Gemini as a third reviewer. Use when the user asks for multi-model review, review quorum, Claude Code + OpenCode review, or a quick POC of reviewer lanes. | `dx-review run \` | workflow, review, dispatch, claude-code, opencode, dx-runner |
+| **dx-runner** | Canonical unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, claude-code, or gemini providers with unified preflight, gates, and failure taxonomy. Use when dispatching agent tasks, running headless jobs, or managing parallel agent sessions. | `dx-runner start --beads bd-xxx --provider cc-glm --worktree ` | workflow, dispatch, governance, multi-provider, automation |
 | **fleet-sync** | Fleet Sync orchestrator for MCP tool convergence, health checks, and IDE config management across canonical VMs. | — |  |
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |
 | **gskill** | Auto-learn repository-specific skills for coding agents using SWE-smith + GEPA. Generates synthetic tasks and evolves skills through reflective optimization. Use when you want to improve agent performance on a specific repository. | — | skill-learning, gepa, swe-smith, optimization, auto-ml |

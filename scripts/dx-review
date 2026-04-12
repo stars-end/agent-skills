@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# dx-review
+# Minimal review quorum wrapper over dx-runner profiles.
+# Default reviewers:
+#   - claude-code-review -> Claude Code Opus
+#   - opencode-review    -> OpenCode GLM-5.1
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+if [[ -L "$SCRIPT_SOURCE" ]]; then
+    SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+DX_RUNNER="${DX_RUNNER_BIN:-$SCRIPT_DIR/dx-runner}"
+
+usage() {
+    cat <<'EOF'
+dx-review
+
+Usage:
+  dx-review run --beads <bd-id> --worktree <path> (--prompt <text> | --prompt-file <path>) [options]
+
+Options:
+  --gemini              Include the optional gemini-burst reviewer.
+  --wait                Wait for reviewers to finish.
+  --timeout-sec <n>     Wait timeout in seconds (default: 300).
+  --poll-sec <n>        Poll interval in seconds (default: 5).
+
+Examples:
+  dx-review run --beads bd-xxx --worktree /tmp/agents/bd-xxx/agent-skills \
+    --prompt "Answer exactly REVIEW_READY." --wait
+EOF
+}
+
+require_bash() {
+    if [[ -z "${BASH_VERSION:-}" ]] || (( ${BASH_VERSINFO[0]:-0} < 4 )); then
+        echo "dx-review requires bash >= 4." >&2
+        exit 2
+    fi
+}
+
+valid_beads_id() {
+    local id="$1"
+    [[ "$id" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]
+}
+
+reviewer_id_for_profile() {
+    local beads="$1"
+    local profile="$2"
+    case "$profile" in
+        claude-code-review) printf '%s.claude' "$beads" ;;
+        opencode-review) printf '%s.opencode' "$beads" ;;
+        gemini-burst) printf '%s.gemini' "$beads" ;;
+        *) printf '%s.%s' "$beads" "$(printf '%s' "$profile" | tr -cd 'a-z0-9')" ;;
+    esac
+}
+
+state_from_check_json() {
+    sed -n 's/.*"state":"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+is_terminal_state() {
+    case "$1" in
+        exited_ok|exited_err|no_op_success|stopped|blocked|missing)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+run_cmd() {
+    local beads="" worktree="" prompt="" prompt_file="" include_gemini=false wait=false timeout_sec=300 poll_sec=5
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --beads)
+                beads="${2:-}"
+                shift 2
+                ;;
+            --worktree)
+                worktree="${2:-}"
+                shift 2
+                ;;
+            --prompt)
+                prompt="${2:-}"
+                shift 2
+                ;;
+            --prompt-file)
+                prompt_file="${2:-}"
+                shift 2
+                ;;
+            --gemini)
+                include_gemini=true
+                shift
+                ;;
+            --wait)
+                wait=true
+                shift
+                ;;
+            --timeout-sec)
+                timeout_sec="${2:-300}"
+                shift 2
+                ;;
+            --poll-sec)
+                poll_sec="${2:-5}"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo "unknown arg: $1" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
+    done
+
+    [[ -n "$beads" ]] || { echo "run requires --beads" >&2; exit 2; }
+    valid_beads_id "$beads" || { echo "invalid Beads id: $beads" >&2; exit 2; }
+    [[ -n "$worktree" && -d "$worktree" ]] || { echo "run requires existing --worktree" >&2; exit 2; }
+    if [[ -n "$prompt" && -n "$prompt_file" ]]; then
+        echo "use --prompt or --prompt-file, not both" >&2
+        exit 2
+    fi
+    if [[ -z "$prompt" && -z "$prompt_file" ]]; then
+        echo "run requires --prompt or --prompt-file" >&2
+        exit 2
+    fi
+    [[ -x "$DX_RUNNER" ]] || { echo "dx-runner not executable: $DX_RUNNER" >&2; exit 2; }
+
+    local run_dir="/tmp/dx-review/${beads}"
+    mkdir -p "$run_dir"
+    if [[ -n "$prompt" ]]; then
+        prompt_file="$run_dir/review.prompt"
+        printf '%s\n' "$prompt" > "$prompt_file"
+    fi
+    [[ -f "$prompt_file" ]] || { echo "prompt file not found: $prompt_file" >&2; exit 2; }
+
+    local -a profiles=("claude-code-review" "opencode-review")
+    if [[ "$include_gemini" == "true" ]]; then
+        profiles+=("gemini-burst")
+    fi
+
+    local -a reviewers=()
+    local failures=0
+    local profile reviewer start_output
+
+    echo "dx-review reviewers: ${profiles[*]}"
+    for profile in "${profiles[@]}"; do
+        reviewer="$(reviewer_id_for_profile "$beads" "$profile")"
+        reviewers+=("$reviewer")
+        echo "starting reviewer=$reviewer profile=$profile"
+        set +e
+        start_output="$("$DX_RUNNER" start --profile "$profile" --beads "$reviewer" --prompt-file "$prompt_file" --worktree "$worktree" 2>&1)"
+        local start_rc=$?
+        set -e
+        printf '%s\n' "$start_output"
+        if [[ "$start_rc" -ne 0 ]]; then
+            echo "reviewer_start_failed reviewer=$reviewer profile=$profile rc=$start_rc" >&2
+            failures=$((failures + 1))
+        fi
+    done
+
+    if [[ "$wait" != "true" ]]; then
+        [[ "$failures" -eq 0 ]] || exit 1
+        return 0
+    fi
+
+    local deadline now all_done check_json state
+    deadline=$(($(date +%s) + timeout_sec))
+    while true; do
+        all_done=true
+        for reviewer in "${reviewers[@]}"; do
+            set +e
+            check_json="$("$DX_RUNNER" check --beads "$reviewer" --json 2>&1)"
+            local check_rc=$?
+            set -e
+            state="$(printf '%s\n' "$check_json" | state_from_check_json)"
+            state="${state:-unknown}"
+            echo "reviewer=$reviewer state=$state rc=$check_rc"
+            if ! is_terminal_state "$state"; then
+                all_done=false
+            fi
+            if [[ "$state" == "exited_err" || "$state" == "blocked" || "$state" == "missing" ]]; then
+                failures=$((failures + 1))
+            fi
+        done
+
+        if [[ "$all_done" == "true" ]]; then
+            break
+        fi
+        now="$(date +%s)"
+        if [[ "$now" -ge "$deadline" ]]; then
+            echo "dx-review timed out after ${timeout_sec}s" >&2
+            failures=$((failures + 1))
+            break
+        fi
+        sleep "$poll_sec"
+    done
+
+    echo "dx-review reports:"
+    for reviewer in "${reviewers[@]}"; do
+        echo "--- $reviewer ---"
+        "$DX_RUNNER" report --beads "$reviewer" --format json || failures=$((failures + 1))
+    done
+
+    [[ "$failures" -eq 0 ]] || exit 1
+}
+
+main() {
+    require_bash
+    local cmd="${1:-}"
+    shift || true
+    case "$cmd" in
+        run) run_cmd "$@" ;;
+        -h|--help|"") usage ;;
+        *)
+            echo "unknown command: $cmd" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+}
+
+main "$@"

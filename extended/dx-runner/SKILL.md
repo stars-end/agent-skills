@@ -2,7 +2,7 @@
 name: dx-runner
 description: |
   Canonical unified runner for multi-provider dispatch with shared governance.
-  Routes to cc-glm, opencode, or gemini providers with unified preflight, gates, and failure taxonomy.
+  Routes to cc-glm, opencode, claude-code, or gemini providers with unified preflight, gates, and failure taxonomy.
   Use when dispatching agent tasks, running headless jobs, or managing parallel agent sessions.
 tags: [workflow, dispatch, governance, multi-provider, automation]
 allowed-tools:
@@ -16,11 +16,11 @@ allowed-tools:
 `dx-runner` is the **canonical entrypoint** for all agent dispatch. It provides:
 
 - **Single command surface**: start/status/check/restart/stop/watchdog/report/preflight
-- **Multi-provider support**: cc-glm (Z.ai/GLM reliability backstop), opencode (primary throughput), gemini (future)
+- **Multi-provider support**: cc-glm (Z.ai/GLM reliability backstop), opencode (primary throughput), claude-code (native Claude Code review lane), gemini (optional burst)
 - **Unified governance**: preflight, permission gates, no-op detection, baseline/integrity/feature-key gates
 - **Deterministic outputs**: Machine-readable JSON with stable schemas
 
-Native Claude Code dispatch is not implemented as a `dx-runner` provider yet. The `cc-glm` provider is the Z.ai/GLM wrapper lane, not Anthropic Claude Code support.
+Native Claude Code dispatch is implemented as the `claude-code` provider. The `cc-glm` provider remains the Z.ai/GLM wrapper lane and is not Anthropic Claude Code support.
 
 OpenCode behavior in this skill is grounded in official docs and live CLI help:
 - [OpenCode CLI docs](https://opencode.ai/docs/cli/)
@@ -43,6 +43,12 @@ export BEADS_DIR="$HOME/.beads-runtime/.beads"
 
 # Start a job with cc-glm provider and explicit repo worktree
 dx-runner start --beads bd-xxx --provider cc-glm --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/task.prompt
+
+# Start the native Claude Code review lane with Opus
+dx-runner start --beads bd-xxx.claude --profile claude-code-review --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/review.prompt
+
+# Run the minimal two-reviewer quorum wrapper: Claude Code Opus + OpenCode GLM-5.1
+dx-review run --beads bd-xxx --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/review.prompt --wait
 
 # Check job status
 dx-runner status
@@ -148,6 +154,7 @@ Run preflight checks:
 
 ```bash
 dx-runner preflight [--provider <name>]
+dx-runner preflight --profile claude-code-review
 ```
 
 ### probe
@@ -156,6 +163,7 @@ Test provider/model availability:
 
 ```bash
 dx-runner probe --provider <name> [--model <id>]
+dx-runner probe --provider claude-code --model opus
 ```
 
 ### profiles (bd-8wdg.1)
@@ -259,6 +267,19 @@ dx-runner start --beads bd-xxx --provider opencode --prompt-file /tmp/task.promp
 - Review/default required: `zhipuai/glm-5.1`
 - If unavailable: fail fast and dispatch via `cc-glm` or `gemini`
 
+### claude-code (Native Claude Code Review Lane)
+
+Native Anthropic Claude Code CLI in headless prompt mode. Use this for review quorum work that explicitly needs Claude Code Opus separate from the `cc-glm` Z.ai/GLM wrapper lane.
+
+```bash
+dx-runner start --beads bd-xxx.claude --profile claude-code-review --worktree /tmp/agents/bd-xxx/repo --prompt-file /tmp/review.prompt
+```
+
+**Model policy:**
+- Review/default required: `opus`
+- Preflight checks `claude --print`, model availability, and non-interactive auth before launch
+- Concurrency default: one native Claude Code review job per host
+
 ### gemini (Operational Lane)
 
 Google Gemini CLI with detached launcher hardening:
@@ -287,6 +308,9 @@ dx-runner start --beads bd-xxx --profile opencode-prod --prompt-file /tmp/task.p
 # Use explicit review profile
 dx-runner start --beads bd-xxx --profile opencode-review --prompt-file /tmp/review.prompt
 
+# Use native Claude Code Opus review profile
+dx-runner start --beads bd-xxx.claude --profile claude-code-review --prompt-file /tmp/review.prompt --worktree /tmp/agents/bd-xxx/repo
+
 # List available profiles
 dx-runner profiles
 ```
@@ -297,6 +321,7 @@ dx-runner profiles
 |---------|----------|-------------|
 | `opencode-prod` | opencode | Production: strict governance, canonical model only |
 | `opencode-review` | opencode | Review: strict governance, `zhipuai/glm-5.1` |
+| `claude-code-review` | claude-code | Review: strict governance, `opus` |
 | `cc-glm-fallback` | cc-glm | Reliability backstop for critical waves |
 | `gemini-burst` | gemini | Burst capacity with relaxed constraints |
 | `dev` | opencode | Development: permissive, allows model override |
@@ -568,7 +593,7 @@ All providers emit the following normalized fields in outcome files:
 
 | Field | Description |
 |-------|-------------|
-| `provider` | Provider name (cc-glm, opencode, gemini) |
+| `provider` | Provider name (cc-glm, opencode, claude-code, gemini) |
 | `selected_model` | Model selected for execution |
 | `reason_code` | Reason for state transition |
 | `fallback_reason` | If fallback occurred, why |
