@@ -356,6 +356,40 @@ EOF
   assert_file_contains "$fake_bd_log" "arg=show" "tailscale hostname detects epyc12 as local hub"
 }
 
+test_tailscale_peer_does_not_make_spoke_local() {
+  local case_dir="$tmpdir/case_ts_peer"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+
+  cat >"$fake_bin/tailscale" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "status" && "${2:-}" == "--json" ]]; then
+  printf '{"Self":{"HostName":"mbp","DNSName":"mbp.sable-cliff.ts.net."},"Peer":{"nodekey:x":{"HostName":"epyc12","DNSName":"epyc12.sable-cliff.ts.net."}}}\n'
+else
+  exit 2
+fi
+EOF
+  chmod +x "$fake_bin/tailscale"
+
+  FAKE_BD_LOG="$fake_bd_log" \
+  FAKE_SSH_LOG="$fake_ssh_log" \
+  HOME="$case_dir/home" \
+  PATH="$fake_bin:/usr/bin:/bin" \
+  BDX_SSH_BIN="$fake_bin/ssh" \
+  BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
+  BDX_REMOTE_HOST="epyc12" \
+  BDX_HOSTNAME="mbp" \
+  "$BDX" show bd-remote >/dev/null
+
+  assert_file_contains "$fake_ssh_log" "host=epyc12" "tailscale peer epyc12 does not make spoke local"
+  assert_file_contains "$fake_bd_log" "arg=show" "spoke routes through remote helper"
+}
+
 test_remote_helper_revalidates_allowlist() {
   local case_dir="$tmpdir/case7"
   local fake_bin="$case_dir/bin"
@@ -390,6 +424,7 @@ main() {
   test_local_on_epyc12
   test_local_epyc12_write_uses_lock
   test_tailscale_hostname_detects_epyc12
+  test_tailscale_peer_does_not_make_spoke_local
   test_remote_helper_revalidates_allowlist
 
   echo "Summary: pass=$pass_count fail=$fail_count"
