@@ -67,6 +67,14 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **Railway CLI token**: \`op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN\` for CI/automation.
 - **Quick reference**: use the \`op-secrets-quickref\` skill.
 
+### 5.0) Agent Secret-Auth Invariant (Always-On)
+
+- For routine agent secret access, raw \`op read\`, \`op item get\`, \`op item list\`, and \`op whoami\` are forbidden.
+- Human GUI-backed OP is bootstrap/recovery only; it is not an acceptable fallback for autonomous agent tasks.
+- Agents must use cache/service-account helpers, preferably \`DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached ...\`.
+- On cache/service-account miss, fail closed with a blocker. Do not fall back to GUI OP.
+- Do not run OP retry loops unless the task is explicitly auth repair.
+
 ### 5.1) Agent Onboarding SOP (Required First Steps)
 
 New agents MUST complete these steps before any other work:

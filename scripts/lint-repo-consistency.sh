@@ -86,4 +86,9 @@ if rg -n -S \
   fail "deterministic Slack transport must not use 'openclaw message send'; use agent_coordination_send_message"
 fi
 
+# 7) Enforce raw-OP guardrail in agent-facing docs/prompts.
+if ! OP_GUARDRAIL_SKIP_CLI_CHECK=true "$ROOT/scripts/guardrails/op-guardrail.sh" --fail >/dev/null; then
+  fail "op guardrail failed (raw OP command snippets must be explicitly marked with HUMAN_RECOVERY_ONLY)"
+fi
+
 echo "OK: repo consistency checks passed"

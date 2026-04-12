@@ -2410,6 +2410,18 @@ start_cmd() {
     [[ -n "$BEADS" ]] || { echo "start requires --beads" >&2; exit 2; }
     [[ -n "$PROMPT_FILE" ]] || { echo "start requires --prompt-file" >&2; exit 2; }
     [[ -f "$PROMPT_FILE" ]] || { echo "prompt file not found: $PROMPT_FILE" >&2; exit 1; }
+    local raw_op_matches raw_op_markers
+    raw_op_matches="$(grep -nE '(^|[[:space:]>`-])op[[:space:]]+(read|whoami|item[[:space:]]+(get|list))\b' "$PROMPT_FILE" || true)"
+    if [[ -n "$raw_op_matches" ]]; then
+        raw_op_markers="$(grep -nE 'AUTH_REPAIR_BREAK_GLASS|DX_ALLOW_RAW_OP_FOR_AUTH_REPAIR=1|HUMAN_RECOVERY_ONLY' "$PROMPT_FILE" || true)"
+        if [[ -z "$raw_op_markers" ]]; then
+            echo "reason_code=raw_op_forbidden_in_agent_context" >&2
+            echo "next_action=remove_raw_op_commands_or_add_explicit_auth_repair_marker" >&2
+            echo "prompt contains forbidden raw OP command snippets in agent context:" >&2
+            printf '%s\n' "$raw_op_matches" | head -n 5 >&2
+            exit 21
+        fi
+    fi
     
     # bd-8wdg.1: Profile support - load profile if specified
     if [[ -n "$PROFILE" ]]; then
