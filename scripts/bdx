@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CANONICAL_BEADS_DIR="${BDX_BEADS_DIR:-$HOME/.beads-runtime/.beads}"
+REMOTE_HOST="${BDX_REMOTE_HOST:-epyc12}"
+REMOTE_HELPER="${BDX_REMOTE_HELPER:-\$HOME/agent-skills/scripts/bdx-remote}"
+SSH_BIN="${BDX_SSH_BIN:-ssh}"
+HOSTNAME_SHORT="${BDX_HOSTNAME:-$(hostname -s 2>/dev/null || hostname)}"
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  bdx <command> [args...]
+
+Canonical coordination commands:
+  Reads: show, ready, list, search, comments, config get|list, dolt test
+  Writes: create, comments add, note, update, close, reopen, dep, label, epic, batch, relate
+
+Local only / rejected:
+  init, where, context, doctor, dolt start|stop|set, unknown commands
+EOF
+}
+
+die() {
+  echo "bdx: $*" >&2
+  exit 2
+}
+
+classify_command() {
+  local cmd="${1:-}"
+  local sub="${2:-}"
+  local third="${3:-}"
+
+  case "$cmd" in
+    create|note|update|close|reopen|dep|label|epic|batch|relate)
+      echo "write"
+      return 0
+      ;;
+    show|ready|list|search)
+      echo "read"
+      return 0
+      ;;
+    comments)
+      if [[ "$sub" == "add" ]]; then
+        echo "write"
+      else
+        echo "read"
+      fi
+      return 0
+      ;;
+    config)
+      case "$sub" in
+        get|list)
+          echo "read"
+          return 0
+          ;;
+        *)
+          die "rejected risky config subcommand '$sub' (allowed: get, list)"
+          ;;
+      esac
+      ;;
+    dolt)
+      case "$sub" in
+        test)
+          echo "read"
+          return 0
+          ;;
+        start|stop|set)
+          die "rejected local-only dolt subcommand '$sub'"
+          ;;
+        *)
+          die "rejected dolt subcommand '$sub' (allowed via bdx: test)"
+          ;;
+      esac
+      ;;
+    init|where|context|doctor)
+      die "rejected local-only command '$cmd'"
+      ;;
+    help|-h|--help|"")
+      usage
+      exit 2
+      ;;
+    *)
+      die "rejected unknown command '$cmd'"
+      ;;
+  esac
+
+  # Unreachable; keeps shellcheck calm on exhaustive return paths.
+  [[ "$third" == "__never__" ]]
+}
+
+run_local() {
+  BEADS_DIR="$CANONICAL_BEADS_DIR" exec bd "$@"
+}
+
+run_remote() {
+  local mode="$1"
+  shift
+
+  # NUL-delimited argv transport: user arguments never touch remote shell parsing.
+  printf '%s\0' "$@" | "$SSH_BIN" "$REMOTE_HOST" "$REMOTE_HELPER" "--mode=$mode"
+}
+
+main() {
+  [[ $# -gt 0 ]] || { usage; exit 2; }
+
+  local mode
+  mode="$(classify_command "$@")"
+
+  if [[ "$HOSTNAME_SHORT" == "$REMOTE_HOST" ]]; then
+    run_local "$@"
+  else
+    run_remote "$mode" "$@"
+  fi
+}
+
+main "$@"
