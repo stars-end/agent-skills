@@ -235,13 +235,7 @@ get_dirty_paths_json() {
   git status --porcelain 2>/dev/null \
     | awk '{line=substr($0,4); sub(/.* -> /,"",line); print line}' \
     | head -n "$n" \
-    | python3 - <<'PY'
-import json
-import sys
-
-paths = [line.rstrip("\n") for line in sys.stdin if line.strip()]
-print(json.dumps(paths))
-PY
+    | python3 -c 'import json, sys; print(json.dumps([line.rstrip("\n") for line in sys.stdin if line.strip()]))'
 }
 
 get_untracked_count() {
