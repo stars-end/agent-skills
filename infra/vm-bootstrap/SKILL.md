@@ -47,7 +47,8 @@ replaces the legacy scripts.
 | `gh` | PRs + auth | brew | `gh --version && gh auth status` |
 | `railway` | env/shell/deploy | mise (`@railway/cli`) | `mise exec -- railway --version` + `railway status` + version >= 3.0.0 |
 | `op` | secrets + service auth | brew | `op --version` |
-| `bd` | Beads tasks | Beads installer | `bd --version` + `bd dolt test --json` |
+| `bd` | Beads local runtime/diagnostics | Beads installer | `bd --version` |
+| `bdx` | Beads agent coordination wrapper | agent-skills scripts | `bdx --help` + `bdx dolt test --json` |
 | `dcg` | destructive command guard | installer | `dcg explain "rm -rf /"` |
 | `ru` | repo sync | installer | `ru --version` |
 
@@ -69,6 +70,7 @@ replaces the legacy scripts.
 4. **gh auth**, **railway login**, and macOS GUI-backed **op** are human setup
    paths only; automation should use synced OP cache/service-account helpers
    and explicit Railway context.
+5. Beads coordination in automation/agents uses `bdx`, not direct remote SQL endpoint env tuning.
 
 ## Dirty Repo Safety
 

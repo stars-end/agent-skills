@@ -2,14 +2,14 @@
 
 > [!NOTE]
 > This is the current quick reference for Beads tooling. Canonical topology and host rollout are defined in
-> [`docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md`](docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md).
+> [`docs/BEADS_COORDINATION_WRAPPER_RUNBOOK.md`](docs/BEADS_COORDINATION_WRAPPER_RUNBOOK.md).
 
 ## Overview
 
-The DX scripts provide automated handling for the **Centralized Beads Database Pattern**, including chunked imports for large JSONL files, safety bypass persistence, and health diagnostics.
+The DX scripts provide automated handling for the canonical Beads coordination pattern: `bdx` routes coordination commands to epyc12 over Tailscale SSH.
 
 **Note on Data Formats**:
-- **Dolt (Canonical)**: The primary, high-concurrency database engine is Dolt server mode. Use `bd` commands for all interactive work.
+- **Dolt (Canonical)**: The primary, high-concurrency database engine is Dolt server mode on epyc12. Use `bdx` for agent coordination commands.
 - **JSONL (Compatibility Only)**: `issues.jsonl` is maintained for legacy compatibility and bulk imports/exports. Do not use JSONL as the primary data store for active fleet operations.
 
 ## DX Scripts
@@ -29,8 +29,9 @@ The DX scripts provide automated handling for the **Centralized Beads Database P
 
 | Tool | Location | Purpose |
 |------|----------|---------|
-| `beads-dolt` | `~/agent-skills/scripts/beads-dolt` | Canonical Beads command wrapper (Dolt SQL mode) |
-| `bd` | `~/.beads-runtime/.beads` | Native canonical DB operations |
+| `bdx` | `~/agent-skills/scripts/bdx` | Canonical Beads coordination wrapper for agents |
+| `beads-dolt` | `~/agent-skills/scripts/beads-dolt` | Backend diagnostics (service/runtime health) |
+| `bd` | `~/.beads-runtime/.beads` | Local diagnostics/bootstrap/path-sensitive operations |
 | `bd-doctor.sh` | `~/agent-skills/health/bd-doctor` | Health diagnostics |
 
 ## Environment Configuration
@@ -42,15 +43,16 @@ The DX scripts provide automated handling for the **Centralized Beads Database P
 export BEADS_IGNORE_REPO_MISMATCH=1
 ```
 
-### Centralized Database Pattern (Hub-Spoke)
+### Canonical Coordination Pattern (Hub-Spoke)
 
 ```bash
-# Hub (single-host mode)
-export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
-export BEADS_DOLT_SERVER_PORT=3307
+# Agent coordination commands (all hosts)
+bdx dolt test --json
+bdx show <known-beads-id> --json
 
-# Spokes and hub connect through this endpoint using Dolt SQL
+# Backend-only diagnostics
 beads-dolt dolt test --json
+beads-dolt status --json
 ```
 
 ### Fail-Fast Signatures (Dolt-Only Contract)
@@ -65,8 +67,6 @@ These indicate wrong binary/runtime, not a valid fallback path.
 export PATH="$HOME/.local/bin:$PATH"
 export BD_BIN="$HOME/.local/bin/bd"
 export BEADS_DIR="$HOME/.beads-runtime/.beads"
-export BEADS_DOLT_SERVER_HOST=100.107.173.83
-export BEADS_DOLT_SERVER_PORT=3307
 hash -r
 ~/.agent/skills/health/bd-doctor/check.sh
 ```
@@ -79,8 +79,8 @@ hash -r
 # Primary entrypoint (checks + offers auto-fix)
 dx-check.sh
 
-# Validate Beads endpoint from the current host
-beads-dolt dolt test --json && beads-dolt status --json
+# Validate Beads coordination path from the current host
+bdx dolt test --json && bdx show <known-beads-id> --json
 ```
 
 ### Manual Large Import
@@ -95,12 +95,11 @@ bd export -o /tmp/epic-snapshot.jsonl
 bd import -i /tmp/epic-snapshot.jsonl
 ```
 
-### Environment Bootstrap
+### Environment Bootstrap (agent-facing)
 
 ```bash
 # Required for fleet mode
-export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
-export BEADS_DOLT_SERVER_PORT=3307
+export BEADS_DIR="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
 
 # Ensure all safety settings are exported
 dx-check.sh
@@ -163,8 +162,8 @@ export BEADS_IGNORE_REPO_MISMATCH=1
 # Legacy wrappers are deprecated and should not be used in active canonical Beads operations.
 # Keep them only for explicit one-off compatibility work in non-canonical contexts.
 
-# For canonical mode, verify Beads SQL health instead:
-beads-dolt dolt test --json && beads-dolt status --json
+# For canonical mode, verify Beads coordination health instead:
+bdx dolt test --json && bdx show <known-beads-id> --json
 
 # Verify modern setup
 dx-check.sh
@@ -178,7 +177,9 @@ dx-check.sh
 ## See Also
 
 - `~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md` - Large import guidance
+- `~/agent-skills/docs/BEADS_COORDINATION_WRAPPER_RUNBOOK.md` - Canonical `bdx` coordination contract
 - `~/agent-skills/health/bd-doctor/SKILL.md` - Beads health checks
 - `~/agent-skills/core/beads-workflow/SKILL.md` - Beads workflow guide
 - `~/.beads-runtime/.beads` - Active centralized runtime directory
+- `~/beads/` - Beads CLI source/build checkout (not runtime)
 - `~/bd/` - Legacy/rollback mirror only

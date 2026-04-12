@@ -28,14 +28,16 @@ mcp__plugin_beads_beads__set_context(workspace_root="/path/to/project")
 **CRITICAL:** confirm Beads is reachable before ending session context.
 
 ```bash
-beads-dolt dolt test --json
-beads-dolt status --json
+bdx dolt test --json
+bdx show <known-beads-id> --json
 ```
 
 **What this does:**
-- Confirms Dolt server connectivity
-- Confirms issue summary is queryable
+- Confirms `bdx` coordination path is healthy
+- Confirms issue reads are queryable
 - Prevents silent session-end on broken tracker state
+
+Use raw `bd` only for local diagnostics/bootstrap/path-sensitive operations.
 
 ### 3. Get Session Stats
 ```

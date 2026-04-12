@@ -84,6 +84,8 @@ dx-worktree prune <repo>
 
 - **Never edit in canonical repos** (`~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`)
 - **Always work inside workspace paths** (`/tmp/agents/<beads-id>/<repo>`)
+- **Use `bdx` for Beads coordination commands** (`create`, `show`, `ready`, `comments`, `note`, etc.)
+- **Use raw `bd` only** for local diagnostics/bootstrap/path-sensitive operations or explicit override
 - **Recovery uses named worktrees**, not stash
 - If stuck: `dx-worktree evacuate-canonical <repo>` → `dx-worktree create <beads-id> <repo>`
 

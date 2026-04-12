@@ -10,7 +10,7 @@ name: beads-workflow
 description: |
   Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations.
   Handles full epic→branch→work lifecycle, dependencies, and ready task queries.
-  Uses Dolt server mode with runtime at ~/.beads-runtime/.beads for canonical multi-VM reliability.
+  Uses `bdx` as the canonical Beads coordination wrapper with runtime at ~/.beads-runtime/.beads for canonical multi-VM reliability.
   Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies,
   or when user mentions "create issue", "track work", "bd create", "find ready tasks",
   issue management, dependencies, work tracking, or Beads workflow operations.
@@ -25,6 +25,8 @@ allowed-tools:
 # Beads Workflow Guide
 
 AI-supervised issue tracking with git-backed distributed database.
+
+**Command surface:** Use `bdx` for coordination commands. Raw `bd` is local diagnostics/bootstrap/path-sensitive operations only.
 
 **Prefix note:** Examples use the Beads prefix for this repo (e.g., bd-xyz). If you are working in another repository, substitute that repo's issue ID prefix everywhere `{issue-id}` is shown (branch names, Feature-Key trailers, dependency IDs).
 In `agent-skills`, do not rely on the Beads default issue prefix when creating new tracking work. If the active Beads context is `af-*` or another non-`bd-*` prefix, create or choose an explicit `bd-*` issue id before branch, commit, or PR work.
@@ -44,22 +46,24 @@ Beads provides persistent task memory across sessions, enabling:
 ## Canonical Contract
 
 - Active Beads runtime is `~/.beads-runtime/.beads`.
+- Canonical coordination surface is `bdx`.
 - `~/bd` is legacy/rollback Git-backed state only.
 - Canonical backend is Dolt server mode.
 - Run Beads mutations from non-app directories; app repos should use worktrees for code and reference Beads IDs.
+- Direct remote Dolt SQL endpoint settings are backend plumbing, not the normal agent coordination path.
 - In `agent-skills`, active context must resolve to a repo-compatible `bd-*` issue id before commit or PR work. If `bd-context` surfaces `af-*` or another non-`bd-*` prefix here, stop early and create or choose the correct `bd-*` issue instead of carrying the mismatch forward.
 - No SQLite fallback for active fleet operation. If you see `sqlite3: unable to open database file` or `unknown command "dolt"`, stop and repair runtime/binary first.
 - Before dispatch waves, verify:
 
 ```bash
-beads-dolt dolt test --json
-beads-dolt status --json
+bdx dolt test --json
+bdx show <known-beads-id> --json
 ```
 
-On `macmini`, do not use `bd ready --json` as a tight-loop health probe. If you need to confirm CLI responsiveness, prefer:
+On `macmini`, do not use `bdx ready --json` as a tight-loop health probe. If you need to confirm CLI responsiveness, prefer:
 
 ```bash
-beads-dolt show <known-beads-id> --json
+bdx show <known-beads-id> --json
 ```
 
 Broad readiness queries can be slow enough on `macmini` to look hung even when the Beads hub is healthy.
@@ -70,8 +74,6 @@ Fail-loud remediation (first response):
 export PATH="$HOME/.local/bin:$PATH"
 export BD_BIN="$HOME/.local/bin/bd"
 export BEADS_DIR="$HOME/.beads-runtime/.beads"
-export BEADS_DOLT_SERVER_HOST=100.107.173.83
-export BEADS_DOLT_SERVER_PORT=3307
 hash -r
 ~/.agent/skills/health/bd-doctor/check.sh
 ```
@@ -100,16 +102,16 @@ hash -r
 
 ```bash
 # When creating with dependency
-bd create --title "Impl: OAuth" --type feature --dep "bd-research-task"
+bdx create --title "Impl: OAuth" --type feature --dep "bd-research-task"
 
 # Add dependency to existing issue
-bd dep bd-new-feature bd-required-api --type blocks
+bdx dep bd-new-feature bd-required-api --type blocks
 
 # Discovery: I found a bug while working on a feature
-bd dep bd-discovered-bug bd-parent-feature --type discovered-from
+bdx dep bd-discovered-bug bd-parent-feature --type discovered-from
 
 # Epic subtask
-bd dep bd-subtask bd-epic --type parent-child
+bdx dep bd-subtask bd-epic --type parent-child
 ```
 
 ### Dependency Types
@@ -121,7 +123,7 @@ bd dep bd-subtask bd-epic --type parent-child
 | `parent-child` | Epic hierarchy | ❌ No |
 | `discovered-from` | Found during work | ❌ No |
 
-**Only `blocks` prevents a task from appearing in `bd ready`.**
+**Only `blocks` prevents a task from appearing in `bdx ready`.**
 
 ## Epic Creation Workflow (AUTOMATED)
 

@@ -18,6 +18,9 @@ Key conventions:
 - Each VM/agent sets `AGENT_NAME=<vm>-<tool>` (e.g. `macmini-codex`, `epyc6-claude-code`, `homedesktop-wsl-gemini`)
 - For in-repo coordination, use the repo’s local Beads issue id as the coordination handle (no cross-repo renames).
 - Always start a session with `dx-check` (baseline) and run `dx-doctor` when using coordinator services.
+- Use `bdx` as the Beads coordination command surface across hosts.
+- Use raw `bd` only for local diagnostics/bootstrap/path-sensitive operations or explicit override.
+- Do not treat direct remote Dolt SQL endpoint settings as the normal agent path.
 
 Recommended coordinator flow:
 1. Assign work by repo (prime-radiant-ai / affordabot / llm-common / agent-skills).

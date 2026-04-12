@@ -98,6 +98,8 @@ pytest -q ~/agent-skills/tests/dx_batch
 - `dx-batch start` automatically runs `dx-runner prune` before queue start.
 - Every run-loop cycle performs a doctor check before launching new items.
 - If live dispatch/runner processes exceed cap, wave fails fast with `exec_saturation`.
+- Beads coordination for wave bookkeeping should use `bdx`; do not route agents through direct SQL endpoint tuning.
+- Raw `bd` is reserved for local diagnostics/bootstrap/path-sensitive operations.
 
 ## Exec Saturation Incident Runbook (bd-cbsb.27)
 

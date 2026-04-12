@@ -50,6 +50,9 @@ dx-runner check --beads bd-xxx
 
 # Generate report
 dx-runner report --beads bd-xxx --format json
+
+# Coordinate Beads state via wrapper
+bdx show bd-xxx --json
 ```
 
 ## Command Reference
@@ -74,6 +77,7 @@ Operator contract:
 - Run control-plane commands with `BEADS_DIR=~/.beads-runtime/.beads` from a non-app directory.
 - Pass `--worktree /tmp/agents/<beads>/<repo>` explicitly for mutating jobs.
 - Use `DX_RUNNER_DEFAULT_WORKTREE` only as fallback for legacy wrappers or previously recorded runs.
+- Use `bdx` for Beads coordination around runs. Raw `bd` is for local diagnostics/bootstrap/path-sensitive operations.
 
 ### status
 
@@ -537,7 +541,7 @@ Preflight noise policy:
 ```json
 {
   "beads": "bd-xxx",
-  "provider": "cc-glm",
+  "provider": "opencode",
   "state": "exited_ok",
   "reason_code": "outcome_exit_0",
   "started_at": "2026-02-18T12:00:00Z",
@@ -545,7 +549,7 @@ Preflight noise policy:
   "retries": 0,
   "exit_code": "0",
   "outcome_state": "success",
-  "selected_model": "glm-5",
+  "selected_model": "zhipuai/glm-5.1",
   "fallback_reason": "none",
   "execution_mode": "detached",
   "worktree": "/tmp/agents/bd-xxx/repo",
