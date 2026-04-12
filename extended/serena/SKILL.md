@@ -58,7 +58,7 @@ Rendered to IDE configs via Fleet Sync:
   "mcpServers": {
     "serena": {
       "type": "stdio",
-      "command": "serena",
+      "command": "~/.local/bin/serena",
       "args": ["start-mcp-server"]
     }
   }
@@ -135,6 +135,10 @@ Rendered to these IDE configs:
 - `claude-code`: `~/.claude.json`
 - `antigravity`: `~/.gemini/antigravity/mcp_config.json`
 - `opencode`: `~/.opencode/config.json`
+
+GUI IDEs such as Antigravity may not inherit shell PATH. Fleet Sync renders the
+MCP command as `~/.local/bin/serena`, which expands to an absolute executable
+path in generated configs.
 
 ## Upstream
 

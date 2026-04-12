@@ -201,8 +201,9 @@ For the canonical dev/staging VM fleet, unattended `op` access is centralized on
 - GUI-backed `op` may require `op signin` again after device lock or 1Password
   lock.
 - Agents, cron jobs, and LaunchAgents must not rely on GUI unlock state.
-- A Mac is agent-ready only when `~/agent-skills/scripts/dx-op-auth-status.sh
-  --json` reports `agent_ready_cache` or `agent_ready_service_account`.
+- A Mac is agent-ready only when `~/agent-skills/scripts/dx-bootstrap-auth.sh
+  --json` reports green with `agent_ready_cache` or
+  `agent_ready_service_account`.
 - `human_interactive_only` means the human can use `op`, but the agent-safe
   cache/service-account path still needs to be fixed.
 
@@ -231,6 +232,8 @@ and gives the fleet a single unattended refresh surface to debug.
   - `~/agent-skills/scripts/dx-refresh-op-caches.sh`
 - Sync on consumer hosts:
   - `~/agent-skills/scripts/dx-sync-op-caches.sh`
+- One-command consumer repair:
+  - `~/agent-skills/scripts/dx-bootstrap-auth.sh`
 
 ### Required host behavior
 

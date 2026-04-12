@@ -77,7 +77,7 @@ tools:
       - gemini-cli
     mcp:
       type: stdio
-      command: "serena"
+      command: "~/.local/bin/serena"
       args:
         - "start-mcp-server"
         - "--enable-web-dashboard"

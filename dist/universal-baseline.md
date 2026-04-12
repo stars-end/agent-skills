@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 518625ff6708bc93bad4309e927b34a93ff3014f -->
-<!-- Last updated: 2026-04-11 07:28:21 UTC -->
+<!-- Source SHA: 16e1f9c504716e1395e2d84eab4c4974e8cdae0a -->
+<!-- Last updated: 2026-04-11 08:34:12 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -211,7 +211,7 @@ New agents MUST complete these steps before any other work:
 **Step 1: Verify Agent-Safe 1Password Auth**
 \`\`\`bash
 # Classifies local auth without printing secrets.
-~/agent-skills/scripts/dx-op-auth-status.sh --json
+~/agent-skills/scripts/dx-bootstrap-auth.sh --json
 
 # Accept for agents/cron:
 #   mode=agent_ready_cache

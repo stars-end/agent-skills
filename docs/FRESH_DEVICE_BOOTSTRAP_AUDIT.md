@@ -61,9 +61,10 @@ The entrypoint should run these phases explicitly:
 1. `dx-link-bins`: install links into `~/.local/bin` or `~/bin`.
 2. `dx-bootstrap-beads`: create `~/.beads-runtime/.beads` metadata/config and
    verify `bd dolt test --json`.
-3. `dx-bootstrap-auth`: run `dx-op-auth-status.sh --json` and require
-   `agent_ready_cache` or `agent_ready_service_account` for agent/cron work;
-   `human_interactive_only` is acceptable only during Mac human bootstrap.
+3. `dx-bootstrap-auth`: run `dx-bootstrap-auth.sh --json`; accept
+   `agent_ready_cache` or `agent_ready_service_account`, otherwise sync OP
+   cache artifacts from `epyc12` and re-check. `human_interactive_only` is
+   acceptable only during Mac human bootstrap.
 4. `dx-render-mcp`: render MCP configs appropriate for the host/client role.
 5. `dx-install-schedules`: install only the schedules for the detected host
    role.
@@ -78,7 +79,7 @@ The entrypoint should run these phases explicitly:
 - `llm-tldr` MCP is local-contained and tested against a host-local worktree.
 - A Mac-local worktree analysis never routes through an `epyc12` MCP process
   unless the worktree is mirrored or mounted there.
-- `dx-op-auth-status.sh --json` returns `agent_ready_cache` or
+- `dx-bootstrap-auth.sh --json` returns green with `agent_ready_cache` or
   `agent_ready_service_account` for agent work.
 - macOS `op whoami` may be verified for human bootstrap, but no cron,
   LaunchAgent, shell startup, or agent bootstrap path depends on GUI unlock

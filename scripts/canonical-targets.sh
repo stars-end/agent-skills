@@ -267,7 +267,7 @@ get_ide_config() {
   esac
 
   case "$ide" in
-    antigravity) echo "$HOME/.gemini/settings.json" ;;
+    antigravity) echo "$HOME/.gemini/antigravity/mcp_config.json" ;;
     claude-code) echo "$HOME/.claude.json" ;;
     codex-cli) echo "$HOME/.codex/config.toml" ;;
     opencode) echo "$HOME/.config/opencode/opencode.jsonc" ;;
