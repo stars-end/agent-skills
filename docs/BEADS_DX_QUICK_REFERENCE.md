@@ -30,7 +30,7 @@ The DX scripts provide automated handling for the **Centralized Beads Database P
 | Tool | Location | Purpose |
 |------|----------|---------|
 | `beads-dolt` | `~/agent-skills/scripts/beads-dolt` | Canonical Beads command wrapper (Dolt SQL mode) |
-| `bd` | `~/bd/.` | Native canonical DB operations |
+| `bd` | `~/.beads-runtime/.beads` | Native canonical DB operations |
 | `bd-doctor.sh` | `~/agent-skills/health/bd-doctor` | Health diagnostics |
 
 ## Environment Configuration
@@ -64,7 +64,7 @@ These indicate wrong binary/runtime, not a valid fallback path.
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 export BD_BIN="$HOME/.local/bin/bd"
-export BEADS_DIR="$HOME/bd/.beads"
+export BEADS_DIR="$HOME/.beads-runtime/.beads"
 export BEADS_DOLT_SERVER_HOST=100.107.173.83
 export BEADS_DOLT_SERVER_PORT=3307
 hash -r
@@ -180,4 +180,5 @@ dx-check.sh
 - `~/agent-skills/docs/BEADS_LARGE_IMPORT_WORKAROUND.md` - Large import guidance
 - `~/agent-skills/health/bd-doctor/SKILL.md` - Beads health checks
 - `~/agent-skills/core/beads-workflow/SKILL.md` - Beads workflow guide
-- `~/bd/` - Centralized database directory
+- `~/.beads-runtime/.beads` - Active centralized runtime directory
+- `~/bd/` - Legacy/rollback mirror only

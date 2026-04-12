@@ -6,7 +6,7 @@ export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:/opt/homebrew/bin:/u
 
 HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
-REPO="${HOME}/bd"
+BEADS_DIR="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
 LOG_FILE="$HOME/logs/dx/beads-health-alert.log"
 # Active contract: no legacy sqlite/jsonl fallback in this alert path.
 # Enable compatibility-only legacy diagnostics explicitly in non-canonical operators only.
@@ -16,22 +16,17 @@ mkdir -p "$(dirname "$LOG_FILE")"
   echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] beads-health-check start: contract=dolt-native-hub-spoke host=${HOST}:${PORT}"
 } >>"$LOG_FILE"
 
-if [[ ! -d "$REPO/.git" ]]; then
-  echo "❌ canonical Beads repo missing at $REPO" | tee -a "$LOG_FILE"
+if [[ ! -d "$BEADS_DIR" ]]; then
+  echo "❌ active Beads runtime missing at $BEADS_DIR" | tee -a "$LOG_FILE"
   exit 1
 fi
 
-if [[ ! -d "$REPO/.beads/dolt" ]]; then
-  echo "❌ ~/.beads/dolt metadata missing or malformed - active contract requires Dolt repo data" | tee -a "$LOG_FILE"
+if [[ ! -f "$BEADS_DIR/metadata.json" || ! -f "$BEADS_DIR/config.yaml" ]]; then
+  echo "❌ active Beads runtime missing metadata.json or config.yaml at $BEADS_DIR" | tee -a "$LOG_FILE"
   exit 1
 fi
 
-if [[ ! -d "$REPO/.beads/dolt/.dolt" ]]; then
-  echo "❌ dolt data-dir is not initialized under ~/bd/.beads/dolt (missing .dolt metadata)" | tee -a "$LOG_FILE"
-  exit 1
-fi
-
-cd "$REPO"
+cd "$HOME"
 
 if ! command -v bd >/dev/null 2>&1; then
   echo "❌ bd CLI not found in PATH" | tee -a "$LOG_FILE"

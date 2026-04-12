@@ -38,7 +38,7 @@ trivial to rediscover from current code.
 Use `bd remember` for small, global facts:
 
 ```bash
-cd ~/bd
+cd ~
 BEADS_DIR=~/.beads-runtime/.beads bd remember \
   "agent-skills changes must happen in /tmp/agents/<beads-id>/agent-skills, not ~/agent-skills" \
   --key agent-skills-worktree-only
@@ -47,7 +47,7 @@ BEADS_DIR=~/.beads-runtime/.beads bd remember \
 Search and recall:
 
 ```bash
-cd ~/bd
+cd ~
 BEADS_DIR=~/.beads-runtime/.beads bd memories worktree
 BEADS_DIR=~/.beads-runtime/.beads bd recall agent-skills-worktree-only
 ```
@@ -58,7 +58,7 @@ Use Beads issues for memory that needs provenance, metadata, comments, links, or
 staleness checks.
 
 ```bash
-cd ~/bd
+cd ~
 BEADS_DIR=~/.beads-runtime/.beads bd create \
   "Memory: agent-skills worktree-only editing policy" \
   --type decision \
@@ -94,7 +94,7 @@ Use these keys for structured memory records:
 Before cross-repo, repeated, or confusing work, search memory first:
 
 ```bash
-cd ~/bd
+cd ~
 BEADS_DIR=~/.beads-runtime/.beads bd memories <keyword>
 BEADS_DIR=~/.beads-runtime/.beads bd search <keyword> --label memory --status all
 BEADS_DIR=~/.beads-runtime/.beads bd search memory --label memory --metadata-field mem.repo=agent-skills --status all

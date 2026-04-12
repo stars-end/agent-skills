@@ -53,7 +53,7 @@ git status
 # 2. Create WIP branch with timestamp
 git checkout -b wip/$(hostname)-$(date +%Y-%m-%d)-$(basename "$PWD")
 
-# 3. If operating in canonical Beads repo, verify Beads health first
+# 3. If operating in legacy ~/bd rollback repo, verify Beads health first
 if [[ "$(git rev-parse --show-toplevel)" = "$HOME/bd" ]]; then
   beads-dolt dolt test --json
   beads-dolt status --json
@@ -92,12 +92,12 @@ This naming convention:
 
 ## Beads Integration
 
-**CRITICAL:** Beads mutations should run in canonical `~/bd`, not app repositories.
+**CRITICAL:** Beads mutations should run from non-app directories with `BEADS_DIR=~/.beads-runtime/.beads`. `~/bd` is legacy/rollback state.
 
 Safe flow:
 
 ```bash
-# 1. If snapshotting ~/bd itself, verify Beads backend health
+# 1. If snapshotting legacy ~/bd itself, verify Beads backend health
 if [[ "$(git rev-parse --show-toplevel)" = "$HOME/bd" ]]; then
   beads-dolt dolt test --json
   beads-dolt status --json
@@ -122,7 +122,7 @@ git rev-parse --show-toplevel
 git log -1
 # Should show the most recent commit. If it fails, HEAD is corrupted.
 
-# 3. If this is ~/bd, verify Dolt backend connectivity
+# 3. If this is legacy ~/bd, verify Dolt backend connectivity
 if [[ "$(git rev-parse --show-toplevel)" = "$HOME/bd" ]]; then
   beads-dolt dolt test --json || echo "Beads backend unreachable"
 fi
@@ -149,7 +149,7 @@ Options:
 The script:
 1. Checks if the repo is dirty
 2. Creates a WIP branch with timestamp
-3. Detects canonical Beads repo and verifies Dolt health if needed
+3. Detects legacy rollback `~/bd` and verifies Dolt health if needed
 4. Commits all changes
 5. Pushes to origin
 6. Returns to the previous branch (or main/master)
@@ -158,7 +158,7 @@ Exit codes:
 - `0`: Success (snapshot created and pushed)
 - `1`: Repository is already clean (no snapshot needed)
 - `2`: Git operation failed
-- `3`: Beads health check failed (when snapshotting `~/bd`)
+- `3`: Beads health check failed (when snapshotting legacy `~/bd`)
 
 ## Best Practices
 

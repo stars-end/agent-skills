@@ -343,7 +343,7 @@ Ready for next feature.
 ### With Beads
 - **Verifies issue already closed** (closed at PR creation time by create-pull-request skill)
 - **Issue already closed before merge** (no merge-time status edits)
-- **Verifies backend health after merge** (canonical `~/bd` checks)
+- **Verifies backend health after merge** (Dolt checks with `BEADS_DIR=~/.beads-runtime/.beads`)
 - **No post-merge tracker mutations** (prevents state drift)
 
 ### With create-pull-request

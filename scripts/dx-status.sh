@@ -224,7 +224,7 @@ done
 echo ""
 echo "--- External Beads Database (BEADS_DIR) ---"
 check_beads_dir() {
-    local expected_path="$HOME/bd/.beads"
+    local expected_path="$HOME/.beads-runtime/.beads"
     local beads_dir_real
     local expected_beads_db
     local expected_real
@@ -242,7 +242,7 @@ check_beads_dir() {
         echo -e "${GREEN}✅ BEADS_DIR = $BEADS_DIR${RESET}"
     fi
 
-    # Server mode compatibility: ~/bd may not expose a raw beads.db file anymore.
+    # Server mode compatibility: legacy ~/bd may not expose a raw beads.db file anymore.
     if [ ! -d "$BEADS_DIR" ]; then
         echo -e "${RED}❌ BEADS_DIR directory missing: $BEADS_DIR${RESET}"
         ERRORS=$((ERRORS+1))
@@ -255,7 +255,7 @@ check_beads_dir() {
         if ("$HOME/.agent/skills/scripts/beads-dolt" dolt test --json >/dev/null 2>&1); then
             echo -e "${GREEN}✅ Beads service reachable in Dolt server mode (expected: no beads.db)${RESET}"
         else
-            echo -e "${RED}❌ Beads service unreachable (${HOME}/bd -- dolt server mode)${RESET}"
+            echo -e "${RED}❌ Beads service unreachable (${HOME}/.beads-runtime -- dolt server mode)${RESET}"
             ERRORS=$((ERRORS+1))
         fi
     else

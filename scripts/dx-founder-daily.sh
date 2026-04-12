@@ -7,7 +7,7 @@
 # Bead: bd-lsxp.3
 #
 # Dependencies:
-#   - Beads source at ~/bd/.beads (native `bd` CLI with hub-spoke Dolt SQL).
+#   - Beads source at ~/.beads-runtime/.beads (native `bd` CLI with hub-spoke Dolt SQL).
 #     SQLite/JSONL are compatibility fallbacks only and must be explicitly enabled.
 #   - GitHub CLI (gh) authenticated
 #   - bv CLI for robot alerts/drift check
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 # Configuration
-BEADS_DIR="${BEADS_DIR:-${HOME}/bd/.beads}"
+BEADS_DIR="${BEADS_DIR:-${HOME}/.beads-runtime/.beads}"
 BEADS_DB="${BEADS_DIR}/beads.db"
 BEADS_ISSUES_JSONL="${BEADS_DIR}/issues.jsonl"
 GH_REPO="stars-end/prime-radiant-ai"
@@ -226,7 +226,7 @@ query_cli_open_issues() {
   fi
 
   local raw
-  raw="$(cd "${HOME}/bd" && BEADS_DIR="${BEADS_DIR}" bd list --json --status open --limit 0 2>>"$LOG_FILE" || true)"
+  raw="$(cd "${HOME}" && BEADS_DIR="${BEADS_DIR}" bd list --json --status open --limit 0 2>>"$LOG_FILE" || true)"
   if [ -z "$raw" ] || ! jq -e 'type == "array"' <<<"$raw" >/dev/null 2>&1; then
     return 1
   fi
@@ -322,7 +322,7 @@ require_active_dolt_source() {
   esac
 
   error "Unable to resolve canonical Beads source (bd CLI required)."
-  error "Run from an environment where ~/bd + Beads SQL service are available."
+  error "Run from an environment where Beads runtime + SQL service are available."
   error "Set ALLOW_BEADS_LEGACY_SOURCE=1 only for compatibility troubleshooting."
   pipeline_fail "${PIPELINE_REASON:-beads_source_missing}" "${PIPELINE_ERROR:-expected CLI but got ${BEADS_SOURCE}}"
   return 1
