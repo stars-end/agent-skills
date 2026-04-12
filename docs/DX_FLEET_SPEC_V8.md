@@ -55,6 +55,7 @@
 | worktree-push.sh | Push unpushed worktree branches | 3:15 AM | bd-s7a3 |
 | worktree-gc-v8.sh | Prune merged worktrees | hourly | bd-7jpo |
 | queue-hygiene-enforcer.sh | Auto-merge policy enforcement + rescue PR cleanup (DX_CONTROLLER only) | */4h | bd-gdlr |
+| dx-spoke-cron-install.sh | Spoke-safe fetch/reconcile/cache cron supplement | install-time | bd-br7e4 |
 | dx-job-wrapper.sh | Wrap all above with state + Slack alerts | N/A | bd-suaw |
 | dx-audit.sh | V8 invariant audit (lookback rescue events, trailers) | Weekly | bd-rrb9 |
 
@@ -94,6 +95,21 @@ not set to 1. This prevents duplicate actions across VMs.
 
 All hosts run the same V8.6 schedule entries. Only the controller host executes
 enforcer actions (`DX_CONTROLLER=1`); replicas run the same job in no-op mode.
+
+Spoke hosts should also run the non-controller supplement installed by
+`scripts/dx-spoke-cron-install.sh`:
+
+- fetch each canonical code repo every 30 minutes, staggered
+- reconcile clean canonical repos every 2 hours
+- sync the agent-safe OP cache from `epyc12` every 15 minutes, except on `epyc12`
+
+Do not install controller-only jobs on spokes: nightly dispatch, baseline sync,
+dependency auto-update, GitHub state-changing audit/enforcer actions, or broad
+macmini host-maintenance jobs such as Homebrew upgrade.
+
+On macOS, cron writes must fail closed rather than hang. If `crontab <file>` does
+not return promptly, treat the host as not converged and repair the local
+crontab/TCC/runtime issue before assuming the schedule is installed.
 
 ## Crontab (macmini — canonical)
 

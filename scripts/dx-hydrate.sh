@@ -114,6 +114,33 @@ fi
 
 # 3.8 Install V8 cron schedule (idempotent)
 echo -e "${GREEN} -> Installing V8 cron schedule...${RESET}"
+install_crontab_from_stdin() {
+    local tmp_cron
+    local pid waited rc
+    tmp_cron="$(mktemp)"
+    cat >"$tmp_cron"
+    crontab "$tmp_cron" &
+    pid="$!"
+    waited=0
+    while kill -0 "$pid" >/dev/null 2>&1; do
+        if [[ "$waited" -ge "${DX_CRONTAB_INSTALL_TIMEOUT_SECONDS:-10}" ]]; then
+            kill "$pid" >/dev/null 2>&1 || true
+            wait "$pid" >/dev/null 2>&1 || true
+            rm -f "$tmp_cron"
+            echo "ERROR: crontab install hung after ${DX_CRONTAB_INSTALL_TIMEOUT_SECONDS:-10}s; leaving crontab unchanged" >&2
+            return 1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    set +e
+    wait "$pid"
+    rc="$?"
+    set -e
+    rm -f "$tmp_cron"
+    return "$rc"
+}
+
 remove_wrapper_job_entries() {
     local job_name="$1"
     local script_name="$2"
@@ -136,7 +163,7 @@ remove_wrapper_job_entries() {
     )"
 
     if [[ "$updated_cron" != "$current_cron" ]]; then
-        printf '%s\n' "$updated_cron" | crontab -
+        printf '%s\n' "$updated_cron" | install_crontab_from_stdin
         echo "   Pruned duplicate cron entries for: $job_name ($script_name)"
     fi
 }
@@ -160,7 +187,7 @@ remove_direct_script_entries() {
     )"
 
     if [[ "$updated_cron" != "$current_cron" ]]; then
-        printf '%s\n' "$updated_cron" | crontab -
+        printf '%s\n' "$updated_cron" | install_crontab_from_stdin
         echo "   Pruned direct cron entries for: $script_name"
     fi
 }
@@ -182,7 +209,7 @@ remove_v8_marker_variants() {
     )"
 
     if [[ "$updated_cron" != "$current_cron" ]]; then
-        printf '%s\n' "$updated_cron" | crontab -
+        printf '%s\n' "$updated_cron" | install_crontab_from_stdin
         echo "   Removed stale marker variants for: $marker"
     fi
 }
@@ -213,7 +240,7 @@ install_cron_entry() {
             echo ""
             echo "# $marker"
             echo "$entry"
-        } | crontab -
+        } | install_crontab_from_stdin
         echo "   Updated cron: $marker"
     else
         {
@@ -221,7 +248,7 @@ install_cron_entry() {
             echo ""
             echo "# $marker"
             echo "$entry"
-        } | crontab -
+        } | install_crontab_from_stdin
         echo "   Added cron: $marker"
     fi
 }
@@ -278,6 +305,12 @@ install_cron_entry "V8: queue-hygiene-enforcer" \
 if [[ "$(hostname -s)" == "epyc12" ]]; then
     install_cron_entry "V8: beads-health" \
         "*/10 * * * * TZ=America/Los_Angeles $BASH_PATH $WRAPPER beads-health -- $AGENTS_ROOT/scripts/dx-beads-health-alert.sh >> $HOME/logs/dx/beads-health-alert.log 2>&1"
+fi
+
+if [[ -x "$AGENTS_ROOT/scripts/dx-spoke-cron-install.sh" ]]; then
+    echo -e "${GREEN} -> Installing spoke-safe DX cron supplement...${RESET}"
+    "$AGENTS_ROOT/scripts/dx-spoke-cron-install.sh" || \
+        echo -e "${YELLOW}   ⚠️  spoke cron supplement not installed; check crontab write permissions.${RESET}"
 fi
 
 # 3.9 macOS legacy launchd policy guard (V8.6)
