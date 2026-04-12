@@ -690,6 +690,17 @@ find_provider_for_beads() {
     printf '%s' "$latest_provider"
 }
 
+provider_hint_from_beads() {
+    local beads="$1"
+    case "$beads" in
+        *.opencode) printf 'opencode' ;;
+        *.claude) printf 'claude-code' ;;
+        *.gemini) printf 'gemini' ;;
+        *.ccglm|*.cc-glm) printf 'cc-glm' ;;
+        *) printf '' ;;
+    esac
+}
+
 list_providers_for_beads() {
     local beads="$1"
     local -a providers=()
@@ -1305,6 +1316,42 @@ check_permission_gate() {
     
     echo "OK:worktree_valid:$worktree"
     return 0
+}
+
+maybe_auto_trust_mise() {
+    local worktree="${1:-}"
+    if [[ "${DX_RUNNER_AUTO_TRUST_MISE:-1}" != "1" ]] || ! command -v mise >/dev/null 2>&1; then
+        return 0
+    fi
+    [[ -n "$worktree" && -d "$worktree" && -f "$worktree/.mise.toml" ]] || return 0
+
+    local trust_target trust_alias trust_before trust_after
+    trust_target="$(cd "$worktree" 2>/dev/null && pwd -P || true)"
+    [[ -n "$trust_target" ]] || return 0
+    trust_alias=""
+    case "$trust_target" in
+        /private/tmp/*) trust_alias="/tmp/${trust_target#/private/tmp/}" ;;
+        /tmp/*) trust_alias="/private/tmp/${trust_target#/tmp/}" ;;
+    esac
+
+    trust_before="$(mise trust --show -C "$trust_target" 2>/dev/null || true)"
+    if printf '%s\n' "$trust_before" | grep -Fqx "$trust_target" \
+        || printf '%s\n' "$trust_before" | grep -Fqx "$trust_target: trusted" \
+        || { [[ -n "$trust_alias" ]] && printf '%s\n' "$trust_before" | grep -Fqx "$trust_alias"; } \
+        || { [[ -n "$trust_alias" ]] && printf '%s\n' "$trust_before" | grep -Fqx "$trust_alias: trusted"; }; then
+        return 0
+    fi
+
+    mise trust "$trust_target" >/dev/null 2>&1 || mise trust -y "$trust_target" >/dev/null 2>&1 || true
+    trust_after="$(mise trust --show -C "$trust_target" 2>/dev/null || true)"
+    if printf '%s\n' "$trust_after" | grep -Fqx "$trust_target" \
+        || printf '%s\n' "$trust_after" | grep -Fqx "$trust_target: trusted" \
+        || { [[ -n "$trust_alias" ]] && printf '%s\n' "$trust_after" | grep -Fqx "$trust_alias"; } \
+        || { [[ -n "$trust_alias" ]] && printf '%s\n' "$trust_after" | grep -Fqx "$trust_alias: trusted"; }; then
+        echo "[bd-8wdg.11] mise trust auto-remediated for $trust_target" >&2
+    else
+        echo "[bd-8wdg.11] WARN: mise trust auto-remediation failed for $trust_target" >&2
+    fi
 }
 
 # ============================================================================
@@ -2489,12 +2536,6 @@ start_cmd() {
         echo "$msg" >&2
         exit 26
     fi
-    
-    # Preflight gate
-    if ! unified_preflight "$PROVIDER"; then
-        echo "preflight gate failed for provider $PROVIDER" >&2
-        exit 21
-    fi
 
     # Resolve and pin worktree to avoid cwd drift/external_directory failures.
     # bd-kuhj.3: ALL mutating providers must use worktree (not just opencode)
@@ -2531,27 +2572,16 @@ EOF
         echo "permission gate failed: $perm_result" >&2
         exit 22
     fi
-    
-    # bd-8wdg.11: Auto-remediate mise trust only for concrete .mise targets.
-    if [[ "${DX_RUNNER_AUTO_TRUST_MISE:-1}" == "1" ]] && command -v mise >/dev/null 2>&1; then
-            local trust_target trust_before trust_after
-            trust_target=""
-            if [[ -d "$WORKTREE" && -f "$WORKTREE/.mise.toml" ]]; then
-                trust_target="$(cd "$WORKTREE" 2>/dev/null && pwd -P || true)"
-            fi
-            if [[ -n "$trust_target" ]]; then
-                trust_before="$(mise trust --show 2>/dev/null || true)"
-                if ! printf '%s\n' "$trust_before" | grep -Fqx "$trust_target"; then
-                    mise trust "$trust_target" >/dev/null 2>&1 || true
-                    trust_after="$(mise trust --show 2>/dev/null || true)"
-                    if printf '%s\n' "$trust_after" | grep -Fqx "$trust_target"; then
-                        echo "[bd-8wdg.11] mise trust auto-remediated for $trust_target" >&2
-                    else
-                        echo "[bd-8wdg.11] WARN: mise trust auto-remediation failed for $trust_target" >&2
-                    fi
-                fi
-            fi
-        fi
+
+    maybe_auto_trust_mise "$WORKTREE"
+    export DX_RUNNER_PREFLIGHT_WORKTREE="$WORKTREE"
+
+    # Preflight gate. Run after worktree/trust preparation so strict provider
+    # preflight sees the same path state the job will actually use.
+    if ! unified_preflight "$PROVIDER"; then
+        echo "preflight gate failed for provider $PROVIDER" >&2
+        exit 21
+    fi
     
     # Baseline gate (optional)
     if [[ -n "$REQUIRED_BASELINE" ]]; then
@@ -2904,7 +2934,7 @@ check_cmd() {
     [[ -n "$BEADS" ]] || { echo "check requires --beads" >&2; exit 2; }
     
     local provider
-    provider="$(find_provider_for_beads "$BEADS")"
+    provider="$(find_provider_for_beads "$BEADS" 2>/dev/null || true)"
     
     if [[ -z "$provider" ]]; then
         for dir in /tmp/dx-runner/*/; do
@@ -2915,13 +2945,27 @@ check_cmd() {
             fi
         done
     fi
+    if [[ -z "$provider" ]]; then
+        provider="$(provider_hint_from_beads "$BEADS")"
+    fi
     
     job_paths "$BEADS" "$provider"
     prune_job "$BEADS" "$provider" >/dev/null
     
     if [[ ! -f "$META_FILE" ]]; then
-        echo "job $BEADS has no metadata file"
-        [[ "$OUTPUT_JSON" == "true" ]] && printf '{"beads":"%s","state":"missing","reason_code":"no_meta"}\n' "$BEADS"
+        local missing_state="missing" missing_action="verify_beads_id_or_start_reviewer"
+        if [[ -n "$provider" ]]; then
+            missing_state="start_failed"
+            missing_action="inspect_dx_review_start_log_or_rerun_preflight"
+        fi
+        if [[ "$OUTPUT_JSON" == "true" ]]; then
+            printf '{"beads":"%s","provider":"%s","state":"%s","reason_code":"no_meta","next_action":"%s"}\n' \
+                "$BEADS" "${provider:-unknown}" "$missing_state" "$missing_action"
+        else
+            echo "job $BEADS has no metadata file"
+            echo "$BEADS: $missing_state (no_meta)"
+            echo "next_action=$missing_action"
+        fi
         exit 1
     fi
     
@@ -3341,6 +3385,12 @@ preflight_cmd() {
             PROVIDER="${PROFILE_CONFIG[provider_name]:-}"
             [[ -n "$PROVIDER" ]] || { echo "profile did not specify provider" >&2; exit 2; }
         fi
+    fi
+    local preflight_worktree="${WORKTREE:-${DX_RUNNER_PREFLIGHT_WORKTREE:-}}"
+    if [[ -n "$preflight_worktree" && -d "$preflight_worktree" ]]; then
+        preflight_worktree="$(cd "$preflight_worktree" 2>/dev/null && pwd -P || printf '%s' "$preflight_worktree")"
+        maybe_auto_trust_mise "$preflight_worktree"
+        export DX_RUNNER_PREFLIGHT_WORKTREE="$preflight_worktree"
     fi
     unified_preflight "$PROVIDER"
     exit $?

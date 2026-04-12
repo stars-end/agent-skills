@@ -336,6 +336,21 @@ test_json_output() {
             fail "status JSON missing field: $field"
         fi
     done
+
+    # Missing reviewer metadata should still produce machine-readable JSON.
+    local missing_beads missing_json missing_rc
+    missing_beads="bd-missing-$$.opencode"
+    rm -f /tmp/dx-runner/opencode/"${missing_beads}".*
+    set +e
+    missing_json="$("$DX_RUNNER" check --beads "$missing_beads" --json 2>&1)"
+    missing_rc=$?
+    set -e
+    if [[ "$missing_rc" -eq 1 ]] \
+        && echo "$missing_json" | jq -e '.state == "start_failed" and .provider == "opencode" and .reason_code == "no_meta"' >/dev/null 2>&1; then
+        pass "check --json emits structured missing reviewer state"
+    else
+        fail "check --json missing reviewer output invalid: rc=$missing_rc output=$missing_json"
+    fi
     
     # Report JSON should have stable fields
     local beads="test-report-$$"
