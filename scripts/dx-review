@@ -20,6 +20,7 @@ dx-review
 
 Usage:
   dx-review run --beads <bd-id> --worktree <path> (--prompt <text> | --prompt-file <path>) [options]
+  dx-review doctor --worktree <path> [--gemini]
 
 Options:
   --gemini              Include the optional gemini-burst reviewer.
@@ -45,6 +46,16 @@ valid_beads_id() {
     [[ "$id" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]
 }
 
+json_escape() {
+    local s="${1:-}"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
 reviewer_id_for_profile() {
     local beads="$1"
     local profile="$2"
@@ -57,18 +68,78 @@ reviewer_id_for_profile() {
 }
 
 state_from_check_json() {
-    sed -n 's/.*"state":"\([^"]*\)".*/\1/p' | head -n 1
+    sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+review_state_for_display() {
+    case "$1" in
+        no_op_success) printf 'review_completed' ;;
+        start_failed) printf 'start_failed' ;;
+        *) printf '%s' "$1" ;;
+    esac
 }
 
 is_terminal_state() {
     case "$1" in
-        exited_ok|exited_err|no_op_success|stopped|blocked|missing)
+        exited_ok|exited_err|no_op_success|stopped|blocked|missing|start_failed)
             return 0
             ;;
         *)
             return 1
             ;;
     esac
+}
+
+run_doctor_for_profiles() {
+    local worktree="$1"
+    local include_gemini="$2"
+    local failures=0 profile rc
+    local -a profiles=("claude-code-review" "opencode-review")
+
+    [[ -n "$worktree" && -d "$worktree" ]] || { echo "doctor requires existing --worktree" >&2; return 2; }
+    if [[ "$include_gemini" == "true" ]]; then
+        profiles+=("gemini-burst")
+    fi
+
+    for profile in "${profiles[@]}"; do
+        [[ -n "$profile" ]] || continue
+        echo "doctor profile=$profile"
+        set +e
+        DX_RUNNER_PREFLIGHT_WORKTREE="$worktree" "$DX_RUNNER" preflight --profile "$profile" --worktree "$worktree"
+        rc=$?
+        set -e
+        if [[ "$rc" -ne 0 ]]; then
+            failures=$((failures + 1))
+        fi
+    done
+
+    [[ "$failures" -eq 0 ]]
+}
+
+doctor_cmd() {
+    local worktree="" include_gemini=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --worktree)
+                worktree="${2:-}"
+                shift 2
+                ;;
+            --gemini)
+                include_gemini=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo "unknown arg: $1" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
+    done
+    run_doctor_for_profiles "$worktree" "$include_gemini"
 }
 
 run_cmd() {
@@ -147,22 +218,45 @@ run_cmd() {
     fi
 
     local -a reviewers=()
+    local -a start_pids=()
+    local -a start_logs=()
+    local -a start_rcs=()
+    local -a start_failed=()
+    local -a final_states=()
     local failures=0
-    local profile reviewer start_output
+    local profile reviewer start_log
 
     echo "dx-review reviewers: ${profiles[*]}"
     for profile in "${profiles[@]}"; do
         reviewer="$(reviewer_id_for_profile "$beads" "$profile")"
         reviewers+=("$reviewer")
-        echo "starting reviewer=$reviewer profile=$profile"
+        start_log="$run_dir/${reviewer}.start.log"
+        start_logs+=("$start_log")
+        echo "launching reviewer=$reviewer profile=$profile start_log=$start_log"
+        "$DX_RUNNER" start --profile "$profile" --beads "$reviewer" --prompt-file "$prompt_file" --worktree "$worktree" >"$start_log" 2>&1 &
+        start_pids+=("$!")
+    done
+
+    local i start_rc
+    for i in "${!start_pids[@]}"; do
+        reviewer="${reviewers[$i]}"
+        profile="${profiles[$i]}"
+        start_log="${start_logs[$i]}"
         set +e
-        start_output="$("$DX_RUNNER" start --profile "$profile" --beads "$reviewer" --prompt-file "$prompt_file" --worktree "$worktree" 2>&1)"
-        local start_rc=$?
+        wait "${start_pids[$i]}"
+        start_rc=$?
         set -e
-        printf '%s\n' "$start_output"
+        start_rcs[$i]="$start_rc"
+        echo "start result reviewer=$reviewer profile=$profile rc=$start_rc"
+        sed -n '1,220p' "$start_log"
         if [[ "$start_rc" -ne 0 ]]; then
-            echo "reviewer_start_failed reviewer=$reviewer profile=$profile rc=$start_rc" >&2
+            echo "reviewer_start_failed reviewer=$reviewer profile=$profile rc=$start_rc start_log=$start_log" >&2
+            start_failed[$i]=true
+            final_states[$i]=start_failed
             failures=$((failures + 1))
+        else
+            start_failed[$i]=false
+            final_states[$i]=running
         fi
     done
 
@@ -171,23 +265,27 @@ run_cmd() {
         return 0
     fi
 
-    local deadline now all_done check_json state
+    local deadline now all_done check_json state display_state
     deadline=$(($(date +%s) + timeout_sec))
     while true; do
         all_done=true
-        for reviewer in "${reviewers[@]}"; do
+        for i in "${!reviewers[@]}"; do
+            reviewer="${reviewers[$i]}"
+            if [[ "${start_failed[$i]:-false}" == "true" ]]; then
+                echo "reviewer=$reviewer state=start_failed rc=${start_rcs[$i]:-1}"
+                continue
+            fi
             set +e
             check_json="$("$DX_RUNNER" check --beads "$reviewer" --json 2>&1)"
             local check_rc=$?
             set -e
             state="$(printf '%s\n' "$check_json" | state_from_check_json)"
             state="${state:-unknown}"
-            echo "reviewer=$reviewer state=$state rc=$check_rc"
+            display_state="$(review_state_for_display "$state")"
+            final_states[$i]="$display_state"
+            echo "reviewer=$reviewer state=$display_state raw_state=$state rc=$check_rc"
             if ! is_terminal_state "$state"; then
                 all_done=false
-            fi
-            if [[ "$state" == "exited_err" || "$state" == "blocked" || "$state" == "missing" ]]; then
-                failures=$((failures + 1))
             fi
         done
 
@@ -204,9 +302,24 @@ run_cmd() {
     done
 
     echo "dx-review reports:"
-    for reviewer in "${reviewers[@]}"; do
+    for i in "${!reviewers[@]}"; do
+        reviewer="${reviewers[$i]}"
         echo "--- $reviewer ---"
-        "$DX_RUNNER" report --beads "$reviewer" --format json || failures=$((failures + 1))
+        if [[ "${start_failed[$i]:-false}" == "true" ]]; then
+            printf '{"beads":"%s","provider_profile":"%s","state":"start_failed","reason_code":"dx_runner_start_failed","start_exit_code":%s,"start_log":"%s"}\n' \
+                "$(json_escape "$reviewer")" "$(json_escape "${profiles[$i]}")" "${start_rcs[$i]:-1}" "$(json_escape "${start_logs[$i]}")"
+            continue
+        fi
+        local report_json report_rc report_state
+        set +e
+        report_json="$("$DX_RUNNER" report --beads "$reviewer" --format json 2>&1)"
+        report_rc=$?
+        set -e
+        printf '%s\n' "$report_json"
+        report_state="$(printf '%s\n' "$report_json" | state_from_check_json)"
+        if [[ "$report_rc" -ne 0 || "$report_state" == "exited_err" || "$report_state" == "blocked" || "$report_state" == "missing" ]]; then
+            failures=$((failures + 1))
+        fi
     done
 
     [[ "$failures" -eq 0 ]] || exit 1
@@ -217,6 +330,7 @@ main() {
     local cmd="${1:-}"
     shift || true
     case "$cmd" in
+        doctor) doctor_cmd "$@" ;;
         run) run_cmd "$@" ;;
         -h|--help|"") usage ;;
         *)

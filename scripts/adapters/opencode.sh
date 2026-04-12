@@ -305,19 +305,27 @@ adapter_preflight() {
         if [[ -z "$trust_target" ]]; then
             echo "N/A (no .mise target)"
         else
-            local trust_state
-            trust_state="$(mise trust --show 2>/dev/null || true)"
-            if printf '%s\n' "$trust_state" | grep -Fqx "$trust_target"; then
+            local trust_state trust_alias
+            trust_state="$(mise trust --show -C "$trust_target" 2>/dev/null || true)"
+            trust_alias=""
+            case "$trust_target" in
+                /private/tmp/*) trust_alias="/tmp/${trust_target#/private/tmp/}" ;;
+                /tmp/*) trust_alias="/private/tmp/${trust_target#/tmp/}" ;;
+            esac
+            if printf '%s\n' "$trust_state" | grep -Fqx "$trust_target" \
+                || printf '%s\n' "$trust_state" | grep -Fqx "$trust_target: trusted" \
+                || { [[ -n "$trust_alias" ]] && printf '%s\n' "$trust_state" | grep -Fqx "$trust_alias"; } \
+                || { [[ -n "$trust_alias" ]] && printf '%s\n' "$trust_state" | grep -Fqx "$trust_alias: trusted"; }; then
                 echo "OK ($trust_target)"
             else
                 local policy
                 policy="$(profile_get_preflight_policy "mise_untrusted" "warn")"
                 echo "UNTRUSTED ($trust_target)"
                 if [[ "$policy" == "error" ]]; then
-                    echo "  ERROR_CODE=opencode_mise_untrusted severity=error action=run_mise_trust_in_worktree target=$trust_target"
+                    echo "  ERROR_CODE=opencode_mise_untrusted severity=error action=mise_trust target=$trust_target command=\"mise trust '$trust_target'\""
                     errors=$((errors + 1))
                 else
-                    echo "  WARN_CODE=opencode_mise_untrusted severity=warn action=run_mise_trust_in_worktree target=$trust_target"
+                    echo "  WARN_CODE=opencode_mise_untrusted severity=warn action=mise_trust target=$trust_target command=\"mise trust '$trust_target'\""
                     warnings=$((warnings + 1))
                 fi
             fi
