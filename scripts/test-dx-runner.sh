@@ -186,7 +186,8 @@ test_governance_gates() {
     echo "=== Testing Governance Gates ==="
     
     # Create temp worktree for gate tests
-    local temp_dir
+    local temp_dir old_pwd
+    old_pwd="$(pwd)"
     temp_dir="$(mktemp -d)"
     cd "$temp_dir"
     git init --quiet
@@ -218,7 +219,7 @@ test_governance_gates() {
     fi
     
     # Cleanup
-    cd /
+    cd "$old_pwd"
     rm -rf "$temp_dir"
 }
 
@@ -2127,6 +2128,46 @@ test_profile_loading() {
     else
         fail "profiles --show did not display profile content"
     fi
+
+    # Regression: load_profile must run in the current shell so provider
+    # settings affect preflight/start.
+    local tmp_home profile_dir adapter profile_preflight
+    tmp_home="$(mktemp -d)"
+    profile_dir="$tmp_home/.config/dx-runner/profiles"
+    mkdir -p "$profile_dir"
+    cat > "$profile_dir/mock-profile.yaml" <<'EOF'
+profile:
+  name: mock-profile
+provider:
+  name: mock-profile-test
+  model: mock-model
+  allow_model_override: false
+preflight:
+  strict: true
+EOF
+    adapter="$ADAPTERS_DIR/mock-profile-test.sh"
+    cat > "$adapter" <<'EOF'
+#!/usr/bin/env bash
+adapter_preflight() {
+  return 0
+}
+adapter_probe_model() { return 0; }
+adapter_list_models() { echo "mock-model"; }
+adapter_resolve_model() { echo "mock-model|available|"; }
+adapter_start() { return 1; }
+adapter_stop() { return 0; }
+EOF
+    chmod +x "$adapter"
+
+    profile_preflight="$(HOME="$tmp_home" BEADS_DIR="${BEADS_DIR:-$HOME/.beads-runtime/.beads}" "$DX_RUNNER" preflight --profile mock-profile 2>&1)" || true
+    if echo "$profile_preflight" | grep -q "provider: mock-profile-test" && echo "$profile_preflight" | grep -q "=== Preflight PASSED ==="; then
+        pass "preflight applies profile provider in current shell"
+    else
+        fail "preflight did not apply profile provider: $profile_preflight"
+    fi
+
+    rm -rf "$tmp_home"
+    rm -f "$adapter"
 }
 
 # ============================================================================

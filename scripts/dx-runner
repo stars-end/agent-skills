@@ -28,6 +28,7 @@ fi
 # Providers:
 #   cc-glm    - Z.ai/GLM wrapper lane (reliability backstop)
 #   opencode  - OpenCode headless (primary throughput)
+#   claude-code - Native Claude Code CLI (review lane)
 #   gemini    - Gemini CLI (parallel capacity)
 #
 # Commands:
@@ -85,6 +86,7 @@ LOG_DIR="/tmp/dx-runner"
 declare -A PROVIDER_DEFAULT_MODEL=(
     ["cc-glm"]="glm-5"
     ["opencode"]="zhipuai/glm-5.1"
+    ["claude-code"]="opus"
     ["gemini"]="gemini-3-flash-preview"
 )
 
@@ -231,6 +233,7 @@ provider_max_parallel() {
     local provider="$1"
     case "$provider" in
         opencode) echo "${DX_RUNNER_MAX_PARALLEL_OPENCODE:-2}" ;;
+        claude-code) echo "${DX_RUNNER_MAX_PARALLEL_CLAUDE_CODE:-1}" ;;
         cc-glm) echo "${DX_RUNNER_MAX_PARALLEL_CC_GLM:-2}" ;;
         gemini) echo "${DX_RUNNER_MAX_PARALLEL_GEMINI:-1}" ;;
         *) echo "${DX_RUNNER_MAX_PARALLEL_DEFAULT:-2}" ;;
@@ -448,10 +451,22 @@ load_profile() {
         PROVIDER="${PROFILE_CONFIG[provider_name]}"
     fi
     if [[ -n "${PROFILE_CONFIG[provider_model]:-}" ]]; then
-        export OPENCODE_MODEL="${PROFILE_CONFIG[provider_model]}"
-        if [[ "${PROFILE_CONFIG[provider_name]:-}" == "opencode" ]]; then
-            export OPENCODE_CANONICAL_MODEL="${PROFILE_CONFIG[provider_model]}"
-        fi
+        case "${PROFILE_CONFIG[provider_name]:-}" in
+            opencode)
+                export OPENCODE_MODEL="${PROFILE_CONFIG[provider_model]}"
+                export OPENCODE_CANONICAL_MODEL="${PROFILE_CONFIG[provider_model]}"
+                ;;
+            claude-code)
+                export CLAUDE_CODE_MODEL="${PROFILE_CONFIG[provider_model]}"
+                export CLAUDE_CODE_CANONICAL_MODEL="${PROFILE_CONFIG[provider_model]}"
+                ;;
+            cc-glm)
+                export CC_GLM_MODEL="${PROFILE_CONFIG[provider_model]}"
+                ;;
+            gemini)
+                export GEMINI_MODEL="${PROFILE_CONFIG[provider_model]}"
+                ;;
+        esac
     fi
     if [[ "${PROFILE_CONFIG[provider_allow_model_override]:-false}" == "true" ]]; then
         export DX_RUNNER_ALLOW_MODEL_OVERRIDE=1
@@ -459,6 +474,7 @@ load_profile() {
     if [[ -n "${PROFILE_CONFIG[concurrency_max_parallel]:-}" ]]; then
         case "${PROFILE_CONFIG[provider_name]:-}" in
             opencode) export DX_RUNNER_MAX_PARALLEL_OPENCODE="${PROFILE_CONFIG[concurrency_max_parallel]}" ;;
+            claude-code) export DX_RUNNER_MAX_PARALLEL_CLAUDE_CODE="${PROFILE_CONFIG[concurrency_max_parallel]}" ;;
             cc-glm) export DX_RUNNER_MAX_PARALLEL_CC_GLM="${PROFILE_CONFIG[concurrency_max_parallel]}" ;;
             gemini) export DX_RUNNER_MAX_PARALLEL_GEMINI="${PROFILE_CONFIG[concurrency_max_parallel]}" ;;
         esac
@@ -498,6 +514,10 @@ profile_get_preflight_policy() {
     if [[ "$PROFILE_STRICT" == true ]]; then
         case "$check_code" in
             opencode_binary_missing|model_unavailable|auth_or_quota_blocked|worktree_missing|canonical_model_probe_timeout|mise_untrusted)
+                echo "error"
+                return 0
+                ;;
+            claude_code_binary_missing|claude_code_auth_or_model_unavailable|claude_code_headless_flags_missing)
                 echo "error"
                 return 0
                 ;;
@@ -2336,11 +2356,13 @@ Usage:
 Providers:
   cc-glm    Z.ai/GLM wrapper lane (reliability backstop)
   opencode  OpenCode headless (primary throughput, strict canonical zhipuai/glm-5.1)
+  claude-code Native Claude Code CLI (review lane, strict canonical opus)
   gemini    Gemini CLI (parallel capacity)
 
 Built-in Profiles (bd-8wdg.1):
   opencode-prod    Production-safe OpenCode with strict governance
   opencode-review  Review-safe OpenCode with zhipuai/glm-5.1
+  claude-code-review Native Claude Code Opus review lane
   cc-glm-fallback  Reliability backstop profile
   gemini-burst     Burst capacity using Gemini CLI
   dev              Permissive development profile
@@ -2429,12 +2451,11 @@ start_cmd() {
     
     # bd-8wdg.1: Profile support - load profile if specified
     if [[ -n "$PROFILE" ]]; then
-        local profile_load_result
-        profile_load_result="$(load_profile "$PROFILE" 2>&1)" || {
-            echo "profile load failed: $profile_load_result" >&2
+        if ! load_profile "$PROFILE"; then
+            echo "profile load failed: $PROFILE" >&2
             echo "reason_code=profile_load_failed"
             exit 21
-        }
+        fi
         # Provider may have been set by profile
         if [[ -z "$PROVIDER" ]]; then
             PROVIDER="${PROFILE_CONFIG[provider_name]:-}"
@@ -2607,9 +2628,22 @@ EOF
     # Source adapter and run
     source "$adapter"
     
-    # Pass explicit --model flag to adapter via OPENCODE_MODEL (bd-5w5o.41)
+    # Pass explicit --model flag to the active adapter.
     if [[ -n "$MODEL_ID" ]]; then
-        export OPENCODE_MODEL="$MODEL_ID"
+        case "$PROVIDER" in
+            opencode)
+                export OPENCODE_MODEL="$MODEL_ID"
+                ;;
+            claude-code)
+                export CLAUDE_CODE_MODEL="$MODEL_ID"
+                ;;
+            cc-glm)
+                export CC_GLM_MODEL="$MODEL_ID"
+                ;;
+            gemini)
+                export GEMINI_MODEL="$MODEL_ID"
+                ;;
+        esac
         export DX_RUNNER_ALLOW_MODEL_OVERRIDE=1
     fi
     
@@ -3297,12 +3331,34 @@ EOF
 
 preflight_cmd() {
     parse_common_args "$@"
+    if [[ -n "$PROFILE" ]]; then
+        if ! load_profile "$PROFILE"; then
+            echo "profile load failed: $PROFILE" >&2
+            echo "reason_code=profile_load_failed"
+            exit 21
+        fi
+        if [[ -z "$PROVIDER" ]]; then
+            PROVIDER="${PROFILE_CONFIG[provider_name]:-}"
+            [[ -n "$PROVIDER" ]] || { echo "profile did not specify provider" >&2; exit 2; }
+        fi
+    fi
     unified_preflight "$PROVIDER"
     exit $?
 }
 
 probe_cmd() {
     parse_common_args "$@"
+    if [[ -n "$PROFILE" ]]; then
+        if ! load_profile "$PROFILE"; then
+            echo "profile load failed: $PROFILE" >&2
+            echo "reason_code=profile_load_failed"
+            exit 21
+        fi
+        if [[ -z "$PROVIDER" ]]; then
+            PROVIDER="${PROFILE_CONFIG[provider_name]:-}"
+            [[ -n "$PROVIDER" ]] || { echo "profile did not specify provider" >&2; exit 2; }
+        fi
+    fi
     [[ -n "$PROVIDER" ]] || { echo "probe requires --provider" >&2; exit 2; }
     
     local adapter="${ADAPTERS_DIR}/${PROVIDER}.sh"

@@ -1,0 +1,45 @@
+# dx-runner profile: claude-code-review
+# Strict review-lane native Claude Code dispatch using Opus.
+
+profile:
+  name: claude-code-review
+  description: Review-safe native Claude Code dispatch with Opus
+  version: "1.0.0"
+
+provider:
+  name: claude-code
+  model: opus
+  allow_model_override: false
+  execution_mode: run
+  fallback_provider: null
+
+concurrency:
+  max_parallel: 1
+  queue_timeout_sec: 60
+
+preflight:
+  strict: true
+  policy:
+    claude_code_binary_missing: error
+    claude_code_headless_flags_missing: error
+    claude_code_auth_or_model_unavailable: error
+    worktree_missing: error
+
+timeouts:
+  max_runtime_minutes: 60
+  no_mutation_timeout_minutes: 20
+  stall_minutes: 15
+  first_output_grace_seconds: 180
+  first_mutation_grace_seconds: 300
+
+scope:
+  enforce_allowed_paths: true
+  allowed_paths_file: null
+  mutation_budget: null
+  file_budget: null
+
+gates:
+  baseline: optional
+  feature_key: required
+  commit_artifact: optional
+  railway_auth: optional
