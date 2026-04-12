@@ -98,7 +98,7 @@ branch id:       ${BEADS_ID:-<none>}
 
 This repo expects explicit ${EXPECTED_PREFIX}-* Feature-Keys.
 Use a hook-compatible issue ID before branch, commit, or PR steps:
-  bd create --id ${EXPECTED_PREFIX}-<issue> --force --type <type> --title "..."
+  bdx create --id ${EXPECTED_PREFIX}-<issue> --force --type <type> --title "..."
 
 EOF
     exit 3
@@ -119,13 +119,13 @@ must still use an explicit ${EXPECTED_PREFIX}-* id.
 EOF
 fi
 
-if command -v bd >/dev/null 2>&1; then
+if command -v bdx >/dev/null 2>&1; then
   if [[ -n "$BEADS_ID" && "$BEADS_ID" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]; then
     echo ""
-    echo "bd show $BEADS_ID (summary):"
-    bd --db "$BD_DB_PATH" show "$BEADS_ID" 2>/dev/null | head -20 || true
+    echo "bdx show $BEADS_ID (summary):"
+    bdx show "$BEADS_ID" 2>/dev/null | head -20 || true
   fi
 else
   echo ""
-  echo "note: bd CLI not found"
+  echo "note: bdx CLI not found"
 fi

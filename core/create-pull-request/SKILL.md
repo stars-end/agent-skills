@@ -92,7 +92,7 @@ FEATURE_KEY=$(echo "$CURRENT_BRANCH" | sed 's/^feature-//')
 - If you need a fresh tracking issue in `agent-skills`, create it explicitly as `bd-*` with `bdx create --id bd-<issue> --force` instead of relying on a generic default prefix.
 
 ### 2. Get Beads Context
-Use `bd` CLI:
+Use the Beads context helper:
 ```bash
 bd-context
 

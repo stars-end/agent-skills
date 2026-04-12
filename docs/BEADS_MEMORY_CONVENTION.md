@@ -15,7 +15,7 @@ misuse the command shape or retrieval convention.
 
 - Current code truth: use `llm-tldr`, then inspect source as needed.
 - Durable task state: use normal Beads issues, dependencies, and comments.
-- Durable memory: use `bd remember` for short facts and Beads issues labeled
+- Durable memory: use `bdx remember` for short facts and Beads issues labeled
   `memory` for structured records.
 - Never trust memory over current code. Treat memory as a lead, then verify
   source-grounded claims with `llm-tldr` or direct file inspection.
@@ -35,11 +35,11 @@ trivial to rediscover from current code.
 
 ## Short Facts
 
-Use `bd remember` for small, global facts:
+Use `bdx remember` for small, global facts:
 
 ```bash
 cd ~
-BEADS_DIR=~/.beads-runtime/.beads bd remember \
+bdx remember \
   "agent-skills changes must happen in /tmp/agents/<beads-id>/agent-skills, not ~/agent-skills" \
   --key agent-skills-worktree-only
 ```
@@ -48,8 +48,8 @@ Search and recall:
 
 ```bash
 cd ~
-BEADS_DIR=~/.beads-runtime/.beads bd memories worktree
-BEADS_DIR=~/.beads-runtime/.beads bd recall agent-skills-worktree-only
+bdx memories worktree
+bdx recall agent-skills-worktree-only
 ```
 
 ## Structured Memory Records
@@ -59,7 +59,7 @@ staleness checks.
 
 ```bash
 cd ~
-BEADS_DIR=~/.beads-runtime/.beads bd create \
+bdx create \
   "Memory: agent-skills worktree-only editing policy" \
   --type decision \
   --priority 3 \
@@ -72,7 +72,7 @@ BEADS_DIR=~/.beads-runtime/.beads bd create \
 Add provenance or follow-up detail as comments:
 
 ```bash
-BEADS_DIR=~/.beads-runtime/.beads bd comments add <memory-id> \
+bdx comments add <memory-id> \
   "Source: discovered while documenting Beads memory convention. Verify with llm-tldr before applying to changed repo policy."
 ```
 
@@ -95,17 +95,17 @@ Before cross-repo, repeated, or confusing work, search memory first:
 
 ```bash
 cd ~
-BEADS_DIR=~/.beads-runtime/.beads bd memories <keyword>
-BEADS_DIR=~/.beads-runtime/.beads bd search <keyword> --label memory --status all
-BEADS_DIR=~/.beads-runtime/.beads bd search memory --label memory --metadata-field mem.repo=agent-skills --status all
-BEADS_DIR=~/.beads-runtime/.beads bd search gotcha --label memory --metadata-field mem.kind=gotcha --status all
+bdx memories <keyword>
+bdx search <keyword> --label memory --status all
+bdx search memory --label memory --metadata-field mem.repo=agent-skills --status all
+bdx search gotcha --label memory --metadata-field mem.kind=gotcha --status all
 ```
 
 Then inspect the specific record:
 
 ```bash
-BEADS_DIR=~/.beads-runtime/.beads bd show <memory-id>
-BEADS_DIR=~/.beads-runtime/.beads bd comments <memory-id>
+bdx show <memory-id>
+bdx comments <memory-id>
 ```
 
 ## Staleness
@@ -115,7 +115,7 @@ materially after the recorded source commit. Update the memory by comment or
 metadata rather than silently relying on it.
 
 ```bash
-BEADS_DIR=~/.beads-runtime/.beads bd update <memory-id> \
+bdx update <memory-id> \
   --set-metadata mem.maturity=draft \
   --set-metadata mem.confidence=medium \
   --append-notes "Marked draft because cited source paths changed; revalidate before reuse."

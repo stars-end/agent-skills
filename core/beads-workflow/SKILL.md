@@ -237,7 +237,7 @@ bdx update bd-abc123 status=in_progress notes="Working on X"
 
 **Complete:**
 ```bash
-bd close bd-abc123 reason="Completed: X"
+bdx close bd-abc123 reason="Completed: X"
 ```
 
 ### Create Work
@@ -557,13 +557,10 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 - This is local host config drift, not a hub/service outage.
 - If `beads-dolt dolt test --json` succeeds, the Beads hub is healthy.
 - Deterministic fix:
-
-```bash
-bd config set beads.role maintainer
-```
+- `bd config set beads.role maintainer`
 
 - Retry the mutation after setting the role. Do not escalate to hub diagnostics if the Dolt connection test passes.
-- Agents performing mutating `bd` commands (create, update, close, dep) should self-heal this before declaring Beads broken.
+- Agents performing mutating coordination commands (`bdx create/update/close/dep`) should self-heal this before declaring Beads broken.
 
 ---
 

@@ -22,7 +22,7 @@ echo "📋 Fetching Beads Task Details..."
 cd "$REPO_PATH"
 
 # Get first open task with full details
-TASK_LINE=$(bd list --status open --limit 1 2>/dev/null | grep -v "Warning" | grep -v "INFO" | grep -E '^[a-z]+-[0-9a-zA-Z]+' | head -n 1)
+TASK_LINE=$(bdx list --status open --limit 1 2>/dev/null | grep -v "Warning" | grep -v "INFO" | grep -E '^[a-z]+-[0-9a-zA-Z]+' | head -n 1)
 TASK_ID=$(echo "$TASK_LINE" | awk '{print $1}')
 
 if [ -z "$TASK_ID" ]; then
@@ -32,8 +32,8 @@ if [ -z "$TASK_ID" ]; then
     TASK_DESIGN=""
 else
     echo "✅ Found task: $TASK_ID"
-    # Fetch full task details using bd show
-    TASK_JSON=$(bd show "$TASK_ID" --json 2>/dev/null || echo '[]')
+    # Fetch full task details using bdx show
+    TASK_JSON=$(bdx show "$TASK_ID" --json 2>/dev/null || echo '[]')
     TASK_SUMMARY=$(echo "$TASK_JSON" | jq -r '.[0].title // "No title"')
     TASK_DESIGN=$(echo "$TASK_JSON" | jq -r '.[0].design // "No design spec"')
 fi

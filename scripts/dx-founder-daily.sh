@@ -7,7 +7,7 @@
 # Bead: bd-lsxp.3
 #
 # Dependencies:
-#   - Beads source at ~/.beads-runtime/.beads (native `bd` CLI with hub-spoke Dolt SQL).
+#   - Beads source at ~/.beads-runtime/.beads (canonical `bdx` coordination path with hub-spoke Dolt SQL backend).
 #     SQLite/JSONL are compatibility fallbacks only and must be explicitly enabled.
 #   - GitHub CLI (gh) authenticated
 #   - bv CLI for robot alerts/drift check
@@ -193,11 +193,11 @@ check_dependencies() {
   if ! command -v jq >/dev/null 2>&1; then
     missing+=("jq")
   fi
-  if ! command -v bd >/dev/null 2>&1; then
+  if ! command -v bdx >/dev/null 2>&1; then
     if [ "$ALLOW_BEADS_LEGACY_SOURCE" = "1" ]; then
-      warn "bd CLI not found; compatibility fallback mode enabled via ALLOW_BEADS_LEGACY_SOURCE=1"
+      warn "bdx CLI not found; compatibility fallback mode enabled via ALLOW_BEADS_LEGACY_SOURCE=1"
     else
-      error "bd CLI not found. Active Beads contract is Dolt SQL only."
+      error "bdx CLI not found. Active Beads contract requires the coordination wrapper."
       error "Set ALLOW_BEADS_LEGACY_SOURCE=1 temporarily if explicit legacy compatibility mode is required."
       return 1
     fi
@@ -221,12 +221,12 @@ query_cli_open_issues() {
     return 0
   fi
 
-  if ! command -v bd >/dev/null 2>&1; then
+  if ! command -v bdx >/dev/null 2>&1; then
     return 1
   fi
 
   local raw
-  raw="$(cd "${HOME}" && BEADS_DIR="${BEADS_DIR}" bd list --json --status open --limit 0 2>>"$LOG_FILE" || true)"
+  raw="$(cd "${HOME}" && bdx list --json --status open --limit 0 2>>"$LOG_FILE" || true)"
   if [ -z "$raw" ] || ! jq -e 'type == "array"' <<<"$raw" >/dev/null 2>&1; then
     return 1
   fi
@@ -270,7 +270,7 @@ query_source() {
 
   if [[ "$ALLOW_BEADS_LEGACY_SOURCE" != "1" ]]; then
     BEADS_SOURCE="missing"
-    pipeline_fail "beads_source_missing" "bd CLI unavailable and compatibility source disabled"
+    pipeline_fail "beads_source_missing" "bdx CLI unavailable and compatibility source disabled"
     return 1
   fi
 
@@ -321,7 +321,7 @@ require_active_dolt_source() {
       ;;
   esac
 
-  error "Unable to resolve canonical Beads source (bd CLI required)."
+  error "Unable to resolve canonical Beads source (bdx CLI required)."
   error "Run from an environment where Beads runtime + SQL service are available."
   error "Set ALLOW_BEADS_LEGACY_SOURCE=1 only for compatibility troubleshooting."
   pipeline_fail "${PIPELINE_REASON:-beads_source_missing}" "${PIPELINE_ERROR:-expected CLI but got ${BEADS_SOURCE}}"

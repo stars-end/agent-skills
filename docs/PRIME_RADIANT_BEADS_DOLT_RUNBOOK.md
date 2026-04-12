@@ -141,15 +141,15 @@ beads-dolt status --json
 beads-dolt show <known-beads-id> --json
 ```
 
-On `macmini`, avoid using `bd ready --json` as an interactive health probe. Broad readiness queries can be slow enough to trip orchestration timeouts even when the hub and targeted issue reads are healthy.
+On `macmini`, avoid using `bdx ready --json` as an interactive health probe. Broad readiness queries can be slow enough to trip orchestration timeouts even when the hub and targeted issue reads are healthy.
 
 Operator note for file-based inspection on Dolt-backed hosts:
 
-- Treat live `bd` queries (`bd show`, `beads-dolt status --json`, `beads-dolt dolt test --json`) as the source of truth.
+- Treat live `bdx` queries (`bdx show`, `beads-dolt status --json`, `beads-dolt dolt test --json`) as the source of truth.
 - Do **not** assume `$BEADS_DIR/issues.jsonl` is current. It can be stale even when live Dolt-backed reads are correct.
 - `$BEADS_DIR/backup/issues.jsonl` may be a fresher mirror than the top-level `issues.jsonl`, but it is still only a file mirror, not the primary truth source.
 - Legacy `~/bd/.beads/*` files are rollback artifacts; do not use them as active runtime truth.
-- If a Beads id is visible in `bd show` but missing from `$BEADS_DIR/issues.jsonl`, classify that as stale file export drift, not as a missing issue in live Beads.
+- If a Beads id is visible in `bdx show` but missing from `$BEADS_DIR/issues.jsonl`, classify that as stale file export drift, not as a missing issue in live Beads.
 
 Fleet checks from macmini:
 
@@ -217,7 +217,7 @@ fi
 
 ### D) `beads.role not configured` (local host config drift)
 
-**Signature:** Mutating `bd` commands (create, update, close, dep) warn `beads.role not configured` or appear to hang. Meanwhile `bd --version` is healthy and `beads-dolt dolt test --json` passes.
+**Signature:** Mutating coordination commands (`bdx create/update/close/dep`) warn `beads.role not configured` or appear to hang. Meanwhile `bd --version` is healthy and `beads-dolt dolt test --json` passes.
 
 **Classification:** Local host config drift. NOT a Dolt hub failure, NOT a service outage.
 
@@ -233,14 +233,14 @@ git config --global beads.role maintainer
 
 ```bash
 beads-dolt dolt test --json    # confirm hub still healthy
-bd create --title "test" --type task --dry-run  # confirm mutation path works
+bdx create --title "test" --type task --dry-run  # confirm mutation path works
 ```
 
 **Rule:** If `beads-dolt dolt test --json` shows `"connection_ok": true`, the hub is healthy. The `beads.role` warning is a local-only blocker. Self-fix before escalating to hub/service diagnostics.
 
-### E) `bd ready --json` is slow on `macmini`
+### E) `bdx ready --json` is slow on `macmini`
 
-**Signature:** `beads-dolt dolt test --json` passes and `bd show <known-beads-id> --json` works, but `bd ready --json` is slow enough to look hung in orchestration loops.
+**Signature:** `beads-dolt dolt test --json` passes and `bdx show <known-beads-id> --json` works, but `bdx ready --json` is slow enough to look hung in orchestration loops.
 
 **Classification:** Local query responsiveness issue. NOT a hub outage.
 
@@ -251,7 +251,7 @@ beads-dolt dolt test --json
 beads-dolt show <known-beads-id> --json
 ```
 
-**Rule:** Do not use `bd ready --json` as a macmini health probe. Keep readiness browsing manual, or run it from the hub host when broad queue inspection is actually needed.
+**Rule:** Do not use `bdx ready --json` as a macmini health probe. Keep readiness browsing manual, or run it from the hub host when broad queue inspection is actually needed.
 
 ```bash
 ssh epyc12 "ss -ltnp | grep ':3307' || true"
@@ -402,6 +402,6 @@ If it reports Dolt mode, do not treat these files as source of truth:
 
 Canonical truth commands:
 
-- `bd show <id> --json`
-- `bd list --json`
+- `bdx show <id> --json`
+- `bdx list --json`
 - `beads-dolt status --json`
