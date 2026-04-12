@@ -39,7 +39,9 @@ DIRTY_WARN_MINUTES="${DIRTY_WARN_MINUTES:-15}"
 DIRTY_EVICT_MINUTES="${DIRTY_EVICT_MINUTES:-45}"
 DIVERGED_EVICT_MINUTES="${DIVERGED_EVICT_MINUTES:-0}"
 
-# bd-kuhj.8: Working hours protection for cleanup operations
+# Active canonical evacuation is allowed to reset after a rescue branch is
+# pushed. Set WORKTREE_CLEANUP_ALLOW_WORKING_HOURS=0 for save-only diagnostics.
+WORKTREE_CLEANUP_ALLOW_WORKING_HOURS="${WORKTREE_CLEANUP_ALLOW_WORKING_HOURS:-1}"
 WORKTREE_CLEANUP_PROTECT_START="${WORKTREE_CLEANUP_PROTECT_START:-8}"
 WORKTREE_CLEANUP_PROTECT_END="${WORKTREE_CLEANUP_PROTECT_END:-18}"
 
@@ -522,9 +524,9 @@ Agent: canonical-evacuate-active" --quiet 2>&1)"; then
     log_recovery "$repo" "evacuated" "dirty_timeout" "$rescue_branch" "branch=${current_branch}" "canonical-evacuate-active"
     state_upsert "$repo" "rescue_branch=$rescue_branch" "evacuated_at_epoch=$(now_epoch)" "evac_reason=dirty-timeout"
 
-    # bd-kuhj.5/bd-kuhj.8: Rescue first, then decide whether canonical reset is safe.
-    if is_working_hours && [[ "${WORKTREE_CLEANUP_ALLOW_WORKING_HOURS:-0}" != "1" ]]; then
-      log "SKIP: $repo dirty reset blocked after rescue push (working hours protection)"
+    # Rescue first, then decide whether canonical reset is safe.
+    if is_working_hours && [[ "$WORKTREE_CLEANUP_ALLOW_WORKING_HOURS" != "1" ]]; then
+      log "SKIP: $repo dirty reset blocked after rescue push (working hours opt-out protection)"
       log_recovery "$repo" "skip" "working_hours_protection" "$rescue_branch" "policy=dirty-timeout-evacuation rescue_pushed=true" "canonical-evacuate-active"
       git worktree remove "$rescue_dir" --force >/dev/null 2>&1 || true
       rm -rf "$rescue_dir" >/dev/null 2>&1 || true

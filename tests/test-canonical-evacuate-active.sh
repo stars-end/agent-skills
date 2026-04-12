@@ -93,7 +93,6 @@ EOF
 HOME="$HOME_DIR" \
 DIRTY_EVICT_MINUTES=0 \
 DIRTY_WARN_MINUTES=0 \
-WORKTREE_CLEANUP_ALLOW_WORKING_HOURS=1 \
 "$AGENTS_ROOT/scripts/canonical-evacuate-active.sh" >"$SCRIPT_OUTPUT"
 
 assert_missing "$HOME_DIR/affordabot/docs/rescue.md" "canonical dirty file reset after rescue"
