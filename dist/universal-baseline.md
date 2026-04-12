@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 756df220dc7957682d0d4f4df19a925e859ac3fc -->
-<!-- Last updated: 2026-04-12 07:12:01 UTC -->
+<!-- Source SHA: f860c093db2989429cfdacec8ddc825d65aef645 -->
+<!-- Last updated: 2026-04-12 07:18:33 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -585,7 +585,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **agent-skills-creator** | Create, update, or deprecate canonical skills in `~/agent-skills` using the current agent-skills method. MUST BE USED when the user wants a new skill, a skill refactor, a deprecation shim, skill metadata updates, or AGENTS baseline regeneration for skill changes. Use for canonical `agent-skills` work, not legacy `.claude/skills` or one-off local skill experiments. | `dx-worktree create <beads-id> agent-skills` | meta, skills, workflow, baseline, agent-skills |
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban views, dependency graphs, and the robot-plan API for auto-selecting next tasks. Keywords: beads, viewer, kanban, dependency graph, robot-plan, task selection, bottleneck | — | workflow, beads, visualization, task-selection |
 | **cass-memory** | Pilot-only CLI episodic memory workflow for explicit cross-agent memory experiments. | — |  |
-| **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode |
+| **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode |
 | **cli-mastery** | CLI environment and command-line usage guidance for Railway, GitHub, and general repo workflows. | — |  |
 | **context-plus** | REMOVED from canonical fleet contract (bd-rb0c.8). context-plus was fully removed in favor of llm-tldr for semantic discovery and serena for symbol-aware edits. This skill is retained as a tombstone only. | — |  |
 | **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with dx-runner as canonical governance surface, OpenCode as primary execution lane, and cc-glm as reliability backstop. dx-dispatch is break-glass only. | — |  |

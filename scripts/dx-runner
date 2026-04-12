@@ -26,7 +26,7 @@ fi
 #   - Auto mise trust remediation (bd-8wdg.11)
 #
 # Providers:
-#   cc-glm    - Claude via Z.ai (reliability backstop)
+#   cc-glm    - Z.ai/GLM wrapper lane (reliability backstop)
 #   opencode  - OpenCode headless (primary throughput)
 #   gemini    - Gemini CLI (parallel capacity)
 #
@@ -2334,7 +2334,7 @@ Usage:
   dx-runner finalize --beads <id> [--reason <code>] [--exit-code <n>]
 
 Providers:
-  cc-glm    Claude via Z.ai (reliability backstop)
+  cc-glm    Z.ai/GLM wrapper lane (reliability backstop)
   opencode  OpenCode headless (primary throughput, strict canonical zhipuai/glm-5.1)
   gemini    Gemini CLI (parallel capacity)
 

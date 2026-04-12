@@ -81,7 +81,7 @@ Warning codes:
 Profiles:
   opencode-prod    Production-safe OpenCode with strict governance
   opencode-review  Review-safe OpenCode with zhipuai/glm-5.1
-  cc-glm-fallback  Reliability backstop using Claude via Z.ai
+  cc-glm-fallback  Reliability backstop using the Z.ai/GLM cc-glm wrapper
   gemini-burst     Burst capacity using Gemini CLI
 
 Examples:
