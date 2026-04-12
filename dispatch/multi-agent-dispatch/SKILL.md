@@ -13,6 +13,11 @@ tags: [workflow, dispatch, dx-runner, governance, cross-vm]
 
 `dx-dispatch` is a **BREAK-GLASS compatibility shim** for remote fanout when dx-runner direct dispatch is unavailable. Use only for legacy cross-VM orchestration.
 
+Beads coordination contract:
+- Use `bdx` for coordination commands across hosts.
+- Raw `bd` is local-only (diagnostics/bootstrap/path-sensitive).
+- Direct remote Dolt SQL endpoint wiring is backend plumbing, not the agent coordination interface.
+
 ## Dispatch Lanes
 
 - **Primary**: `dx-runner --provider opencode` (governed, canonical)

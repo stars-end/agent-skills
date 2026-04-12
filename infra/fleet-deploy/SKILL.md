@@ -36,6 +36,7 @@ registry. Eliminates hardcoded SSH targets and user confusion (e.g., `feng@epyc6
 - Rolling out config changes
 - Running git pull across fleet
 - Verifying deployment status
+- Rolling out `bdx` coordination wrapper updates and policy docs
 
 ## Canonical VM Registry
 
@@ -150,6 +151,21 @@ for name in ['macmini', 'homedesktop-wsl', 'epyc6']:
 PY
 ```
 
+### 5. Verify Beads Coordination Surface
+
+```bash
+python3 - ~/agent-skills/configs/fleet_hosts.yaml <<'PY'
+import yaml, subprocess, sys, os
+yaml_path = os.path.expanduser(sys.argv[1])
+hosts = yaml.safe_load(open(yaml_path))['hosts']
+for name in ['macmini', 'homedesktop-wsl', 'epyc6', 'epyc12']:
+    ssh_target = hosts[name]['ssh']
+    result = subprocess.run(['ssh', ssh_target, 'bdx dolt test --json >/dev/null && echo OK || echo FAIL'],
+                          capture_output=True, text=True)
+    print(f"{name}: {result.stdout.strip()}")
+PY
+```
+
 ## Quick Reference Commands
 
 ### Get SSH target for a single VM
@@ -214,12 +230,14 @@ ssh feng@epyc6 "command"
 - Pass YAML path via `sys.argv[1]` to Python, not embedded strings
 - Test on one VM before fleet-wide rollout
 - Include CRON_TZ for time-sensitive crons
+- Validate `bdx` on each host after Beads-related rollout work
 
 ### Don't
 - Reconstruct SSH targets as `"$user@$vm"` - use `h['ssh']` from YAML
 - Embed `$HOME` inside Python heredocs (won't expand)
 - Use grep|awk to parse YAML (brittle)
 - Skip the `0 17 * * *` final pass for canonical-evacuate
+- Teach agents to coordinate Beads via direct remote Dolt SQL endpoint settings
 
 ## Examples
 

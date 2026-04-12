@@ -15,6 +15,7 @@ description: |
   "branch ahead of master", PR creation, opening pull requests, deployment preparation, or submitting for team review.
 tags: [workflow, github, pr, beads, review]
 allowed-tools:
+  - Bash(bdx:*)
   - Bash(git:*)
   - Bash(gh:*)
   - Bash(bd:*)
@@ -46,7 +47,7 @@ if [[ ! "$CURRENT_BRANCH" =~ ^feature-bd-[a-zA-Z0-9.-]+$ ]]; then
   echo ""
   echo "Option 1: Rename branch to match Beads issue"
   echo "  1. Find your Beads issue:"
-  echo "     bd list --status open"
+  echo "     bdx list --status open"
   echo ""
   echo "  2. Rename branch:"
   echo "     git branch -m feature-bd-<ID>"
@@ -61,7 +62,7 @@ if [[ ! "$CURRENT_BRANCH" =~ ^feature-bd-[a-zA-Z0-9.-]+$ ]]; then
   echo "     Title: $DESCRIPTIVE_NAME"
   echo ""
   echo "  2. Create issue:"
-  echo "     bd create '$DESCRIPTIVE_NAME' --type feature --priority 2"
+  echo "     bdx create '$DESCRIPTIVE_NAME' --type feature --priority 2"
   echo "     # Returns: bd-xyz"
   echo ""
   echo "  3. Rename branch to match:"
@@ -88,7 +89,7 @@ FEATURE_KEY=$(echo "$CURRENT_BRANCH" | sed 's/^feature-//')
 - Provides clear recovery steps
 - Educates on Issue-First workflow
 - In `agent-skills`, this also guards against carrying `af-*` or any other non-`bd-*` Beads context into PR creation. Treat that mismatch as an early blocker and correct it before retrying.
-- If you need a fresh tracking issue in `agent-skills`, create it explicitly as `bd-*` with `bd create --id bd-<issue> --force` instead of relying on a generic default prefix.
+- If you need a fresh tracking issue in `agent-skills`, create it explicitly as `bd-*` with `bdx create --id bd-<issue> --force` instead of relying on a generic default prefix.
 
 ### 2. Get Beads Context
 Use `bd` CLI:
@@ -96,12 +97,12 @@ Use `bd` CLI:
 bd-context
 
 # Get issue details
-issue=$(bd show <FEATURE_KEY> --json)
+issue=$(bdx show <FEATURE_KEY> --json)
 ```
 
 If not found, create proactively:
 ```bash
-bd create --title <FEATURE_KEY> --type feature --priority 2 --id <FEATURE_KEY>
+bdx create --title <FEATURE_KEY> --type feature --priority 2 --id <FEATURE_KEY>
 ```
 
 **Detect epic vs feature:**
@@ -168,7 +169,7 @@ echo ""
 ```bash
 # Close Beads issue BEFORE creating PR
 echo "Closing Beads issue ${FEATURE_KEY}..."
-bd close ${FEATURE_KEY} --reason "Work complete, ready for review in PR"
+bdx close ${FEATURE_KEY} --reason "Work complete, ready for review in PR"
 
 # Verify canonical Beads health and push branch updates
 (beads-dolt dolt test --json && beads-dolt status --json)
@@ -291,12 +292,12 @@ if [ "$issue.type" = "epic" ] || [ "$issue.type" = "feature" ]; then
   # Check if docs directory exists
   if [ -d "$DOC_DIR" ]; then
     # Check if linked to Beads
-    CURRENT_REF=$(bd show ${FEATURE_KEY} --json | jq -r '.external_ref // ""')
+    CURRENT_REF=$(bdx show ${FEATURE_KEY} --json | jq -r '.external_ref // ""')
 
     if [ -z "$CURRENT_REF" ] || [ "$CURRENT_REF" = "null" ]; then
       echo "ℹ️  Docs exist but not linked to Beads"
       echo "   Auto-linking: ${FEATURE_KEY} ↔ ${DOC_DIR}/"
-      bd update ${FEATURE_KEY} --external-ref "docs:${DOC_DIR}/"
+      bdx update ${FEATURE_KEY} --external-ref "docs:${DOC_DIR}/"
     fi
 
     # Check if docs updated recently (within last 7 days)
@@ -370,7 +371,7 @@ gh pr create
 
 $(if [ -z "$DRAFT_FLAG" ]; then echo "Closes: bd-{ID}"; else echo "Related: bd-{ID} (in progress)"; fi)
 
-Beads record: `bd show bd-{ID}`
+Beads record: `bdx show bd-{ID}`
 
 ## Documentation
 
@@ -416,7 +417,7 @@ gh pr create
 
 **Epic:** bd-{ID} (remains open for future work)
 
-Beads record: `bd show bd-{ID}`
+Beads record: `bdx show bd-{ID}`
 
 ## Documentation
 
@@ -451,7 +452,7 @@ PR_NUMBER=$(gh pr view --json number -q .number)
 bd-link-pr $PR_NUMBER
 
 # Or update via CLI
-bd update <FEATURE_KEY> status=in_progress --external-ref "PR#${PR_NUMBER}"
+bdx update <FEATURE_KEY> status=in_progress --external-ref "PR#${PR_NUMBER}"
 ```
 
 ### 6. Confirm to User

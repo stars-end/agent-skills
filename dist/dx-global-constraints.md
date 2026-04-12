@@ -24,20 +24,24 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **Active Beads runtime path is always \`~/.beads-runtime/.beads\`**.
 - **\`~/beads\` is the Beads CLI source/build checkout, not runtime state**.
 - **\`~/bd\` is legacy/rollback Git-backed state, not active runtime truth**.
-- **Run \`dx-runner\` / \`dx-batch\` control-plane commands from any non-app directory with \`BEADS_DIR=~/.beads-runtime/.beads\`**.
+- **Use \`bdx\` for Beads coordination commands** (\`create\`, \`show\`, \`comments add\`, \`ready\`, \`search\`, memory commands, etc.).
+- **Raw \`bd\` is reserved for local diagnostics/bootstrap/path-sensitive operations or explicit override.**
+- **Run \`dx-runner\` / \`dx-batch\` control-plane commands from non-app directories; use \`bdx\` for Beads coordination around those runs.**
 - **Set \`BEADS_DIR=~/.beads-runtime/.beads\` in normal agent shells**.
 - **Never run mutating Beads commands from app repos** (\`~/prime-radiant-ai\`, \`~/agent-skills\`, etc.) unless explicitly using a documented override.
-- **Backend must be Dolt server mode** for multi-VM/multi-agent reliability.
+- **Backend must be Dolt server mode on \`epyc12\`** for multi-VM/multi-agent reliability.
 - **\`epyc12\` is the central Dolt server host**.
+- **Direct remote Dolt SQL endpoint settings are backend plumbing, not the agent coordination interface.**
 - **Client hosts must not rely on local \`~/bd/.beads/dolt\` data directories**.
 - **Legacy macOS \`io.agentskills.ru\` LaunchAgent is disabled by policy** (use cron/systemd schedules only).
-- **Before dispatch**: verify \`bd dolt test --json\` succeeds and Beads service is active on the host.
-- **\`beads.role\` self-heal**: if mutating \`bd\` commands warn \`beads.role not configured\` while \`bd dolt test --json\` passes, run \`bd config set beads.role maintainer\`; if that fails outside a Git repo, run \`git config --global beads.role maintainer\` before escalating. This is local config drift, not a hub outage.
+- **Before dispatch**: verify \`bdx dolt test --json\` and \`bdx show <known-beads-id> --json\` succeed.
+- **\`beads.role\` self-heal**: if local diagnostic \`bd\` commands warn \`beads.role not configured\` while \`bdx dolt test --json\` passes, run \`bd config set beads.role maintainer\`; if that fails outside a Git repo, run \`git config --global beads.role maintainer\` before escalating. This is local config drift, not a hub outage.
 - **Do not infer runtime health from \`~/bd\` git cleanliness or Git sync**; use live Beads checks.
 - **Host service contract**:
   - Linux canonical VMs: \`systemctl --user is-active beads-dolt.service\`
   - macOS canonical host: \`launchctl print gui/\$(id -u)/com.starsend.beads-dolt\`
 - **Source-of-truth runbook**: \`~/agent-skills/docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md\`
+- **Agent-facing runbook**: \`~/agent-skills/docs/BEADS_COORDINATION_WRAPPER_RUNBOOK.md\`
 
 ## 2) V8 DX Automation Rules
 1. **No auto-merge**: never enable GitHub auto-merge on PRs. Direct agent-executed merges are allowed only after explicit current-session HITL approval and passing merge gates.
@@ -49,11 +53,11 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **PR title must include a Feature-Key**: include \`bd-<beads-id>\` somewhere in the title (e.g. \`bd-f6fh: ...\`)
 - **PR body must include Agent**: add a line like \`Agent: <agent-id>\`
 
-## 4) Delegation Rule (V8.4 - Batch by Outcome)
+## 4) Delegation Rule (V8.6 - Batch by Outcome)
 - **Primary rule**: batch by outcome, not by file. One agent per coherent change set.
 - **Default parallelism**: 2 agents, scale to 3-4 only when independent and stable.
-- **Default orchestration rule**: for chained Beads work, multi-step outcomes, or tasks expected to need implement/review baton flow, use \`dx-loop\` as the default execution surface.
-- **Direct/manual fallback**: implement directly only for isolated single-task work or when \`dx-loop\` itself is the active blocker.
+- **Default orchestration rule**: use \`dx-batch\` over \`dx-runner\` for chained Beads work, multi-step outcomes, or implement/review baton flow.
+- **Direct/manual fallback**: implement directly only for isolated single-task work or when the orchestration surface itself is the active blocker.
 - **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
 - **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
 - **See Section 6** for detailed parallel orchestration patterns.
@@ -179,11 +183,11 @@ If a named skill contains an explicit `BLOCKED` contract:
 Use existing Beads primitives as the default durable memory layer before adding
 any new memory service or wrapper.
 
-- **Short facts**: use \`bd remember\`, \`bd memories\`, \`bd recall\`, and \`bd forget\`.
+- **Short facts**: use \`bdx remember\`, \`bdx memories\`, \`bdx recall\`, and \`bdx forget\`.
 - **Structured memory**: create normal Beads issues with \`--type decision\` or an appropriate custom type, plus the \`memory\` label.
-- **Memory body**: put the durable fact, decision, gotcha, runbook, or handoff in \`description\` / \`notes\`; use \`bd comments add\` for provenance and follow-up history.
+- **Memory body**: put the durable fact, decision, gotcha, runbook, or handoff in \`description\` / \`notes\`; use \`bdx comments add\` for provenance and follow-up history.
 - **Required metadata for structured memory**: \`mem.kind\`, \`mem.repo\`, \`mem.maturity\`, \`mem.confidence\`, \`mem.source_issue\`, and source grounding such as \`mem.source_commit\`, \`mem.paths\`, or \`mem.stale_if_paths\` when known.
-- **Retrieval**: search short facts with \`bd memories <keyword>\`; search structured records with \`bd search <keyword> --label memory --status all\` and metadata filters such as \`bd search memory --label memory --metadata-field mem.repo=agent-skills --status all\`.
+- **Retrieval**: search short facts with \`bdx memories <keyword>\`; search structured records with \`bdx search <keyword> --label memory --status all\` and metadata filters such as \`bdx search memory --label memory --metadata-field mem.repo=agent-skills --status all\`.
 - **Source of truth**: memory is a lead, not proof. Verify source-grounded claims with \`llm-tldr\` or direct source inspection before acting.
 - **Wrapper threshold**: add a dedicated \`bd-mem\` helper only if agents repeatedly fail to follow this convention.
 - **Detailed convention**: \`~/agent-skills/docs/BEADS_MEMORY_CONVENTION.md\`.

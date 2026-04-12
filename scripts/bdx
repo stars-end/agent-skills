@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CANONICAL_BEADS_DIR="${BDX_BEADS_DIR:-$HOME/.beads-runtime/.beads}"
+REMOTE_HOST="${BDX_REMOTE_HOST:-epyc12}"
+REMOTE_HELPER="${BDX_REMOTE_HELPER:-\$HOME/agent-skills/scripts/bdx-remote}"
+SSH_BIN="${BDX_SSH_BIN:-ssh}"
+HOSTNAME_SHORT="${BDX_HOSTNAME:-$(hostname -s 2>/dev/null || hostname)}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SSH_CONNECT_TIMEOUT="${BDX_SSH_CONNECT_TIMEOUT:-10}"
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  bdx <command> [args...]
+
+Canonical coordination commands:
+  Reads: show, ready, list, search, comments, memories, recall, config get|list, dolt test
+  Writes: create, comments add, note, update, close, reopen, dep, label, epic, batch, relate, remember, forget
+
+Local only / rejected:
+  init, where, context, doctor, dolt start|stop|set, unknown commands
+EOF
+}
+
+die() {
+  echo "bdx: $*" >&2
+  exit 2
+}
+
+remote_host_key() {
+  local host="${REMOTE_HOST##*@}"
+  host="${host%%.*}"
+  printf '%s' "$host"
+}
+
+is_hub_host() {
+  local remote_key
+  remote_key="$(remote_host_key)"
+
+  if [[ "${BDX_FORCE_LOCAL:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  if [[ "$HOSTNAME_SHORT" == "$remote_key" || "$HOSTNAME_SHORT" == "$REMOTE_HOST" ]]; then
+    return 0
+  fi
+
+  if command -v tailscale >/dev/null 2>&1; then
+    local ts_status
+    ts_status="$(tailscale status --json 2>/dev/null || true)"
+    if printf '%s' "$ts_status" | grep -Eq "\"HostName\"[[:space:]]*:[[:space:]]*\"${remote_key}\"|\"DNSName\"[[:space:]]*:[[:space:]]*\"${remote_key}\\."; then
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+emit_argv() {
+  printf '%s\0' "$@"
+}
+
+classify_command() {
+  local cmd="${1:-}"
+  local sub="${2:-}"
+  local third="${3:-}"
+
+  case "$cmd" in
+    create|note|update|close|reopen|dep|label|epic|batch|relate|remember|forget)
+      echo "write"
+      return 0
+      ;;
+    show|ready|list|search|memories|recall)
+      echo "read"
+      return 0
+      ;;
+    comments)
+      case "$sub" in
+        add)
+          echo "write"
+          ;;
+        ""|list|show)
+          echo "read"
+          ;;
+        *)
+          die "rejected comments subcommand '$sub' (allowed: add, list, show)"
+          ;;
+      esac
+      return 0
+      ;;
+    config)
+      case "$sub" in
+        get|list)
+          echo "read"
+          return 0
+          ;;
+        *)
+          die "rejected risky config subcommand '$sub' (allowed: get, list)"
+          ;;
+      esac
+      ;;
+    dolt)
+      case "$sub" in
+        test)
+          echo "read"
+          return 0
+          ;;
+        start|stop|set)
+          die "rejected local-only dolt subcommand '$sub'"
+          ;;
+        *)
+          die "rejected dolt subcommand '$sub' (allowed via bdx: test)"
+          ;;
+      esac
+      ;;
+    init|where|context|doctor)
+      die "rejected local-only command '$cmd'"
+      ;;
+    help|-h|--help|"")
+      usage
+      exit 0
+      ;;
+    *)
+      die "rejected unknown command '$cmd'"
+      ;;
+  esac
+
+  # Unreachable; keeps shellcheck calm on exhaustive return paths.
+  [[ "$third" == "__never__" ]]
+}
+
+run_local() {
+  local mode="$1"
+  shift
+
+  if [[ "$mode" == "write" ]]; then
+    emit_argv "$@" | BDX_BEADS_DIR="$CANONICAL_BEADS_DIR" "$SCRIPT_DIR/bdx-remote" "--mode=write"
+    return $?
+  fi
+
+  BEADS_DIR="$CANONICAL_BEADS_DIR" exec bd "$@"
+}
+
+run_remote() {
+  local mode="$1"
+  shift
+  local ssh_opts=(
+    -o "BatchMode=yes"
+    -o "ConnectTimeout=${SSH_CONNECT_TIMEOUT}"
+    -o "StrictHostKeyChecking=accept-new"
+  )
+
+  # NUL-delimited argv transport: user arguments never touch remote shell parsing.
+  emit_argv "$@" | "$SSH_BIN" "${ssh_opts[@]}" "$REMOTE_HOST" "$REMOTE_HELPER" "--mode=$mode"
+}
+
+main() {
+  [[ $# -gt 0 ]] || { usage; exit 2; }
+
+  local mode
+  mode="$(classify_command "$@")"
+
+  if is_hub_host; then
+    run_local "$mode" "$@"
+  else
+    run_remote "$mode" "$@"
+  fi
+}
+
+main "$@"

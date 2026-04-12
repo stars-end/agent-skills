@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CANONICAL_BEADS_DIR="${BDX_BEADS_DIR:-$HOME/.beads-runtime/.beads}"
+LOCK_TIMEOUT_SECONDS="${BDX_LOCK_TIMEOUT_SECONDS:-45}"
+LOCK_ROOT="${BDX_LOCK_ROOT:-$HOME/.beads-runtime/.locks}"
+LOCK_NAME="${BDX_LOCK_NAME:-bdx-mutate.lock}"
+LOCK_PATH="$LOCK_ROOT/$LOCK_NAME"
+
+die() {
+  echo "bdx-remote: $*" >&2
+  exit 2
+}
+
+classify_command() {
+  local cmd="${1:-}"
+  local sub="${2:-}"
+
+  case "$cmd" in
+    create|note|update|close|reopen|dep|label|epic|batch|relate|remember|forget)
+      echo "write"
+      return 0
+      ;;
+    show|ready|list|search|memories|recall)
+      echo "read"
+      return 0
+      ;;
+    comments)
+      case "$sub" in
+        add)
+          echo "write"
+          ;;
+        ""|list|show)
+          echo "read"
+          ;;
+        *)
+          die "rejected comments subcommand '$sub' (allowed: add, list, show)"
+          ;;
+      esac
+      return 0
+      ;;
+    config)
+      case "$sub" in
+        get|list)
+          echo "read"
+          return 0
+          ;;
+        *)
+          die "rejected risky config subcommand '$sub' (allowed: get, list)"
+          ;;
+      esac
+      ;;
+    dolt)
+      case "$sub" in
+        test)
+          echo "read"
+          return 0
+          ;;
+        start|stop|set)
+          die "rejected local-only dolt subcommand '$sub'"
+          ;;
+        *)
+          die "rejected dolt subcommand '$sub' (allowed via bdx: test)"
+          ;;
+      esac
+      ;;
+    init|where|context|doctor)
+      die "rejected local-only command '$cmd'"
+      ;;
+    help|-h|--help|"")
+      die "help must be handled by bdx, not bdx-remote"
+      ;;
+    *)
+      die "rejected unknown command '$cmd'"
+      ;;
+  esac
+}
+
+mode="read"
+for arg in "$@"; do
+  case "$arg" in
+    --mode=read|--mode=write)
+      mode="${arg#--mode=}"
+      ;;
+    *)
+      die "unsupported argument '$arg'"
+      ;;
+  esac
+done
+
+args=()
+while IFS= read -r -d '' item; do
+  args+=("$item")
+done
+
+[[ ${#args[@]} -gt 0 ]] || die "missing command argv on stdin"
+
+actual_mode="$(classify_command "${args[@]}")"
+if [[ "$actual_mode" != "$mode" ]]; then
+  die "client mode '$mode' does not match command mode '$actual_mode'"
+fi
+
+run_bd() {
+  BEADS_DIR="$CANONICAL_BEADS_DIR" bd "${args[@]}"
+}
+
+run_with_mkdir_lock() {
+  local lockdir="${LOCK_PATH}.dir"
+  local deadline=$((SECONDS + LOCK_TIMEOUT_SECONDS))
+
+  mkdir -p "$LOCK_ROOT"
+  while ! mkdir "$lockdir" 2>/dev/null; do
+    if (( SECONDS >= deadline )); then
+      die "timed out acquiring lock: $lockdir"
+    fi
+    sleep 0.1
+  done
+
+  trap "rmdir '$lockdir' 2>/dev/null || true" EXIT
+  run_bd
+}
+
+if [[ "$mode" == "write" ]]; then
+  mkdir -p "$LOCK_ROOT"
+  if [[ "${BDX_DISABLE_FLOCK:-0}" != "1" ]] && command -v flock >/dev/null 2>&1; then
+    exec flock -w "$LOCK_TIMEOUT_SECONDS" "$LOCK_PATH" env BEADS_DIR="$CANONICAL_BEADS_DIR" bd "${args[@]}"
+  fi
+  run_with_mkdir_lock
+  exit $?
+fi
+
+run_bd

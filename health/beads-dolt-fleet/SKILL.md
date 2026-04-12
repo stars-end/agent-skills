@@ -1,6 +1,6 @@
 ---
 name: beads-dolt-fleet
-description: Fleet-level Beads Dolt operations for canonical hosts (verify, converge, and recover shared `~/.beads-runtime/.beads` runtime state).
+description: Fleet-level Beads backend operations for canonical hosts (verify, converge, and recover shared `~/.beads-runtime/.beads` runtime state behind `bdx`).
 tags: [health, beads, dolt, fleet, vm]
 allowed-tools:
   - Bash(ssh:*)
@@ -17,6 +17,10 @@ allowed-tools:
 ## Purpose
 
 Operate Beads as a cross-host system, not a single-host CLI.
+
+Agent coordination contract:
+- Use `bdx` for coordination commands.
+- Use this skill for backend service/runtime health only.
 
 Use this skill for:
 - fleet-wide Dolt health checks
@@ -35,17 +39,18 @@ Use this skill for:
 Run from macmini:
 
 ```bash
+bdx dolt test --json
+bdx show <known-beads-id> --json
+
+# Backend-only diagnostics
 export BEADS_DOLT_SERVER_HOST="${BEADS_DOLT_SERVER_HOST:-100.107.173.83}"
 export BEADS_DOLT_SERVER_PORT="${BEADS_DOLT_SERVER_PORT:-3307}"
-export EPYC12_BEADS_HOST="${EPYC12_BEADS_HOST:-$BEADS_DOLT_SERVER_HOST}"
-
-beads-dolt dolt test --json && beads-dolt status --json | jq -c '.summary'
 ssh epyc12 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
 ssh homedesktop-wsl "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
 ssh epyc6 "~/.agent/skills/scripts/beads-dolt dolt test --json; ~/.agent/skills/scripts/beads-dolt status --json | jq -c '.summary'"
 ```
 
-Spokes should point to epyc12’s Tailscale SQL endpoint for all Beads operations.
+Direct remote SQL listener wiring is backend plumbing, not the agent command surface.
 If summaries differ unexpectedly, converge from source host (`epyc12` by default).
 
 ## Converge From Source Host
@@ -86,3 +91,4 @@ launchctl print gui/$(id -u)/com.starsend.beads-dolt
 - Always keep timestamped `dolt.pre-sync-*` backups before replacement.
 - Never run two Dolt servers against the same data-dir on one host.
 - Hub data-dir is `~/.beads-runtime/.beads/dolt`; spokes should not run local Dolt listeners in steady state.
+- Keep agent coordination on `bdx`; do not tell agents to coordinate through raw SQL endpoint settings.

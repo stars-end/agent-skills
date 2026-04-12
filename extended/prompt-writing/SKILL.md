@@ -161,7 +161,7 @@ STOP if ANY check fails:
 - [ ] `BEADS_SUBTASK` is concrete ID, not placeholder
 - [ ] No `/Users/...`, `/tmp/...`, or `/home/...` local paths
 - [ ] Paths are repo-relative or GitHub URLs
-- [ ] If Beads IDs unknown, resolve via `BEADS_DIR=~/.beads-runtime/.beads bd ready` first
+- [ ] If Beads IDs unknown, resolve via `bdx ready` first
 
 If you can't resolve: return blocker, don't emit prompt.
 
@@ -249,8 +249,8 @@ If blocked, return exactly:
 - BLOCKED: <reason_code>
 - NEEDS: <single dependency/info needed>
 - NEXT_COMMANDS:
-   1) BEADS_DIR=~/.beads-runtime/.beads bd show bd-sg2v.13
-   2) BEADS_DIR=~/.beads-runtime/.beads bd ready
+   1) bdx show bd-sg2v.13
+   2) bdx ready
 
 ## Done Gate (Mandatory)
 Do not claim complete until:

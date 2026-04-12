@@ -10,12 +10,13 @@ name: beads-workflow
 description: |
   Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations.
   Handles full epic→branch→work lifecycle, dependencies, and ready task queries.
-  Uses Dolt server mode with runtime at ~/.beads-runtime/.beads for canonical multi-VM reliability.
+  Uses `bdx` as the canonical Beads coordination wrapper with runtime at ~/.beads-runtime/.beads for canonical multi-VM reliability.
   Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies,
-  or when user mentions "create issue", "track work", "bd create", "find ready tasks",
+  or when user mentions "create issue", "track work", "bdx create", "find ready tasks",
   issue management, dependencies, work tracking, or Beads workflow operations.
 tags: [workflow, beads, issue-tracking, git]
 allowed-tools:
+  - Bash(bdx:*)
   - Bash(bd:*)
   - Bash(scripts/bd-*:*)
   - Bash(git:*)
@@ -25,6 +26,8 @@ allowed-tools:
 # Beads Workflow Guide
 
 AI-supervised issue tracking with git-backed distributed database.
+
+**Command surface:** Use `bdx` for coordination commands. Raw `bd` is local diagnostics/bootstrap/path-sensitive operations only.
 
 **Prefix note:** Examples use the Beads prefix for this repo (e.g., bd-xyz). If you are working in another repository, substitute that repo's issue ID prefix everywhere `{issue-id}` is shown (branch names, Feature-Key trailers, dependency IDs).
 In `agent-skills`, do not rely on the Beads default issue prefix when creating new tracking work. If the active Beads context is `af-*` or another non-`bd-*` prefix, create or choose an explicit `bd-*` issue id before branch, commit, or PR work.
@@ -44,22 +47,24 @@ Beads provides persistent task memory across sessions, enabling:
 ## Canonical Contract
 
 - Active Beads runtime is `~/.beads-runtime/.beads`.
+- Canonical coordination surface is `bdx`.
 - `~/bd` is legacy/rollback Git-backed state only.
 - Canonical backend is Dolt server mode.
 - Run Beads mutations from non-app directories; app repos should use worktrees for code and reference Beads IDs.
+- Direct remote Dolt SQL endpoint settings are backend plumbing, not the normal agent coordination path.
 - In `agent-skills`, active context must resolve to a repo-compatible `bd-*` issue id before commit or PR work. If `bd-context` surfaces `af-*` or another non-`bd-*` prefix here, stop early and create or choose the correct `bd-*` issue instead of carrying the mismatch forward.
 - No SQLite fallback for active fleet operation. If you see `sqlite3: unable to open database file` or `unknown command "dolt"`, stop and repair runtime/binary first.
 - Before dispatch waves, verify:
 
 ```bash
-beads-dolt dolt test --json
-beads-dolt status --json
+bdx dolt test --json
+bdx show <known-beads-id> --json
 ```
 
-On `macmini`, do not use `bd ready --json` as a tight-loop health probe. If you need to confirm CLI responsiveness, prefer:
+On `macmini`, do not use `bdx ready --json` as a tight-loop health probe. If you need to confirm CLI responsiveness, prefer:
 
 ```bash
-beads-dolt show <known-beads-id> --json
+bdx show <known-beads-id> --json
 ```
 
 Broad readiness queries can be slow enough on `macmini` to look hung even when the Beads hub is healthy.
@@ -70,8 +75,6 @@ Fail-loud remediation (first response):
 export PATH="$HOME/.local/bin:$PATH"
 export BD_BIN="$HOME/.local/bin/bd"
 export BEADS_DIR="$HOME/.beads-runtime/.beads"
-export BEADS_DOLT_SERVER_HOST=100.107.173.83
-export BEADS_DOLT_SERVER_PORT=3307
 hash -r
 ~/.agent/skills/health/bd-doctor/check.sh
 ```
@@ -88,7 +91,7 @@ hash -r
 
 ## ⚠️ CRITICAL: Always Set Dependencies
 
-**Problem**: Without dependencies, `bd ready` and BV graph analysis can't identify blocked tasks or critical paths.
+**Problem**: Without dependencies, `bdx ready` and BV graph analysis can't identify blocked tasks or critical paths.
 
 **Rule**: When creating ANY issue, ALWAYS ask yourself:
 1. **Does this block something?** → Add `--dep` with `blocks` type
@@ -100,16 +103,16 @@ hash -r
 
 ```bash
 # When creating with dependency
-bd create --title "Impl: OAuth" --type feature --dep "bd-research-task"
+bdx create --title "Impl: OAuth" --type feature --dep "bd-research-task"
 
 # Add dependency to existing issue
-bd dep bd-new-feature bd-required-api --type blocks
+bdx dep bd-new-feature bd-required-api --type blocks
 
 # Discovery: I found a bug while working on a feature
-bd dep bd-discovered-bug bd-parent-feature --type discovered-from
+bdx dep bd-discovered-bug bd-parent-feature --type discovered-from
 
 # Epic subtask
-bd dep bd-subtask bd-epic --type parent-child
+bdx dep bd-subtask bd-epic --type parent-child
 ```
 
 ### Dependency Types
@@ -121,7 +124,7 @@ bd dep bd-subtask bd-epic --type parent-child
 | `parent-child` | Epic hierarchy | ❌ No |
 | `discovered-from` | Found during work | ❌ No |
 
-**Only `blocks` prevents a task from appearing in `bd ready`.**
+**Only `blocks` prevents a task from appearing in `bdx ready`.**
 
 ## Epic Creation Workflow (AUTOMATED)
 
@@ -143,26 +146,26 @@ bd dep bd-subtask bd-epic --type parent-child
 bd-context
 
 # 2. Create epic
-# Use bd create with JSON or flags
-bd create --title "AUTHENTICATION_SYSTEM" --type epic --priority 1 --desc "OAuth + JWT..."
+# Use bdx create with JSON or flags
+bdx create --title "AUTHENTICATION_SYSTEM" --type epic --priority 1 --desc "OAuth + JWT..."
 
 # Output: Created issue bd-xyz (AUTHENTICATION_SYSTEM)
 
 # 3. Create phase tasks
-bd create --title "Research: OAuth" --type task --priority 1
+bdx create --title "Research: OAuth" --type task --priority 1
 # bd-xyz.1
 
-bd create --title "Spec: Auth flow" --type task --priority 1 --dep "bd-xyz.1"
+bdx create --title "Spec: Auth flow" --type task --priority 1 --dep "bd-xyz.1"
 # bd-xyz.2
 
-bd create --title "Impl: OAuth" --type feature --priority 1 --dep "bd-xyz.2"
+bdx create --title "Impl: OAuth" --type feature --priority 1 --dep "bd-xyz.2"
 # bd-xyz.3
 
 # 4. Create and checkout branch
 git checkout -b feature-AUTHENTICATION_SYSTEM
 
 # 5. Start first task
-bd update bd-xyz.1 status=in_progress
+bdx update bd-xyz.1 status=in_progress
 
 # 6. Confirm
 echo "✅ Created epic bd-xyz with phase tasks"
@@ -188,14 +191,14 @@ echo "✅ Created epic bd-xyz with phase tasks"
 bd-context
 
 # 2. Create feature
-bd create --title "OAUTH_LOGIN_BUTTON" --type feature --priority 2 --desc "Single OAuth login component..."
+bdx create --title "OAUTH_LOGIN_BUTTON" --type feature --priority 2 --desc "Single OAuth login component..."
 # Output: Created issue bd-abc
 
 # 3. Create and checkout branch
 git checkout -b feature-OAUTH_LOGIN_BUTTON
 
 # 4. Start feature
-bd update bd-abc status=in_progress
+bdx update bd-abc status=in_progress
 
 # 5. Confirm
 echo "✅ Created feature bd-abc"
@@ -207,12 +210,12 @@ echo "✅ Created feature bd-abc"
 
 **Ready tasks (no blockers):**
 ```bash
-bd ready
+bdx ready
 ```
 
 **All issues:**
 ```bash
-bd list --status open
+bdx list --status open
 ```
 
 **Current context:**
@@ -224,12 +227,12 @@ bd-context
 
 **Show issue:**
 ```bash
-bd show bd-abc123
+bdx show bd-abc123
 ```
 
 **Update status:**
 ```bash
-bd update bd-abc123 status=in_progress notes="Working on X"
+bdx update bd-abc123 status=in_progress notes="Working on X"
 ```
 
 **Complete:**
@@ -241,7 +244,7 @@ bd close bd-abc123 reason="Completed: X"
 
 **New issue:**
 ```bash
-bd create --title "Description" --type feature --priority 2
+bdx create --title "Description" --type feature --priority 2
 ```
 
 **Link to PR:**
@@ -253,12 +256,12 @@ bd-link-pr <pr-number>
 
 **Add blocker:**
 ```bash
-bd dep bd-new-feature bd-required-api --type blocks
+bdx dep bd-new-feature bd-required-api --type blocks
 ```
 
 **Track discovery:**
 ```bash
-bd dep bd-discovered-bug bd-parent-feature --type discovered-from
+bdx dep bd-discovered-bug bd-parent-feature --type discovered-from
 ```
 
 ## Integration with Workflow Skills
@@ -541,7 +544,7 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 - Verify host service is active (`beads-dolt.service` on Linux or launchd agent on macOS)
 
 **Issue not found:**
-- List all: `bd list --status open`
+- List all: `bdx list --status open`
 - Check ID format: `bd-abc123` (not just abc123)
 - Verify Beads backend is initialized and healthy: `beads-dolt dolt test --json`
 
@@ -586,6 +589,6 @@ If Dolt mode is detected, treat CLI results as source of truth and do not treat 
 
 Use:
 
-- `bd show <id> --json`
-- `bd list --json`
+- `bdx show <id> --json`
+- `bdx list --json`
 - `beads-dolt status --json`
