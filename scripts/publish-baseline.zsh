@@ -480,7 +480,7 @@ extract_skill() {
     local skill_dir_name
     skill_dir_name="$(basename "$(dirname "$skill_file")")"
     local frontmatter
-    frontmatter="$(awk 'NR==1 && $0=="---"{inside=1; next} inside && $0=="---"{exit} inside{print}' "$skill_file")"
+    frontmatter="$(awk '$0=="---" && !inside{inside=1; next} inside && $0=="---"{exit} inside{print}' "$skill_file")"
     local name
     name="$(printf '%s\n' "$frontmatter" | awk '
         /^name:[[:space:]]*/{
@@ -521,10 +521,10 @@ extract_skill() {
         }
     ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^[[:space:]]*//; s/[[:space:]]*$//')"
     if [[ -z "$desc" || "$desc" == "|" || "$desc" == ">" ]]; then
-         desc=$(awk '/^description:/{flag=1; next} /^[a-zA-Z0-9_-]+:/{flag=0} /^---/{flag=0} flag' "$skill_file" | tr '\n' ' ' | sed 's/  */ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | cut -c1-160 || echo "")
+         desc=$(awk '/^description:/{flag=1; next} /^[a-zA-Z0-9_-]+:/{flag=0} /^---/{flag=0} flag' "$skill_file" | tr '\n' ' ' | sed 's/  */ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
     fi
     if [[ -z "$desc" ]]; then
-         desc=$(grep -v "^---" "$skill_file" | grep -v "^#" | grep -v "^$" | head -1 | cut -c1-160 || echo "")
+         desc=$(grep -v "^---" "$skill_file" | grep -v "^#" | grep -v "^$" | head -1 || echo "")
     fi
 
     local tags
