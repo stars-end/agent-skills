@@ -94,7 +94,7 @@ Implementation uses these tokens via:
 
 | Item | Fields | Purpose |
 |------|--------|---------|
-| `Agent-Secrets-Production` | `ZAI_API_KEY`, `RAILWAY_API_TOKEN`, `GITHUB_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `WINDMILL_API_TOKEN` | DX/dev workflow secrets (default source) |
+| `Agent-Secrets-Production` | `ZAI_API_KEY`, `RAILWAY_API_TOKEN`, `GITHUB_TOKEN`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `WINDMILL_API_TOKEN`, `WINDMILL_DEV_LOGIN_URL`, `WINDMILL_DEV_LOGIN_USER`, `WINDMILL_DEV_LOGIN_PASSWORD` | DX/dev workflow secrets (default source) |
 
 **Note:** ZAI_API_KEY is used as ANTHROPIC_AUTH_TOKEN (Z.ai routes to Anthropic-compatible API).
 
@@ -185,6 +185,56 @@ For repeated reads or commands that need the token to survive across tool calls,
 source scripts/lib/dx-auth.sh
 export WINDMILL_API_TOKEN="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/WINDMILL_API_TOKEN")"
 ```
+
+### Windmill Dev Topology
+
+Shared dev instance:
+- `https://server-dev-8d5b.up.railway.app`
+
+Workspaces on that instance are repo-specific:
+- affordabot assets `f/affordabot/*` -> workspace `affordabot`
+- prime-radiant-ai EODHD assets `f/eodhd/*` -> workspace `eodhd`
+
+Do not assume one shared workspace just because the dev server is shared.
+
+### Windmill CLI Fallback (`wmill` missing)
+
+If `wmill` is not installed, use `npx windmill-cli`.
+
+```bash
+npx windmill-cli --version
+```
+
+### Windmill Safe Live Checks (No Token Print)
+
+```bash
+source scripts/lib/dx-auth.sh
+export WINDMILL_API_TOKEN="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/WINDMILL_API_TOKEN")"
+export WINDMILL_BASE_URL="$(dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/WINDMILL_DEV_LOGIN_URL")"
+
+# Backend version for live instance sanity check
+npx windmill-cli version -r "$WINDMILL_BASE_URL"
+
+# Enumerate remote workspaces without printing token value
+npx windmill-cli workspace list-remote -r "$WINDMILL_BASE_URL"
+```
+
+### Windmill Sync Safety
+
+Before any `sync push`, confirm:
+- target workspace is correct for the repo (`affordabot` vs `eodhd`)
+- schedule mutations are intended for that environment
+
+Do not run broad `sync push` from the wrong repo/workspace pairing.
+
+### Vault Cleanup Recommendation
+
+Non-secret selector fields improve automation clarity:
+- `WINDMILL_DEV_AFFORDABOT_WORKSPACE=affordabot`
+- `WINDMILL_DEV_PRIME_WORKSPACE=eodhd`
+
+These fields are metadata only. They are safe to store as plain text fields in
+the same vault item and prevent ambiguous workspace targeting.
 
 ## Failure Modes: Auth vs Rate Limit
 
