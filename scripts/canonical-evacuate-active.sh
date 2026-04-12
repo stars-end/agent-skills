@@ -53,6 +53,11 @@ log() {
   echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] $*"
 }
 
+push_without_hooks() {
+  # Rescue durability must not depend on local feature-work hooks.
+  git -c core.hooksPath=/dev/null push --no-verify "$@"
+}
+
 now_epoch() {
   date +%s
 }
@@ -432,7 +437,8 @@ evacuate_diverged() {
 
   git branch -f "$rescue_branch" HEAD >/dev/null 2>&1 || true
 
-  if git push -u origin "$rescue_branch" --quiet >/dev/null 2>&1; then
+  local push_output
+  if push_output="$(push_without_hooks -u origin "$rescue_branch" --quiet 2>&1)"; then
     log_recovery "$repo" "evacuated" "diverged" "$rescue_branch" "branch=${current_branch}" "$agent"
     state_upsert "$repo" "rescue_branch=$rescue_branch" "evacuated_at_epoch=$(now_epoch)" "evac_reason=diverged"
 
@@ -443,7 +449,7 @@ evacuate_diverged() {
     return 0
   fi
 
-  log "ERROR: $repo diverged evacuation push failed; canonical NOT reset"
+  log "ERROR: $repo diverged evacuation push failed for $rescue_branch: ${push_output:-no output}; canonical NOT reset"
   return 1
 }
 
@@ -477,7 +483,10 @@ evacuate_dirty() {
 
     local x="${xy:0:1}"
     local y="${xy:1:1}"
-    [[ "$x" == "D" || "$y" == "D" ]] && continue
+    if [[ "$x" == "D" || "$y" == "D" ]]; then
+      git -C "$rescue_dir" rm -f -- "$file" >/dev/null 2>&1 || true
+      continue
+    fi
 
     [[ -e "$repo_path/$file" ]] || continue
 
@@ -487,15 +496,29 @@ evacuate_dirty() {
 
   cd "$rescue_dir"
   git add -A >/dev/null 2>&1 || true
-  git commit -m "chore(rescue): evacuate canonical dirty state
+
+  local commit_output
+  if ! commit_output="$(git -c core.hooksPath=/dev/null commit --no-verify -m "chore(rescue): evacuate canonical dirty state
 
 Original-Branch: $current_branch
 Source: $host
 Reason: dirty-timeout
-Feature-Key: RESCUE-$host-$repo
-Agent: canonical-evacuate-active" --quiet >/dev/null 2>&1 || true
+Feature-Key: bd-rescue
+Rescue-Key: RESCUE-$host-$repo
+Agent: canonical-evacuate-active" --quiet 2>&1)"; then
+    if git diff --cached --quiet; then
+      log "ERROR: $repo rescue worktree has no staged changes; canonical NOT reset"
+    else
+      log "ERROR: $repo rescue commit failed: ${commit_output:-no output}; canonical NOT reset"
+    fi
+    cd "$repo_path"
+    git worktree remove "$rescue_dir" --force >/dev/null 2>&1 || true
+    rm -rf "$rescue_dir" >/dev/null 2>&1 || true
+    return 1
+  fi
 
-  if git push -u origin "$rescue_branch" --quiet >/dev/null 2>&1; then
+  local push_output
+  if push_output="$(push_without_hooks -u origin "$rescue_branch" --quiet 2>&1)"; then
     log_recovery "$repo" "evacuated" "dirty_timeout" "$rescue_branch" "branch=${current_branch}" "canonical-evacuate-active"
     state_upsert "$repo" "rescue_branch=$rescue_branch" "evacuated_at_epoch=$(now_epoch)" "evac_reason=dirty-timeout"
 
@@ -539,7 +562,7 @@ Agent: canonical-evacuate-active" --quiet >/dev/null 2>&1 || true
     return 0
   fi
 
-  log "ERROR: $repo dirty evacuation push failed; canonical NOT reset"
+  log "ERROR: $repo dirty evacuation push failed for $rescue_branch: ${push_output:-no output}; canonical NOT reset"
   cd "$repo_path"
   git worktree remove "$rescue_dir" --force >/dev/null 2>&1 || true
   rm -rf "$rescue_dir" >/dev/null 2>&1 || true
