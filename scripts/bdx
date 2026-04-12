@@ -49,7 +49,20 @@ is_hub_host() {
   if command -v tailscale >/dev/null 2>&1; then
     local ts_status
     ts_status="$(tailscale status --json 2>/dev/null || true)"
-    if printf '%s' "$ts_status" | grep -Eq "\"HostName\"[[:space:]]*:[[:space:]]*\"${remote_key}\"|\"DNSName\"[[:space:]]*:[[:space:]]*\"${remote_key}\\."; then
+    local self_names=""
+    if command -v python3 >/dev/null 2>&1; then
+      self_names="$(printf '%s' "$ts_status" | python3 -c 'import json,sys
+try:
+    self_node=json.load(sys.stdin).get("Self", {})
+except Exception:
+    self_node={}
+for key in ("HostName", "DNSName"):
+    value=self_node.get(key)
+    if value:
+        print(value)
+' 2>/dev/null || true)"
+    fi
+    if printf '%s\n' "$self_names" | grep -Eq "^${remote_key}(\\.|$)"; then
       return 0
     fi
   fi
