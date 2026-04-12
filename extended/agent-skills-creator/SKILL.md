@@ -31,7 +31,7 @@ Skill work should produce:
 
 - `~/agent-skills` is the source of truth for shared skills.
 - Use a worktree for any skill change.
-- Track the work in canonical Beads (`~/bd`) before making substantive edits.
+- Track the work in canonical Beads (`BEADS_DIR=~/.beads-runtime/.beads`) before making substantive edits.
 - Do not teach stale `.claude/skills`, `skill-rules.json`, repo-local `.beads`, or legacy `bd sync` flows unless explicitly documenting compatibility.
 - Regenerate baseline after any skill addition, removal, rename, deprecation, or metadata change.
 
@@ -64,7 +64,7 @@ Use the patterns in:
 ### 1. Establish the Work Item
 
 If there is no Beads issue yet:
-- create one in `~/bd`
+- create one from a non-app directory with active runtime configured
 - use a meaningful title and issue type
 
 Then create a worktree:

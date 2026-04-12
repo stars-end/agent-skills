@@ -15,7 +15,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 REPO_NAME="$(basename -- "$REPO_ROOT")"
 REMOTE_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || echo "")"
 BRANCH="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || echo "")"
-BD_DB_PATH="${BD_DB:-$HOME/bd/.beads}"
+BD_DB_PATH="${BD_DB:-${BEADS_DIR:-$HOME/.beads-runtime/.beads}}"
 EXPECTED_PREFIX=""
 CURRENT_ISSUE_PREFIX=""
 

@@ -3,7 +3,7 @@ name: beads-guard
 description: |
   Safe Beads workflow helper (warning-only). Use before Beads mutations to
   avoid Beads conflict. Ensures you are on a feature branch, up to date with
-  origin/master, and executes Beads operations against canonical `~/bd` control-plane context
+  origin/master, and executes Beads operations against canonical Dolt control-plane context
   with runtime pinned at `~/.beads-runtime/.beads`.
 tags: [beads, dx, guardrail]
 ---
@@ -27,7 +27,7 @@ export BEADS_DIR="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
 beads-dolt dolt test --json
 # If this fails, run `bd-doctor` before proceeding
 
-# 3) Do your Beads op in canonical repo context
+# 3) Do your Beads op from a non-app directory
 #   bd close <id> --reason "..."
 #   bd create "..." --type ... --priority ...
 #   For rollback-only compatibility (deprecated): bd-sync-safe

@@ -14,7 +14,7 @@ hosts:
       - "$HOME/prime-radiant-ai"
       - "$HOME/affordabot"
       - "$HOME/llm-common"
-    beads_db: "$HOME/bd/.beads"
+    beads_db: "$HOME/.beads-runtime/.beads"
     notes: "Captain VM - heartbeat origin"
 
   homedesktop-wsl:
@@ -28,7 +28,7 @@ hosts:
       - "$HOME/prime-radiant-ai"
       - "$HOME/affordabot"
       - "$HOME/llm-common"
-    beads_db: "$HOME/bd/.beads"
+    beads_db: "$HOME/.beads-runtime/.beads"
     notes: "Primary dev environment with DCG, CASS"
 
   epyc6:
@@ -42,7 +42,7 @@ hosts:
       - "$HOME/prime-radiant-ai"
       - "$HOME/affordabot"
       - "$HOME/llm-common"
-    beads_db: "$HOME/bd/.beads"
+    beads_db: "$HOME/.beads-runtime/.beads"
     dispatch_enabled: false
     notes: "DISABLED for dispatch - runtime/session issues. See extended/cc-glm/docs/EPYC6_ENABLEMENT_GATE.md for enablement criteria. GPU/ML host with canonical user fengning"
 
@@ -57,6 +57,6 @@ hosts:
       - "$HOME/prime-radiant-ai"
       - "$HOME/affordabot"
       - "$HOME/llm-common"
-    beads_db: "$HOME/bd/.beads"
+    beads_db: "$HOME/.beads-runtime/.beads"
     dispatch_enabled: true
     notes: "DEFAULT Linux dispatch target (use instead of epyc6). Expanded canonical VM universe (Linux; user fengning)"

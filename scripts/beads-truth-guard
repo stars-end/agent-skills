@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BEADS_ROOT="${BEADS_DIR:-$HOME/bd/.beads}"
+BEADS_ROOT="${BEADS_DIR:-$HOME/.beads-runtime/.beads}"
 METADATA="$BEADS_ROOT/metadata.json"
 
 if [ ! -f "$METADATA" ]; then
@@ -38,8 +38,8 @@ if [ "$DB_TYPE" = "dolt" ]; then
 beads-truth-guard: DOLT MODE DETECTED
 
 Do not use file-based truth checks in this mode:
-  ~/bd/.beads/issues.jsonl
-  ~/bd/.beads/backup/issues.jsonl
+  ~/.beads-runtime/.beads/issues.jsonl
+  ~/.beads-runtime/.beads/backup/issues.jsonl
 
 In dolt-native mode, JSONL exports are not the live source of truth.
 Use live commands instead:

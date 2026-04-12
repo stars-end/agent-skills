@@ -1,16 +1,16 @@
 ## Canonical bd prefix cutover (2026-04-02)
 
-- Canonical `~/bd` now creates new issues with the `bd-*` prefix.
+- Canonical Beads now creates new issues with the `bd-*` prefix.
 - Legacy prefixes remain readable in the shared database via `allowed_prefixes` for historical continuity.
 - Treat legacy prefixes as carry-forward context only. Do not start new canonical workflow from `af-*` or other legacy prefixes when a fresh `bd-*` issue is appropriate.
-- Under the current local DX model, `bd-*` is the default workflow contract for new work that depends on canonical `~/bd`.
+- Under the current local DX model, `bd-*` is the default workflow contract for new work in canonical repos.
 
 ---
 name: beads-workflow
 description: |
   Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations.
   Handles full epic→branch→work lifecycle, dependencies, and ready task queries.
-  Uses centralized Beads at ~/bd with Dolt server mode for canonical multi-VM reliability.
+  Uses Dolt server mode with runtime at ~/.beads-runtime/.beads for canonical multi-VM reliability.
   Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies,
   or when user mentions "create issue", "track work", "bd create", "find ready tasks",
   issue management, dependencies, work tracking, or Beads workflow operations.
@@ -43,9 +43,10 @@ Beads provides persistent task memory across sessions, enabling:
 
 ## Canonical Contract
 
-- Canonical Beads repo is `~/bd` (remote `stars-end/bd`).
+- Active Beads runtime is `~/.beads-runtime/.beads`.
+- `~/bd` is legacy/rollback Git-backed state only.
 - Canonical backend is Dolt server mode.
-- Run Beads mutations from `~/bd` by default; app repos should use worktrees for code and reference Beads IDs.
+- Run Beads mutations from non-app directories; app repos should use worktrees for code and reference Beads IDs.
 - In `agent-skills`, active context must resolve to a repo-compatible `bd-*` issue id before commit or PR work. If `bd-context` surfaces `af-*` or another non-`bd-*` prefix here, stop early and create or choose the correct `bd-*` issue instead of carrying the mismatch forward.
 - No SQLite fallback for active fleet operation. If you see `sqlite3: unable to open database file` or `unknown command "dolt"`, stop and repair runtime/binary first.
 - Before dispatch waves, verify:
@@ -68,7 +69,7 @@ Fail-loud remediation (first response):
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 export BD_BIN="$HOME/.local/bin/bd"
-export BEADS_DIR="$HOME/bd/.beads"
+export BEADS_DIR="$HOME/.beads-runtime/.beads"
 export BEADS_DOLT_SERVER_HOST=100.107.173.83
 export BEADS_DOLT_SERVER_PORT=3307
 hash -r
@@ -545,7 +546,7 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 - Verify Beads backend is initialized and healthy: `beads-dolt dolt test --json`
 
 **Dolt lock contention (`database ... is locked`):**
-- Ensure only one Dolt server process is using `~/bd/.beads/dolt` on the host
+- Ensure only one Dolt server process is using `~/.beads-runtime/.beads/dolt` on the host
 - Restart managed service (`systemctl --user restart beads-dolt.service` on Linux)
 - Re-check with `beads-dolt dolt test --json`
 
@@ -580,8 +581,8 @@ Before any Beads truth inspection on canonical hosts, run:
 
 If Dolt mode is detected, treat CLI results as source of truth and do not treat these files as live truth:
 
-- `~/bd/.beads/issues.jsonl`
-- `~/bd/.beads/backup/issues.jsonl`
+- `~/.beads-runtime/.beads/issues.jsonl`
+- `~/.beads-runtime/.beads/backup/issues.jsonl`
 
 Use:
 

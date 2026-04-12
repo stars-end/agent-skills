@@ -21,14 +21,14 @@ Produce a reviewable plan that another agent or human can execute without hidden
 
 Every output from this skill should include:
 - a written spec or implementation memo
-- a canonical Beads structure in `~/bd`
+- a canonical Beads structure using `BEADS_DIR=~/.beads-runtime/.beads`
 - dependency edges that match the real execution order
 - acceptance and validation gates
 - a clear first executable task
 
 ## Canonical Contract
 
-- Create and mutate Beads from `~/bd`, not from app repos.
+- Create and mutate Beads from a non-app directory with `BEADS_DIR=~/.beads-runtime/.beads`.
 - Use worktrees for code/doc changes in canonical repos.
 - Prefer one epic plus a small number of meaningful child tasks over a noisy task explosion.
 - Model dependencies explicitly with `parent-child`, `blocks`, and `discovered-from`.
@@ -97,7 +97,7 @@ If no repo path is appropriate, return the plan in the response and create the B
 
 ### 4. Create Canonical Beads Structure
 
-Run Beads commands from `~/bd`.
+Run Beads commands from a non-app directory with runtime explicitly set.
 
 Preferred structure:
 - `epic`: the full outcome
@@ -107,7 +107,8 @@ Preferred structure:
 Default pattern:
 
 ```bash
-cd ~/bd
+cd ~
+export BEADS_DIR="$HOME/.beads-runtime/.beads"
 bd create --title "<epic title>" --type epic --priority 1
 bd create --title "<phase or outcome>" --type feature --priority 1
 bd dep add <child> <epic> --type parent-child

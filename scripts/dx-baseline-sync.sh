@@ -120,6 +120,27 @@ preflight() {
 FAILED_REPOS=()
 SUCCESS_REPOS=()
 
+validate_generated_baseline() {
+  local baseline="$CANONICAL_REPO/dist/universal-baseline.md"
+
+  if [[ ! -f "$baseline" ]]; then
+    error "Baseline validation failed: missing $baseline"
+    return 1
+  fi
+
+  if ! rg -q "~/.beads-runtime/.beads" "$baseline"; then
+    error "Baseline validation failed: missing V8.6 Beads runtime path"
+    return 1
+  fi
+
+  if rg -n 'Run Beads mutations from `~/bd`|cd ~/bd && bd ready|BEADS_DIR="\$HOME/bd/.beads"' "$baseline" >/dev/null; then
+    error "Baseline validation failed: found active legacy ~/bd guidance in generated baseline"
+    return 1
+  fi
+
+  return 0
+}
+
 # 1. Regenerate Baseline in CANONICAL agent-skills
 regenerate_baseline() {
   log "Regenerating baseline in canonical agent-skills..."
@@ -152,6 +173,11 @@ regenerate_baseline() {
 
   if [[ ! -f "dist/universal-baseline.md" ]]; then
     error "Baseline generation failed: dist/universal-baseline.md not found"
+    return 1
+  fi
+
+  if ! validate_generated_baseline; then
+    error "Baseline generation failed validation"
     return 1
   fi
 

@@ -143,7 +143,7 @@ fi
 # Repo-local .beads state is compatibility-only in the Dolt fleet contract.
 if git status --porcelain | grep -qE '(^| )\.beads/'; then
   log_error "Detected repo-local .beads changes in $REPO_NAME"
-  log_error "Canonical Beads state lives in ~/bd/.beads; do not snapshot repo-local .beads artifacts."
+  log_error "Active Beads runtime lives in ~/.beads-runtime/.beads; do not snapshot repo-local .beads artifacts."
   log_error "Remove or ignore the repo-local .beads changes, then rerun this snapshot."
   exit 3
 fi

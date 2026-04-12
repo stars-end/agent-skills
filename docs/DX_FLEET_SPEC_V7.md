@@ -1,7 +1,12 @@
 # DX Fleet Spec — V7 (Canonical Worktrees + Durable Beads + Stable QA Paths)
-**Status:** Active  
+**Status:** Superseded historical reference. Active Beads runtime guidance lives in `AGENTS.md` V8.6 and `docs/PRIME_RADIANT_BEADS_DOLT_RUNBOOK.md`.
 **Audience:** humans + all canonical IDE agents (`codex-cli`, `codex desktop`, `claude code`, `antigravity`, `gemini-cli`, `opencode`)  
 **Last updated:** 2026-02-03  
+
+> [!WARNING]
+> This V7 document predates the epyc12 hub-spoke Dolt runtime cutover.
+> References to `~/bd` describe the old Git-backed Beads planning repo and must
+> not be used as active runtime guidance.
 
 ## Purpose (What V7 Optimizes For)
 V7 is a **fleet operating contract** for a solo founder running many agents across multiple VMs.

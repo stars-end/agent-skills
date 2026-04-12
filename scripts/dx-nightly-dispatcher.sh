@@ -21,7 +21,7 @@ source "$SCRIPT_DIR/lib/dx-auth.sh"
 
 # Setup environment (include /opt/homebrew/bin for bash 5+ required by dx-runner)
 export PATH="/opt/homebrew/bin:$HOME_DIR/bin:$HOME_DIR/.local/bin:$HOME_DIR/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin"
-export BEADS_DIR="$HOME_DIR/bd/.beads"
+export BEADS_DIR="$HOME_DIR/.beads-runtime/.beads"
 export PYTHONPATH="$REPO_ROOT"
 
 # 1Password service account for non-interactive auth (required for cron jobs)

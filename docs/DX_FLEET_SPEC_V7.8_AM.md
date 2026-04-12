@@ -4,6 +4,11 @@ Owner: fengning
 Scope: macmini + homedesktop-wsl + epyc6; repos: `agent-skills`, `prime-radiant-ai`, `affordabot`, `llm-common`  
 Slack Heartbeat Channel: `#all-stars-end`  
 
+> [!WARNING]
+> Superseded historical reference. This V7.8 planning doc predates the V8.6
+> Beads runtime cutover. Active Beads truth is `~/.beads-runtime/.beads` with
+> the epyc12 Dolt SQL hub; `~/bd` is legacy/rollback state only.
+
 This document consolidates the current DX fleet operating model across all layers (host-plane automation, repo-plane baseline inheritance, PR-plane visibility, and Beads planning) and the additional “A–M” workstreams.
 
 The core problem this system solves:

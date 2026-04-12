@@ -26,13 +26,15 @@ Any required scheduled job (ru, canonical-sync, auto-checkpoint, etc.) has not r
 - **1-Command Remediation**: `dx-schedule-install.sh --apply` (re-installs/re-loads jobs)
 - **Stop Condition**: Job fails repeatedly with same exit code in logs.
 
-## Condition 4: Beads Sync Drift
-`~/bd` repo is dirty or behind origin for >24h.
+## Condition 4: Legacy Beads Rollback Mirror Drift
+`~/bd` repo is dirty or behind origin for >24h. This is a rollback-mirror
+condition only; active Beads health must be checked with live Dolt commands
+against `~/.beads-runtime/.beads`.
 
-- **Detection**: `cd ~/bd && git status -sb`
-- **Expected Output**: `## master...origin/master` (clean)
-- **1-Command Remediation**: `bd-sync-safe.sh`
-- **Stop Condition**: Database prefix/ID mismatch or merge conflict in `.beads/`.
+- **Detection**: `git -C ~/bd status -sb` for the legacy mirror; `BEADS_DIR=~/.beads-runtime/.beads bd dolt test --json` for active health.
+- **Expected Output**: legacy mirror is clean, and active Dolt test reports `connection_ok: true`.
+- **1-Command Remediation**: repair active health through `bd-doctor`; handle legacy mirror cleanup separately.
+- **Stop Condition**: active Dolt connectivity fails, or legacy rollback mirror has a merge conflict in `.beads/`.
 
 ## Condition 5: Stranded Worktrees
 No-upstream worktrees persisting in `/tmp/agents` for >24h without an active session lock.
