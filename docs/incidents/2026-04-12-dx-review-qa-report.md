@@ -321,3 +321,289 @@ dx-review run \
 - Update `opencode-review` preflight to normalize `/tmp`/`/private/tmp` and emit exact `mise trust -y <path>` remediation.
 - Add a review-lane state mapping in `dx-review` summaries.
 - Add a small shell test covering failed reviewer start behavior.
+
+## Retest After PR #552 / `b52eef9`
+
+Date: 2026-04-12
+Host: Fengs-MacBook-Pro
+Local `agent-skills` HEAD: `b52eef9 bd-p87lk: stabilize dx-review quorum runs`
+
+This section records a second product-agent QA pass after the reported #552 fixes landed locally.
+
+### Retest Commands
+
+Affordabot doctor against the original repro worktree:
+
+```bash
+dx-review doctor \
+  --worktree /tmp/agents/offline-20260412-windmill-bakeoff/affordabot
+```
+
+Affordabot live review smoke:
+
+```bash
+dx-review run \
+  --beads bd-jxclm.15r \
+  --worktree /tmp/agents/offline-20260412-windmill-bakeoff/affordabot \
+  --prompt-file /tmp/dx-review-bd-jxclm.15r.prompt \
+  --wait \
+  --timeout-sec 900 \
+  --poll-sec 10
+```
+
+Agent-skills doctor from a different current working directory:
+
+```bash
+dx-review doctor \
+  --worktree /tmp/agents/bd-jxclm.15/agent-skills
+```
+
+Agent-skills live review from a different current working directory:
+
+```bash
+dx-review run \
+  --beads bd-jxclm.15s \
+  --worktree /tmp/agents/bd-jxclm.15/agent-skills \
+  --prompt-file /tmp/dx-review-bd-jxclm.15r.prompt \
+  --wait \
+  --timeout-sec 240 \
+  --poll-sec 10
+```
+
+Agent-skills live review from inside the target worktree:
+
+```bash
+cd /tmp/agents/bd-jxclm.15/agent-skills
+dx-review run \
+  --beads bd-jxclm.15t \
+  --worktree /tmp/agents/bd-jxclm.15/agent-skills \
+  --prompt-file /tmp/dx-review-bd-jxclm.15r.prompt \
+  --wait \
+  --timeout-sec 300 \
+  --poll-sec 10
+```
+
+Missing metadata check:
+
+```bash
+dx-runner check --beads bd-jxclm.15s.missing --json
+```
+
+### Fixed In Retest
+
+#### Parallel reviewer launch now works
+
+The affordabot smoke run printed both launch lines immediately:
+
+```text
+dx-review reviewers: claude-code-review opencode-review
+launching reviewer=bd-jxclm.15r.claude profile=claude-code-review start_log=/tmp/dx-review/bd-jxclm.15r/bd-jxclm.15r.claude.start.log
+launching reviewer=bd-jxclm.15r.opencode profile=opencode-review start_log=/tmp/dx-review/bd-jxclm.15r/bd-jxclm.15r.opencode.start.log
+```
+
+This fixes the original quorum-breaking behavior where Claude startup blocked OpenCode from launching.
+
+#### Affordabot repro worktree now passes doctor
+
+Doctor result against `/tmp/agents/offline-20260412-windmill-bakeoff/affordabot`:
+
+```text
+claude binary: OK (claude)
+canonical model probe: OK (opus)
+=== Preflight PASSED ===
+opencode binary: OK (opencode)
+model availability: OK (16 models)
+canonical model probe: OK (zhipuai/glm-5.1)
+execution mode capability: OK (headless run)
+beads-mcp binary: MISSING
+  WARN_CODE=opencode_beads_mcp_missing severity=warn action=install_beads_mcp_for_richer_context
+mise trust: OK (/private/tmp/agents/offline-20260412-windmill-bakeoff/affordabot)
+=== Preflight PASSED ===
+```
+
+The `beads-mcp` warning is still present, but non-blocking.
+
+#### Affordabot live review now completes both reviewers
+
+The affordabot smoke run completed both lanes:
+
+```text
+reviewer=bd-jxclm.15r.claude state=review_completed raw_state=no_op_success rc=0
+reviewer=bd-jxclm.15r.opencode state=review_completed raw_state=no_op_success rc=0
+```
+
+Final report summary:
+
+```json
+{
+  "beads": "bd-jxclm.15r.claude",
+  "provider": "claude-code",
+  "state": "no_op_success",
+  "reason_code": "exit_zero_no_mutations",
+  "selected_model": "opus",
+  "mutations": 0
+}
+```
+
+```json
+{
+  "beads": "bd-jxclm.15r.opencode",
+  "provider": "opencode",
+  "state": "no_op_success",
+  "reason_code": "exit_zero_no_mutations",
+  "selected_model": "zhipuai/glm-5.1",
+  "mutations": 0
+}
+```
+
+The wrapper status output now maps review-lane no-mutation completion to `review_completed`, which is materially better for product-agent UX. The underlying `dx-runner report` JSON still preserves the raw `no_op_success` state.
+
+#### Start/preflight failure is now terminal and structured
+
+The run against the `agent-skills` worktree from `/Users/fning/prime-radiant-ai` triggered an OpenCode preflight failure. Unlike the first QA pass, `dx-review` did not poll it as `unknown` until timeout:
+
+```text
+reviewer_start_failed reviewer=bd-jxclm.15s.opencode profile=opencode-review rc=21 start_log=/tmp/dx-review/bd-jxclm.15s/bd-jxclm.15s.opencode.start.log
+reviewer=bd-jxclm.15s.claude state=healthy raw_state=healthy rc=0
+reviewer=bd-jxclm.15s.opencode state=start_failed rc=21
+reviewer=bd-jxclm.15s.claude state=review_completed raw_state=no_op_success rc=0
+reviewer=bd-jxclm.15s.opencode state=start_failed rc=21
+```
+
+The final report included synthetic structured JSON for the failed start:
+
+```json
+{
+  "beads": "bd-jxclm.15s.opencode",
+  "provider_profile": "opencode-review",
+  "state": "start_failed",
+  "reason_code": "dx_runner_start_failed",
+  "start_exit_code": 21,
+  "start_log": "/tmp/dx-review/bd-jxclm.15s/bd-jxclm.15s.opencode.start.log"
+}
+```
+
+This is a meaningful fix.
+
+#### Agent-skills live review works when run from the target worktree
+
+Running from `/tmp/agents/bd-jxclm.15/agent-skills` completed both reviewers:
+
+```text
+reviewer=bd-jxclm.15t.claude state=review_completed raw_state=no_op_success rc=0
+reviewer=bd-jxclm.15t.opencode state=review_completed raw_state=no_op_success rc=0
+```
+
+OpenCode preflight correctly treated `mise` as not applicable in that worktree:
+
+```text
+mise trust: N/A (no .mise target)
+=== Preflight PASSED with warnings (1 warning(s)) ===
+```
+
+### Remaining Product Frictions / Bugs
+
+#### A. `dx-review doctor --worktree` can still evaluate `mise` against the caller cwd
+
+Severity: High
+
+Repro:
+
+```bash
+cd /Users/fning/prime-radiant-ai
+dx-review doctor --worktree /tmp/agents/bd-jxclm.15/agent-skills
+```
+
+Observed failure:
+
+```text
+cwd: /Users/fning/prime-radiant-ai
+mise trust: UNTRUSTED (/Users/fning/prime-radiant-ai)
+  ERROR_CODE=opencode_mise_untrusted severity=error action=mise_trust target=/Users/fning/prime-radiant-ai command="mise trust '/Users/fning/prime-radiant-ai'"
+=== Preflight FAILED (1 error(s), 1 warning(s)) ===
+```
+
+Expected behavior:
+
+- The command should evaluate the supplied worktree, not the product agent's caller cwd.
+- Since `/tmp/agents/bd-jxclm.15/agent-skills` has no `.mise.toml`, expected result is:
+
+```text
+mise trust: N/A (no .mise target)
+```
+
+Why this matters:
+
+- Product agents commonly run orchestration commands from their current app repo while reviewing another worktree.
+- In this repro, the target review worktree was valid, but the doctor failed because the caller cwd had an unrelated `.mise.toml`.
+- Workaround is to `cd` into the target worktree before running `dx-review doctor` or `dx-review run`, but that weakens the advertised command shape.
+
+Likely cause:
+
+- `opencode` adapter preflight falls back to `$(pwd)/.mise.toml` when the supplied worktree has no `.mise.toml`.
+- That fallback should be disabled when an explicit `--worktree` / `DX_RUNNER_PREFLIGHT_WORKTREE` is present. An explicit worktree with no `.mise.toml` should produce `N/A`, not inspect cwd.
+
+#### B. `dx-runner check --json` still emits no JSON for totally missing metadata
+
+Severity: Medium
+
+Repro:
+
+```bash
+dx-runner check --beads bd-jxclm.15s.missing --json
+```
+
+Observed output:
+
+```text
+
+rc=1
+```
+
+Expected behavior, based on the #552 fix claim:
+
+```json
+{
+  "beads": "bd-jxclm.15s.missing",
+  "provider": "unknown",
+  "state": "start_failed",
+  "reason_code": "missing_reviewer_metadata",
+  "next_action": "inspect_dx_review_start_log_or_rerun_preflight"
+}
+```
+
+Why this matters:
+
+- `dx-review` now handles its own failed starts well, but direct `dx-runner check --json` remains weak for missing metadata.
+- External automation that relies on `dx-runner check --json` still needs shell exit-code special handling.
+
+#### C. `beads-mcp binary: MISSING` warning remains in every OpenCode preflight
+
+Severity: Low
+
+Observed warning:
+
+```text
+beads-mcp binary: MISSING
+  WARN_CODE=opencode_beads_mcp_missing severity=warn action=install_beads_mcp_for_richer_context
+```
+
+This is non-blocking, but noisy. If `beads-mcp` is optional, the product-agent docs should explicitly say that this warning is expected and not a reason to stop.
+
+## Updated Verdict After Retest
+
+`dx-review` is now usable for product-agent review of app worktrees, especially when the command is run from the target worktree or the caller cwd has no unrelated untrusted `.mise.toml`.
+
+It is not fully frictionless yet. The remaining high-value fix is to make explicit `--worktree` authoritative for `mise` preflight, including the case where the target worktree has no `.mise.toml`. The second fix is to make direct `dx-runner check --json` emit structured missing-metadata JSON as advertised.
+
+Recommended product-agent command until the cwd bug is fixed:
+
+```bash
+cd /tmp/agents/<id>/<repo>
+dx-review doctor --worktree "$PWD"
+dx-review run \
+  --beads bd-xxxx \
+  --worktree "$PWD" \
+  --prompt-file /tmp/review.prompt \
+  --wait
+```
