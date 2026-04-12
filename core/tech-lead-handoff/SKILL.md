@@ -6,6 +6,7 @@ description: |
   Use when user says "handoff", "tech lead review", "review this", "create handoff", or after completing significant work.
 tags: [workflow, handoff, review, beads, documentation]
 allowed-tools:
+  - Bash(bdx:*)
   - Read
   - Write
   - Edit
@@ -86,7 +87,7 @@ If mode is ambiguous, stop and ask for mode.
 (beads-dolt dolt test --json && beads-dolt status --json)
 
 # Verify work item(s) referenced by this handoff
-bd show <beads-id>
+bdx show <beads-id>
 ```
 
 ### 3. Ensure PR Exists and Capture Review Artifacts

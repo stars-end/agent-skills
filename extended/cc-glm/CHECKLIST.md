@@ -79,7 +79,7 @@ ruff check  # or eslint, prettier, etc.
 
 **Commands:**
 ```bash
-bd show bd-xxxx
+bdx show bd-xxxx
 cat /tmp/cc-glm-jobs/bd-xxxx.meta
 ```
 
@@ -234,7 +234,7 @@ cd /tmp/agents/bd-001/agent-skills
 git add <files>
 git commit -m "feat: bd-001 task description" -m "Co-Authored-By: cc-glm <noreply@anthropic.com>"
 git push
-bd close bd-001 --reason "Completed"
+bdx close bd-001 --reason "Completed"
 
 # For failed gates:
 # 1. Document issues in handoff notes
@@ -351,7 +351,7 @@ for id in 001 003; do  # assume 002 failed
   git add -A
   git commit -m "feat: bd-$id completed" -m "Co-Authored-By: cc-glm <noreply@anthropic.com>"
   git push
-  bd close bd-$id --reason "Completed"
+  bdx close bd-$id --reason "Completed"
 done
 
 # 6. Handle failed job (bd-002)

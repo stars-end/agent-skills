@@ -431,14 +431,14 @@ mcp__plugin_beads_beads__update(research.id, status="in_progress")
 
 **Work queue (automatic):**
 ```
-bd ready
+bdx ready
 # Shows: bd-xyz.1 (Research) - ready
 # bd-xyz.2, bd-xyz.3, bd-xyz.4 blocked
 
 # Complete research
-bd close bd-xyz.1 "Research complete"
+bdx close bd-xyz.1 "Research complete"
 
-bd ready
+bdx ready
 # Shows: bd-xyz.2 (Spec) - ready
 # bd-xyz.3, bd-xyz.4 still blocked
 ```
@@ -644,14 +644,14 @@ bd-context
 ### View Issue Details
 
 ```bash
-bd show bd-abc
+bdx show bd-abc
 # Full issue with dependencies, notes, history
 ```
 
 ### Check Database
 
 ```bash
-bd show bd-abc --json
+bdx show bd-abc --json
 # Canonical issue record from Dolt-backed Beads
 ```
 

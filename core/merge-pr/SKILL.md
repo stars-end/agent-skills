@@ -9,6 +9,7 @@ description: |
   merge, deployment, PR completion, or shipping code.
 tags: [workflow, pr, github, merge, deployment]
 allowed-tools:
+  - Bash(bdx:*)
   - Bash(bd:*)
   - Bash(git:*)
   - Bash(gh:*)
@@ -121,7 +122,7 @@ git status --porcelain
 
 ```bash
 # Get current issue status
-STATUS=$(bd show $FEATURE_KEY --json | jq -r '.status')
+STATUS=$(bdx show $FEATURE_KEY --json | jq -r '.status')
 
 if [ "$STATUS" != "closed" ]; then
   echo "❌ Error: Beads issue must be closed BEFORE merge"
@@ -141,12 +142,12 @@ if [ "$STATUS" != "closed" ]; then
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
   echo "Option 1: Close issue now (less ideal but works)"
-  echo "  bd close $FEATURE_KEY --reason \"Closing before merge in PR #$PR_NUMBER\""
+  echo "  bdx close $FEATURE_KEY --reason \"Closing before merge in PR #$PR_NUMBER\""
   echo "  (beads-dolt dolt test --json && beads-dolt status --json)"
   echo "  # Then retry merge"
   echo ""
   echo "Option 2: Close and recreate PR (atomic pattern)"
-  echo "  bd close $FEATURE_KEY --reason \"Work complete, ready for review\""
+  echo "  bdx close $FEATURE_KEY --reason \"Work complete, ready for review\""
   echo "  (beads-dolt dolt test --json && beads-dolt status --json)"
   echo "  gh pr close $PR_NUMBER"
   echo "  gh pr create  # Creates new PR after Beads state is validated"
@@ -270,7 +271,7 @@ if [ -d "$DOC_DIR" ]; then
   echo "💾 Caching docs to Serena..."
 
   # Get issue details
-  ISSUE_JSON=$(bd show $FEATURE_KEY --json)
+  ISSUE_JSON=$(bdx show $FEATURE_KEY --json)
   ISSUE_TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
   ISSUE_TYPE=$(echo "$ISSUE_JSON" | jq -r '.type')
 
@@ -517,12 +518,12 @@ AI:
    Recovery options:
 
    Option 1: Close issue now (less ideal but works)
-     bd close bd-xyz --reason 'Closing before merge in PR #200'
+     bdx close bd-xyz --reason 'Closing before merge in PR #200'
      (beads-dolt dolt test --json && beads-dolt status --json)
      # Then retry merge
 
    Option 2: Close and recreate PR (atomic pattern)
-     bd close bd-xyz --reason 'Work complete, ready for review'
+     bdx close bd-xyz --reason 'Work complete, ready for review'
      (beads-dolt dolt test --json && beads-dolt status --json)
      gh pr close 200
      gh pr create  # Creates new PR after Beads state validation
@@ -570,7 +571,7 @@ AI:
 **Cause:** Branch conflicts with master
 **Fix:** Rebase on master: `git fetch origin master && git rebase origin/master`
 
-### "bd close failed" error
+### "bdx close failed" error
 **Cause:** Beads issue doesn't exist or already closed
 **Fix:** Verify issue ID matches branch name
 

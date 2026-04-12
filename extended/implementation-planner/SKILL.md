@@ -6,6 +6,7 @@ description: |
   Use for new systems, multi-phase refactors, cross-repo work, infra changes, or any work that needs a reviewable plan before execution.
 tags: [planning, beads, specification, workflow, architecture]
 allowed-tools:
+  - Bash(bdx:*)
   - Read
   - Bash(bd:*)
   - Bash(git:*)
@@ -109,10 +110,10 @@ Default pattern:
 ```bash
 cd ~
 export BEADS_DIR="$HOME/.beads-runtime/.beads"
-bd create --title "<epic title>" --type epic --priority 1
-bd create --title "<phase or outcome>" --type feature --priority 1
-bd dep add <child> <epic> --type parent-child
-bd dep add <later-task> <earlier-task> --type blocks
+bdx create --title "<epic title>" --type epic --priority 1
+bdx create --title "<phase or outcome>" --type feature --priority 1
+bdx dep add <child> <epic> --type parent-child
+bdx dep add <later-task> <earlier-task> --type blocks
 ```
 
 Use:

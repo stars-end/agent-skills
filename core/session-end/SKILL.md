@@ -8,6 +8,7 @@ description: |
   Beads checks, Dolt status, or export operations.
 tags: [workflow, beads, session, cleanup]
 allowed-tools:
+  - Bash(bdx:*)
   - mcp__plugin_beads_beads__*
   - Bash(bd:*)
   - Bash(git:*)
@@ -96,7 +97,7 @@ Current Work:
   2. bd-abc.3 (P1) - API integration testing
   3. bd-def.2 (P2) - Documentation updates
 
-Say "bd ready" to see full ready work queue
+Say "bdx ready" to see full ready work queue
 ```
 
 ## Best Practices

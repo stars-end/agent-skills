@@ -3,6 +3,7 @@ name: bd-doctor
 description: Diagnose and repair Beads reliability issues for the canonical `bdx` coordination path (`~/.beads-runtime/.beads` runtime, epyc12 host) across hosts.
 tags: [health, beads, dolt, reliability, fleet]
 allowed-tools:
+  - Bash(bdx:*)
   - Bash(bd:*)
   - Bash(git:*)
   - Bash(systemctl:*)
@@ -133,7 +134,7 @@ fi
 
 ### 4) `beads.role` not configured (local config drift)
 
-**Signature:** `bd` commands warn `beads.role not configured` or appear to hang on mutations (e.g., `bd create`), while `bd --version` and `beads-dolt dolt test --json` succeed.
+**Signature:** local diagnostic `bd` commands warn `beads.role not configured` or appear to hang on mutations, while `bd --version` and `bdx dolt test --json` succeed.
 
 **Root cause:** Local `beads.role` is unset. The Beads CLI requires this config to determine mutation permissions. This is host-local config drift, not a Dolt hub or service outage.
 
@@ -149,14 +150,14 @@ git config --global beads.role maintainer
 
 ```bash
 beads-dolt dolt test --json   # should still pass
-bd create --title "test" --type task --dry-run  # should proceed without role warning
+bdx create --title "test" --type task --dry-run  # should proceed without role warning
 ```
 
 **Rule:** Retry `bd config set beads.role maintainer`, then `git config --global beads.role maintainer` if needed, before escalating to hub/service diagnostics. If `beads-dolt dolt test --json` passes, the hub is healthy — the blocker is local.
 
-### 5) `bd ready --json` slow or timing out on `macmini`
+### 5) `bdx ready --json` slow or timing out on `macmini`
 
-**Signature:** `bd show <known-id> --json` succeeds and `beads-dolt dolt test --json` passes, but broader commands like `bd ready --json` feel hung or exceed orchestration timeouts.
+**Signature:** `bdx show <known-id> --json` succeeds and `bdx dolt test --json` passes, but broader commands like `bdx ready --json` feel hung or exceed orchestration timeouts.
 
 **Classification:** Query responsiveness degradation on the local host. Not a hub outage.
 
@@ -167,7 +168,7 @@ beads-dolt dolt test --json
 beads-dolt show <known-beads-id> --json
 ```
 
-**Rule:** On `macmini`, do not use `bd ready --json` as a health probe in tight loops. Use targeted `bd show <known-beads-id> --json` for responsiveness checks, and run broad queue inspection manually or from the hub host when needed.
+**Rule:** On `macmini`, do not use `bdx ready --json` as a health probe in tight loops. Use targeted `bdx show <known-beads-id> --json` for responsiveness checks, and run broad queue inspection manually or from the hub host when needed.
 
 ### 6) Spoke connectivity from non-hub host
 

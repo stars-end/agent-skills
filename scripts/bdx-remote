@@ -12,6 +12,70 @@ die() {
   exit 2
 }
 
+classify_command() {
+  local cmd="${1:-}"
+  local sub="${2:-}"
+
+  case "$cmd" in
+    create|note|update|close|reopen|dep|label|epic|batch|relate|remember|forget)
+      echo "write"
+      return 0
+      ;;
+    show|ready|list|search|memories|recall)
+      echo "read"
+      return 0
+      ;;
+    comments)
+      case "$sub" in
+        add)
+          echo "write"
+          ;;
+        ""|list|show)
+          echo "read"
+          ;;
+        *)
+          die "rejected comments subcommand '$sub' (allowed: add, list, show)"
+          ;;
+      esac
+      return 0
+      ;;
+    config)
+      case "$sub" in
+        get|list)
+          echo "read"
+          return 0
+          ;;
+        *)
+          die "rejected risky config subcommand '$sub' (allowed: get, list)"
+          ;;
+      esac
+      ;;
+    dolt)
+      case "$sub" in
+        test)
+          echo "read"
+          return 0
+          ;;
+        start|stop|set)
+          die "rejected local-only dolt subcommand '$sub'"
+          ;;
+        *)
+          die "rejected dolt subcommand '$sub' (allowed via bdx: test)"
+          ;;
+      esac
+      ;;
+    init|where|context|doctor)
+      die "rejected local-only command '$cmd'"
+      ;;
+    help|-h|--help|"")
+      die "help must be handled by bdx, not bdx-remote"
+      ;;
+    *)
+      die "rejected unknown command '$cmd'"
+      ;;
+  esac
+}
+
 mode="read"
 for arg in "$@"; do
   case "$arg" in
@@ -30,6 +94,11 @@ while IFS= read -r -d '' item; do
 done
 
 [[ ${#args[@]} -gt 0 ]] || die "missing command argv on stdin"
+
+actual_mode="$(classify_command "${args[@]}")"
+if [[ "$actual_mode" != "$mode" ]]; then
+  die "client mode '$mode' does not match command mode '$actual_mode'"
+fi
 
 run_bd() {
   BEADS_DIR="$CANONICAL_BEADS_DIR" bd "${args[@]}"

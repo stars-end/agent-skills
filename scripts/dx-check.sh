@@ -174,7 +174,11 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 echo -e "${BLUE}🩺 Running DX Health Check...${RESET}"
 
-# V8.6 Preflight: prefer centralized epyc12 Dolt SQL via a dedicated runtime dir.
+needs_fix=0
+
+# V8.6 Preflight: `bdx` is the agent coordination surface. BEADS_DIR remains
+# useful for local diagnostics/bootstrap, but fresh spokes should not be forced
+# into direct remote Dolt SQL setup before agents can coordinate.
 DEFAULT_BEADS_DIR="$HOME/.beads-runtime/.beads"
 if [[ -z "${BEADS_DIR:-}" ]]; then
     if [[ -d "$DEFAULT_BEADS_DIR" ]]; then
@@ -183,13 +187,8 @@ if [[ -z "${BEADS_DIR:-}" ]]; then
         export BEADS_DIR="$DEFAULT_BEADS_DIR"
         export BEADS_IGNORE_REPO_MISMATCH=1
     else
-        echo -e "${RED}❌ FATAL: BEADS_DIR not set and default DB not found.${RESET}"
-        echo "   Expected Beads runtime at: $DEFAULT_BEADS_DIR"
-        echo "   Action:"
-        echo "     1) Create $DEFAULT_BEADS_DIR/metadata.json for epyc12 Dolt SQL"
-        echo "     2) Persist: export BEADS_DIR=\"$DEFAULT_BEADS_DIR\""
-        echo "     3) Persist: export BEADS_DOLT_SERVER_HOST=\"100.107.173.83\""
-        exit 1
+        echo -e "${YELLOW}⚠️  BEADS_DIR not set and local diagnostic runtime is missing at ${DEFAULT_BEADS_DIR}.${RESET}"
+        echo "   Agent coordination should still work through bdx if Tailscale SSH to epyc12 is healthy."
     fi
 fi
 
@@ -198,7 +197,8 @@ if [[ "${BEADS_DIR}" == "${DEFAULT_BEADS_DIR}" ]]; then
     export BEADS_IGNORE_REPO_MISMATCH=1
 fi
 
-# Dolt hub defaulting for plain `bd` usability (prevents localhost split-brain on spokes).
+# Dolt hub defaults are retained only for raw `bd` diagnostics/bootstrap. Normal
+# agent coordination must use `bdx`.
 DEFAULT_BEADS_DOLT_SERVER_HOST="${EPYC12_BEADS_HOST:-100.107.173.83}"
 DEFAULT_BEADS_DOLT_SERVER_PORT="${EPYC12_BEADS_PORT:-3307}"
 if [[ -z "${BEADS_DOLT_SERVER_HOST:-}" ]]; then
@@ -210,6 +210,31 @@ if [[ -z "${BEADS_DOLT_SERVER_PORT:-}" ]]; then
     echo -e "${YELLOW}⚠️  BEADS_DOLT_SERVER_PORT not set; defaulting to ${DEFAULT_BEADS_DOLT_SERVER_PORT} for this run.${RESET}"
     echo "   Tip: persist with: export BEADS_DOLT_SERVER_PORT=\"${DEFAULT_BEADS_DOLT_SERVER_PORT}\" (e.g. ~/.zshenv)"
     export BEADS_DOLT_SERVER_PORT="${DEFAULT_BEADS_DOLT_SERVER_PORT}"
+fi
+
+BDX_BIN=""
+if command -v bdx >/dev/null 2>&1; then
+    BDX_BIN="$(command -v bdx)"
+elif [[ -x "${SCRIPT_DIR}/bdx" ]]; then
+    BDX_BIN="${SCRIPT_DIR}/bdx"
+fi
+
+if [[ -z "$BDX_BIN" ]]; then
+    echo -e "${RED}❌ FATAL: bdx not found.${RESET}"
+    echo "   Fix: ensure ~/agent-skills/scripts is on PATH or symlink scripts/bdx into ~/.local/bin."
+    needs_fix=1
+else
+    echo -e "${GREEN}✅ bdx found: ${BDX_BIN}${RESET}"
+    if ! "$BDX_BIN" --help >/dev/null 2>&1; then
+        echo -e "${RED}❌ bdx help failed.${RESET}"
+        needs_fix=1
+    elif ! "$BDX_BIN" dolt test --json >/dev/null 2>&1; then
+        echo -e "${RED}❌ bdx cannot reach canonical Beads on epyc12.${RESET}"
+        echo "   Fix: verify Tailscale SSH to epyc12 and remote ~/agent-skills/scripts/bdx-remote."
+        needs_fix=1
+    else
+        echo -e "${GREEN}✅ bdx coordination path healthy.${RESET}"
+    fi
 fi
 
 if [[ -d ".beads" ]]; then
@@ -227,8 +252,6 @@ if [[ -n "$TRACKED_BEADS_FILES" ]]; then
     echo "$TRACKED_BEADS_FILES" | sed 's/^/     - /'
     exit 1
 fi
-
-needs_fix=0
 
 # macOS hygiene: disable legacy ru LaunchAgent if present (bd-f5rw)
 if [[ "$(uname -s)" == "Darwin" ]]; then

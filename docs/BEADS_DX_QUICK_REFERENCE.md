@@ -86,7 +86,7 @@ bdx dolt test --json && bdx show <known-beads-id> --json
 ### Manual Large Import
 
 ```bash
-# Active path is Dolt SQL (`bd dolt test` + `bd status`).
+# Active agent path is `bdx`; raw import/export is legacy recovery only.
 # Use JSONL import/export only in legacy/compatibility recovery workflows.
 export ALLOW_BEADS_LEGACY_SOURCE=1
 export ALLOW_BEADS_LEGACY_IMPORT=1

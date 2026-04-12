@@ -14,6 +14,7 @@ description: |
   commit operations, saving work, git workflows, or syncing changes.
 tags: [workflow, git, beads, commit]
 allowed-tools:
+  - Bash(bdx:*)
   - Bash(git:*)
   - Bash(make:*)
   - Bash(bd:*)
@@ -32,7 +33,7 @@ Commit current work with Beads tracking + smart discovery handling + auto phase 
 bd-context
 ```
 
-If `bd-context` reports an incompatible issue prefix in `agent-skills`, stop there. Create or choose the correct `bd-*` issue for this repo, rename the branch to `feature-bd-<issue>`, and only then continue with commit flow. If the active Beads default prefix is incompatible but the current branch is already `bd-*`, keep the branch and create any new tracking issues with explicit `bd create --id bd-<issue> --force`.
+If `bd-context` reports an incompatible issue prefix in `agent-skills`, stop there. Create or choose the correct `bd-*` issue for this repo, rename the branch to `feature-bd-<issue>`, and only then continue with commit flow. If the active Beads default prefix is incompatible but the current branch is already `bd-*`, keep the branch and create any new tracking issues with explicit `bdx create --id bd-<issue> --force`.
 
 ### 2. Get Current Issue
 ```bash
@@ -40,14 +41,14 @@ git branch --show-current
 # Extract FEATURE_KEY from feature-<KEY> pattern
 ```
 
-Use `bd show`:
+Use `bdx show`:
 ```bash
-currentIssue=$(bd show <FEATURE_KEY> --json)
+currentIssue=$(bdx show <FEATURE_KEY> --json)
 ```
 
 If not found, auto-create as safety net:
 ```bash
-bd create --title <FEATURE_KEY> --type feature --priority 2 --desc "Auto-created during commit"
+bdx create --title <FEATURE_KEY> --type feature --priority 2 --desc "Auto-created during commit"
 ```
 
 **Note:** Issue should ideally exist BEFORE coding (Issue-First Development), but this prevents orphaned commits.
@@ -71,12 +72,12 @@ Score risk level:
 
 If discovery found and risk <= "auto (notify)":
 ```bash
-childIssueId=$(bd create --title "Bug: <detected-issue>" --type bug --priority 1 --dep ${currentIssueId} --json | jq -r .id)
+childIssueId=$(bdx create --title "Bug: <detected-issue>" --type bug --priority 1 --dep ${currentIssueId} --json | jq -r .id)
 ```
 
 Close child issue BEFORE commit:
 ```bash
-bd close $childIssueId --reason "Fixed"
+bdx close $childIssueId --reason "Fixed"
 ```
 
 Verify canonical Beads health:
@@ -122,11 +123,11 @@ if make ci-lite exists:
 DOC_DIR="docs/${currentIssue.id}"
 if [ -d "$DOC_DIR" ]; then
   # Check if already linked
-  CURRENT_REF=$(bd show ${currentIssue.id} --json | jq -r '.external_ref // ""')
+  CURRENT_REF=$(bdx show ${currentIssue.id} --json | jq -r '.external_ref // ""')
 
   if [ -z "$CURRENT_REF" ] || [ "$CURRENT_REF" = "null" ]; then
     # Auto-link
-    bd update ${currentIssue.id} --external-ref "docs:${DOC_DIR}/"
+    bdx update ${currentIssue.id} --external-ref "docs:${DOC_DIR}/"
     echo "📎 Auto-linked: ${currentIssue.id} ↔ ${DOC_DIR}/"
   fi
 fi
@@ -176,7 +177,7 @@ If discovery handled, commit was already done in step 4.
 
 After commit, check if current issue should close:
 ```bash
-bd show $currentIssueId
+bdx show $currentIssueId
 ```
 
 **Auto-close criteria:**
@@ -186,7 +187,7 @@ bd show $currentIssueId
 
 If should close:
 ```bash
-bd close $currentIssueId --reason "Completed in commit <hash>"
+bdx close $currentIssueId --reason "Completed in commit <hash>"
 ```
 
 ### 8. Auto Phase Transition
@@ -194,12 +195,12 @@ bd close $currentIssueId --reason "Completed in commit <hash>"
 After closing current issue, find next ready task:
 ```bash
 # Find ready tasks with priority 1
-bd ready --priority 1
+bdx ready --priority 1
 ```
 
 If next task found:
 ```bash
-bd update $nextTaskId status=in_progress
+bdx update $nextTaskId status=in_progress
 ```
 
 ### 9. Confirm to User

@@ -8,6 +8,7 @@ description: |
   bug fixes, feedback loops, or systematic issue resolution.
 tags: [workflow, pr, beads, debugging, iteration]
 allowed-tools:
+  - Bash(bdx:*)
   - Bash(bd:*)
   - Bash(git:*)
   - Bash(gh:*)
@@ -115,7 +116,7 @@ gh pr view --json number,url,title -q '.number'
 
 ```bash
 # Get parent feature issue
-bd show <FEATURE_KEY>
+bdx show <FEATURE_KEY>
 ```
 
 ### 3. Gather PR Feedback
@@ -190,14 +191,14 @@ For each discovery, create child issue:
 
 ```bash
 # Create child issue linked to parent
-bd create "Bug: <short-description>" \
+bdx create "Bug: <short-description>" \
   --type bug \
   --priority 1 \
   --description "<full-context>" \
   --design "<how-to-fix>"
 
 # Link to parent (creates discovered-from dependency)
-bd dep add <child-id> <parent-id> --type discovered-from
+bdx dep add <child-id> <parent-id> --type discovered-from
 ```
 
 **Issue type rules:**
@@ -290,7 +291,7 @@ mcp__serena__insert_after_symbol(...)
 make lint-fast
 
 # 4. Close child issue BEFORE commit
-bd close ${childIssue.id} --reason "Fixed"
+bdx close ${childIssue.id} --reason "Fixed"
 
 # 5. Verify canonical Beads health
 beads-dolt dolt test --json
@@ -535,7 +536,7 @@ echo "2. Update evidence to match reality"
 echo "3. Re-run verification"
 
 # Create blocking child issue
-bd create "Blocker: Evidence contradicts claims in PR #${PR_NUMBER}" \
+bdx create "Blocker: Evidence contradicts claims in PR #${PR_NUMBER}" \
   --type bug \
   --priority 0 \
   --description "PR claims [X] but evidence shows [Y]"

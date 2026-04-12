@@ -7,6 +7,7 @@ description: |
 tags: [workflow, beads, visualization, task-selection]
 compatibility: Requires BV binary installed via curl script. Works with all agents.
 allowed-tools:
+  - Bash(bdx:*)
   - Bash(bv:*)
   - Bash(which:*)
   - Read
@@ -27,7 +28,7 @@ BV is a TUI for visualizing Beads issues with graph analysis and a robot protoco
 
 ## Auto-Select Next Task (Robot Mode)
 
-Instead of `bd list --status open`, use BV for smarter task selection:
+Instead of `bdx list --status open`, use BV for smarter task selection:
 
 ```bash
 bv --robot-plan
@@ -52,7 +53,7 @@ NEXT_TASK=$(bv --robot-plan | jq -r .next)
 
 # If valid, show details
 if [ -n "$NEXT_TASK" ] && [ "$NEXT_TASK" != "null" ]; then
-    bd show "$NEXT_TASK"
+    bdx show "$NEXT_TASK"
 fi
 ```
 
@@ -131,9 +132,9 @@ if next_task:
 
 | Scenario | Use |
 |----------|-----|
-| Create/update issues | `bd create`, `bd update` |
+| Create/update issues | `bdx create`, `bdx update` |
 | Find next task (smart) | `bv --robot-plan` |
-| Find any ready task | `bd ready` |
+| Find any ready task | `bdx ready` |
 | Visualize dependencies | `bv` (interactive) or `bv --robot-insights` |
 | Graph bottleneck analysis | `bv --robot-insights` |
 
@@ -144,7 +145,7 @@ If BV is not installed or fails, fall back to bd:
 ```bash
 NEXT=$(bv --robot-plan 2>/dev/null | jq -r .next)
 if [ -z "$NEXT" ] || [ "$NEXT" = "null" ]; then
-    NEXT=$(bd ready --limit 1 --json | jq -r '.[0].id')
+    NEXT=$(bdx ready --limit 1 --json | jq -r '.[0].id')
 fi
 ```
 

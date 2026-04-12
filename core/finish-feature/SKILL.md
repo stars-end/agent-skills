@@ -9,6 +9,7 @@ description: |
   or when user mentions epic completion, cleanup, archiving, feature finalization, or closing work.
 tags: [workflow, beads, cleanup, archiving]
 allowed-tools:
+  - Bash(bdx:*)
   - mcp__plugin_beads_beads__*
   - Bash(git:*)
   - Bash(gh:*)
@@ -73,11 +74,11 @@ issue = mcp__plugin_beads_beads__show(issue_id=issueId)
 
 ```bash
 # 1. All children closed?
-children=$(bd show $issueId --json | jq -r '.dependents[] | select(.type == "parent-child" or .type == "discovered-from") | .id')
+children=$(bdx show $issueId --json | jq -r '.dependents[] | select(.type == "parent-child" or .type == "discovered-from") | .id')
 
 openChildren=()
 for child in $children; do
-  status=$(bd show $child --json | jq -r '.status')
+  status=$(bdx show $child --json | jq -r '.status')
   if [ "$status" != "closed" ]; then
     openChildren+=("$child")
   fi
@@ -97,7 +98,7 @@ if [ ${#openChildren[@]} -gt 0 ]; then
   if [ "$choice" = "a" ]; then
     echo "Aborted. Finish child issues first:"
     for child in "${openChildren[@]}"; do
-      echo "   bd close $child --reason 'Completed'"
+      echo "   bdx close $child --reason 'Completed'"
     done
     exit 0
   fi
@@ -175,8 +176,8 @@ fi
 **Handle issue closure based on type:**
 
 ```bash
-ISSUE_TYPE=$(bd show $issueId --json | jq -r '.type')
-ISSUE_STATUS=$(bd show $issueId --json | jq -r '.status')
+ISSUE_TYPE=$(bdx show $issueId --json | jq -r '.type')
+ISSUE_STATUS=$(bdx show $issueId --json | jq -r '.status')
 
 if [ "$ISSUE_TYPE" = "epic" ]; then
   # Epics: Close if all children closed (special case)
@@ -217,7 +218,7 @@ else
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "Since work is already merged, close retroactively:"
-    echo "  bd close $issueId --reason 'Retroactive closure - work merged in PR'"
+    echo "  bdx close $issueId --reason 'Retroactive closure - work merged in PR'"
     echo "  beads-dolt dolt test --json && beads-dolt status --json"
     echo ""
     echo "Then retry: Say 'finish this feature'"
@@ -427,7 +428,7 @@ fi
 🌿 Branch: ${deleted ? "Deleted (local + remote)" : "Kept (manual cleanup)"}
 
 Next steps:
-  - Find new work: bd ready
+  - Find new work: bdx ready
   - View stats: bd stats
   - Start new feature: Say "create <feature>"
 ```
@@ -488,7 +489,7 @@ Parent epic: ${parent_id}
 ✅ **Offers branch deletion after PR merged (local + remote)**
 ✅ **Automatically switches to master after cleanup**
 ✅ Shows parent epic progress (if applicable)
-✅ Suggests next work (bd ready)
+✅ Suggests next work (bdx ready)
 
 ## What This Skill DOESN'T Do
 
@@ -512,14 +513,14 @@ finish-feature activates:
 2. Verify: Commits merged ✓
 3. Offer archiving: User chooses [y] Yes
 4. Archive: docs/bd-xyz/ → docs/archive/2025-Q1/bd-xyz/
-5. Close: bd close bd-xyz --reason "Completed - archived"
+5. Close: bdx close bd-xyz --reason "Completed - archived"
 6. Commit: git commit -m "docs: archive bd-xyz on completion"
 
 ✅ Finished: bd-xyz (feature)
 📄 Docs: Archived to docs/archive/2025-Q1/bd-xyz/
 🧹 Cleanup: Committed
 
-Next: bd ready (find new work)
+Next: bdx ready (find new work)
 ```
 
 ### Example 2: Finish Epic with Open Children (Abort)
@@ -541,8 +542,8 @@ finish-feature:
 User chooses: [a] Abort
 
 Aborted. Finish child issues first:
-   bd close bd-abc.2 --reason 'Completed'
-   bd close bd-abc.3 --reason 'Completed'
+   bdx close bd-abc.2 --reason 'Completed'
+   bdx close bd-abc.3 --reason 'Completed'
 
 Skill exits.
 ```
@@ -559,14 +560,14 @@ finish-feature:
 3. Offer archiving: User chooses [n] No (ongoing reference)
 4. Skip archiving
 5. Cache: Skipped (Supermemory not yet implemented)
-6. Close: bd close bd-docs --reason "Completed"
+6. Close: bdx close bd-docs --reason "Completed"
 
 ✅ Finished: bd-docs (epic)
 📄 Docs: Kept at docs/bd-docs/ (not archived)
 💾 Cache: Skipped (Supermemory pending)
 🧹 Cleanup: No changes
 
-Next: bd ready
+Next: bdx ready
 ```
 
 ## Troubleshooting
@@ -576,8 +577,8 @@ Next: bd ready
 **Symptom:** Skill warns about open children
 
 **Solution:**
-1. Check which children: `bd show bd-xyz --json | jq '.dependents'`
-2. Close each child: `bd close bd-xyz.1 --reason 'Completed'`
+1. Check which children: `bdx show bd-xyz --json | jq '.dependents'`
+2. Close each child: `bdx close bd-xyz.1 --reason 'Completed'`
 3. Re-run finish-feature
 
 ### Commits Not Merged
@@ -608,7 +609,7 @@ Next: bd ready
 
 **Beads reference:**
 - Official AGENTS.md: https://github.com/steveyegge/beads/blob/main/AGENTS.md
-- Close command: `bd close <id> --reason <reason>`
+- Close command: `bdx close <id> --reason <reason>`
 - Dependencies: parent-child, discovered-from, blocks
 
 **Memory caching (V4.2.1):**

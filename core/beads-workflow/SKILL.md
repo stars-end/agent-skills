@@ -12,10 +12,11 @@ description: |
   Handles full epic→branch→work lifecycle, dependencies, and ready task queries.
   Uses `bdx` as the canonical Beads coordination wrapper with runtime at ~/.beads-runtime/.beads for canonical multi-VM reliability.
   Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies,
-  or when user mentions "create issue", "track work", "bd create", "find ready tasks",
+  or when user mentions "create issue", "track work", "bdx create", "find ready tasks",
   issue management, dependencies, work tracking, or Beads workflow operations.
 tags: [workflow, beads, issue-tracking, git]
 allowed-tools:
+  - Bash(bdx:*)
   - Bash(bd:*)
   - Bash(scripts/bd-*:*)
   - Bash(git:*)
@@ -90,7 +91,7 @@ hash -r
 
 ## ⚠️ CRITICAL: Always Set Dependencies
 
-**Problem**: Without dependencies, `bd ready` and BV graph analysis can't identify blocked tasks or critical paths.
+**Problem**: Without dependencies, `bdx ready` and BV graph analysis can't identify blocked tasks or critical paths.
 
 **Rule**: When creating ANY issue, ALWAYS ask yourself:
 1. **Does this block something?** → Add `--dep` with `blocks` type
@@ -145,26 +146,26 @@ bdx dep bd-subtask bd-epic --type parent-child
 bd-context
 
 # 2. Create epic
-# Use bd create with JSON or flags
-bd create --title "AUTHENTICATION_SYSTEM" --type epic --priority 1 --desc "OAuth + JWT..."
+# Use bdx create with JSON or flags
+bdx create --title "AUTHENTICATION_SYSTEM" --type epic --priority 1 --desc "OAuth + JWT..."
 
 # Output: Created issue bd-xyz (AUTHENTICATION_SYSTEM)
 
 # 3. Create phase tasks
-bd create --title "Research: OAuth" --type task --priority 1
+bdx create --title "Research: OAuth" --type task --priority 1
 # bd-xyz.1
 
-bd create --title "Spec: Auth flow" --type task --priority 1 --dep "bd-xyz.1"
+bdx create --title "Spec: Auth flow" --type task --priority 1 --dep "bd-xyz.1"
 # bd-xyz.2
 
-bd create --title "Impl: OAuth" --type feature --priority 1 --dep "bd-xyz.2"
+bdx create --title "Impl: OAuth" --type feature --priority 1 --dep "bd-xyz.2"
 # bd-xyz.3
 
 # 4. Create and checkout branch
 git checkout -b feature-AUTHENTICATION_SYSTEM
 
 # 5. Start first task
-bd update bd-xyz.1 status=in_progress
+bdx update bd-xyz.1 status=in_progress
 
 # 6. Confirm
 echo "✅ Created epic bd-xyz with phase tasks"
@@ -190,14 +191,14 @@ echo "✅ Created epic bd-xyz with phase tasks"
 bd-context
 
 # 2. Create feature
-bd create --title "OAUTH_LOGIN_BUTTON" --type feature --priority 2 --desc "Single OAuth login component..."
+bdx create --title "OAUTH_LOGIN_BUTTON" --type feature --priority 2 --desc "Single OAuth login component..."
 # Output: Created issue bd-abc
 
 # 3. Create and checkout branch
 git checkout -b feature-OAUTH_LOGIN_BUTTON
 
 # 4. Start feature
-bd update bd-abc status=in_progress
+bdx update bd-abc status=in_progress
 
 # 5. Confirm
 echo "✅ Created feature bd-abc"
@@ -209,12 +210,12 @@ echo "✅ Created feature bd-abc"
 
 **Ready tasks (no blockers):**
 ```bash
-bd ready
+bdx ready
 ```
 
 **All issues:**
 ```bash
-bd list --status open
+bdx list --status open
 ```
 
 **Current context:**
@@ -226,12 +227,12 @@ bd-context
 
 **Show issue:**
 ```bash
-bd show bd-abc123
+bdx show bd-abc123
 ```
 
 **Update status:**
 ```bash
-bd update bd-abc123 status=in_progress notes="Working on X"
+bdx update bd-abc123 status=in_progress notes="Working on X"
 ```
 
 **Complete:**
@@ -243,7 +244,7 @@ bd close bd-abc123 reason="Completed: X"
 
 **New issue:**
 ```bash
-bd create --title "Description" --type feature --priority 2
+bdx create --title "Description" --type feature --priority 2
 ```
 
 **Link to PR:**
@@ -255,12 +256,12 @@ bd-link-pr <pr-number>
 
 **Add blocker:**
 ```bash
-bd dep bd-new-feature bd-required-api --type blocks
+bdx dep bd-new-feature bd-required-api --type blocks
 ```
 
 **Track discovery:**
 ```bash
-bd dep bd-discovered-bug bd-parent-feature --type discovered-from
+bdx dep bd-discovered-bug bd-parent-feature --type discovered-from
 ```
 
 ## Integration with Workflow Skills
@@ -543,7 +544,7 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 - Verify host service is active (`beads-dolt.service` on Linux or launchd agent on macOS)
 
 **Issue not found:**
-- List all: `bd list --status open`
+- List all: `bdx list --status open`
 - Check ID format: `bd-abc123` (not just abc123)
 - Verify Beads backend is initialized and healthy: `beads-dolt dolt test --json`
 
@@ -588,6 +589,6 @@ If Dolt mode is detected, treat CLI results as source of truth and do not treat 
 
 Use:
 
-- `bd show <id> --json`
-- `bd list --json`
+- `bdx show <id> --json`
+- `bdx list --json`
 - `beads-dolt status --json`

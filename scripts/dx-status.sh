@@ -220,17 +220,34 @@ for repo in "${ALL_REPOS[@]}"; do
     check_beads_local_version "$repo" "$(is_in_list "$repo" "${CANONICAL_REQUIRED_REPOS[@]:-}" && echo 1 || echo 0)"
 done
 
-# 2.7 BEADS_DIR Check
+# 2.7 Beads coordination check
 echo ""
-echo "--- External Beads Database (BEADS_DIR) ---"
+echo "--- Beads Coordination (bdx) + Diagnostic Runtime ---"
 check_beads_dir() {
     local expected_path="$HOME/.beads-runtime/.beads"
     local beads_dir_real
     local expected_beads_db
     local expected_real
-    if [ -z "${BEADS_DIR:-}" ]; then
-        echo -e "${RED}❌ BEADS_DIR not set${RESET}"
+    local bdx_bin=""
+
+    if command -v bdx >/dev/null 2>&1; then
+        bdx_bin="$(command -v bdx)"
+    elif [[ -x "$HOME/agent-skills/scripts/bdx" ]]; then
+        bdx_bin="$HOME/agent-skills/scripts/bdx"
+    fi
+
+    if [[ -z "$bdx_bin" ]]; then
+        echo -e "${RED}❌ bdx not found${RESET}"
         ERRORS=$((ERRORS+1))
+    elif "$bdx_bin" dolt test --json >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ bdx coordination path healthy${RESET}"
+    else
+        echo -e "${RED}❌ bdx coordination path failed${RESET}"
+        ERRORS=$((ERRORS+1))
+    fi
+
+    if [ -z "${BEADS_DIR:-}" ]; then
+        warn_only "BEADS_DIR not set; raw bd diagnostics may be limited, but agents should coordinate through bdx"
         return
     fi
     beads_dir_real=$(resolve_path "$BEADS_DIR")
@@ -244,8 +261,7 @@ check_beads_dir() {
 
     # Server mode compatibility: legacy ~/bd may not expose a raw beads.db file anymore.
     if [ ! -d "$BEADS_DIR" ]; then
-        echo -e "${RED}❌ BEADS_DIR directory missing: $BEADS_DIR${RESET}"
-        ERRORS=$((ERRORS+1))
+        warn_only "BEADS_DIR directory missing: $BEADS_DIR (raw bd diagnostics only)"
         return
     fi
 
@@ -255,18 +271,15 @@ check_beads_dir() {
         if ("$HOME/.agent/skills/scripts/beads-dolt" dolt test --json >/dev/null 2>&1); then
             echo -e "${GREEN}✅ Beads service reachable in Dolt server mode (expected: no beads.db)${RESET}"
         else
-            echo -e "${RED}❌ Beads service unreachable (${HOME}/.beads-runtime -- dolt server mode)${RESET}"
-            ERRORS=$((ERRORS+1))
+            warn_only "Local beads-dolt diagnostic service unreachable (${HOME}/.beads-runtime -- dolt server mode)"
         fi
     else
-        echo -e "${RED}❌ Beads state not found at $BEADS_DIR (neither beads.db nor dolt dir)${RESET}"
-        ERRORS=$((ERRORS+1))
+        warn_only "Beads diagnostic state not found at $BEADS_DIR (neither beads.db nor dolt dir)"
     fi
 
     # Check for repository mismatch bypass
     if [ -z "${BEADS_IGNORE_REPO_MISMATCH:-}" ]; then
-        echo -e "${RED}❌ BEADS_IGNORE_REPO_MISMATCH not set${RESET}"
-        ERRORS=$((ERRORS+1))
+        warn_only "BEADS_IGNORE_REPO_MISMATCH not set for raw bd diagnostics"
     else
         echo -e "${GREEN}✅ BEADS_IGNORE_REPO_MISMATCH = $BEADS_IGNORE_REPO_MISMATCH${RESET}"
     fi

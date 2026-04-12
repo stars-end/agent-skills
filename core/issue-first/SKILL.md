@@ -14,6 +14,7 @@ description: |
   creating features, building new systems, beginning development, or implementing new functionality.
 tags: [workflow, beads, issue-tracking, implementation]
 allowed-tools:
+  - Bash(bdx:*)
   - mcp__plugin_beads_beads__*
   - Bash(git:*)
   - Bash(bd:*)
@@ -31,7 +32,7 @@ Ensures **Issue-First** pattern: All implementation work tracked in Beads BEFORE
 
 Repo compatibility rule:
 - In `agent-skills`, do not carry an active non-`bd-*` issue id into implementation. If the current context is `af-*` (or another prefix), stop and create or choose the repo-compatible `bd-*` issue before branch, commit, or PR work.
-- If the Beads default prefix is incompatible with the repo, create explicit hook-compatible ids with `bd create --id bd-<issue> --force` rather than relying on a generic default prefix.
+- If the Beads default prefix is incompatible with the repo, create explicit hook-compatible ids with `bdx create --id bd-<issue> --force` rather than relying on a generic default prefix.
 
 ## When to Use This Skill
 

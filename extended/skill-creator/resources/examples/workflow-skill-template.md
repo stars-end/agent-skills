@@ -123,15 +123,15 @@ Next: [What user should do next]
 
 [How this skill uses Beads CLI]
 
-- **Check context:** `bd show <issue_id>`
-- **Update status:** `bd update <issue_id> status=<status>`
-- **Close on success:** `bd close <issue_id> reason="..."`
-- **Create discoveries:** `bd create ...`
+- **Check context:** `bdx show <issue_id>`
+- **Update status:** `bdx update <issue_id> status=<status>`
+- **Close on success:** `bdx close <issue_id> reason="..."`
+- **Create discoveries:** `bdx create ...`
 
 **Pattern:**
 ```bash
 # Beads integration example
-bd update $ISSUE_ID status=in_progress
+bdx update $ISSUE_ID status=in_progress
 ```
 
 ### With Code Search

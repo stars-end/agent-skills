@@ -78,6 +78,9 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 : "${FAKE_SSH_LOG:?missing FAKE_SSH_LOG}"
+while [[ "${1:-}" == "-o" ]]; do
+  shift 2
+done
 host="$1"
 shift
 printf 'host=%s\n' "$host" >>"$FAKE_SSH_LOG"
@@ -184,6 +187,44 @@ test_remote_write_mkdir_fallback() {
   assert_file_contains "$fake_bd_log" "arg=note" "write command reached bd via fallback lock"
 }
 
+test_memory_commands() {
+  local case_dir="$tmpdir/case_mem"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+  local fake_flock_log="$case_dir/fake-flock.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+  setup_fake_flock "$fake_bin"
+
+  FAKE_BD_LOG="$fake_bd_log" \
+  FAKE_SSH_LOG="$fake_ssh_log" \
+  FAKE_FLOCK_LOG="$fake_flock_log" \
+  HOME="$case_dir/home" \
+  PATH="$fake_bin:/usr/bin:/bin" \
+  BDX_SSH_BIN="$fake_bin/ssh" \
+  BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
+  BDX_REMOTE_HOST="epyc12" \
+  BDX_HOSTNAME="macbook" \
+  "$BDX" remember "fleet" "bdx is canonical" >/dev/null
+
+  FAKE_BD_LOG="$fake_bd_log" \
+  FAKE_SSH_LOG="$fake_ssh_log" \
+  FAKE_FLOCK_LOG="$fake_flock_log" \
+  HOME="$case_dir/home" \
+  PATH="$fake_bin:/usr/bin:/bin" \
+  BDX_SSH_BIN="$fake_bin/ssh" \
+  BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
+  BDX_REMOTE_HOST="epyc12" \
+  BDX_HOSTNAME="macbook" \
+  "$BDX" memories "fleet" >/dev/null
+
+  assert_file_contains "$fake_flock_log" "lock=$case_dir/home/.beads-runtime/.locks/bdx-mutate.lock" "remember uses write lock"
+  assert_file_contains "$fake_bd_log" "arg=remember" "remember command allowed"
+  assert_file_contains "$fake_bd_log" "arg=memories" "memories command allowed"
+}
+
 test_rejections() {
   local case_dir="$tmpdir/case4"
   local fake_bin="$case_dir/bin"
@@ -203,6 +244,7 @@ test_rejections() {
   )
 
   run_expect_fail "rejected local-only command 'init'" env "${base_env[@]}" "$BDX" init
+  run_expect_fail "rejected comments subcommand 'delete'" env "${base_env[@]}" "$BDX" comments delete bd-test c1
   run_expect_fail "rejected local-only dolt subcommand 'start'" env "${base_env[@]}" "$BDX" dolt start
   run_expect_fail "rejected risky config subcommand 'set'" env "${base_env[@]}" "$BDX" config set x y
   run_expect_fail "rejected unknown command 'xyz123'" env "${base_env[@]}" "$BDX" xyz123
@@ -239,12 +281,116 @@ EOF
   assert_file_contains "$fake_bd_log" "BEADS_DIR=$case_dir/home/.beads-runtime/.beads" "epyc12 local path uses canonical BEADS_DIR"
 }
 
+test_local_epyc12_write_uses_lock() {
+  local case_dir="$tmpdir/case6"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+  local fake_flock_log="$case_dir/fake-flock.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+  setup_fake_flock "$fake_bin"
+
+  cat >"$fake_bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "unexpected ssh invocation" >&2
+exit 99
+EOF
+  chmod +x "$fake_bin/ssh"
+
+  FAKE_BD_LOG="$fake_bd_log" \
+  FAKE_SSH_LOG="$fake_ssh_log" \
+  FAKE_FLOCK_LOG="$fake_flock_log" \
+  HOME="$case_dir/home" \
+  PATH="$fake_bin:/usr/bin:/bin" \
+  BDX_SSH_BIN="$fake_bin/ssh" \
+  BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
+  BDX_REMOTE_HOST="epyc12" \
+  BDX_HOSTNAME="epyc12" \
+  "$BDX" comments add bd-local "locked local write" >/dev/null
+
+  assert_file_contains "$fake_flock_log" "lock=$case_dir/home/.beads-runtime/.locks/bdx-mutate.lock" "epyc12 local write uses lock"
+  assert_file_contains "$fake_bd_log" "arg=comments" "epyc12 local write reaches bd"
+}
+
+test_tailscale_hostname_detects_epyc12() {
+  local case_dir="$tmpdir/case_ts"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+
+  cat >"$fake_bin/tailscale" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "status" && "${2:-}" == "--json" ]]; then
+  printf '{"Self":{"HostName":"epyc12","DNSName":"epyc12.sable-cliff.ts.net."}}\n'
+else
+  exit 2
+fi
+EOF
+  chmod +x "$fake_bin/tailscale"
+
+  cat >"$fake_bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "unexpected ssh invocation" >&2
+exit 99
+EOF
+  chmod +x "$fake_bin/ssh"
+
+  FAKE_BD_LOG="$fake_bd_log" \
+  FAKE_SSH_LOG="$fake_ssh_log" \
+  HOME="$case_dir/home" \
+  PATH="$fake_bin:/usr/bin:/bin" \
+  BDX_SSH_BIN="$fake_bin/ssh" \
+  BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
+  BDX_REMOTE_HOST="epyc12" \
+  BDX_HOSTNAME="v2202601262171429561" \
+  "$BDX" show bd-local >/dev/null
+
+  assert_file_contains "$fake_bd_log" "arg=show" "tailscale hostname detects epyc12 as local hub"
+}
+
+test_remote_helper_revalidates_allowlist() {
+  local case_dir="$tmpdir/case7"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+
+  local output rc
+  set +e
+  output="$(
+    printf 'doctor\0--fix\0' | \
+      FAKE_BD_LOG="$fake_bd_log" \
+      HOME="$case_dir/home" \
+      PATH="$fake_bin:/usr/bin:/bin" \
+      "$ROOT/scripts/bdx-remote" --mode=write 2>&1
+  )"
+  rc=$?
+  set -e
+
+  [[ $rc -ne 0 ]] && pass "remote helper rejects direct disallowed command" || fail "remote helper allowed doctor --fix"
+  assert_contains "$output" "rejected local-only command 'doctor'" "remote helper rejection message is explicit"
+  [[ ! -f "$fake_bd_log" ]] && pass "remote helper did not call bd for rejected command" || fail "remote helper called bd for rejected command"
+}
+
 main() {
   test_remote_read_injection_safe
   test_remote_write_uses_flock
   test_remote_write_mkdir_fallback
+  test_memory_commands
   test_rejections
   test_local_on_epyc12
+  test_local_epyc12_write_uses_lock
+  test_tailscale_hostname_detects_epyc12
+  test_remote_helper_revalidates_allowlist
 
   echo "Summary: pass=$pass_count fail=$fail_count"
   [[ $fail_count -eq 0 ]]
