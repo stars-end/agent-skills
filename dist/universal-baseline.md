@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: e26236a9c6928a79cbaa574f3d2ae624b4fa06f0 -->
-<!-- Last updated: 2026-04-12 07:46:56 UTC -->
+<!-- Source SHA: 5afebef118aa72fde97c483548b578a537a97bd6 -->
+<!-- Last updated: 2026-04-12 07:49:44 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -561,7 +561,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
-| **beads-workflow** | Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations. Handles full epic→branch→work lifecycle, dependencies, and ready task queries. Uses `bdx` as the canonical Beads coordination wrapper with runtime at ~/.beads-runtime/.beads for canonical multi-VM reliability. Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies, or when user mentions "create issue", "track work", "bdx create", "find ready tasks", issue management, dependencies, work tracking, or Beads workflow operations. | `bd close bd-abc123 reason="Completed: X"` | workflow, beads, issue-tracking, git |
+| **beads-workflow** | Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations. Handles full epic→branch→work lifecycle, dependencies, and ready task queries. Uses `bdx` as the canonical Beads coordination wrapper with runtime at ~/.beads-runtime/.beads for canonical multi-VM reliability. Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies, or when user mentions "create issue", "track work", "bdx create", "find ready tasks", issue management, dependencies, work tracking, or Beads workflow operations. | — | workflow, beads, issue-tracking, git |
 | **create-pull-request** | Create GitHub pull request with atomic Beads issue closure. MUST BE USED for opening PRs. Asks if work is complete - if YES, closes Beads issue BEFORE creating PR. If NO, creates draft PR with issue still open. Automatically links Beads tracking and includes Feature-Key. Use when user wants to open a PR, submit work for review, merge into master, or prepare for deployment, or when user mentions "ready for review", "create PR", "open PR", "merge conflicts", "CI checks needed", "branch ahead of master", PR creation, opening pull requests, deployment preparation, or submitting for team review. | — | workflow, github, pr, beads, review |
 | **database-quickref** | Fail-fast quick reference for Railway Postgres operations. Use when user asks to check database, run queries, verify data, inspect tables, or mentions psql, postgres, database, "check the db", "validate data". | — | database, postgres, railway, psql |
 | **feature-lifecycle** | A suite of skills to manage the full development lifecycle from start to finish. - `start-feature`: Initializes a new feature branch, docs, and story. - `sync-feature`: Saves work with CI checks. - `finish-feature`: Verifies and creates a pull request. | — | workflow, git, feature, beads, dx |

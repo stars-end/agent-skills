@@ -50,7 +50,7 @@ After running setup or repair:
 
 ```bash
 # Verify installation
-bd dolt test --json
+bdx dolt test --json
 ```
 
 DX command contract:

@@ -98,7 +98,7 @@ print_checklist() {
   "gates": {
     "diff_review": "git diff --stat HEAD in worktree must show changes",
     "validation": "Validation commands from job output must pass",
-    "beads_status": "bd show <beads> must indicate issue is open",
+    "beads_status": "bdx show <beads> must indicate issue is open",
     "risk_assessment": "Job output must include risk notes or declare 'none'"
   }
 }
@@ -134,7 +134,7 @@ Gate 2: VALIDATION
 Gate 3: BEADS STATUS
   Status: [ ] PASS  [ ] FAIL  [ ] SKIP
   ├─ Issue still open?
-  │  Command: bd show <beads-id>
+  │  Command: bdx show <beads-id>
   │  Expected: Status is NOT "closed"
   ├─ Beads metadata consistent?
   │  Check: repo, worktree, agent match task
@@ -167,7 +167,7 @@ If READY TO COMMIT:
   2. git add <files>
   3. git commit -m "<message>" -m "Co-Authored-By: cc-glm <noreply@anthropic.com>"
   4. git push
-  5. bd close <beads-id> --reason "Completed"
+  5. bdx close <beads-id> --reason "Completed"
 
 If NEEDS REVISION:
   1. Document specific issues in <beads>.handoff-notes.txt
@@ -374,19 +374,19 @@ check_cmd() {
   echo "─────────────────────────────────────────────────────────────────────"
 
   if [[ -n "$DRY_RUN" ]]; then
-    check_info "(dry-run) Would check: bd show $BEADS"
+    check_info "(dry-run) Would check: bdx show $BEADS"
     check_pass "Issue open (dry-run)"
   else
-    if command -v bd >/dev/null 2>&1; then
+    if command -v bdx >/dev/null 2>&1; then
       local bd_output
-      bd_output="$(bd show "$BEADS" 2>&1 || true)"
+      bd_output="$(bdx show "$BEADS" 2>&1 || true)"
       if [[ "$bd_output" == *"closed"* ]] || [[ "$bd_output" == *"Closed"* ]]; then
         check_warn "Beads issue appears to be closed"
       else
         check_pass "Beads issue appears open"
       fi
     else
-      check_info "bd command not available; skipping status check"
+      check_info "bdx command not available; skipping status check"
     fi
 
     if [[ -f "$META_FILE" ]]; then
@@ -445,7 +445,7 @@ check_cmd() {
     echo "  2. git add <files>"
     echo "  3. git commit -m \"feat: $BEADS\" -m \"Co-Authored-By: cc-glm <noreply@anthropic.com>\""
     echo "  4. git push"
-    echo "  5. bd close $BEADS --reason 'Completed'"
+    echo "  5. bdx close $BEADS --reason 'Completed'"
   else
     echo "  1. Review failed gates above"
     echo "  2. Add notes to: $HANDOFF_NOTES"

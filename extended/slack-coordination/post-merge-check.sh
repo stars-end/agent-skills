@@ -39,11 +39,11 @@ Checking queue for next task..." \
 echo "First Post Result: $FIRST_RES" >&2
 
 # 2. Check Beads for Next Task
-# Assumes 'bd' CLI is available and configured
+# Assumes 'bdx' CLI is available and configured
 # Use 'open' status to capture all candidate tasks.
 # Parse text output (ID is first column) because JSON format is unreliable on some hosts
 # Capture ID and Summary. Text format: ID STATUS PRIORITY SUMMARY
-NEXT_TASK_LINE=$(bd list --status open --limit 1 2>/dev/null | grep -v "Warning" | grep -v "INFO" | grep -E '^[a-z]+-[0-9a-zA-Z]+' | head -n 1)
+NEXT_TASK_LINE=$(bdx list --status open --limit 1 2>/dev/null | grep -v "Warning" | grep -v "INFO" | grep -E '^[a-z]+-[0-9a-zA-Z]+' | head -n 1)
 NEXT_TASK_ID=$(echo "$NEXT_TASK_LINE" | awk '{print $1}')
 NEXT_TASK_SUMMARY=$(echo "$NEXT_TASK_LINE" | awk '{$1=""; $2=""; $3=""; print $0}' | sed 's/^[ \t]*//')
 
@@ -51,9 +51,9 @@ if [ -z "$NEXT_TASK_SUMMARY" ]; then NEXT_TASK_SUMMARY="(No description availabl
 
 if [ -z "$NEXT_TASK_ID" ]; then
     echo "ℹ️  No open tasks found in queue." >&2
-    # Verify we can find ANY tasks to differentiate "queue empty" from "bd failed"
-    if ! command -v bd &> /dev/null; then
-         echo "❌ 'bd' command not found." >&2
+    # Verify we can find ANY tasks to differentiate "queue empty" from "bdx failed"
+    if ! command -v bdx &> /dev/null; then
+         echo "❌ 'bdx' command not found." >&2
          exit 1
     fi
     curl -s -X POST -H "Authorization: Bearer $SLACK_MCP_XOXP_TOKEN" \
