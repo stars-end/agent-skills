@@ -592,8 +592,8 @@ def test_opencode_phase_defaults_are_applied_when_models_unset(tmp_path):
         },
     )
 
-    assert loop.implement_model == "zai-coding-plan/glm-5"
-    assert loop.review_model == "zai-coding-plan/glm-5.1"
+    assert loop.implement_model == "zhipuai/glm-5.1"
+    assert loop.review_model == "zhipuai/glm-5.1"
 
 
 def test_non_opencode_phase_defaults_remain_unset(tmp_path):
@@ -621,7 +621,7 @@ def test_start_implement_uses_implement_runner(tmp_path):
             "cadence_seconds": 0,
             "implement_provider": "opencode",
             "review_provider": "cc-glm",
-            "implement_model": "zai-coding-plan/glm-5",
+            "implement_model": "zhipuai/glm-5.1",
         },
     )
     loop.wave_dir = tmp_path / "waves" / wave_id
@@ -652,7 +652,7 @@ def test_start_implement_uses_implement_runner(tmp_path):
 
     assert loop._start_implement("bd-test") is True
     assert dispatched_provider["provider"] == "opencode"
-    assert dispatched_provider["model"] == "zai-coding-plan/glm-5"
+    assert dispatched_provider["model"] == "zhipuai/glm-5.1"
 
     print("Pillar C: _start_implement uses implement runner with model")
 
@@ -690,7 +690,7 @@ def test_start_review_uses_review_runner(tmp_path):
             "cadence_seconds": 0,
             "implement_provider": "opencode",
             "review_provider": "cc-glm",
-            "review_model": "zai-coding-plan/glm-5.1",
+            "review_model": "zhipuai/glm-5.1",
         },
     )
     loop.wave_dir = tmp_path / "waves" / wave_id
@@ -727,7 +727,7 @@ def test_start_review_uses_review_runner(tmp_path):
 
     assert loop._start_review("bd-test") is True
     assert dispatched_provider["provider"] == "cc-glm"
-    assert dispatched_provider["model"] == "zai-coding-plan/glm-5.1"
+    assert dispatched_provider["model"] == "zhipuai/glm-5.1"
 
     print("Pillar C: _start_review uses review runner with model")
 

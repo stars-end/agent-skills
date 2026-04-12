@@ -57,7 +57,7 @@ class NightlyDispatchConfig:
     # Strict model gating per provider
     PROVIDER_MODELS: Dict[str, List[str]] = field(
         default_factory=lambda: {
-            "opencode": ["zhipuai-coding-plan/glm-5"],  # STRICT - single model ID
+            "opencode": ["zhipuai/glm-5.1"],  # STRICT - single model ID
             "cc-glm": ["cc-glm"],
             "gemini": ["gemini-2.5-pro", "gemini-2.0-flash"],
         }
@@ -279,7 +279,7 @@ class NightlyDispatcher:
         preflight_results: Dict[str, PreflightResult] = {}
 
         # === PRIMARY: OpenCode with strict model gate ===
-        opencode_model = "zhipuai-coding-plan/glm-5"
+        opencode_model = "zhipuai/glm-5.1"
         opencode_result = self.run_preflight("opencode", opencode_model)
         preflight_results["opencode"] = opencode_result
 

@@ -292,11 +292,11 @@ dx-batch doctor --wave-id <wave-id> --json
 
 \`\`\`bash
 # Headless single-run lane
-opencode run -m zhipuai-coding-plan/glm-5 "Implement task T1 from plan.md"
+opencode run -m zhipuai/glm-5.1 "Implement task T1 from plan.md"
 
 # Legacy server lane for parallel clients (opt-in only)
 opencode serve --hostname 127.0.0.1 --port 4096
-opencode run --attach http://127.0.0.1:4096 -m zhipuai-coding-plan/glm-5 "Implement task T2 from plan.md"
+opencode run --attach http://127.0.0.1:4096 -m zhipuai/glm-5.1 "Implement task T2 from plan.md"
 \`\`\`
 
 **Reliability backstop: cc-glm via dx-runner**
@@ -341,7 +341,7 @@ Task:
 - Use \`report --format json\` as the source of truth for outcome and metrics.
 - Prefer one controlled restart max; then escalate using failure taxonomy.
 - Run \`dx-runner prune\` periodically to clear stale PID ghosts.
-- For OpenCode, enforce canonical model \`zhipuai-coding-plan/glm-5\`; fallback provider if unavailable.
+- For OpenCode, enforce canonical model \`zhipuai/glm-5.1\`; fallback provider if unavailable.
 
 ### Monitoring (Simplified)
 

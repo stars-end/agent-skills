@@ -27,26 +27,26 @@ from opencode_preflight import (
 
 class TestModelResolver(unittest.TestCase):
     def test_preferred_available(self) -> None:
-        available = ["zai-coding-plan/glm-5", "zai/glm-4"]
+        available = ["zhipuai/glm-5.1", "zai/glm-4"]
         selected, reason, fallback = resolve_model(
             PREFERRED_MODEL, available, "localhost"
         )
-        self.assertEqual(selected, "zai-coding-plan/glm-5")
+        self.assertEqual(selected, "zhipuai/glm-5.1")
         self.assertEqual(reason, "preferred")
         self.assertIsNone(fallback)
 
-    def test_fallback_on_epyc12(self) -> None:
+    def test_no_model_fallback_on_epyc12(self) -> None:
         available = ["zai/glm-5", "opencode/glm-5-free"]
         selected, reason, fallback = resolve_model(PREFERRED_MODEL, available, "epyc12")
-        self.assertEqual(selected, "zai/glm-5")
-        self.assertEqual(reason, "fallback")
-        self.assertIn("preferred", fallback or "")
+        self.assertEqual(selected, "")
+        self.assertEqual(reason, "unavailable")
+        self.assertIn("required model unavailable", fallback or "")
 
-    def test_deep_fallback_epyc12(self) -> None:
+    def test_no_deep_fallback_epyc12(self) -> None:
         available = ["opencode/glm-5-free", "other/model"]
         selected, reason, fallback = resolve_model(PREFERRED_MODEL, available, "epyc12")
-        self.assertEqual(selected, "opencode/glm-5-free")
-        self.assertEqual(reason, "fallback")
+        self.assertEqual(selected, "")
+        self.assertEqual(reason, "unavailable")
 
     def test_no_available_model(self) -> None:
         available = ["other/model", "another/model"]
@@ -59,8 +59,8 @@ class TestModelResolver(unittest.TestCase):
         selected, reason, fallback = resolve_model(
             PREFERRED_MODEL, available, "unknown-host"
         )
-        self.assertEqual(selected, "zai/glm-5")
-        self.assertEqual(reason, "fallback")
+        self.assertEqual(selected, "")
+        self.assertEqual(reason, "unavailable")
 
 
 class TestAncestryGate(unittest.TestCase):
@@ -137,13 +137,13 @@ class TestPreflightResult(unittest.TestCase):
         result = PreflightResult(
             passed=True,
             reason_code="preflight_ok",
-            selected_model="zai-coding-plan/glm-5",
+            selected_model="zhipuai/glm-5.1",
             selection_reason="preferred",
             fallback_reason=None,
             host="localhost",
             opencode_bin="/usr/bin/opencode",
             opencode_version="1.2.0",
-            available_models=["zai-coding-plan/glm-5"],
+            available_models=["zhipuai/glm-5.1"],
             mise_trusted=True,
             node_version="20.0.0",
             pnpm_version="8.0.0",
@@ -151,7 +151,7 @@ class TestPreflightResult(unittest.TestCase):
             details={},
         )
         d = result.to_dict()
-        self.assertEqual(d["selected_model"], "zai-coding-plan/glm-5")
+        self.assertEqual(d["selected_model"], "zhipuai/glm-5.1")
         self.assertEqual(d["reason_code"], "preflight_ok")
         self.assertTrue(d["passed"])
 

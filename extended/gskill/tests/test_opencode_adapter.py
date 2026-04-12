@@ -6,7 +6,7 @@ from extended.gskill.lib.opencode_adapter import OpenCodeAdapter, OpenCodeConfig
 def test_adapter_config_defaults():
     """Test default configuration."""
     config = OpenCodeConfig()
-    assert config.model == "zhipuai-coding-plan/glm-5"
+    assert config.model == "zhipuai/glm-5.1"
     assert config.timeout == 120
     assert config.max_retries == 2
 

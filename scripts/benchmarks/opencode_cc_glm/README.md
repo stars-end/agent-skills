@@ -44,7 +44,7 @@ Provider-agnostic governed wave runner:
 ```bash
 scripts/benchmarks/opencode_cc_glm/run_governed_benchmark.py \
   --workflows opencode_run_headless,opencode_server_http,opencode_server_attach_run,cc_glm_headless \
-  --model zai-coding-plan/glm-5 \
+  --model zhipuai/glm-5.1 \
   --required-baseline <sha> \
   --reported-commit <sha> \
   --branch feature-bd-cbsb

@@ -12,7 +12,7 @@ Migrate `nightly_dispatch.py` from deprecated `dx-dispatch.py` interface to new 
 
 **Key Changes:**
 - Replace `dx-dispatch.py` subprocess calls with `dx-runner` native integration
-- Implement strict OpenCode model gating (zhipuai-coding-plan/glm-5 only)
+- Implement strict OpenCode model gating (zhipuai/glm-5.1 only)
 - Add provider-level fallback chain (opencode → cc-glm → gemini)
 - Fix claim detection regex for multi-word owner names
 - Use secure temporary files for prompts
@@ -24,7 +24,7 @@ Migrate `nightly_dispatch.py` from deprecated `dx-dispatch.py` interface to new 
 
 ```yaml
 OpenCode:
-  allowed_models: ["zhipuai-coding-plan/glm-5"]  # FIXED: Single model ID, not two tokens
+  allowed_models: ["zhipuai/glm-5.1"]  # FIXED: Single model ID, not two tokens
   behavior: strict_gate  # FAIL if model unavailable, don't fallback within provider
   fallback_provider: cc-glm
 
@@ -39,7 +39,7 @@ gemini:
   fallback_provider: null  # Terminal - alert if unavailable
 ```
 
-**Critical:** OpenCode does NOT fallback to other models. If zhipuai-coding-plan/glm-5 unavailable, route to next provider.
+**Critical:** OpenCode does NOT fallback to other models. If zhipuai/glm-5.1 unavailable, route to next provider.
 
 ---
 
@@ -67,8 +67,8 @@ def select_provider() -> Tuple[str, Optional[str], Dict[str, PreflightResult]]:
     preflight_results: Dict[str, PreflightResult] = {}
     
     # === PRIMARY: OpenCode with strict model gate ===
-    # FIXED: Single model ID "zhipuai-coding-plan/glm-5", not two separate models
-    opencode_model = "zhipuai-coding-plan/glm-5"
+    # FIXED: Single model ID "zhipuai/glm-5.1", not two separate models
+    opencode_model = "zhipuai/glm-5.1"
     opencode_result = run_preflight("opencode", opencode_model)
     preflight_results["opencode"] = opencode_result
     
@@ -328,7 +328,7 @@ class TestDispatchLogicUnit:
         
         # Mock preflight results where OpenCode fails and cc-glm succeeds
         mock_results = {
-            "opencode": PreflightResult("opencode", False, "Model zhipuai-coding-plan/glm-5 rate limited", "zhipuai-coding-plan/glm-5"),
+            "opencode": PreflightResult("opencode", False, "Model zhipuai/glm-5.1 rate limited", "zhipuai/glm-5.1"),
             "cc-glm": PreflightResult("cc-glm", True, None, "cc-glm")
         }
         
@@ -413,7 +413,7 @@ class NightlyDispatchConfig:
     # Strict model gating per provider
     # FIXED: Single model ID for OpenCode
     PROVIDER_MODELS = {
-        "opencode": ["zhipuai-coding-plan/glm-5"],  # STRICT - single model ID
+        "opencode": ["zhipuai/glm-5.1"],  # STRICT - single model ID
         "cc-glm": ["cc-glm"],
         "gemini": ["gemini-2.5-pro", "gemini-2.0-flash"]
     }
@@ -466,7 +466,7 @@ T+72h: Archive legacy dx-dispatch.py references
 
 ## Verification Checklist
 
-- [ ] P0: OpenCode model ID is single token "zhipuai-coding-plan/glm-5", not split
+- [ ] P0: OpenCode model ID is single token "zhipuai/glm-5.1", not split
 - [ ] P0: dx-runner commands use correct syntax (no --dry-run, check --beads, stop not kill)
 - [ ] P0: Fallback reason uses dict lookup by provider name, not brittle list indices
 - [ ] P0: Strict OpenCode model gate documented and enforced
@@ -495,7 +495,7 @@ T+72h: Archive legacy dx-dispatch.py references
 
 | Decision | Value | Rationale | Date |
 |----------|-------|-----------|------|
-| OpenCode model | **zhipuai-coding-plan/glm-5** (single ID) | Correct model identifier format | 2026-02-19 |
+| OpenCode model | **zhipuai/glm-5.1** (single ID) | Correct model identifier format | 2026-02-19 |
 | Fallback chain | opencode→cc-glm→gemini | Matches current governance and quality backstop | 2026-02-19 |
 | Ack timeout | **45s** with 1 retry | Safer under transient host load (changed from 30s) | 2026-02-19 |
 | MAX_PARALLEL | **1** for 48h, then 2 | Migration safety, auto-restore after clean runs | 2026-02-19 |
