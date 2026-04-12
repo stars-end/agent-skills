@@ -1,7 +1,7 @@
 ---
 name: merge-pr
 description: |
-  Prepare PR for merge and guide human to merge via GitHub web UI. MUST BE USED when user wants to merge a PR.
+  Prepare PR for merge and either guide human web UI merge or execute a direct merge after explicit HITL approval. MUST BE USED when user wants to merge a PR.
   Verifies CI passing, verifies Beads issue already closed (from PR creation), and provides merge instructions.
   Issue closure happens at PR creation time (create-pull-request skill), NOT at merge time.
   Use when user says "merge the PR", "merge it", "merge this", "ready to merge", "merge to master",
@@ -17,25 +17,26 @@ allowed-tools:
 
 # Merge Pull Request
 
-Prepare PR for human merge via GitHub web UI (<30 seconds prep).
+Prepare PR for merge via GitHub web UI or direct `gh pr merge` when the user gives explicit current-session HITL approval.
 
 ## Purpose
 
 Final step in V3 workflow: commit → create PR → fix PR → **merge PR**
 
-**Philosophy:** AI prepares, human executes merge (trust + safety)
+**Philosophy:** auto-merge stays disabled; a merge happens only after the user gives explicit HITL approval for this PR.
 
 Handles:
 - Verify CI passing (all checks green)
 - Verify approvals (recommended but not required)
 - Check working tree clean
 - **Verify Beads issue already closed** (NOT close it - that happens at PR creation)
-- Provide merge instructions for web UI
+- Provide merge instructions for web UI, or perform direct merge after explicit HITL approval
 - Post-merge cleanup (switch to master, sync Beads, cache docs)
 
-**Human responsibility:**
-- Execute merge via GitHub web UI
-- Delete remote branch (via web UI)
+**Merge authority:**
+- Default: provide web UI instructions and wait for the human to merge
+- HITL-approved direct merge: use `gh pr merge` only when the user explicitly asks the agent to merge this PR in the current session
+- Never enable GitHub auto-merge (`gh pr merge --auto` or equivalent)
 
 ## When to Use This Skill
 
@@ -172,9 +173,11 @@ echo ""
 - **Prevents hook conflicts:** All Beads state changes on feature branch
 - **Clear workflow:** Closed = "ready to ship", Open = "work in progress"
 
-### 5. Present Merge Instructions to User (MANDATORY)
+### 5. Obtain Merge Approval
 
-**This confirmation is REQUIRED. Provide web UI link and clear instructions.**
+**Explicit HITL approval is REQUIRED before any merge.**
+
+Default path: provide web UI link and clear instructions.
 
 ```
 ✅ PR #156 Ready to Merge
@@ -208,18 +211,23 @@ Status:
 After you merge, say "cleanup" and I'll switch to master and pull latest.
 ```
 
-**Why human merges:**
-- GitHub web UI handles squash reliably
-- User sees final commit message before merge
-- No risk of `gh pr merge` local cleanup failures
-- User controls exact timing of merge
-- Web UI provides visual confirmation
+Direct merge path: if the user explicitly says the agent should merge this PR, run a direct merge after the readiness gates pass.
 
-### 6. Wait for Human to Merge
+```bash
+gh pr merge "$PR_NUMBER" --squash --delete-branch \
+  --subject "$SQUASH_SUBJECT" \
+  --body "$SQUASH_BODY"
+```
 
-**Do not proceed automatically. Wait for:**
+If elevated permissions are required and the user already gave explicit HITL approval, `--admin` is acceptable. Do not use `--auto`.
+
+### 6. Merge Or Wait
+
+If using the default web UI path, do not proceed automatically. Wait for:
 - User confirmation: "merged" / "done" / "cleanup"
 - User explicitly asks to verify merge succeeded
+
+If using the HITL-approved direct merge path, verify the merge immediately and continue cleanup.
 
 ### 7. Post-Merge Cleanup (After User Confirms)
 
@@ -385,8 +393,8 @@ Ready for next feature.
 
 1. **Verify issue already closed** - Should be closed at PR creation time
 2. **Clean working tree** - No uncommitted changes before verification
-3. **Human merges** - Trust web UI reliability
-4. **Wait for confirmation** - Don't assume merge happened
+3. **Explicit HITL approval** - Either human merges in web UI or explicitly asks the agent to merge this PR
+4. **Wait or verify** - Wait for web UI confirmation, or verify immediately after direct merge
 5. **Verify merge** - Check PR state before cleanup
 6. **Sync Beads after** - Import closure from master
 7. **Pre-merge closure pattern** - issue already closed before merge, no post-merge tracker mutations
@@ -396,17 +404,17 @@ Ready for next feature.
 ✅ Verify PR merge-readiness (CI, approvals, conflicts)
 ✅ Check working tree clean (block if dirty)
 ✅ **Verify Beads issue already closed** (error if not)
-✅ Provide merge instructions with web UI link
-✅ Wait for human to merge
+✅ Provide merge instructions with web UI link by default
+✅ Execute direct merge only after explicit current-session HITL approval
 ✅ Clean up local workspace after merge
 ✅ Sync Beads state from master
 ✅ Auto-cache docs to Serena (if exist)
 
 ## What This Skill DOESN'T Do
 
-❌ Merge PR automatically (human does via web UI)
-❌ Delete remote branch (human does via web UI checkbox)
-❌ Skip user confirmation (always waits for "merged" confirmation)
+❌ Enable GitHub auto-merge
+❌ Merge without explicit current-session HITL approval
+❌ Skip readiness gates
 ❌ **Close Beads issue** (already closed at PR creation time by create-pull-request skill)
 ❌ Push to master (never, pre-push hook blocks)
 ❌ Perform merge-time tracker mutations on master
@@ -585,5 +593,6 @@ AI:
 
 **Changelog:**
 - 2026-03-08: Updated canonical skill routing, removed legacy path references
+- 2026-04-12: Clarified that direct agent merge is allowed after explicit current-session HITL approval; GitHub auto-merge remains forbidden.
 - 2025-11-13: Initial creation with CI verification, approval checking, mandatory user confirmation
-- 2025-11-13: **BREAKING** - Changed to human-merge workflow (Option A). AI prepares (closes Beads on feature branch), human merges via web UI, AI cleans up after confirmation. Fixes gh pr merge local cleanup failures.
+- 2025-11-13: **BREAKING** - Changed to human-merge workflow (Option A). AI prepares (closes Beads on feature branch), human merges via web UI, AI cleans up after confirmation. Superseded by 2026-04-12 HITL-approved direct merge allowance.

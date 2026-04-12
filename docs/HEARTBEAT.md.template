@@ -62,7 +62,7 @@ Last run: never
 When reading this section, consider:
 1. Rescue branch events indicate canonical workflow violations (often direct canonical edits)
 2. Missing Feature-Key means commits aren't linked to beads issues
-3. Auto-merge should NEVER be enabled (humans merge)
+3. GitHub auto-merge should NEVER be enabled; direct agent merge requires explicit current-session HITL approval
 4. Stale PRs may indicate blocked work or forgotten branches
 5. Look for TRENDS: is the situation improving or degrading?
 

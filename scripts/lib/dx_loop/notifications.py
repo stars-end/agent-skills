@@ -2,7 +2,7 @@
 dx-loop low-noise operator notification policy
 
 Emits interrupts only for:
-- merge_ready: Ready for human merge
+- merge_ready: Ready for HITL merge approval
 - blocked: Execution blocked (kickoff_env, run, review)
 - needs_decision: Requires human decision
 
@@ -111,7 +111,7 @@ class NotificationManager:
     Manages low-noise operator notifications
 
     Only emits notifications for actionable states:
-    - merge_ready (ready for human merge)
+    - merge_ready (ready for HITL merge approval)
     - blocked (execution blocked)
     - needs_decision (requires human input)
 

@@ -14,7 +14,7 @@ blockers are suppressed to preserve operator focus.
 
 | State | Emitted? | Rationale |
 |-------|----------|-----------|
-| `merge_ready` | ✅ Always | Ready for human merge approval |
+| `merge_ready` | ✅ Always | Ready for HITL merge approval |
 | `kickoff_env_blocked` | ✅ First occurrence | Bootstrap/worktree/host gates failed |
 | `run_blocked` | ✅ First occurrence | dx-runner execution blocked |
 | `review_blocked` | ✅ First occurrence | Review verdict blocked implementation |
