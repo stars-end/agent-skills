@@ -190,11 +190,11 @@ if [[ $HARDCODED_TOKENS -eq 0 ]]; then
 fi
 
 # ============================================================
-# Guard 5: Reject raw OP commands in delegation/baseline surfaces
+# Guard 5: Reject raw OP commands in agent-facing surfaces unless explicitly marked
 # ============================================================
 
 echo ""
-echo "[5/5] Scanning delegation/baseline surfaces for raw OP command snippets..."
+echo "[5/5] Scanning agent-facing surfaces for raw OP command snippets..."
 
 RAW_OP_DOC_ISSUES=0
 while IFS= read -r file; do
@@ -202,9 +202,9 @@ while IFS= read -r file; do
     while IFS= read -r match; do
         line_no="${match%%:*}"
         line_text="${match#*:}"
-        start=$((line_no>6 ? line_no-6 : 1))
-        context="$(sed -n "${start},${line_no}p" "$file" | tr '[:upper:]' '[:lower:]')"
-        if echo "$context" | grep -Eq "human fallback only|human recovery only|interactive auth \(human fallback only\)|manual bootstrap"; then
+        start=$((line_no>2 ? line_no-2 : 1))
+        context="$(sed -n "${start},${line_no}p" "$file")"
+        if echo "$context" | grep -q "HUMAN_RECOVERY_ONLY"; then
             continue
         fi
         echo "🚨 GUARD VIOLATION: raw OP command snippet in delegation/baseline surface"
@@ -215,9 +215,12 @@ while IFS= read -r file; do
         RAW_OP_DOC_ISSUES=$((RAW_OP_DOC_ISSUES+1))
     done < <(grep -nE '^[[:space:]]*op[[:space:]]+(read|whoami|item[[:space:]]+(get|list))\b' "$file" || true)
 done < <(printf '%s\n' \
+    "$REPO_ROOT/core/op-secrets-quickref/SKILL.md" \
     "$REPO_ROOT/extended/prompt-writing/SKILL.md" \
     "$REPO_ROOT/scripts/publish-baseline.zsh" \
-    "$REPO_ROOT/dist/universal-baseline.md")
+    "$REPO_ROOT/dist/universal-baseline.md" \
+    "$REPO_ROOT/dist/dx-global-constraints.md" \
+    "$REPO_ROOT/AGENTS.md")
 
 if [[ $RAW_OP_DOC_ISSUES -eq 0 ]]; then
     echo "✅ No forbidden raw OP command snippets found in delegation/baseline surfaces"

@@ -218,6 +218,7 @@ DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Producti
 
 Use only for a human terminal recovery flow, not for agents:
 ```bash
+# HUMAN_RECOVERY_ONLY
 eval $(op signin)
 ```
 
@@ -227,6 +228,7 @@ eval $(op signin)
 
 List items in the `dev` vault during manual recovery only:
 ```bash
+# HUMAN_RECOVERY_ONLY
 op item list --vault dev
 ```
 
@@ -234,11 +236,13 @@ op item list --vault dev
 
 Get field labels for an item using grep/cut (no jq needed) in manual recovery:
 ```bash
+# HUMAN_RECOVERY_ONLY
 op item get --vault dev Agent-Secrets-Production --format json | grep -o '"label":"[^"]*"' | cut -d'"' -f4
 ```
 
 Alternative using op's native field output:
 ```bash
+# HUMAN_RECOVERY_ONLY
 op item get --vault dev Agent-Secrets-Production --fields label
 ```
 
@@ -247,6 +251,7 @@ op item get --vault dev Agent-Secrets-Production --fields label
 For explicit human bootstrap/recovery only:
 
 ```bash
+# HUMAN_RECOVERY_ONLY
 op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
 ```
 
@@ -331,6 +336,7 @@ gh auth status  # Should show: ✓ Logged in to github.com (GH_TOKEN)
 ### Read Multiple Fields at Once (Human Recovery Only)
 
 ```bash
+# HUMAN_RECOVERY_ONLY
 op item get --vault dev Agent-Secrets-Production --fields ZAI_API_KEY,RAILWAY_API_TOKEN,GITHUB_TOKEN
 ```
 
@@ -353,10 +359,7 @@ If cache/service-account auth is unavailable in agent mode, fail closed and retu
 If a secret belongs to the deployed app or service runtime, do **not** invent a 1Password path for it.
 
 Wrong:
-
-```bash
-op read "op://dev/prime-radiant-dev/EODHD_CRON_SHARED_SECRET"
-```
+Raw `op read` against an invented app-runtime secret path (human recovery examples stay in the appendix only).
 
 Right:
 
