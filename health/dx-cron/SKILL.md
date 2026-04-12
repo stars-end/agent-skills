@@ -44,6 +44,11 @@ ls -lhrt ~/logs/*.log ~/logs/dx/*.log | tail -5
 # Verify service-account auth using canonical host alias resolution
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami \
   >/dev/null 2>&1 && echo "✅ OP service account valid" || echo "❌ OP service account invalid"
+
+# Verify canonical repos use SSH remotes for non-interactive rescue pushes
+for r in agent-skills prime-radiant-ai affordabot llm-common; do
+  git -C ~/"$r" remote get-url origin 2>/dev/null || true
+done
 ```
 
 ### 3. Debugging: `dx-cron tail <job>`
@@ -65,6 +70,9 @@ Tails the last 20 lines of a specific log.
 - Rapidly scans crontab for DX-related processes.
 - Surfaces log file staleness (did it run recently?).
 - Provides shortcuts for log inspection.
+- Highlights canonical cleanup preconditions:
+  - canonical repo origins should be `git@github.com:stars-end/<repo>.git`
+  - cron cleanup logs should not be polluted by mise trust/shim errors
 
 ## Examples
 - `dx cron list`

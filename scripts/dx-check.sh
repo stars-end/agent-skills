@@ -171,6 +171,7 @@ while [ -L "$SOURCE" ]; do
     [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+source "${SCRIPT_DIR}/lib/canonical-git-remotes.sh"
 
 echo -e "${BLUE}🩺 Running DX Health Check...${RESET}"
 
@@ -234,6 +235,58 @@ else
         needs_fix=1
     else
         echo -e "${GREEN}✅ bdx coordination path healthy.${RESET}"
+    fi
+fi
+
+# Canonical cron rescue pushes must use non-interactive GitHub SSH remotes.
+CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common)
+canonical_repo_present=0
+canonical_repo_ssh_ready=0
+for repo in "${CANONICAL_REPOS[@]}"; do
+    repo_path="$HOME/$repo"
+    [[ -d "$repo_path/.git" ]] || continue
+    canonical_repo_present=1
+
+    remote_result="$(canonical_ensure_origin_ssh "$repo" "$repo_path" "fix")"
+    remote_status="${remote_result%%|*}"
+    remote_current="$(echo "$remote_result" | cut -d'|' -f2)"
+    remote_expected="$(echo "$remote_result" | cut -d'|' -f3)"
+
+    case "$remote_status" in
+        ssh_ok)
+            canonical_repo_ssh_ready=1
+            echo -e "${GREEN}✅ $repo origin uses SSH: ${remote_current}${RESET}"
+            ;;
+        converted)
+            canonical_repo_ssh_ready=1
+            echo -e "${YELLOW}⚠️  $repo origin auto-converted to SSH for cron safety.${RESET}"
+            echo "   ${remote_current} -> ${remote_expected}"
+            ;;
+        unsupported_origin)
+            echo -e "${RED}❌ $repo origin is not canonical SSH and cannot be auto-converted.${RESET}"
+            echo "   Current: ${remote_current}"
+            echo "   Expected: ${remote_expected}"
+            echo "   Fix: git -C \"$repo_path\" remote set-url origin \"$remote_expected\""
+            needs_fix=1
+            ;;
+        set_failed)
+            echo -e "${RED}❌ $repo origin conversion to SSH failed.${RESET}"
+            echo "   Attempted: ${remote_current} -> ${remote_expected}"
+            needs_fix=1
+            ;;
+        missing_origin|read_failed)
+            echo -e "${YELLOW}⚠️  $repo origin remote unavailable; skipping SSH cron push preflight.${RESET}"
+            ;;
+    esac
+done
+
+if [[ "$canonical_repo_present" -eq 1 && "$canonical_repo_ssh_ready" -eq 1 ]]; then
+    if canonical_github_ssh_smoke "agent-skills" "8"; then
+        echo -e "${GREEN}✅ GitHub SSH non-interactive push path looks healthy.${RESET}"
+    else
+        echo -e "${RED}❌ GitHub SSH preflight failed for non-interactive cron push path.${RESET}"
+        echo "   Fix: ensure SSH key auth works (e.g. ssh -T git@github.com) and rerun dx-check."
+        needs_fix=1
     fi
 fi
 

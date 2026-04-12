@@ -24,6 +24,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/dx-slack-alerts.sh"
+source "$SCRIPT_DIR/lib/canonical-git-remotes.sh"
+
+# Cron cleanup should avoid user-level shims (e.g., mise) to keep git-only
+# maintenance deterministic across fresh devices.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 STATE_DIR="$HOME/.dx-state"
 STATE_FILE="$STATE_DIR/dirty-incidents.json"
@@ -572,6 +577,25 @@ process_repo() {
   log "Checking $repo..."
 
   [[ -d "$repo_path/.git" ]] || return 0
+
+  # Keep canonical rescue push non-interactive by ensuring SSH remotes for
+  # managed stars-end canonical repos when conversion is safe.
+  local remote_status remote_current remote_expected remote_result
+  remote_result="$(canonical_ensure_origin_ssh "$repo" "$repo_path" "fix")"
+  remote_status="${remote_result%%|*}"
+  remote_current="$(echo "$remote_result" | cut -d'|' -f2)"
+  remote_expected="$(echo "$remote_result" | cut -d'|' -f3)"
+  case "$remote_status" in
+    converted)
+      log "OK: $repo origin normalized to SSH ($remote_current -> $remote_expected)"
+      ;;
+    set_failed)
+      log "ERROR: $repo failed to normalize origin to SSH ($remote_current -> $remote_expected); push may fail"
+      ;;
+    unsupported_origin)
+      log "WARN: $repo origin is not canonical SSH and was not changed ($remote_current); expected $remote_expected"
+      ;;
+  esac
 
   if is_locked "$repo_path"; then
     log "SKIP: $repo (locked)"

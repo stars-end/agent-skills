@@ -18,6 +18,11 @@ set -euo pipefail
 # Configuration
 CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/canonical-git-remotes.sh"
+
+# Keep cron cleanup deterministic and independent from user-level shim PATH.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
+
 STATE_DIR="$HOME/.dx-state"
 RECOVERY_LOG="$STATE_DIR/recovery-commands.log"
 CANONICAL_SYNC_SKIP_REASON_PREFIX="skip"
@@ -241,6 +246,23 @@ process_repo() {
     fi
 
     cd "$repo_path"
+
+    local remote_status remote_current remote_expected remote_result
+    remote_result="$(canonical_ensure_origin_ssh "$repo" "$repo_path" "fix")"
+    remote_status="${remote_result%%|*}"
+    remote_current="$(echo "$remote_result" | cut -d'|' -f2)"
+    remote_expected="$(echo "$remote_result" | cut -d'|' -f3)"
+    case "$remote_status" in
+        converted)
+            log "$repo: Normalized origin to SSH ($remote_current -> $remote_expected)"
+            ;;
+        set_failed)
+            warn "$repo: Failed to normalize origin to SSH ($remote_current -> $remote_expected)"
+            ;;
+        unsupported_origin)
+            warn "$repo: Non-canonical origin unchanged ($remote_current), expected $remote_expected"
+            ;;
+    esac
 
     # Fetch origin master
     if [[ "$DRY_RUN" == false ]]; then

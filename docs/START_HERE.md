@@ -51,7 +51,14 @@ After running setup or repair:
 ```bash
 # Verify installation
 bdx dolt test --json
+# Verify canonical GitHub SSH push path for cron rescue jobs
+dx-check
 ```
+
+`dx-check` now auto-normalizes canonical repo `origin` URLs from
+`https://github.com/stars-end/<repo>.git` to
+`git@github.com:stars-end/<repo>.git` when safe, and fails preflight if
+non-interactive GitHub SSH auth is unavailable.
 
 DX command contract:
 - `dx-check` is the default health + fix entrypoint.
@@ -87,6 +94,10 @@ git push
 
 V8 uses worktree discipline, canonical sync, and scheduled DX hygiene jobs.
 Auto-checkpoint is not part of the active bootstrap contract.
+
+Canonical cleanup cron scripts run with a conservative system PATH to avoid
+user-level shim noise (for example, mise trust warnings) during git-only
+maintenance tasks.
 
 ---
 
