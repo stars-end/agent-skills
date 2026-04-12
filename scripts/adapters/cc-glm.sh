@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # cc-glm adapter for dx-runner
 #
-# Implements the adapter contract for Claude via Z.ai
+# Implements the adapter contract for the Z.ai/GLM cc-glm wrapper.
+# This is not native Claude Code provider support; the claude binary is the
+# compatibility transport used by cc-glm-headless.sh.
 #
 # Required functions:
 #   adapter_start        - Start a job
@@ -11,7 +13,7 @@
 #   adapter_probe_model  - Test model availability
 #   adapter_list_models  - List available models
 #   adapter_resolve_model - Resolve model with fallback (parity)
-#   adapter_find_cc_glm  - Find Claude binary (parity)
+#   adapter_find_cc_glm  - Find claude transport binary (parity)
 #
 # Exit codes (parity with opencode):
 #   25 - Model unavailable

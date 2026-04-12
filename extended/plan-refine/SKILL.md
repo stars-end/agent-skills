@@ -80,7 +80,7 @@ Then commit the plan to git to lock in the architecture.
 - Attach the final plan to the Beads issue (or reference the commit).
 
 ### With cc-glm
-- This skill uses `cc-glm` configuration (Claude 3.5 Sonnet/Opus) to perform the critique, ensuring high-reasoning capability.
+- This skill uses the `cc-glm` Z.ai/GLM wrapper lane to perform the critique, ensuring high-reasoning capability without implying native Claude Code provider support.
 
 ## Examples
 

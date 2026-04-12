@@ -35,7 +35,8 @@ Distribute external beads database via `BEADS_DIR` environment variable across a
 
 | IDE | Primary VM | Config Location | Status |
 |-----|------------|-----------------|--------|
-| Claude Code | homedesktop-wsl | `cc-glm` alias | ✅ Active |
+| Claude Code | homedesktop-wsl | native Claude Code config | ⚠️ Not managed by dx-runner |
+| cc-glm | homedesktop-wsl | Z.ai/GLM wrapper around `claude` transport | ✅ Active |
 | Antigravity | homedesktop-wsl | `~/.gemini/antigravity/mcp_config.json` (MCP) | ✅ Active |
 | Codex CLI | homedesktop-wsl | `~/.codex/config.toml` | ✅ Active |
 | Gemini CLI | homedesktop-wsl | `~/.gemini-cli/config.json` | ✅ Active |

@@ -4,7 +4,7 @@ description: |
   Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution.
   Batch by outcome (not file). Primary dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures.
   Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution.
-tags: [workflow, delegation, automation, claude-code, glm, parallel, fallback, reliability, opencode]
+tags: [workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode]
 allowed-tools:
   - Bash
   - Task
@@ -21,6 +21,8 @@ allowed-tools:
 - Primary throughput lane: OpenCode headless CLI (`opencode run`)
 - Reliability backstop lane: cc-glm via `dx-runner --provider cc-glm` with baseline/integrity/feature-key gates
 - Use cc-glm when OpenCode misses SLOs, fails governance gates, or the wave is marked critical
+
+`cc-glm` is **not native Claude Code provider support**. It is the existing Z.ai/GLM wrapper path that uses the `claude` CLI as a transport with explicit Z.ai auth/routing and `glm-*` models. Do not infer Anthropic account auth, Claude Code model aliases, or generic Claude Code session semantics from `dx-runner --provider cc-glm`.
 
 Legacy direct controls (`cc-glm-job.sh`) are still available for low-level troubleshooting, but orchestration defaults to `dx-runner`.
 

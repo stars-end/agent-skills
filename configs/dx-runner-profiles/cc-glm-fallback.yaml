@@ -3,7 +3,7 @@
 
 profile:
   name: cc-glm-fallback
-  description: Reliability backstop using Claude via Z.ai
+  description: Reliability backstop using the Z.ai/GLM cc-glm wrapper
   version: "1.0.0"
 
 provider:

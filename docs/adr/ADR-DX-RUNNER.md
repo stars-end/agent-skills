@@ -20,7 +20,7 @@ This creates:
 ## Decision
 
 Replace overlapping dispatch planes with ONE canonical lean runner (`dx-runner`) routing to 3 providers:
-- `cc-glm`: Claude via Z.ai (proven reliability backstop)
+- `cc-glm`: Z.ai/GLM wrapper lane (proven reliability backstop)
 - `opencode`: OpenCode headless (primary throughput lane)
 - `gemini`: Gemini CLI (future capacity)
 

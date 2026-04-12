@@ -40,7 +40,7 @@ Legend:
 - `N/A`: client not required on that host
 - `FAIL`: missing/incorrect visibility
 
-| Host | Claude (`claude/cc-glm mcp list`) | Gemini (`gemini mcp list`) | OpenCode (`opencode mcp list`) | Codex (`codex mcp list`) |
+| Host | Claude Code (`claude mcp list`) | Gemini (`gemini mcp list`) | OpenCode (`opencode mcp list`) | Codex (`codex mcp list`) |
 |------|-----------------------------------|------------------------------|----------------------------------|---------------------------|
 | `macmini` | `PASS` (connected) | `PASS` (connected) | `PASS` (connected) | `PASS` (listed+enabled) |
 | `epyc6` | `PASS` (connected) | `PASS` (connected) | `PASS` (connected) | `N/A` (optional on Linux) |

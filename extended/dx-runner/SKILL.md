@@ -16,9 +16,11 @@ allowed-tools:
 `dx-runner` is the **canonical entrypoint** for all agent dispatch. It provides:
 
 - **Single command surface**: start/status/check/restart/stop/watchdog/report/preflight
-- **Multi-provider support**: cc-glm (reliability backstop), opencode (primary throughput), gemini (future)
+- **Multi-provider support**: cc-glm (Z.ai/GLM reliability backstop), opencode (primary throughput), gemini (future)
 - **Unified governance**: preflight, permission gates, no-op detection, baseline/integrity/feature-key gates
 - **Deterministic outputs**: Machine-readable JSON with stable schemas
+
+Native Claude Code dispatch is not implemented as a `dx-runner` provider yet. The `cc-glm` provider is the Z.ai/GLM wrapper lane, not Anthropic Claude Code support.
 
 OpenCode behavior in this skill is grounded in official docs and live CLI help:
 - [OpenCode CLI docs](https://opencode.ai/docs/cli/)
@@ -228,7 +230,7 @@ Canonical repos are clean mirrors. Use: dx-worktree create bd-xxx agent-skills
 
 ### cc-glm (Reliability Backstop)
 
-Claude via Z.ai. Proven patterns from cc-glm-job.sh.
+Z.ai/GLM wrapper lane using `cc-glm-headless.sh` and proven patterns from `cc-glm-job.sh`. This is not native Claude Code provider support.
 
 ```bash
 dx-runner start --beads bd-xxx --provider cc-glm --prompt-file /tmp/task.prompt

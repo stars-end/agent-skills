@@ -8,7 +8,7 @@
 ## Context and Pain Points
 
 Prior to DX V8, the agent dispatch landscape was fragmented across multiple independent execution planes:
-- `cc-glm-job.sh`: Specialized for Claude dispatch via Z.ai with internal governance.
+- `cc-glm-job.sh`: Specialized for the Z.ai/GLM cc-glm wrapper with internal governance.
 - `opencode` CLI: Direct interaction with OpenCode headless, lacking project-specific gates.
 - `gemini` CLI: Newest provider with inconsistent logging and metadata formats.
 

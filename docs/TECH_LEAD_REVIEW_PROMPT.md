@@ -153,6 +153,6 @@ Please review and confirm:
 
 ---
 
-**Prepared by:** Claude (cc-glm)
+**Prepared by:** cc-glm
 **Date:** 2026-01-24
 **Status:** Awaiting tech-lead review
