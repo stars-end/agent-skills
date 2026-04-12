@@ -12,6 +12,7 @@ HOME_DIR="$TEST_DIR/home"
 ORIGIN="$TEST_DIR/origin.git"
 SCRIPT_OUTPUT="$TEST_DIR/canonical-evacuate.out"
 TEST_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+FAKE_BIN="$TEST_DIR/fake-bin"
 
 cleanup() {
   cd / >/dev/null 2>&1 || true
@@ -48,6 +49,19 @@ assert_missing() {
 }
 
 mkdir -p "$HOME_DIR" "$TEST_DIR/seed"
+mkdir -p "$FAKE_BIN"
+cat >"$FAKE_BIN/git" <<'EOF'
+#!/usr/bin/env bash
+echo "FAKE_SHIM_HIT: git" >&2
+exit 97
+EOF
+cat >"$FAKE_BIN/python3" <<'EOF'
+#!/usr/bin/env bash
+echo "FAKE_SHIM_HIT: python3" >&2
+exit 98
+EOF
+chmod +x "$FAKE_BIN/git" "$FAKE_BIN/python3"
+
 git -c init.defaultBranch=master init --bare "$ORIGIN" >/dev/null
 
 git -C "$TEST_DIR/seed" -c init.defaultBranch=master init >/dev/null
@@ -92,7 +106,7 @@ dirty rescue content
 EOF
 
 HOME="$HOME_DIR" \
-PATH="$TEST_PATH" \
+PATH="$FAKE_BIN:$TEST_PATH" \
 DIRTY_EVICT_MINUTES=0 \
 DIRTY_WARN_MINUTES=0 \
 "$AGENTS_ROOT/scripts/canonical-evacuate-active.sh" >"$SCRIPT_OUTPUT"
@@ -110,3 +124,9 @@ echo "PASS: rescue branch preserves dirty content"
 
 git --git-dir="$ORIGIN" log -1 --format=%B "$rescue_ref" | grep -q "Feature-Key: bd-rescue"
 echo "PASS: rescue commit uses hook-compatible Feature-Key"
+
+if grep -q "FAKE_SHIM_HIT" "$SCRIPT_OUTPUT"; then
+  echo "FAIL: canonical-evacuate-active used shimmed git/python3 from PATH" >&2
+  exit 1
+fi
+echo "PASS: canonical-evacuate-active bypasses shimmed PATH tools"

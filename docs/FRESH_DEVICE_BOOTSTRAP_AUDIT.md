@@ -26,6 +26,9 @@ that should be deprecated or converted to shims.
   - `epyc12` is the unattended OP cache refresh hub; consumer hosts should be
     cache-only whenever possible.
 - Schedules: cron/systemd by host role; no LaunchAgent `ru` policy on macOS.
+- Canonical Git remotes: canonical repos on each host should use GitHub SSH
+  origins (`git@github.com:stars-end/<repo>.git`) so non-interactive cleanup
+  cron rescue pushes never block on HTTPS credential prompts.
 - Shell startup: no health checks, MCP checks, browser dashboards, or service
   starts from `.zshrc`, `.zshenv`, `.bashrc`, or `.bash_profile`.
 
