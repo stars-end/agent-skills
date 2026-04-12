@@ -20,6 +20,10 @@ Keep secrets out of repos and dotfiles. Use 1Password `op://...` references and 
 - Tool calls do **not** share shell exports reliably. If auth needs to survive across tool calls, prefer cache/service-account mode from `scripts/lib/dx-auth.sh` and keep OP/Railway auth inside the same shell invocation.
 - If you need Railway in automation, load `RAILWAY_API_TOKEN` from the synced cache or service-account refresh in the **same command invocation**.
 - Do not treat macOS 1Password GUI unlock as agent readiness. It proves only `human_interactive_only`.
+- For agent sessions (especially macOS), raw `op read`, `op item get`, `op item list`, and `op whoami` are forbidden for routine secret access.
+- Agent-safe secret reads must use cache/service-account helpers, preferably `DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached ...`.
+- If cache/service-account auth is unavailable, fail closed with a blocker. Do not fall back to GUI-backed `op` in agent workflows.
+- Do not run OP retry loops unless the task is explicitly auth-repair.
 - Prefer the canonical status helper before diagnosing:
 
 ```bash
@@ -147,15 +151,14 @@ export OP_SERVICE_ACCOUNT_TOKEN="$(systemd-creds decrypt ~/.config/systemd/user/
 export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-macmini-token)"
 ```
 
-### Step 4: Verify Auth
+### Step 4: Verify Agent-Safe Mode
 
 ```bash
-op whoami
+~/agent-skills/scripts/dx-op-auth-status.sh --json
 ```
 
-For agent-safe service-account mode, expected output is `ServiceAccount: ...`.
-For macOS human setup, `op whoami` may show an interactive account; that is
-valid for manual bootstrap only.
+For agent workflows, accept `agent_ready_cache` or `agent_ready_service_account`.
+Use `op whoami` only in explicit human bootstrap/recovery sessions.
 
 ### macOS GUI Bootstrap
 
@@ -199,19 +202,16 @@ Treat these as different problems:
   - service-account auth succeeded, but 1Password is rate-limiting the client
 
 For rate limits:
-- stop repeated `op item list`, `op item get`, `op item create`, and `op read` loops
+- stop repeated raw OP loops (`op item list`, `op item get`, `op item create`, `op read`)
 - batch reads where possible
 - wait and retry with backoff instead of assuming auth is broken
 
-Minimal retry pattern:
+Agent-safe check pattern:
 
 ```bash
-for delay in 5 15 30; do
-  if op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN" >/dev/null; then
-    break
-  fi
-  sleep "$delay"
-done
+source scripts/lib/dx-auth.sh
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN" >/dev/null \
+  || { echo "BLOCKED: cache_unavailable"; exit 1; }
 ```
 
 ### Interactive Auth (Human Fallback Only)
@@ -221,18 +221,18 @@ Use only for a human terminal recovery flow, not for agents:
 eval $(op signin)
 ```
 
-## Common Commands (No jq Required)
+## Common Commands (Human Recovery Only; Not Agent Routine)
 
 ### List Items (Titles Only)
 
-List items in the `dev` vault:
+List items in the `dev` vault during manual recovery only:
 ```bash
 op item list --vault dev
 ```
 
 ### List Field Labels (No Secret Values)
 
-Get field labels for an item using grep/cut (no jq needed):
+Get field labels for an item using grep/cut (no jq needed) in manual recovery:
 ```bash
 op item get --vault dev Agent-Secrets-Production --format json | grep -o '"label":"[^"]*"' | cut -d'"' -f4
 ```
@@ -244,7 +244,7 @@ op item get --vault dev Agent-Secrets-Production --fields label
 
 ### Read a Single Secret (interactive / one-shot)
 
-For occasional manual use, `op read` is fine:
+For explicit human bootstrap/recovery only:
 
 ```bash
 op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
@@ -328,7 +328,7 @@ gh auth status  # Should show: ✓ Logged in to github.com (GH_TOKEN)
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- railway status
 ```
 
-### Read Multiple Fields at Once
+### Read Multiple Fields at Once (Human Recovery Only)
 
 ```bash
 op item get --vault dev Agent-Secrets-Production --fields ZAI_API_KEY,RAILWAY_API_TOKEN,GITHUB_TOKEN
@@ -342,12 +342,10 @@ op item get --vault dev Agent-Secrets-Production --fields ZAI_API_KEY,RAILWAY_AP
 ~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 ```
 
-If you must do it manually, keep both steps in the same shell invocation:
+If cache/service-account auth is unavailable in agent mode, fail closed and return a blocker. Human recovery can use:
 
 ```bash
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-epyc6-token)" && \
-export RAILWAY_API_TOKEN="$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')" && \
-railway whoami
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 ```
 
 ### App Runtime Secrets: Use Railway Context, Not `op read`
@@ -406,13 +404,17 @@ BACKEND_URL="${RAILWAY_SERVICE_BACKEND_URL:-http://localhost:3000}"
 - Never hardcode secrets in repos.
 - Prefer synced cache or service-account auth over interactive biometric auth
   for agents, cron, systemd, and LaunchAgents.
-- **Prefer cached secret helpers** (`dx_auth_read_secret_cached`, `dx_auth_load_zai_api_key`, etc.) for cron, systemd, automation, and any repeated secret reads. Use raw `op read` only for occasional manual one-shot use.
+- **Use cached secret helpers** (`dx_auth_read_secret_cached`, `dx_auth_load_zai_api_key`, etc.) for cron, systemd, automation, and repeated secret reads.
+- In agent sessions, raw `op read`, `op item get`, `op item list`, and `op whoami` are forbidden for routine secret access.
+- Human GUI-backed OP is bootstrap/recovery only and must be labeled as such.
+- On cache/service-account miss, fail closed with a blocker; never silently fall back to GUI OP.
+- Do not run OP retry loops unless the task is explicitly auth-repair.
 - Prefer `op://...` references in env templates and resolve at runtime via `op run --env-file=... -- <command>`.
 - Avoid printing secrets in logs. If you must verify, do it once and then stop output.
 - Use grep/cut instead of jq for field extraction (more portable).
 - Do not put `OP_SERVICE_ACCOUNT_TOKEN` or `RAILWAY_API_TOKEN` in `~/.zshrc` or `~/.zshenv`.
 - Do not guess 1Password item names for app runtime secrets. If the value belongs to a deployed service, fetch it from Railway context.
-- Do not diagnose OP rate limits as sign-in failures without checking `op whoami` first.
+- Do not diagnose OP rate limits as sign-in failures without checking `dx-op-auth-status.sh --json` first.
 
 ## References
 

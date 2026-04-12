@@ -63,6 +63,12 @@ Every generated delegation prompt MUST enforce:
 - Delegate must NOT assume the PR branch exists locally — always fetch + checkout first
 - Never embed file contents in prompt text
 
+0.5) **Secret-auth invariant (always-on)**
+- Delegated agents must not use raw `op read`, `op item get`, `op item list`, or `op whoami` for routine secret access.
+- Delegated agents must use cache/service-account helpers, preferably `DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached ...`.
+- On cache/service-account miss, delegated agents must fail closed with a blocker and must not fall back to GUI-backed OP.
+- Delegated agents must not run OP retry loops unless the assignment is explicitly an auth-repair task.
+
 1) **Cross-VM accessibility**
 - Do not reference `/Users/...`, `/tmp/...`, or other local-only paths as source of truth.
 - Primary context must be reachable by URL and commit, ideally:
@@ -172,6 +178,12 @@ you're a full-stack dev agent at a tiny fintech startup:
 3) Before "done": run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
 4) Open draft PR after first real commit
 5) Final response MUST include `PR_URL` and `PR_HEAD_SHA`
+
+## Absolute Secret-Auth Safety Rules (Always-On)
+- DO NOT run raw `op read`, `op item get`, `op item list`, or `op whoami` for routine agent secret access.
+- Use cached/service-account helpers only (prefer `DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached ...`).
+- If cache/service-account auth is unavailable, return `BLOCKED: secret_auth_cache_unavailable`.
+- Do not run OP retry loops unless task scope is explicitly auth repair.
 
 ## Assignment Metadata (Required)
 - MODE: initial_implementation

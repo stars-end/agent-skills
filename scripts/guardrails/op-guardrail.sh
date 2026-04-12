@@ -8,6 +8,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VERBOSE="${VERBOSE:-false}"
 FAIL_ON_FIND="${FAIL_ON_FIND:-false}"
+SKIP_OP_CLI_CHECK="${OP_GUARDRAIL_SKIP_CLI_CHECK:-false}"
 ISSUES_FILE="/tmp/op-guardrail-issues.$$"
 
 # Parse args
@@ -31,24 +32,28 @@ TOTAL_ISSUES=0
 # Guard 1: Check op CLI Version
 # ============================================================
 
-echo "[1/4] Checking op CLI version..."
-if command -v op >/dev/null 2>&1; then
-    OP_VERSION=$(op --version 2>/dev/null || echo "0.0.0")
-    REQUIRED="2.18.0"
-
-    if [[ "$(printf '%s\n' "$REQUIRED" "$OP_VERSION" | sort -V | head -n1)" != "$REQUIRED" ]]; then
-        echo "❌ GUARD: op CLI version $OP_VERSION < $REQUIRED (required for service accounts)"
-        echo "   Action: brew upgrade op"
-        echo "op_version:$OP_VERSION" >> "$ISSUES_FILE"
-        TOTAL_ISSUES=$((TOTAL_ISSUES+1))
-    else
-        echo "✅ op CLI version: $OP_VERSION"
-    fi
+echo "[1/5] Checking op CLI version..."
+if [[ "$SKIP_OP_CLI_CHECK" == "true" ]]; then
+    echo "↪ Skipped op CLI version check (OP_GUARDRAIL_SKIP_CLI_CHECK=true)"
 else
-    echo "❌ GUARD: op CLI not found"
-    echo "   Action: brew install 1password-cli"
-    echo "op_version:not_found" >> "$ISSUES_FILE"
-    TOTAL_ISSUES=$((TOTAL_ISSUES+1))
+    if command -v op >/dev/null 2>&1; then
+        OP_VERSION=$(op --version 2>/dev/null || echo "0.0.0")
+        REQUIRED="2.18.0"
+
+        if [[ "$(printf '%s\n' "$REQUIRED" "$OP_VERSION" | sort -V | head -n1)" != "$REQUIRED" ]]; then
+            echo "❌ GUARD: op CLI version $OP_VERSION < $REQUIRED (required for service accounts)"
+            echo "   Action: brew upgrade op"
+            echo "op_version:$OP_VERSION" >> "$ISSUES_FILE"
+            TOTAL_ISSUES=$((TOTAL_ISSUES+1))
+        else
+            echo "✅ op CLI version: $OP_VERSION"
+        fi
+    else
+        echo "❌ GUARD: op CLI not found"
+        echo "   Action: brew install 1password-cli"
+        echo "op_version:not_found" >> "$ISSUES_FILE"
+        TOTAL_ISSUES=$((TOTAL_ISSUES+1))
+    fi
 fi
 
 # ============================================================
@@ -56,7 +61,7 @@ fi
 # ============================================================
 
 echo ""
-echo "[2/4] Scanning for --no-masking flag..."
+echo "[2/5] Scanning for --no-masking flag..."
 
 NO_MASKING_FOUND=0
 while IFS= read -r file; do
@@ -97,7 +102,7 @@ fi
 # ============================================================
 
 echo ""
-echo "[3/4] Scanning for OP_CONNECT_* variables..."
+echo "[3/5] Scanning for OP_CONNECT_* variables..."
 
 OP_CONNECT_FOUND=0
 # Check shell startup files
@@ -150,7 +155,7 @@ fi
 # ============================================================
 
 echo ""
-echo "[4/4] Verifying service account token patterns..."
+echo "[4/5] Verifying service account token patterns..."
 
 HARDCODED_TOKENS=0
 while IFS= read -r file; do
@@ -182,6 +187,40 @@ done < <(find "$REPO_ROOT" -type f \( -name "*.py" -o -name "*.js" -o -name "*.t
 
 if [[ $HARDCODED_TOKENS -eq 0 ]]; then
     echo "✅ No hardcoded service account tokens found"
+fi
+
+# ============================================================
+# Guard 5: Reject raw OP commands in delegation/baseline surfaces
+# ============================================================
+
+echo ""
+echo "[5/5] Scanning delegation/baseline surfaces for raw OP command snippets..."
+
+RAW_OP_DOC_ISSUES=0
+while IFS= read -r file; do
+    # only command-like usage (line starts with op ...) to avoid prose mentions
+    while IFS= read -r match; do
+        line_no="${match%%:*}"
+        line_text="${match#*:}"
+        start=$((line_no>6 ? line_no-6 : 1))
+        context="$(sed -n "${start},${line_no}p" "$file" | tr '[:upper:]' '[:lower:]')"
+        if echo "$context" | grep -Eq "human fallback only|human recovery only|interactive auth \(human fallback only\)|manual bootstrap"; then
+            continue
+        fi
+        echo "🚨 GUARD VIOLATION: raw OP command snippet in delegation/baseline surface"
+        echo "   File: $file:$line_no"
+        echo "   Line: $line_text"
+        echo "$file:$line_no:raw_op_doc_surface" >> "$ISSUES_FILE"
+        TOTAL_ISSUES=$((TOTAL_ISSUES+1))
+        RAW_OP_DOC_ISSUES=$((RAW_OP_DOC_ISSUES+1))
+    done < <(grep -nE '^[[:space:]]*op[[:space:]]+(read|whoami|item[[:space:]]+(get|list))\b' "$file" || true)
+done < <(printf '%s\n' \
+    "$REPO_ROOT/extended/prompt-writing/SKILL.md" \
+    "$REPO_ROOT/scripts/publish-baseline.zsh" \
+    "$REPO_ROOT/dist/universal-baseline.md")
+
+if [[ $RAW_OP_DOC_ISSUES -eq 0 ]]; then
+    echo "✅ No forbidden raw OP command snippets found in delegation/baseline surfaces"
 fi
 
 # ============================================================
