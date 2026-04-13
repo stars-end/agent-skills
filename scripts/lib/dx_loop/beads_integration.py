@@ -12,8 +12,8 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Set
 import subprocess
 import json
-import os
 from pathlib import Path
+from .beads_cli import beads_command, beads_subprocess_env, control_plane_cwd
 
 
 @dataclass
@@ -76,7 +76,7 @@ class BeadsWaveManager:
         beads_repo_path: Optional[Path] = None,
         default_repo: Optional[str] = None,
     ):
-        self.beads_repo_path = beads_repo_path or Path.home() / "bd"
+        self.beads_repo_path = (beads_repo_path or control_plane_cwd()).expanduser()
         self.default_repo = default_repo
         self.tasks: Dict[str, BeadsTask] = {}
         self.layers: List[List[str]] = []
@@ -165,12 +165,13 @@ class BeadsWaveManager:
         """
         Load all subtasks of an epic from Beads
 
-        Uses bd show to get epic details with dependents.
+        Uses bdx show to get epic details with dependents.
         """
         try:
             result = subprocess.run(
-                ["bd", "show", epic_id, "--json"],
+                beads_command(["show", epic_id, "--json"]),
                 cwd=str(self.beads_repo_path),
+                env=beads_subprocess_env(),
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -234,8 +235,9 @@ class BeadsWaveManager:
         """Load full task details including dependencies"""
         try:
             result = subprocess.run(
-                ["bd", "show", task.beads_id, "--json"],
+                beads_command(["show", task.beads_id, "--json"]),
                 cwd=str(self.beads_repo_path),
+                env=beads_subprocess_env(),
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds,
@@ -301,12 +303,13 @@ class BeadsWaveManager:
     def close_beads_task(self, beads_id: str, reason: str = "") -> bool:
         """Close a task in Beads and update local status. Returns True on success."""
         try:
-            cmd = ["bd", "close", beads_id]
+            cmd = beads_command(["close", beads_id])
             if reason:
                 cmd += ["--reason", reason]
             result = subprocess.run(
                 cmd,
                 cwd=str(self.beads_repo_path),
+                env=beads_subprocess_env(),
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -337,8 +340,9 @@ class BeadsWaveManager:
 
         try:
             result = subprocess.run(
-                ["bd", "show", beads_id, "--json"],
+                beads_command(["show", beads_id, "--json"]),
                 cwd=str(self.beads_repo_path),
+                env=beads_subprocess_env(),
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds,
@@ -386,28 +390,15 @@ class BeadsWaveManager:
         """
         try:
             result = subprocess.run(
-                ["bd", "show", epic_id, "--json"],
+                beads_command(["show", epic_id, "--json"]),
                 cwd=str(self.beads_repo_path),
+                env=beads_subprocess_env(),
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds,
             )
             if result.returncode != 0:
-                bd_bin = os.environ.get("BD_BIN")
-                if (
-                    bd_bin
-                    and bd_bin != "bd"
-                    and "embedded Dolt requires CGO" in (result.stderr or "")
-                ):
-                    result = subprocess.run(
-                        [bd_bin, "show", epic_id, "--json"],
-                        cwd=str(self.beads_repo_path),
-                        capture_output=True,
-                        text=True,
-                        timeout=timeout_seconds,
-                    )
-                if result.returncode != 0:
-                    return None
+                return None
 
             data = json.loads(result.stdout)
             if not data or not isinstance(data, list):

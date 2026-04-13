@@ -54,6 +54,19 @@ dx-loop explain --beads-id bd-5w5o.49
 dx-loop status --wave-id <id> --json
 ```
 
+## Beads Runtime Contract
+
+`dx-loop` Beads control-plane calls run through `bdx` by default.
+
+- default Beads executable: `bdx`
+- override executable only when needed:
+  - `DX_LOOP_BEADS_BIN=<path-or-name>`
+  - `BDX_BIN=<path-or-name>`
+- default `BEADS_DIR`: `~/.beads-runtime/.beads` (set automatically for dx-loop Beads subprocesses when unset)
+- default control-plane cwd: `$HOME` (override with `DX_LOOP_CONTROL_CWD`)
+
+This keeps dx-loop aligned with canonical Beads coordination and avoids relying on legacy `~/bd` repo-local runtime state.
+
 ## Commands
 
 ### start

@@ -48,7 +48,8 @@ def test_close_beads_task_updates_status_on_success(monkeypatch):
     )
 
     def fake_run(cmd, **kwargs):
-        assert cmd[:3] == ["bd", "close", "bd-test"]
+        assert cmd[:3] == ["bdx", "close", "bd-test"]
+        assert kwargs["env"]["BEADS_DIR"].endswith("/.beads-runtime/.beads")
         return subprocess.CompletedProcess(cmd, 0, stdout="OK", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -98,6 +99,35 @@ def test_close_beads_task_returns_false_on_timeout(monkeypatch):
 
     assert result is False
     assert manager.tasks["bd-test"].status == "open"
+
+
+def test_refresh_task_status_uses_bdx_default_and_runtime_env(monkeypatch):
+    """Runtime Beads calls should use bdx + canonical BEADS_DIR by default."""
+    manager = BeadsWaveManager()
+    manager.tasks["bd-test"] = BeadsTask(
+        beads_id="bd-test",
+        title="Test task",
+        status="open",
+    )
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["env"] = kwargs.get("env", {})
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout=json.dumps([{"id": "bd-test", "status": "closed"}]),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    status = manager.refresh_task_status("bd-test")
+
+    assert status == "closed"
+    assert seen["cmd"][0] == "bdx"
+    assert seen["env"]["BEADS_DIR"].endswith("/.beads-runtime/.beads")
 
 
 def test_approved_review_path_warns_on_close_failure(monkeypatch, capsys):
