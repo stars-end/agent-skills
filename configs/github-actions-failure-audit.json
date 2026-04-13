@@ -1,0 +1,10 @@
+{
+  "canonical_repos": [
+    "stars-end/affordabot",
+    "stars-end/prime-radiant-ai",
+    "stars-end/agent-skills",
+    "stars-end/llm-common"
+  ],
+  "failed_run_limit": 30,
+  "recent_run_limit": 80
+}

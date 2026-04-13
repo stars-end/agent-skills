@@ -17,11 +17,15 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Configuration
 BEADS_DIR="${BEADS_DIR:-${HOME}/.beads-runtime/.beads}"
 BEADS_DB="${BEADS_DIR}/beads.db"
 BEADS_ISSUES_JSONL="${BEADS_DIR}/issues.jsonl"
 GH_REPO="stars-end/prime-radiant-ai"
+CI_AUDIT_FAILED_LIMIT="${DX_GH_FAILURE_AUDIT_FAILED_LIMIT:-8}"
+CI_AUDIT_RECENT_LIMIT="${DX_GH_FAILURE_AUDIT_RECENT_LIMIT:-40}"
 ALLOW_BEADS_LEGACY_SOURCE="${ALLOW_BEADS_LEGACY_SOURCE:-0}"
 TEMP_DIR=$(mktemp -d)
 OUTPUT_FILE="${TEMP_DIR}/founder-daily-data.json"
@@ -39,9 +43,13 @@ DRIFT_STATUS="unknown"
 FAILED_RUNS_JSON="[]"
 FAILED_COUNT=0
 WORKFLOW_HEALTH_JSON="[]"
+FAILURE_GROUPS_JSON="[]"
+CI_REPO_ERRORS_JSON="[]"
+CI_COVERAGE_ERROR_COUNT=0
 STALE_PRS_COUNT=0
 BACKLOG_COUNT=0
 RESCUE_COUNT=0
+GH_ACTIONS_AUDIT_CACHE=""
 
 # Founder pipeline telemetry (machine-readable classification for founders + digests)
 PIPELINE_STARTED_AT="$(date -u +%s)"
@@ -139,6 +147,9 @@ build_pipeline_payload() {
     --arg drift "$DRIFT_STATUS" \
     --argjson failed "${FAILED_RUNS_JSON:-[]}" \
     --argjson failed_count "$FAILED_COUNT" \
+    --argjson failure_groups "${FAILURE_GROUPS_JSON:-[]}" \
+    --argjson repo_errors "${CI_REPO_ERRORS_JSON:-[]}" \
+    --arg coverage_error_count "${CI_COVERAGE_ERROR_COUNT}" \
     --argjson stale_prs_count "$STALE_PRS_COUNT" \
     --argjson backlog_count "$BACKLOG_COUNT" \
     --argjson rescue_count "$RESCUE_COUNT" \
@@ -168,6 +179,9 @@ build_pipeline_payload() {
       github: {
         failed_runs: $failed,
         failed_count: $failed_count,
+        failure_groups: $failure_groups,
+        repo_errors: $repo_errors,
+        coverage_error_count: ($coverage_error_count | tonumber? // 0),
         stale_prs_count: $stale_prs_count,
         rescue_count: $rescue_count,
         workflow_health: $workflow_health
@@ -656,37 +670,131 @@ check_drift() {
   esac
 }
 
-# Query GitHub for failed runs (last 24h)
-query_github_failed() {
-  log "Querying GitHub for failed runs..."
-
-  if ! command -v gh >/dev/null 2>&1; then
-    warn "gh CLI not found, skipping GitHub queries"
-    echo "[]"
+# Query cross-repo GitHub Actions grouped failures
+ensure_github_actions_audit_cache() {
+  if [[ -n "$GH_ACTIONS_AUDIT_CACHE" ]]; then
     return 0
   fi
 
-  gh run list --repo "$GH_REPO" \
-    --json conclusion,createdAt,workflowName,databaseId \
-    --limit 50 \
-    --jq '[.[] | select(.conclusion != "success" and (.createdAt | fromdateiso8601) > now - 86400) | {workflow: .workflowName, created: .createdAt, id: .databaseId, url: ("https://github.com/stars-end/prime-radiant-ai/actions/runs/" + (.databaseId | tostring))}]' \
-    2>>"$LOG_FILE" || echo "[]"
+  log "Querying cross-repo GitHub Actions failure groups..."
+
+  local raw
+  if raw="$("${SCRIPT_DIR}/dx-gh-actions-audit.py" --json --failed-run-limit "$CI_AUDIT_FAILED_LIMIT" --recent-run-limit "$CI_AUDIT_RECENT_LIMIT" 2>>"$LOG_FILE" || true)"; then
+    :
+  fi
+
+  if [[ -z "$raw" ]] || ! jq -e '.summary and .active_groups and .repo_errors and .groups' <<<"$raw" >/dev/null 2>&1; then
+    warn "Cross-repo GitHub Actions audit unavailable; returning explicit collector error record"
+    raw="$(cat <<EOF_JSON
+{
+  "generated_at":"$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "repos":[],
+  "repo_errors":[
+    {
+      "repo":"all",
+      "stage":"collector_invocation",
+      "error_code":"collector_failed",
+      "message":"dx-gh-actions-audit output invalid",
+      "stderr":""
+    }
+  ],
+  "groups":[],
+  "active_groups":[],
+  "stale_groups":[],
+  "summary":{
+    "repos_total":0,
+    "repos_ok":0,
+    "repos_error":1,
+    "coverage_repo_errors":1,
+    "total_groups":0,
+    "active_groups":0,
+    "stale_groups":0
+  }
+}
+EOF_JSON
+)"
+  fi
+
+  GH_ACTIONS_AUDIT_CACHE="$raw"
+  return 0
+}
+
+query_github_failed() {
+  ensure_github_actions_audit_cache || true
+  local out
+  out="$(jq -c '[.active_groups[]? | {
+    repo: .repo,
+    workflow: .workflow,
+    job: .job,
+    signature: .signature,
+    created: .latest_failure.created_at,
+    id: .latest_failure.run_id,
+    url: .latest_failure.run_url
+  }]' <<<"${GH_ACTIONS_AUDIT_CACHE:-{}}" 2>>"$LOG_FILE" || true)"
+  if [[ -z "$out" ]] || ! jq -e 'type == "array"' <<<"$out" >/dev/null 2>&1; then
+    echo "[]"
+  else
+    printf '%s\n' "$out"
+  fi
+}
+
+query_github_repo_errors() {
+  ensure_github_actions_audit_cache || true
+  local out
+  out="$(jq -c '.repo_errors // []' <<<"${GH_ACTIONS_AUDIT_CACHE:-{}}" 2>>"$LOG_FILE" || true)"
+  if [[ -z "$out" ]] || ! jq -e 'type == "array"' <<<"$out" >/dev/null 2>&1; then
+    echo "[]"
+  else
+    printf '%s\n' "$out"
+  fi
+}
+
+query_github_coverage_error_count() {
+  ensure_github_actions_audit_cache || true
+  local out
+  out="$(jq -r '.summary.coverage_repo_errors // .summary.repos_error // 0' <<<"${GH_ACTIONS_AUDIT_CACHE:-{}}" 2>>"$LOG_FILE" || true)"
+  out="$(printf '%s\n' "$out" | head -n1 | tr -dc '0-9')"
+  if [[ -z "$out" ]]; then
+    echo "0"
+  else
+    printf '%s\n' "$out"
+  fi
+}
+
+query_failure_groups() {
+  ensure_github_actions_audit_cache || true
+  local out
+  out="$(jq -c '.active_groups // []' <<<"${GH_ACTIONS_AUDIT_CACHE:-{}}" 2>>"$LOG_FILE" || true)"
+  if [[ -z "$out" ]] || ! jq -e 'type == "array"' <<<"$out" >/dev/null 2>&1; then
+    echo "[]"
+  else
+    printf '%s\n' "$out"
+  fi
 }
 
 # Query GitHub workflow health
 query_github_health() {
-  log "Querying GitHub workflow health..."
-
-  if ! command -v gh >/dev/null 2>&1; then
+  ensure_github_actions_audit_cache || true
+  local out
+  out="$(jq -c '[.groups[]? | {
+      repo: .repo,
+      workflow: .workflow,
+      classification: .classification.status
+    }]
+    | group_by(.repo + "|" + .workflow)
+    | map({
+        repo: .[0].repo,
+        workflow: .[0].workflow,
+        total: length,
+        active: (map(select(.classification == "active")) | length),
+        stale: (map(select(.classification == "stale")) | length)
+      })
+    | sort_by(.active, .total) | reverse' <<<"${GH_ACTIONS_AUDIT_CACHE:-{}}" 2>>"$LOG_FILE" || true)"
+  if [[ -z "$out" ]] || ! jq -e 'type == "array"' <<<"$out" >/dev/null 2>&1; then
     echo "[]"
-    return 0
+  else
+    printf '%s\n' "$out"
   fi
-
-  gh run list --repo "$GH_REPO" \
-    --json conclusion,workflowName \
-    --limit 20 \
-    --jq '[group_by(.workflowName) | .[] | {workflow: .[0].workflowName, total: length, failed: map(select(.conclusion != "success")) | length}] | sort_by(.failed) | reverse' \
-    2>>"$LOG_FILE" || echo "[]"
 }
 
 # Main execution
@@ -755,11 +863,29 @@ main() {
   alerts_json=$(get_robot_alerts)
 
   DRIFT_STATUS=$(check_drift)
+  ensure_github_actions_audit_cache || true
 
   FAILED_RUNS_JSON=$(query_github_failed)
   FAILED_COUNT=$(echo "$FAILED_RUNS_JSON" | jq 'length // 0')
+  FAILURE_GROUPS_JSON=$(query_failure_groups)
+  CI_REPO_ERRORS_JSON=$(query_github_repo_errors)
+  local ci_repo_error_count ci_coverage_error_count
+  ci_repo_error_count=$(echo "$CI_REPO_ERRORS_JSON" | jq 'length // 0')
+  ci_coverage_error_count=$(query_github_coverage_error_count | tr -dc '0-9')
+  if [[ -z "$ci_coverage_error_count" ]]; then
+    ci_coverage_error_count=0
+  fi
+  CI_COVERAGE_ERROR_COUNT="$ci_coverage_error_count"
 
   WORKFLOW_HEALTH_JSON=$(query_github_health)
+
+  if [ "$ci_coverage_error_count" -gt 0 ]; then
+    if [ "$ci_coverage_error_count" -ge 4 ]; then
+      pipeline_fail "github_actions_audit_unavailable" "cross-repo GitHub Actions audit failed for all canonical repos"
+    else
+      pipeline_warn "github_actions_audit_partial" "cross-repo GitHub Actions audit reported per-repo errors"
+    fi
+  fi
 
   CRITICAL_COUNT=$(echo "$alerts_json" | jq -r '.summary.critical // 0' 2>/dev/null || echo "0")
   
@@ -807,6 +933,8 @@ format_slack_message() {
   p0_count=$(jq '.beads.p0_issues | length' "$json_file")
   p1_count=$(jq '.beads.p1_issues | length' "$json_file")
   failed_count=$(jq '.github.failed_count' "$json_file")
+  local ci_repo_error_count
+  ci_repo_error_count=$(jq '.github.coverage_error_count // (.github.repo_errors | length)' "$json_file")
   critical_count=$(jq '.beads.robot_alerts.critical' "$json_file")
   drift_status=$(jq -r '.beads.drift_status' "$json_file")
   local founder_status founder_reason founder_source
@@ -829,7 +957,7 @@ format_slack_message() {
   elif [ "$drift_status" = "critical" ] || [ "$failed_count" -gt 0 ] || [ "$p0_count" -gt 5 ] || [ "$rescue_count" -gt 0 ]; then
     status_emoji="🚨"
     status_text="Action needed"
-  elif [ "$drift_status" = "warning" ] || [ "$critical_count" -gt 50 ] || [ "$stale_prs_count" -gt 5 ] || [ "$backlog_count" -gt 20 ]; then
+  elif [ "$ci_repo_error_count" -gt 0 ] || [ "$drift_status" = "warning" ] || [ "$critical_count" -gt 50 ] || [ "$stale_prs_count" -gt 5 ] || [ "$backlog_count" -gt 20 ]; then
     status_emoji="⚠️"
     status_text="Review needed"
   fi
@@ -840,7 +968,7 @@ format_slack_message() {
   
   local main_msg="${status_emoji} *DX Daily* (${today}): ${status_text}
 • P0: ${p0_count} | P1: ${p1_count} | GH fails: ${failed_count} | Rescue: ${rescue_count}
-• Stale PRs: ${stale_prs_count} | Backlog: ${backlog_count} | Drift: ${drift_status}
+• Stale PRs: ${stale_prs_count} | Backlog: ${backlog_count} | Drift: ${drift_status} | GH repo errors: ${ci_repo_error_count}
 • Founder source: ${founder_source} (${founder_reason})"
   
   echo "$main_msg"
@@ -868,7 +996,13 @@ format_slack_message() {
     if [ "$failed_count" -gt 0 ]; then
       echo ""
       echo "*Failed GitHub Actions:*"
-      jq -r '.github.failed_runs[:3] | .[] | "• \(.workflow): \(.url)"' "$json_file" 2>/dev/null || true
+      jq -r '.github.failure_groups[:3] | .[] | "• \(.repo) | \(.workflow) | \(.job): \(.signature) (\(.latest_failure.run_url))"' "$json_file" 2>/dev/null || true
+    fi
+
+    if [ "$ci_repo_error_count" -gt 0 ]; then
+      echo ""
+      echo "*GitHub Audit Coverage Errors:*"
+      jq -r '.github.repo_errors[:3] | .[] | "• \(.repo) | \(.stage): \(.error_code)"' "$json_file" 2>/dev/null || true
     fi
   fi
 }

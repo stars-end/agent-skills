@@ -17,6 +17,8 @@ OUTPUT_SLACK=0
 STATE_ONLY=0
 SLACK_CHANNEL="#fleet-events"
 SLACK_POST_ON_GREEN=true
+CI_AUDIT_FAILED_LIMIT="${DX_GH_FAILURE_AUDIT_FAILED_LIMIT:-8}"
+CI_AUDIT_RECENT_LIMIT="${DX_GH_FAILURE_AUDIT_RECENT_LIMIT:-40}"
 
 json_escape() {
   local s="$1"
@@ -132,9 +134,12 @@ render_slack_text() {
   local fail="$4"
   local unknown="$5"
   local hosts_failed="$6"
+  local ci_active="$7"
+  local ci_repo_errors="$8"
+  local ci_top_url="$9"
 
   local line
-  line="🛰️ dx-audit ${MODE}: ${fleet_status}. checks pass=${pass} warn=${warn} fail=${fail} unknown=${unknown} hosts_failed=${hosts_failed}."
+  line="🛰️ dx-audit ${MODE}: ${fleet_status}. checks pass=${pass} warn=${warn} fail=${fail} unknown=${unknown} hosts_failed=${hosts_failed}; ci_active=${ci_active} ci_repo_errors=${ci_repo_errors}."
   if [[ "$fleet_status" == "green" ]]; then
     if [[ "$SLACK_POST_ON_GREEN" == "true" ]]; then
       line+=" ✅ no action needed"
@@ -145,6 +150,9 @@ render_slack_text() {
     line+=" ⚠️ run: dx-fleet repair --json"
   else
     line+=" ❗ remediation required: dx-fleet repair --json"
+  fi
+  if [[ "${ci_active}" -gt 0 && -n "$ci_top_url" ]]; then
+    line+=" | top_ci=${ci_top_url}"
   fi
   printf '%s' "$line"
 }
@@ -185,6 +193,69 @@ save_artifact() {
   mkdir -p "$history_dir"
   write_atomic "$latest" "$payload"
   write_atomic "$history_file" "$payload"
+}
+
+status_rank() {
+  case "$1" in
+    green) echo 0 ;;
+    yellow) echo 1 ;;
+    red) echo 2 ;;
+    *) echo 1 ;;
+  esac
+}
+
+max_status() {
+  local a="$1"
+  local b="$2"
+  if [[ "$(status_rank "$a")" -ge "$(status_rank "$b")" ]]; then
+    echo "$a"
+  else
+    echo "$b"
+  fi
+}
+
+collect_ci_failure_groups_json() {
+  local stderr_file output rc stderr_trimmed
+  stderr_file="$(mktemp)"
+  set +e
+  output="$("${SCRIPT_DIR}/dx-gh-actions-audit.py" --json --failed-run-limit "$CI_AUDIT_FAILED_LIMIT" --recent-run-limit "$CI_AUDIT_RECENT_LIMIT" 2>"$stderr_file")"
+  rc=$?
+  set -e
+
+  if [[ "$rc" -eq 0 ]] && command -v jq >/dev/null 2>&1 && printf '%s' "$output" | jq -e '.summary and .active_groups and .repo_errors' >/dev/null 2>&1; then
+    rm -f "$stderr_file"
+    printf '%s' "$output"
+    return 0
+  fi
+
+  stderr_trimmed="$(tr '\n' ' ' < "$stderr_file" | sed 's/[[:space:]]\+/ /g' | sed 's/"/\\"/g' | cut -c1-600)"
+  rm -f "$stderr_file"
+  cat <<EOF_JSON
+{
+  "generated_at":"$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
+  "repos":[],
+  "repo_errors":[
+    {
+      "repo":"all",
+      "stage":"collector_invocation",
+      "error_code":"collector_failed",
+      "message":"dx-gh-actions-audit invocation failed",
+      "stderr":"${stderr_trimmed}"
+    }
+  ],
+  "groups":[],
+  "active_groups":[],
+  "stale_groups":[],
+  "summary":{
+    "repos_total":0,
+    "repos_ok":0,
+    "repos_error":1,
+    "total_groups":0,
+    "active_groups":0,
+    "stale_groups":0
+  }
+}
+EOF_JSON
 }
 
 main() {
@@ -235,10 +306,36 @@ EOF_JSON
   hosts_failed="$(printf '%s' "$check_payload" | jq -r '.summary.hosts_failed // 0')"
   fleet_status="$(printf '%s' "$check_payload" | jq -r '.fleet_status // "unknown"')"
 
+  local ci_payload ci_active ci_repo_errors ci_status ci_top_url overall_status
+  ci_payload="$(collect_ci_failure_groups_json)"
+  ci_active="$(printf '%s' "$ci_payload" | jq -r '.summary.active_groups // 0')"
+  ci_repo_errors="$(printf '%s' "$ci_payload" | jq -r '.summary.coverage_repo_errors // .summary.repos_error // 0')"
+  ci_top_url="$(printf '%s' "$ci_payload" | jq -r '.active_groups[0].latest_failure.run_url // ""')"
+  ci_status="green"
+  if [[ "$ci_active" -gt 0 ]]; then
+    ci_status="red"
+  elif [[ "$ci_repo_errors" -gt 0 ]]; then
+    ci_status="yellow"
+  fi
+  overall_status="$(max_status "$fleet_status" "$ci_status")"
+
   local slack_message
-  slack_message="$(render_slack_text "$fleet_status" "$pass" "$warn" "$fail" "$unknown" "$hosts_failed")"
+  slack_message="$(render_slack_text "$overall_status" "$pass" "$warn" "$fail" "$unknown" "$hosts_failed" "$ci_active" "$ci_repo_errors" "$ci_top_url")"
 
   local payload
+  local ci_check_status ci_check_severity ci_check_details
+  ci_check_status="pass"
+  ci_check_severity="low"
+  ci_check_details="active_groups=${ci_active} repo_errors=${ci_repo_errors}"
+  if [[ "$ci_active" -gt 0 ]]; then
+    ci_check_status="fail"
+    ci_check_severity="high"
+    ci_check_details="${ci_check_details} top_url=${ci_top_url}"
+  elif [[ "$ci_repo_errors" -gt 0 ]]; then
+    ci_check_status="warn"
+    ci_check_severity="medium"
+  fi
+
   payload="$(printf '%s' "$check_payload" | jq -c \
     --arg mode "$MODE" \
     --argjson pass "$pass" \
@@ -250,9 +347,33 @@ EOF_JSON
     --arg state_paths "$(artifact_paths_json | tr -d '\n')" \
     --arg slack_channel "$SLACK_CHANNEL" \
     --arg slack_message "$slack_message" \
+    --arg overall_status "$overall_status" \
+    --arg ci_payload "$(printf '%s' "$ci_payload" | tr -d '\n')" \
+    --arg ci_check_status "$ci_check_status" \
+    --arg ci_check_severity "$ci_check_severity" \
+    --arg ci_check_details "$ci_check_details" \
+    --arg ci_top_url "$ci_top_url" \
     '.mode=$mode
      | .summary={pass:$pass,yellow:$warn,red:$fail,unknown:$unknown,hosts_checked:$hosts_checked,hosts_failed:$hosts_failed}
      | .state_paths=($state_paths | fromjson)
+     | .fleet_status=$overall_status
+     | .github_actions=($ci_payload | fromjson)
+     | .summary.github_actions={
+         active_groups: ((.github_actions.summary.active_groups // 0) | tonumber),
+         stale_groups: ((.github_actions.summary.stale_groups // 0) | tonumber),
+         repo_errors: ((.github_actions.summary.coverage_repo_errors // .github_actions.summary.repos_error // 0) | tonumber),
+         top_run_url: $ci_top_url
+       }
+     | .checks=((.checks // []) + [{
+         id:"github.actions.cross_repo_failures",
+         host:"github",
+         status:$ci_check_status,
+         severity:$ci_check_severity,
+         details:$ci_check_details
+       }])
+     | .reason_codes=((.reason_codes // []) +
+         (if ((.github_actions.summary.active_groups // 0) | tonumber) > 0 then ["github_actions_active_failures"] else [] end) +
+         (if ((.github_actions.summary.coverage_repo_errors // .github_actions.summary.repos_error // 0) | tonumber) > 0 then ["github_actions_audit_partial"] else [] end))
      | .slack_channel=$slack_channel
      | .slack_message=$slack_message')"
 
@@ -266,7 +387,7 @@ EOF_JSON
     printf '%s\n' "$payload"
   fi
 
-  case "$fleet_status" in
+  case "$overall_status" in
     red) exit 2 ;;
     yellow) exit 1 ;;
     *) exit "$check_rc" ;;

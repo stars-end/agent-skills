@@ -168,6 +168,36 @@ run_remote() {
   emit_argv "$@" | "$SSH_BIN" "${ssh_opts[@]}" "$REMOTE_HOST" "$REMOTE_HELPER" "--mode=$mode"
 }
 
+find_flag_match() {
+  local needle="$1"
+  shift
+  local arg
+  for arg in "$@"; do
+    if [[ "$arg" == "$needle" || "$arg" == "$needle="* ]]; then
+      printf '%s' "$needle"
+      return 0
+    fi
+  done
+  return 1
+}
+
+preflight_remote_write() {
+  local cmd="$1"
+  shift
+
+  local file_flag=""
+  local candidate
+  for candidate in --body-file --design-file --metadata-file --acceptance-file --notes-file; do
+    if file_flag="$(find_flag_match "$candidate" "$@")"; then
+      die "remote bdx write rejected: local file-bearing flag '$file_flag' is not supported over remote routing. Use inline values or run from epyc12."
+    fi
+  done
+
+  if [[ "$cmd" == "create" ]] && find_flag_match "--repo" "$@" >/dev/null; then
+    die "remote bdx create rejected: '--repo' can trigger embedded-Dolt target-repo initialization. Use repo labels/metadata or run create on epyc12 with validated repo context."
+  fi
+}
+
 main() {
   [[ $# -gt 0 ]] || { usage; exit 2; }
 
@@ -184,6 +214,9 @@ main() {
   if is_hub_host; then
     run_local "$mode" "$@"
   else
+    if [[ "$mode" == "write" ]]; then
+      preflight_remote_write "$@"
+    fi
     run_remote "$mode" "$@"
   fi
 }
