@@ -120,6 +120,15 @@ Every generated delegation prompt MUST enforce:
   - `CLASS: dx_loop_control_plane`
 - Direct/manual implementation should be framed as fallback only when `dx-loop` itself is the active blocker or a tiny end-stage repair is clearly justified.
 
+8) **Memory retrieval for high-friction domains**
+- For cross-VM, cross-repo, vendor/API, infra/auth/workflow, or repeated-friction work, require targeted Beads memory lookup before execution:
+  - `bdx memories <keyword> --json`
+  - `bdx search <keyword> --label memory --status all --json`
+  - `bdx show <memory-id> --json`
+  - `bdx comments <memory-id> --json`
+- Do not require memory lookup for trivial routine edits.
+- Clarify in prompts: `bdx comments add` is task-local history; durable cross-agent memory belongs in `bdx remember` or closed `memory` issues.
+
 ## Outcome Enforcement Options
 
 Generated prompts should set these options explicitly when relevant:
@@ -169,6 +178,7 @@ STOP if ANY check fails:
 - [ ] No `/Users/...`, `/tmp/...`, or `/home/...` local paths
 - [ ] Paths are repo-relative or GitHub URLs
 - [ ] If Beads IDs are unknown, resolve with targeted lookup first: `bdx show <known-id> --json`, `bdx search ...`, or BV `robot-plan`; use `bdx ready --limit ...` only for manual queue browsing, not orchestration loops or health probes
+- [ ] For cross-VM/cross-repo/vendor/API/infra/auth/workflow work, memory retrieval commands are included and scoped (`bdx memories`, `bdx search --label memory`, then targeted `show/comments`)
 
 If you can't resolve: return blocker, don't emit prompt.
 

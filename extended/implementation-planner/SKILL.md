@@ -34,6 +34,12 @@ Every output from this skill should include:
 - Prefer one epic plus a small number of meaningful child tasks over a noisy task explosion.
 - Model dependencies explicitly with `parent-child`, `blocks`, and `discovered-from`.
 - Make the active contract executable, not aspirational.
+- For cross-VM, cross-repo, vendor/API, infra/auth/workflow, or repeated-friction planning, retrieve memory first:
+  - `bdx memories <keyword> --json`
+  - `bdx search <keyword> --label memory --status all --json`
+  - `bdx show <memory-id> --json`
+  - `bdx comments <memory-id> --json`
+- Memory lookup is optional for trivial routine edits/plans.
 
 ## When To Use
 
@@ -73,6 +79,9 @@ Read only the files needed to answer:
 - Is there already a Beads epic or existing work tree?
 - Does the user want a new plan or a refinement of an existing one?
 - Is the plan product, infra, migration, or meta-work?
+- Is there existing Beads memory (KV or `memory` issues) that should constrain the plan?
+
+For non-trivial planning domains, run targeted memory retrieval first and treat memory as guidance, not source truth.
 
 ### 2. Define the Execution Contract
 
@@ -149,6 +158,31 @@ The plan should always conclude with:
 - the Beads epic id
 - the immediate child task to start first
 - why that task is first
+
+## Durable Memory Capture From Planning
+
+When the plan yields reusable knowledge, store it explicitly:
+
+- Short global fact: `bdx remember --key <stable-key>`
+- Structured durable memory: closed issue labeled `memory`
+- Task-local rationale: `bdx comments add <issue-id>`
+
+Required metadata for structured memory issues:
+
+- `mem.scope`: `global|repo|tool|vendor|workflow`
+- `mem.repo`: repo name or `global`
+- `mem.source_issue`: concrete issue id or `none`
+- `mem.kind`: `decision|runbook|learning|gotcha|handoff|best_practice`
+- `mem.maturity`: `draft|validated|core`
+- `mem.confidence`: `low|medium|high`
+
+Optional metadata:
+
+- `mem.paths`
+- `mem.stale_if_paths`
+- `mem.source_commit`
+- `mem.query_hint`
+- `mem.symbols`
 
 ## Planning Rules
 
