@@ -242,6 +242,31 @@ test_memory_commands() {
   assert_file_contains "$fake_bd_log" "arg=memories" "memories command allowed"
 }
 
+test_comments_issue_id_read_shape() {
+  local case_dir="$tmpdir/case_comments_read"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+
+  FAKE_BD_LOG="$fake_bd_log" \
+  FAKE_SSH_LOG="$fake_ssh_log" \
+  HOME="$case_dir/home" \
+  PATH="$fake_bin:/usr/bin:/bin" \
+  BDX_SSH_BIN="$fake_bin/ssh" \
+  BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
+  BDX_REMOTE_HOST="epyc12" \
+  BDX_HOSTNAME="macbook" \
+  "$BDX" comments bd-test --json >/dev/null
+
+  assert_file_contains "$fake_ssh_log" "host=epyc12" "comments <id> routes as remote read"
+  assert_file_contains "$fake_bd_log" "arg=comments" "comments command reached bd"
+  assert_file_contains "$fake_bd_log" "arg=bd-test" "comments issue id preserved"
+  assert_file_contains "$fake_bd_log" "arg=--json" "comments JSON flag preserved"
+}
+
 test_rejections() {
   local case_dir="$tmpdir/case4"
   local fake_bin="$case_dir/bin"
@@ -691,6 +716,7 @@ main() {
   test_remote_write_uses_flock
   test_remote_write_mkdir_fallback
   test_memory_commands
+  test_comments_issue_id_read_shape
   test_rejections
   test_local_on_epyc12
   test_local_epyc12_write_uses_lock
