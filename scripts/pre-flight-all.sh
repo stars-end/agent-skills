@@ -1,42 +1,27 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-echo "╔══════════════════════════════════════════╗"
-echo "║  V4.2.1 Pre-Flight Check Suite          ║"
-echo "║  Checking all 3 VMs before implementation ║"
-echo "╚══════════════════════════════════════════╝"
-echo
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-SCRIPT_DIR="$(dirname "$0")"
+cat <<'EOF'
+DEPRECATED: pre-flight-all.sh (V4.2.1) is no longer the canonical bootstrap surface.
 
-# Run all pre-flight checks
-"$SCRIPT_DIR/pre-flight-network.sh"
-echo
-"$SCRIPT_DIR/pre-flight-1password.sh"
-echo
-"$SCRIPT_DIR/pre-flight-ssh-path.sh"
-echo
-"$SCRIPT_DIR/pre-flight-ssh-keys.sh"
-echo
-"$SCRIPT_DIR/pre-flight-ides.sh"
-echo
-"$SCRIPT_DIR/pre-flight-railway.sh"
-echo
-"$SCRIPT_DIR/pre-flight-gh-cli.sh"
+Use the role-aware bootstrap/check flow instead:
+  1) scripts/dx-bootstrap-device.sh --role auto --check-only
+  2) scripts/dx-check.sh
+  3) health/mcp-doctor/check.sh
 
-echo
-echo "╔══════════════════════════════════════════╗"
-echo "║  ✅ Pre-Flight Checks Complete            ║"
-echo "╚══════════════════════════════════════════╝"
-echo
-echo "Review results above before starting V4.2.1 implementation."
-echo
-echo "BLOCKERS that must pass:"
-echo "  ✓ All 3 VMs reachable via SSH"
-echo "  ✓ op CLI >= 2.18.0 installed on all VMs"
-echo "  ✓ op CLI in SSH PATH on all VMs"
-echo
-echo "RECOMMENDED (pass OR document exceptions):"
-echo "  ✓ All 4 canonical IDEs installed (see docs/IDE_SPECS.md)"
-echo "  ✓ Railway CLI logged in on all VMs"
-echo "  ✓ GH CLI logged in on all VMs"
+Optional compatibility probes still available:
+  - scripts/pre-flight-network.sh
+  - scripts/pre-flight-ssh-keys.sh
+  - scripts/pre-flight-railway.sh
+EOF
+
+if [[ -x "$SCRIPT_DIR/dx-bootstrap-device.sh" ]]; then
+  echo
+  echo "Running role-aware check-only bootstrap now..."
+  exec "$SCRIPT_DIR/dx-bootstrap-device.sh" --role auto --check-only
+fi
+
+echo "Missing canonical bootstrap script: scripts/dx-bootstrap-device.sh" >&2
+exit 2

@@ -39,6 +39,23 @@ Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
 - Do not manually choose between MCP, daemon, or plain CLI paths
 - Do not substitute a different analysis stack unless `llm-tldr` is unavailable or fails after one reasonable attempt
 
+### Timeout Contract (Both Layers)
+
+`llm-tldr` routing has two timeout layers and both must be bounded:
+
+1. MCP path timeout:
+   - bounded by client/runtime policy (Codex/Claude/OpenCode/Gemini tool-call timeout)
+   - this is not configured inside `tldr-daemon-fallback.sh`
+2. CLI fallback timeout:
+   - callers must wrap `tldr-daemon-fallback.sh` with GNU `timeout`
+   - on timeout, return a clear reason and fall back to targeted `rg` or direct source reads
+
+Example bounded fallback:
+
+```bash
+timeout 25 ~/agent-skills/scripts/tldr-daemon-fallback.sh semantic --repo /tmp/agents/<beads-id>/<repo> --query "where is auth bootstrapped?"
+```
+
 ## Beads Memory Synergy
 
 Beads memory is discovery input, not source truth.

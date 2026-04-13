@@ -1,7 +1,7 @@
 # Fresh Device Bootstrap Audit and Deprecation Map
 
-Feature-Key: `bd-0oal8.1`
-Scope: stale fresh-device/bootstrap surfaces only (no behavioral script changes)
+Feature-Key: `bd-0oal8.2`
+Scope: fresh-device/bootstrap cleanup + role-aware entrypoint rollout
 
 ## Decision Categories
 
@@ -28,16 +28,17 @@ Scope: stale fresh-device/bootstrap surfaces only (no behavioral script changes)
 
 | Surface | Category | Why | Follow-up action |
 |---|---|---|---|
-| `scripts/bootstrap-agent.sh` | compatibility shim | Legacy one-liner that chains `dx-hydrate` + `dx-check`; already marked deprecated in header. | Retain as thin delegate to future role-aware bootstrap entrypoint. |
-| `scripts/dx-hydrate.sh` | needs strategic HITL decision | Too broad (bins, cron, aliases, services, launchd policy, optional stacks) and currently acts as control-plane installer. | Split into role-aware primitives before hard deprecation. |
+| `scripts/dx-bootstrap-device.sh` | canonical | Role-aware fresh-device bootstrap entrypoint for `macos-client`, `linux-spoke`, and `hub-controller`; delegates to existing primitives conservatively. | Keep as conceptual entrypoint for fresh-device setup/check. |
+| `scripts/bootstrap-agent.sh` | compatibility shim | Legacy one-liner now delegates directly to `dx-bootstrap-device.sh`. | Keep as thin shim until old prompts are retired. |
+| `scripts/dx-hydrate.sh` | compatibility shim | Still broad and legacy, but no longer the conceptual fresh-device entrypoint. | Keep for legacy/install-repair flows only; do not teach as primary setup path. |
 | `scripts/pre-flight-all.sh` | deprecate loudly | V4.2.1 wording and VM assumptions; not aligned to V8.6 role-aware contract. | Convert to explicit deprecation wrapper that points to canonical checks. |
-| `scripts/pre-flight-1password.sh` | candidate delete after HITL | Legacy direct `op whoami` checks across hosts; conflicts with cache/service-account-first agent contract. | Replace with `dx-bootstrap-auth.sh --json` + `dx-op-auth-status.sh --json` flow. |
-| `scripts/pre-flight-gh-cli.sh` | candidate delete after HITL | Legacy direct remote host loop for GH login; not part of fresh-device P0 bootstrap. | Move to optional diagnostics or remove after approval. |
-| `scripts/pre-flight-ides.sh` | candidate delete after HITL | Legacy IDE inventory script (`V4.2.1` label), weak coupling to current MCP hydration model. | Replace with `dx-check` + `mcp-doctor` role-specific checks. |
+| `scripts/pre-flight-1password.sh` | deprecate loudly | Deprecated wrapper now hard-exits and points to agent-safe auth commands. | Remove after one migration cycle. |
+| `scripts/pre-flight-gh-cli.sh` | deprecate loudly | Deprecated wrapper now hard-exits and points to canonical checks. | Remove after one migration cycle. |
+| `scripts/pre-flight-ides.sh` | deprecate loudly | Deprecated wrapper now hard-exits and points to `dx-check` + `mcp-doctor`. | Remove after one migration cycle. |
 | `scripts/pre-flight-network.sh` | compatibility shim | Simple connectivity probe still useful, but not canonical bootstrap gate. | Keep as optional helper, no longer primary setup entrypoint. |
 | `scripts/pre-flight-railway.sh` | canonical | Uses canonical railway requirements checker in non-interactive mode. | Keep; reference from role-aware bootstrap smoke stage. |
 | `scripts/pre-flight-ssh-keys.sh` | compatibility shim | Delegates to deprecated-for-canonical `ssh-key-doctor`; useful for non-Tailscale targets only. | Keep as non-canonical helper and update message text if needed later. |
-| `scripts/pre-flight-ssh-path.sh` | candidate delete after HITL | Legacy PATH checks around SSH key workflows and `~/.agent/skills`. | Replace with `ensure-shell-path.sh` + `dx-check` checks. |
+| `scripts/pre-flight-ssh-path.sh` | deprecate loudly | Deprecated wrapper now hard-exits and points to `ensure-shell-path.sh` + `dx-check`. | Remove after one migration cycle. |
 | `scripts/dx-check.sh` | canonical | Current integrated preflight for `bdx`, Beads runtime defaults, MCP visibility, launchd policy hygiene, and role checks. | Keep as primary verification surface. |
 | `scripts/dx-ensure-bins.sh` | canonical | Idempotent link installer for current tool surfaces including `bdx`. | Keep. |
 | `scripts/dx-spoke-cron-install.sh` | canonical | Role-aware spoke cron install including OP cache sync from `epyc12`. | Keep. |
@@ -46,14 +47,14 @@ Scope: stale fresh-device/bootstrap surfaces only (no behavioral script changes)
 | `scripts/migrate-to-external-beads.sh` | deprecate loudly | Historical migration script for old external-beads flow; no longer active topology. | Convert to hard-exit notice with runbook pointer in cleanup wave. |
 | `scripts/rollout-external-beads-all-vms.sh` | deprecate loudly | Historical orchestrator for deprecated migration. | Convert to hard-exit notice with runbook pointer in cleanup wave. |
 | `scripts/setup-env-from-1password.sh` | deprecate loudly | Already marked historical/deprecated and based on old monolithic flow. | Keep only with explicit no-op/deprecation guidance. |
-| `scripts/setup-env-opencode.sh` | needs strategic HITL decision | Still uses live `op` lookups and interactive assumptions; conflicts with strict cache/service-account-first automation goals. | Decide if this remains human-only or is replaced by cache-backed generation path. |
-| `scripts/setup-env-slack-coordinator.sh` | needs strategic HITL decision | Same as above. | Same decision as opencode env script. |
-| `scripts/setup-git-hooks.sh` | candidate delete after HITL | Push hook writes legacy `bd sync` behavior and V5 assumptions. Not aligned with current Beads/runtime contract. | Remove or replace after explicit approval. |
+| `scripts/setup-env-opencode.sh` | compatibility shim | Marked human-only with TTY guard; blocked for agent/cron use. | Keep as human bootstrap helper; do not route agents here. |
+| `scripts/setup-env-slack-coordinator.sh` | compatibility shim | Marked human-only with TTY guard; blocked for agent/cron use. | Keep as human bootstrap helper; do not route agents here. |
+| `scripts/setup-git-hooks.sh` | compatibility shim | Hard-deprecated legacy hook installer; now delegates to `dx-git-hooks-bootstrap.sh`. | Keep wrapper for compatibility, no legacy `bd sync` behavior remains. |
 | `scripts/setup-slack-mcp.sh` | compatibility shim | Useful optional helper, but V4.2.1 framing and broad IDE mutation are stale. | Keep as optional helper, refresh docs later. |
 | `scripts/install-ru.sh` | canonical | Minimal, idempotent tool installer for `ru`, no secrets. | Keep. |
 | `infra/vm-bootstrap/SKILL.md` | canonical (Linux adapter) | Explicitly Linux-only and points to this audit for cross-host contract. | Keep as Linux adapter under unified bootstrap contract. |
 | `infra/fleet-sync/SKILL.md` | canonical | Current MCP convergence/source-of-truth skill, including llm-tldr containment details. | Keep. |
-| `health/mcp-doctor/SKILL.md` | needs strategic HITL decision | Still documents `context-plus` launcher contract in active skill text, conflicting with removed/tombstoned context-plus policy. | Decide whether to fully remove context-plus references from active doctor contract now. |
+| `health/mcp-doctor/SKILL.md` | canonical | Active skill + checker now validate `llm-tldr` + `serena` only and no longer teach `context-plus` launcher contracts. | Keep. |
 | `health/bd-doctor/SKILL.md` | canonical | Current Beads diagnosis contract: `bdx`, `~/.beads-runtime/.beads`, epyc12 hub, readiness caveats. | Keep. |
 | `health/dx-cron/SKILL.md` | canonical | Current cron/log observability surface with canonical cleanup expectations. | Keep. |
 | `core/op-secrets-quickref/SKILL.md` | canonical | Current auth mode matrix reflects GUI-human vs cache/service-account agent paths and epyc12 hub refresh rule. | Keep. |
@@ -64,10 +65,12 @@ Scope: stale fresh-device/bootstrap surfaces only (no behavioral script changes)
 
 The following stale themes are still present and should be handled in later cleanup tasks:
 
-- `context-plus` appears in active-adjacent docs under `docs/runbook/fleet-sync/` and in `health/mcp-doctor/SKILL.md`.
+- `context-plus` remains only in tombstone/historical evidence docs; active doctor
+  contracts and fleet-sync render templates no longer validate or install it.
 - V4.2.1 labels remain in `pre-flight-*` and `setup-slack-mcp.sh`.
 - Historical Beads migration scripts (`migrate-to-external-beads.sh`, `rollout-external-beads-all-vms.sh`) still look executable despite top-of-file warnings.
-- `bd sync` still exists in `scripts/setup-git-hooks.sh` and conflicts with current central Dolt runtime contract.
+- `bd sync` remains only in historical docs and legacy sync helpers; it is no
+  longer installed by `scripts/setup-git-hooks.sh`.
 - Legacy mounts (`~/.agent/skills`) remain as compatibility behavior in `dx-hydrate.sh`.
 
 ## llm-tldr Bounded Fallback Requirement
@@ -105,20 +108,24 @@ Fresh-device acceptance must include both a macOS client and one Linux spoke:
   - cron entries align with spoke profile (`dx-spoke-cron-install.sh`)
   - bounded `llm-tldr` fallback smoke behavior validated
 
-## Strategic HITL Decisions Required Before Cleanup Wave
+## Cleanup Wave Decisions Implemented
 
 1. `dx-hydrate.sh` decomposition strategy:
-   - one role-aware bootstrap entrypoint vs multiple host-role scripts.
+   - one role-aware bootstrap entrypoint, `scripts/dx-bootstrap-device.sh`.
 2. Active handling for `context-plus` historical traces:
-   - keep in evidence-only files vs remove from active runbook/skill contracts.
+   - keep in evidence-only/tombstone files; remove from active doctor and
+     fleet-sync render contracts.
 3. Fate of legacy pre-flight suite:
-   - retain as compatibility wrappers vs delete after migration to `dx-check` + role-specific smoke.
+   - retain only precise compatibility helpers; hard-deprecate stale scripts.
 4. `setup-env-*` live `op` behavior:
-   - keep as human-only utilities or convert to cache/service-account-aware generation.
+   - keep as human-only utilities; agent/cron paths use cache/service-account
+     auth helpers.
 5. `setup-git-hooks.sh`:
-   - remove (preferred) or rewrite against current Beads contract.
+   - compatibility shim to `dx-git-hooks-bootstrap.sh`; no legacy `bd sync`
+     hook behavior remains.
 
-## Guardrail for This Subtask
+## Remaining Guardrail
 
-This audit intentionally does not delete scripts, change cron behavior, or alter auth/runtime behavior.
-It is a decision-prep map for the follow-on cleanup tasks in `bd-0oal8`.
+This cleanup intentionally keeps compatibility shims instead of silently
+deleting old entrypoints. Future deletion should be a separate, explicit
+cleanup after one migration cycle.

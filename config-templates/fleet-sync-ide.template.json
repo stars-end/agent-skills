@@ -1,67 +1,20 @@
 {
   "mcpServers": {
-    "context-plus-agent-skills": {
+    "llm-tldr": {
       "type": "stdio",
-      "command": "node",
-      "args": [
-        "~/.local/share/contextplus-patched/build/index.js",
-        "~/agent-skills"
-      ],
-      "env": {
-        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
-        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
-      }
-    },
-    "context-plus-prime-radiant-ai": {
-      "type": "stdio",
-      "command": "node",
-      "args": [
-        "~/.local/share/contextplus-patched/build/index.js",
-        "~/prime-radiant-ai"
-      ],
-      "env": {
-        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
-        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
-      }
-    },
-    "context-plus-affordabot": {
-      "type": "stdio",
-      "command": "node",
-      "args": [
-        "~/.local/share/contextplus-patched/build/index.js",
-        "~/affordabot"
-      ],
-      "env": {
-        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
-        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
-      }
-    },
-    "context-plus-llm-common": {
-      "type": "stdio",
-      "command": "node",
-      "args": [
-        "~/.local/share/contextplus-patched/build/index.js",
-        "~/llm-common"
-      ],
-      "env": {
-        "OPENROUTER_EMBED_MODEL": "openai/text-embedding-3-small",
-        "CONTEXTPLUS_EMBED_PROVIDER": "auto"
-      }
-    },
-    "cass-memory": {
-      "type": "stdio",
-      "command": "cass-memory",
+      "command": "~/agent-skills/scripts/tldr-mcp-contained-launch.py",
       "args": []
     },
     "serena": {
       "type": "stdio",
-      "command": "serena",
-      "args": []
-    },
-    "llm-tldr": {
-      "type": "stdio",
-      "command": "tldr-mcp",
-      "args": []
+      "command": "~/.local/bin/serena",
+      "args": [
+        "start-mcp-server",
+        "--enable-web-dashboard",
+        "false",
+        "--open-web-dashboard",
+        "false"
+      ]
     }
   }
 }

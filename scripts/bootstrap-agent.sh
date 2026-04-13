@@ -1,28 +1,20 @@
-#!/bin/bash
-# Legacy universal Agent Bootstrap & Health Check.
-# Deprecated as a fresh-device bootstrap surface; see
-# docs/FRESH_DEVICE_BOOTSTRAP_AUDIT.md for the active contract.
-# Usage: curl -fsSL <URL> | bash
+#!/usr/bin/env bash
+# Legacy bootstrap shim.
+# Canonical fresh-device entrypoint is scripts/dx-bootstrap-device.sh.
 
-set -e
+set -euo pipefail
 
-echo "🤖 Bootstrapping Agent Environment..."
+echo "DEPRECATED: bootstrap-agent.sh is now a compatibility shim."
+echo "Using canonical role-aware bootstrap entrypoint: scripts/dx-bootstrap-device.sh"
 
-# 1. Ensure agent-skills exists
-if [ ! -d "$HOME/agent-skills" ]; then
-    echo "📥 Cloning agent-skills..."
-    git clone https://github.com/stars-end/agent-skills.git "$HOME/agent-skills"
-else
-    echo "🔄 Updating agent-skills..."
-    cd "$HOME/agent-skills" && git pull origin master
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_SCRIPT="$SCRIPT_DIR/dx-bootstrap-device.sh"
+
+if [[ ! -x "$BOOTSTRAP_SCRIPT" ]]; then
+  echo "Missing canonical bootstrap script: $BOOTSTRAP_SCRIPT" >&2
+  echo "Clone or update agent-skills, then run:" >&2
+  echo "  ~/agent-skills/scripts/dx-bootstrap-device.sh --role auto" >&2
+  exit 2
 fi
 
-# 2. Hydrate & Link
-"$HOME/agent-skills/scripts/dx-hydrate.sh"
-
-# 3. Source env (for this shell)
-source "$HOME/.bashrc" 2>/dev/null || true
-
-# 4. Run Health Check
-echo "🩺 Running DX Check..."
-"$HOME/agent-skills/scripts/dx-check.sh"
+exec "$BOOTSTRAP_SCRIPT" --role auto "$@"

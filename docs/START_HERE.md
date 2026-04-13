@@ -4,12 +4,9 @@ This repo standardizes your agent environment across canonical VMs.
 
 ## Current Status
 
-The fresh-device bootstrap surface is under cleanup. Do not use
-`scripts/bootstrap-agent.sh` or `scripts/dx-hydrate.sh` as a fresh-device
-one-liner until they are converted into role-aware shims.
-
-Use the active contract in `docs/FRESH_DEVICE_BOOTSTRAP_AUDIT.md` when setting
-up a new host.
+Use `scripts/dx-bootstrap-device.sh` as the role-aware fresh-device entrypoint.
+`scripts/bootstrap-agent.sh` is a compatibility shim and `scripts/dx-hydrate.sh`
+is legacy broad repair, not the conceptual setup path for new agents.
 
 ## Quick Start (Current Safe Path)
 
@@ -33,6 +30,7 @@ cd ~/agent-skills/infra/vm-bootstrap
 ### Existing Host - Verify, Then Repair Explicitly
 
 ```bash
+~/agent-skills/scripts/dx-bootstrap-device.sh --role auto --check-only
 ~/agent-skills/health/bd-doctor/check.sh
 ~/agent-skills/health/mcp-doctor/check.sh
 ~/agent-skills/scripts/dx-bootstrap-auth.sh --json
@@ -61,6 +59,7 @@ dx-check
 non-interactive GitHub SSH auth is unavailable.
 
 DX command contract:
+- `dx-bootstrap-device.sh` is the role-aware fresh-device entrypoint.
 - `dx-check` is the default health + fix entrypoint.
 - `dx-status` is read-only diagnostics.
 - `dx-hydrate` is legacy broad bootstrap/repair and should not be used as a
