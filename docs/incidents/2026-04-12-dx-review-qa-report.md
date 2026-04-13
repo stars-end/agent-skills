@@ -607,3 +607,140 @@ dx-review run \
   --prompt-file /tmp/review.prompt \
   --wait
 ```
+
+## Retest After PR #554 / `816387a`
+
+Date: 2026-04-12
+Host: Fengs-MacBook-Pro
+Local `agent-skills` HEAD: `816387a bd-icwpm: fix dx-review worktree preflight`
+
+This section records a third QA pass after PR #554 merged and the local canonical checkout was fast-forwarded.
+
+### Commands
+
+Previously failing authoritative-worktree repro:
+
+```bash
+cd /Users/fning/prime-radiant-ai
+dx-review doctor --worktree /tmp/agents/bd-jxclm.15/agent-skills
+```
+
+Missing metadata JSON repro:
+
+```bash
+cd /Users/fning/prime-radiant-ai
+dx-runner check --beads bd-jxclm.15u.missing --json
+printf '\nrc=%s\n' "$?"
+```
+
+Live review from the previously failing caller cwd:
+
+```bash
+cd /Users/fning/prime-radiant-ai
+dx-review run \
+  --beads bd-jxclm.15u \
+  --worktree /tmp/agents/bd-jxclm.15/agent-skills \
+  --prompt-file /tmp/dx-review-bd-jxclm.15r.prompt \
+  --wait \
+  --timeout-sec 300 \
+  --poll-sec 10
+```
+
+### Resolved
+
+#### Explicit `--worktree` is now authoritative for `mise`
+
+The exact repro that previously failed by inspecting `/Users/fning/prime-radiant-ai/.mise.toml` now passes:
+
+```text
+cwd: /Users/fning/prime-radiant-ai
+provider: opencode
+canonical model probe: OK (zhipuai/glm-5.1)
+execution mode capability: OK (headless run)
+beads-mcp binary: MISSING
+  WARN_CODE=opencode_beads_mcp_missing severity=warn action=install_beads_mcp_for_richer_context
+mise trust: N/A (explicit worktree has no .mise target: /private/tmp/agents/bd-jxclm.15/agent-skills)
+
+=== Preflight PASSED with warnings (1 warning(s)) ===
+```
+
+This closes the high-severity product-agent cwd bleed bug.
+
+#### Missing reviewer metadata now emits JSON
+
+The missing-metadata check now emits machine-readable JSON:
+
+```json
+{
+  "beads": "bd-jxclm.15u.missing",
+  "provider": "unknown",
+  "state": "missing",
+  "reason_code": "no_meta",
+  "next_action": "verify_beads_id_or_start_reviewer"
+}
+```
+
+The command still exits `1`, which is appropriate for missing metadata as long as automation can parse the JSON body.
+
+#### Live run passes from a non-target caller cwd
+
+The live run from `/Users/fning/prime-radiant-ai` against `/tmp/agents/bd-jxclm.15/agent-skills` completed both reviewers:
+
+```text
+reviewer=bd-jxclm.15u.claude state=review_completed raw_state=no_op_success rc=0
+reviewer=bd-jxclm.15u.opencode state=review_completed raw_state=no_op_success rc=0
+```
+
+Final reports:
+
+```json
+{
+  "beads": "bd-jxclm.15u.claude",
+  "provider": "claude-code",
+  "state": "no_op_success",
+  "reason_code": "exit_zero_no_mutations",
+  "selected_model": "opus",
+  "worktree": "/tmp/agents/bd-jxclm.15/agent-skills",
+  "mutations": 0
+}
+```
+
+```json
+{
+  "beads": "bd-jxclm.15u.opencode",
+  "provider": "opencode",
+  "state": "no_op_success",
+  "reason_code": "exit_zero_no_mutations",
+  "selected_model": "zhipuai/glm-5.1",
+  "worktree": "/tmp/agents/bd-jxclm.15/agent-skills",
+  "mutations": 0
+}
+```
+
+### Remaining P2 Enhancement Requests
+
+The blocking/friction bugs from the first two passes are resolved. Remaining items are product-agent ergonomics:
+
+- Add `dx-review summarize --beads <id>` to combine reviewer verdicts, findings, failures, token/cost use, and log/report paths into one artifact.
+- Add `dx-review run --pr <owner/repo#num>` or `--github-pr <url>` to auto-populate repository, PR URL, base/head SHAs, changed files, and default review prompt context.
+- Add prompt templates such as `--template smoke`, `--template code-review`, and `--template arch-review`.
+- Add an explicit read-only review mode that permits non-mutating shell commands like `git diff`, `rg`, `sed`, and `pytest --collect-only` while still blocking edits, commits, pushes, and secret retrieval.
+- Print a final quorum line, for example `dx-review quorum: 2/2 completed, 0 failed`, so product agents do not need to infer status from per-reviewer JSON.
+- Include token and cost summaries in the final wrapper output. The OpenCode smoke prompt previously consumed about 50k total tokens, which is acceptable only if visible.
+- Continue improving runtime skill discovery so already-running product-agent sessions notice the new `dx-review` skill or get an explicit refresh instruction.
+
+### Final Tooling Verdict
+
+After PR #554, `dx-review` is ready for product-agent use with the advertised command shape:
+
+```bash
+dx-review doctor --worktree /tmp/agents/<id>/<repo>
+
+dx-review run \
+  --beads bd-xxxx \
+  --worktree /tmp/agents/<id>/<repo> \
+  --prompt-file /tmp/review.prompt \
+  --wait
+```
+
+The remaining work is polish, not a blocker for adoption.
