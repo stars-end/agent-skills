@@ -229,8 +229,7 @@ Each tool in `configs/mcp-tools.yaml` has an `integration_mode` field:
 | Tool | Mode | Status | Notes |
 |------|------|--------|-------|
 | `llm-tldr` | mcp | Enabled | Static analysis context slicing |
-| `cass-memory` | cli | Enabled | CLI-native, no IDE rendering |
-| `context-plus` | mcp | Enabled | Package: `contextplus@latest` |
+| `cass-memory` | cli | Disabled by default | Pilot-only CLI memory, no IDE rendering |
 | `serena` | mcp | Enabled | Install from GitHub (PyPI collision) |
 
 ## 13) Platform Status Contract
@@ -249,13 +248,14 @@ Ops infrastructure is healthy but tool-value lane is partial:
 - Core ops checks pass: `beads_dolt`, `required_service_health`, `op_auth_readiness`, `alerts_transport_readiness`
 - Tools that are explicitly disabled in `configs/mcp-tools.yaml` are exempt from health checks
 
-**Current State (as of 2026-03-10): FULL_GO**
+**Current State (as of 2026-04-13): FULL_GO for the active canonical tool set**
 
-All four tools are enabled and pass Layer 1-4 checks:
+Active MCP tools are:
 - `llm-tldr` (mcp): Static analysis context slicing
-- `cass-memory` (cli): CLI-native episodic memory
-- `context-plus` (mcp): Structural context analysis
 - `serena` (mcp): AI assistant memory
+
+`cass-memory` remains pilot-only CLI memory and is disabled by default in
+`configs/mcp-tools.yaml`.
 
 **Known Limitations (documented in evidence/layer4.txt):**
 - Claude Code: All MCP tools visible and connected ✓
@@ -263,7 +263,8 @@ All four tools are enabled and pass Layer 1-4 checks:
 - OpenCode: All MCP tools visible and connected ✓ (using `mcp` JSONC format)
 - Gemini CLI: All MCP tools visible and connected ✓ (using `~/.gemini/settings.json`)
 
-Full GO is achieved. All four primary clients show MCP tool visibility for Layer 4 (Codex verified on macmini, optional on Linux).
+Full GO is achieved when all primary clients show active MCP tool visibility for
+Layer 4 (Codex verified on macmini, optional on Linux).
 
 Pre-merge acceptance is defined by:
 `docs/runbook/fleet-sync/merge-acceptance-matrix.md`

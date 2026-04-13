@@ -108,7 +108,7 @@ check_mcp_client() {
   local out
   out=$(eval "$list_cmd" 2>&1 || true)
   local missing_tools=""
-  for tool in "llm-tldr" "context-plus" "serena"; do
+  for tool in "llm-tldr" "serena"; do
     if ! client_tool_visible "$client_name" "$tool" "$out"; then
       missing_tools="$missing_tools $tool"
     fi
@@ -159,79 +159,6 @@ else
     client_warnings=$((client_warnings+1))
   fi
 fi
-
-check_context_plus_google_contract() {
-  local gemini_path="$HOME/.gemini/settings.json"
-  local antigravity_path="$HOME/.gemini/antigravity/mcp_config.json"
-  local contract_line
-
-  contract_line="$(python3 - "$gemini_path" "$antigravity_path" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-gemini_path = Path(sys.argv[1]).expanduser()
-antigravity_path = Path(sys.argv[2]).expanduser()
-
-def classify(path: Path):
-    if not path.exists():
-        return "missing_file"
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return "invalid_json"
-    servers = payload.get("mcpServers")
-    if not isinstance(servers, dict):
-        return "missing_mcpServers"
-    ctx = servers.get("context-plus")
-    if not isinstance(ctx, dict):
-        return "missing_context_plus"
-    command = str(ctx.get("command", "")).strip()
-    args = ctx.get("args", [])
-    if not isinstance(args, list):
-        args = []
-    args = [str(a) for a in args]
-    joined = " ".join(args)
-
-    if command == "npx" and "contextplus" in joined:
-        return "stale_npx"
-    if command == "node" and "contextplus-patched/build/index.js" in joined:
-        return "plain_node"
-    if command == "bash" and any(
-        ("exec node" in a and "contextplus-patched/build/index.js" in a and "2>/dev/null" in a)
-        for a in args
-    ):
-        return "wrapped_bash"
-    return "other"
-
-gemini_state = classify(gemini_path)
-antigravity_state = classify(antigravity_path)
-drift = "1" if gemini_state != antigravity_state else "0"
-ok = "1" if gemini_state == "wrapped_bash" and antigravity_state == "wrapped_bash" else "0"
-print(f"{gemini_state}|{antigravity_state}|{drift}|{ok}")
-PY
-)"
-
-  IFS='|' read -r gemini_state antigravity_state drift ok <<< "$contract_line"
-  echo -n "- context-plus launcher contract (gemini/antigravity): "
-  if [[ "$ok" == "1" ]]; then
-    echo "✅ wrapped_bash on both surfaces"
-    return
-  fi
-
-  if [[ "$gemini_state" == "stale_npx" || "$antigravity_state" == "stale_npx" ]]; then
-    echo "⚠️  stale npx launcher detected (gemini=$gemini_state antigravity=$antigravity_state)"
-  elif [[ "$gemini_state" == "plain_node" || "$antigravity_state" == "plain_node" ]]; then
-    echo "⚠️  plain node launcher detected (gemini=$gemini_state antigravity=$antigravity_state)"
-  elif [[ "$drift" == "1" ]]; then
-    echo "⚠️  config drift between gemini and antigravity (gemini=$gemini_state antigravity=$antigravity_state)"
-  else
-    echo "⚠️  unexpected launcher form (gemini=$gemini_state antigravity=$antigravity_state)"
-  fi
-  client_warnings=$((client_warnings+1))
-}
-
-check_context_plus_google_contract
 
 echo ""
 echo "=========================================================="

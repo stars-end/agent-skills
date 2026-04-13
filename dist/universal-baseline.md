@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 9cd9a9ba6b2aebad69baf39ab014908c27330d9c -->
-<!-- Last updated: 2026-04-12 21:14:39 UTC -->
+<!-- Source SHA: 7ff943a82709924bbce06b420df83a1e25aabcb7 -->
+<!-- Last updated: 2026-04-13 07:14:52 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -348,6 +348,9 @@ Transport handling rule:
 - \`llm-tldr\` is filesystem-local: the MCP server process must run on a host that can read the requested project path
 - if \`llm-tldr\` MCP is unavailable in the current runtime, use the canonical local fallback instead of inventing a new analysis path
 - agents should not manually choose among MCP vs daemon vs raw CLI surfaces beyond this fallback rule
+- timeout policy is layered:
+  - MCP path timeout is controlled by client/runtime tool-call policy
+  - CLI fallback must be wrapped by GNU \`timeout\` and on timeout must fall back to targeted \`rg\` or direct source reads
 
 Codex desktop hydration check:
 1. run \`codex mcp list\` and confirm the tool is configured

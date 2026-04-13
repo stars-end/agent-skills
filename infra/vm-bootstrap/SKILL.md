@@ -17,10 +17,10 @@ tags: [dx, tooling, setup, linux]
 Verify and optionally install required tools for a standardized Linux
 development VM.
 
-This is a Linux adapter, not the universal fresh-device bootstrap surface. For
-macOS clients or cross-host setup decisions, follow
-`docs/FRESH_DEVICE_BOOTSTRAP_AUDIT.md` until the role-aware bootstrap entrypoint
-replaces the legacy scripts.
+This is a Linux adapter, not the universal fresh-device bootstrap surface. Use
+`scripts/dx-bootstrap-device.sh --role auto` as the role-aware entrypoint, and
+this skill/script when the detected host is a Linux VM that needs tool
+verification or interactive installs.
 
 ## Modes
 

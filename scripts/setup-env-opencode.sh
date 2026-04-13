@@ -2,8 +2,18 @@
 # setup-env-opencode.sh
 # Generate ~/.config/opencode/.env from 1Password (per-service, no mega-item)
 # Usage: ./scripts/setup-env-opencode.sh
+# HUMAN-ONLY utility. Not for agents/cron.
 
 set -euo pipefail
+
+if [[ ! -t 0 || ! -t 1 ]]; then
+    echo "BLOCKED: human_interactive_only"
+    echo "setup-env-opencode.sh is a human-only helper."
+    echo "Agents/cron must use cache/service-account auth helpers instead:"
+    echo "  scripts/dx-bootstrap-auth.sh --json"
+    echo "  scripts/dx-op-auth-status.sh --json"
+    exit 2
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE_FILE="$SCRIPT_DIR/env/opencode.env.template"
