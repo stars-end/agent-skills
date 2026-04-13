@@ -28,6 +28,13 @@ It replaces prompt-shaping usage that previously lived in:
 - `parallelize-cloud-work` (archived)
 - `jules-dispatch` (archived)
 
+## Boundary: Review Lanes
+
+`prompt-writing` is for delegation prompts that ask another agent to implement,
+repair, verify, or ship code changes. For inbound reviewer lanes, use
+`dx-review --template <smoke|code-review|architecture-review|security-review>`
+instead of embedding reviewer prompt bodies manually.
+
 ## Lifecycle Modes
 
 Use one explicit mode in each generated prompt:

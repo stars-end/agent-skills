@@ -13,24 +13,32 @@ if [[ -L "$SCRIPT_SOURCE" ]]; then
 fi
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 DX_RUNNER="${DX_RUNNER_BIN:-$SCRIPT_DIR/dx-runner}"
+TEMPLATES_DIR="${DX_REVIEW_TEMPLATES_DIR:-$SCRIPT_DIR/../templates/dx-review}"
 
 usage() {
     cat <<'EOF'
 dx-review
 
 Usage:
-  dx-review run --beads <bd-id> --worktree <path> (--prompt <text> | --prompt-file <path>) [options]
+  dx-review run --beads <bd-id> --worktree <path> (--prompt <text> | --prompt-file <path> | --template <name> | --pr <ref>) [options]
   dx-review doctor --worktree <path> [--gemini]
+  dx-review summarize --beads <bd-id> [--gemini]
 
 Options:
   --gemini              Include the optional gemini-burst reviewer.
+  --pr <url|repo#num>   Include GitHub PR metadata from gh.
+  --github-pr <ref>     Alias for --pr.
+  --template <name>     Review template: smoke, code-review, architecture-review, arch-review, security-review.
+  --read-only-shell     Include explicit read-only shell review contract.
   --wait                Wait for reviewers to finish.
   --timeout-sec <n>     Wait timeout in seconds (default: 300).
   --poll-sec <n>        Poll interval in seconds (default: 5).
 
 Examples:
   dx-review run --beads bd-xxx --worktree /tmp/agents/bd-xxx/agent-skills \
-    --prompt "Answer exactly REVIEW_READY." --wait
+    --pr https://github.com/stars-end/agent-skills/pull/554 \
+    --template code-review --wait
+  dx-review summarize --beads bd-xxx
 EOF
 }
 
@@ -90,6 +98,437 @@ is_terminal_state() {
     esac
 }
 
+reason_from_json() {
+    sed -n 's/.*"reason_code"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+provider_from_json() {
+    sed -n 's/.*"provider"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+verdict_from_text() {
+    local text="${1:-}"
+    local verdict=""
+    verdict="$(printf '%s\n' "$text" | sed -n 's/.*"verdict"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+    if [[ -z "$verdict" ]]; then
+        verdict="$(printf '%s\n' "$text" | sed -E -n 's/^[*[:space:]]*VERDICT:[*[:space:]]*([^*[:space:]]+).*$/\1/p' | head -n 1)"
+    fi
+    printf '%s' "$verdict"
+}
+
+json_number_from_text() {
+    local key="$1"
+    local text="${2:-}"
+    local value
+    value="$(printf '%s\n' "$text" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\\{0,1\\}\\([-0-9.][0-9.]*\\)\"\\{0,1\\}.*/\\1/p" | head -n 1)"
+    printf '%s' "$value"
+}
+
+usage_number_from_text() {
+    local key="$1"
+    local text="${2:-}"
+    local value alt_key=""
+    value="$(json_number_from_text "$key" "$text")"
+    if [[ -z "$value" ]]; then
+        value="$(printf '%s\n' "$text" | sed -n "s/^[[:space:]-]*${key}:[[:space:]]*\\([0-9][0-9.]*\\).*$/\\1/p" | head -n 1)"
+    fi
+    if [[ -z "$value" ]]; then
+        case "$key" in
+            input_tokens) alt_key="input" ;;
+            output_tokens) alt_key="output" ;;
+            total_tokens) alt_key="total" ;;
+            estimated_cost_usd) alt_key="cost" ;;
+        esac
+        if [[ -n "$alt_key" ]]; then
+            value="$(json_number_from_text "$alt_key" "$text")"
+        fi
+    fi
+    printf '%s' "$value"
+}
+
+field_from_text() {
+    local key="$1"
+    local text="${2:-}"
+    local value
+    value="$(printf '%s\n' "$text" | sed -E -n "s/^[*[:space:]]*${key}:[*[:space:]]*(.*)$/\\1/p" | head -n 1 | sed -E 's/[[:space:]*]*$//')"
+    printf '%s' "$value"
+}
+
+findings_count_from_text() {
+    local text="${1:-}"
+    local value
+    value="$(json_number_from_text "findings_count" "$text")"
+    if [[ -z "$value" ]]; then
+        value="$(field_from_text "FINDINGS_COUNT" "$text" | sed -n 's/^\([0-9][0-9]*\).*$/\1/p' | head -n 1)"
+    fi
+    printf '%s' "${value:-null}"
+}
+
+read_only_enforcement_from_text() {
+    local text="${1:-}"
+    local value
+    value="$(printf '%s\n' "$text" | sed -n 's/.*"read_only_enforcement"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+    if [[ -z "$value" ]]; then
+        value="$(printf '%s\n' "$text" | sed -E -n 's/.*READ_ONLY_ENFORCEMENT:[*[:space:]]*(provider_enforced|contract_only|unavailable).*/\1/p' | head -n 1)"
+    fi
+    case "$value" in
+        provider_enforced|contract_only|unavailable) printf '%s' "$value" ;;
+        *) printf 'unavailable' ;;
+    esac
+}
+
+template_path() {
+    local name="$1"
+    case "$name" in
+        smoke|code-review|architecture-review|security-review)
+            printf '%s/%s.md' "$TEMPLATES_DIR" "$name"
+            ;;
+        arch-review)
+            printf '%s/architecture-review.md' "$TEMPLATES_DIR"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+contract_path() {
+    local name="$1"
+    printf '%s/contracts/%s.md' "$TEMPLATES_DIR" "$name"
+}
+
+append_section_file() {
+    local title="$1"
+    local file="$2"
+    local out="$3"
+    [[ -f "$file" ]] || { echo "required template file missing: $file" >&2; return 1; }
+    {
+        printf '\n## %s\n\n' "$title"
+        cat "$file"
+        printf '\n'
+    } >> "$out"
+}
+
+parse_pr_ref() {
+    local ref="$1"
+    if [[ "$ref" =~ ^https://github.com/([^/]+/[^/]+)/pull/([0-9]+) ]]; then
+        printf '%s %s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+        return 0
+    fi
+    if [[ "$ref" =~ ^([^[:space:]#/]+/[^[:space:]#/]+)#([0-9]+)$ ]]; then
+        printf '%s %s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+        return 0
+    fi
+    return 1
+}
+
+render_pr_metadata() {
+    local pr_ref="$1"
+    local out="$2"
+    command -v gh >/dev/null 2>&1 || { echo "BLOCKED: github_pr_metadata_unavailable (gh missing)" >&2; return 1; }
+    command -v jq >/dev/null 2>&1 || { echo "BLOCKED: github_pr_metadata_unavailable (jq missing)" >&2; return 1; }
+
+    local repo number view_json files checks diff_names
+    if ! read -r repo number < <(parse_pr_ref "$pr_ref"); then
+        echo "BLOCKED: github_pr_metadata_unavailable (unsupported PR ref: $pr_ref)" >&2
+        return 1
+    fi
+
+    set +e
+    view_json="$(gh pr view "$number" --repo "$repo" --json number,url,title,state,baseRefName,headRefName,baseRefOid,headRefOid,files,statusCheckRollup 2>&1)"
+    local view_rc=$?
+    diff_names="$(gh pr diff "$number" --repo "$repo" --name-only 2>&1)"
+    local diff_rc=$?
+    set -e
+    if [[ "$view_rc" -ne 0 ]]; then
+        echo "BLOCKED: github_pr_metadata_unavailable ($view_json)" >&2
+        return 1
+    fi
+    if [[ "$diff_rc" -ne 0 ]]; then
+        diff_names="unavailable: $diff_names"
+    fi
+
+    files="$(printf '%s\n' "$view_json" | jq -r '.files[]?.path // empty' | sed 's/^/- /')"
+    checks="$(printf '%s\n' "$view_json" | jq -r '.statusCheckRollup[]? | "- " + (.name // "unknown") + ": " + (.status // "unknown") + "/" + (.conclusion // "pending")' 2>/dev/null || true)"
+
+    {
+        printf '\n## Pull Request Metadata\n\n'
+        printf -- '- Repo: `%s`\n' "$repo"
+        printf -- '- PR: #%s\n' "$(printf '%s\n' "$view_json" | jq -r '.number')"
+        printf -- '- URL: %s\n' "$(printf '%s\n' "$view_json" | jq -r '.url')"
+        printf -- '- Title: %s\n' "$(printf '%s\n' "$view_json" | jq -r '.title')"
+        printf -- '- State: %s\n' "$(printf '%s\n' "$view_json" | jq -r '.state')"
+        printf -- '- Base: %s `%s`\n' "$(printf '%s\n' "$view_json" | jq -r '.baseRefName')" "$(printf '%s\n' "$view_json" | jq -r '.baseRefOid')"
+        printf -- '- Head: %s `%s`\n\n' "$(printf '%s\n' "$view_json" | jq -r '.headRefName')" "$(printf '%s\n' "$view_json" | jq -r '.headRefOid')"
+        printf '### Changed Files\n\n'
+        if [[ -n "$files" ]]; then printf '%s\n' "$files"; else printf -- '- unavailable\n'; fi
+        printf '\n### Status Checks\n\n'
+        if [[ -n "$checks" ]]; then printf '%s\n' "$checks"; else printf -- '- unavailable\n'; fi
+        printf '\n### Diff Name-Only\n\n```text\n%s\n```\n' "$diff_names"
+    } >> "$out"
+}
+
+build_review_prompt() {
+    local out="$1"
+    local template_name="$2"
+    local pr_ref="$3"
+    local prompt_text="$4"
+    local prompt_file="$5"
+    local read_only_shell="$6"
+
+    : > "$out"
+    printf '# dx-review prompt\n' >> "$out"
+
+    if [[ -n "$template_name" || "$read_only_shell" == "true" ]]; then
+        append_section_file "Read-Only Review Mode" "$(contract_path read-only-review-mode)" "$out"
+    fi
+    if [[ -n "$template_name" ]]; then
+        append_section_file "Secret-Auth Invariant" "$(contract_path secret-auth-invariant)" "$out"
+        append_section_file "Tool Routing" "$(contract_path tool-routing-review)" "$out"
+    fi
+    if [[ -n "$pr_ref" ]]; then
+        render_pr_metadata "$pr_ref" "$out"
+    fi
+    if [[ -n "$template_name" ]]; then
+        local tpath
+        tpath="$(template_path "$template_name")" || { echo "unknown template: $template_name" >&2; return 1; }
+        append_section_file "Review Template: $template_name" "$tpath" "$out"
+        append_section_file "Reviewer Output Schema" "$(contract_path reviewer-output-schema)" "$out"
+    fi
+    if [[ -n "$prompt_file" ]]; then
+        append_section_file "Additional Instructions" "$prompt_file" "$out"
+    fi
+    if [[ -n "$prompt_text" ]]; then
+        {
+            printf '\n## Additional Instructions\n\n'
+            printf '%s\n' "$prompt_text"
+        } >> "$out"
+    fi
+}
+
+profile_for_reviewer() {
+    case "$1" in
+        *.claude) printf 'claude-code-review' ;;
+        *.opencode) printf 'opencode-review' ;;
+        *.gemini) printf 'gemini-burst' ;;
+        *) printf 'unknown' ;;
+    esac
+}
+
+provider_hint_for_reviewer() {
+    case "$1" in
+        *.claude) printf 'claude-code' ;;
+        *.opencode) printf 'opencode' ;;
+        *.gemini) printf 'gemini' ;;
+        *) printf 'unknown' ;;
+    esac
+}
+
+reviewer_is_failed() {
+    local state="$1"
+    local verdict="$2"
+    case "$state" in
+        start_failed|blocked|missing|exited_err|unknown|running)
+            return 0
+            ;;
+    esac
+    case "$verdict" in
+        fail|failed|blocked|error)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+reviewer_is_completed() {
+    local state="$1"
+    case "$state" in
+        exited_ok|no_op_success|stopped)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+summarize_reviews() {
+    local beads="$1"
+    local include_gemini="$2"
+    local quiet="${3:-false}"
+    local run_dir="/tmp/dx-review/${beads}"
+    local summary_json="$run_dir/summary.json"
+    local summary_md="$run_dir/summary.md"
+    local -a profiles=("claude-code-review" "opencode-review")
+    local -a reviewers=()
+    local -a entries=()
+    local -a md_rows=()
+    local total=0 completed=0 failed=0 quorum_not_reached=0
+    local profile reviewer
+
+    mkdir -p "$run_dir"
+    if [[ "$include_gemini" == "true" ]]; then
+        profiles+=("gemini-burst")
+    fi
+    for profile in "${profiles[@]}"; do
+        reviewers+=("$(reviewer_id_for_profile "$beads" "$profile")")
+    done
+
+    for reviewer in "${reviewers[@]}"; do
+        total=$((total + 1))
+        local reviewer_profile state reason provider display_state verdict
+        local check_json check_rc report_json report_rc report_path log_path start_log
+        local input_tokens output_tokens total_tokens estimated_cost usage_available usage_source
+        local findings_count read_only_enforcement log_text normalized_log_text parse_text
+        local usage_json verdict_json
+        local reviewer_failed=false reviewer_completed=false
+
+        reviewer_profile="$(profile_for_reviewer "$reviewer")"
+        start_log="$run_dir/${reviewer}.start.log"
+        report_path="$run_dir/${reviewer}.report.json"
+
+        set +e
+        check_json="$("$DX_RUNNER" check --beads "$reviewer" --json 2>&1)"
+        check_rc=$?
+        set -e
+
+        state="$(printf '%s\n' "$check_json" | state_from_check_json)"
+        reason="$(printf '%s\n' "$check_json" | reason_from_json)"
+        provider="$(printf '%s\n' "$check_json" | provider_from_json)"
+
+        set +e
+        report_json="$("$DX_RUNNER" report --beads "$reviewer" --format json 2>&1)"
+        report_rc=$?
+        set -e
+        printf '%s\n' "$report_json" > "$report_path"
+
+        if [[ -z "$state" ]]; then
+            state="$(printf '%s\n' "$report_json" | state_from_check_json)"
+        fi
+        if [[ -z "$reason" ]]; then
+            reason="$(printf '%s\n' "$report_json" | reason_from_json)"
+        fi
+        if [[ -z "$provider" ]]; then
+            provider="$(printf '%s\n' "$report_json" | provider_from_json)"
+        fi
+
+        state="${state:-unknown}"
+        reason="${reason:-unknown}"
+        provider="${provider:-$(provider_hint_for_reviewer "$reviewer")}"
+        display_state="$(review_state_for_display "$state")"
+
+        log_path="/tmp/dx-runner/${provider}/${reviewer}.log"
+        log_text=""
+        if [[ -f "$log_path" ]]; then
+            log_text="$(cat "$log_path" 2>/dev/null || true)"
+        else
+            log_path=""
+        fi
+        normalized_log_text="$(printf '%s' "$log_text" | sed 's/\\n/\
+/g')"
+        parse_text="${report_json}"$'\n'"${check_json}"$'\n'"${normalized_log_text}"
+        verdict="$(verdict_from_text "$parse_text")"
+        findings_count="$(findings_count_from_text "$parse_text")"
+        read_only_enforcement="$(read_only_enforcement_from_text "$parse_text")"
+
+        input_tokens="$(usage_number_from_text "input_tokens" "$parse_text")"
+        output_tokens="$(usage_number_from_text "output_tokens" "$parse_text")"
+        total_tokens="$(usage_number_from_text "total_tokens" "$parse_text")"
+        estimated_cost="$(usage_number_from_text "estimated_cost_usd" "$parse_text")"
+        usage_available=false
+        usage_source=""
+        if [[ -n "$input_tokens" || -n "$output_tokens" || -n "$total_tokens" || -n "$estimated_cost" ]]; then
+            usage_available=true
+            usage_source="dx-runner-report-or-log"
+        fi
+
+        if [[ -z "$input_tokens" ]]; then input_tokens="null"; fi
+        if [[ -z "$output_tokens" ]]; then output_tokens="null"; fi
+        if [[ -z "$total_tokens" ]]; then total_tokens="null"; fi
+        if [[ -z "$estimated_cost" ]]; then estimated_cost="null"; fi
+        if [[ -n "$usage_source" ]]; then
+            usage_source="\"$(json_escape "$usage_source")\""
+        else
+            usage_source="null"
+        fi
+
+        usage_json=$(cat <<EOF
+{"available":${usage_available},"input_tokens":${input_tokens},"output_tokens":${output_tokens},"total_tokens":${total_tokens},"estimated_cost_usd":${estimated_cost},"source":${usage_source}}
+EOF
+)
+
+        if [[ ! -f "$start_log" ]]; then
+            start_log=""
+        fi
+
+        if [[ -n "$verdict" ]]; then
+            verdict_json="\"$(json_escape "$verdict")\""
+        else
+            verdict_json="null"
+        fi
+
+        if reviewer_is_failed "$state" "$verdict"; then
+            reviewer_failed=true
+            failed=$((failed + 1))
+        fi
+        if reviewer_is_completed "$state" && [[ "$reviewer_failed" != "true" ]]; then
+            reviewer_completed=true
+            completed=$((completed + 1))
+        fi
+        if [[ "$state" == "missing" || "$state" == "start_failed" || "$state" == "running" || "$state" == "unknown" ]]; then
+            quorum_not_reached=$((quorum_not_reached + 1))
+        fi
+
+        entries+=("$(cat <<EOF
+{"reviewer":"$(json_escape "$reviewer")","profile":"$(json_escape "$reviewer_profile")","state":"$(json_escape "$display_state")","reason_code":"$(json_escape "$reason")","verdict":${verdict_json},"findings_count":${findings_count},"read_only_enforcement":"$(json_escape "$read_only_enforcement")","report_path":"$(json_escape "$report_path")","log_path":"$(json_escape "$log_path")","start_log":"$(json_escape "$start_log")","usage":${usage_json}}
+EOF
+)")
+        md_rows+=("| ${reviewer} | ${reviewer_profile} | ${display_state} | ${reason} | ${verdict:-n/a} | ${findings_count} | ${read_only_enforcement} | available=${usage_available} |")
+    done
+
+    local i exit_code
+    local reviewers_json=""
+    for i in "${!entries[@]}"; do
+        if [[ "$i" -gt 0 ]]; then
+            reviewers_json+=","
+        fi
+        reviewers_json+="${entries[$i]}"
+    done
+
+    if [[ "$quorum_not_reached" -gt 0 ]]; then
+        exit_code=2
+    elif [[ "$failed" -gt 0 ]]; then
+        exit_code=1
+    else
+        exit_code=0
+    fi
+
+    cat > "$summary_json" <<EOF
+{"beads":"$(json_escape "$beads")","run_dir":"$(json_escape "$run_dir")","summary_md":"$(json_escape "$summary_md")","summary_json":"$(json_escape "$summary_json")","quorum":{"total":${total},"completed":${completed},"failed":${failed},"not_reached":${quorum_not_reached},"exit_code":${exit_code}},"reviewers":[${reviewers_json}]}
+EOF
+
+    {
+        printf '# dx-review summary: %s\n\n' "$beads"
+        printf 'quorum: %s/%s completed, %s failed\n\n' "$completed" "$total" "$failed"
+        printf '| reviewer | profile | state | reason | verdict | findings | read-only | usage |\n'
+        printf '|---|---|---|---|---|---|---|---|\n'
+        local row
+        for row in "${md_rows[@]}"; do
+            printf '%s\n' "$row"
+        done
+        printf '\n- summary.json: `%s`\n' "$summary_json"
+        printf -- '- summary.md: `%s`\n' "$summary_md"
+    } > "$summary_md"
+
+    if [[ "$quiet" != "true" ]]; then
+        echo "quorum: ${completed}/${total} completed, ${failed} failed"
+        echo "summary.json: $summary_json"
+        echo "summary.md: $summary_md"
+    fi
+
+    return "$exit_code"
+}
+
 run_doctor_for_profiles() {
     local worktree="$1"
     local include_gemini="$2"
@@ -142,8 +581,38 @@ doctor_cmd() {
     run_doctor_for_profiles "$worktree" "$include_gemini"
 }
 
+summarize_cmd() {
+    local beads="" include_gemini=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --beads)
+                beads="${2:-}"
+                shift 2
+                ;;
+            --gemini)
+                include_gemini=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo "unknown arg: $1" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
+    done
+
+    [[ -n "$beads" ]] || { echo "summarize requires --beads" >&2; exit 2; }
+    valid_beads_id "$beads" || { echo "invalid Beads id: $beads" >&2; exit 2; }
+    summarize_reviews "$beads" "$include_gemini" "false"
+}
+
 run_cmd() {
     local beads="" worktree="" prompt="" prompt_file="" include_gemini=false wait=false timeout_sec=300 poll_sec=5
+    local pr_ref="" template_name="" read_only_shell=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -162,6 +631,18 @@ run_cmd() {
             --prompt-file)
                 prompt_file="${2:-}"
                 shift 2
+                ;;
+            --pr|--github-pr)
+                pr_ref="${2:-}"
+                shift 2
+                ;;
+            --template)
+                template_name="${2:-}"
+                shift 2
+                ;;
+            --read-only-shell)
+                read_only_shell=true
+                shift
                 ;;
             --gemini)
                 include_gemini=true
@@ -198,15 +679,19 @@ run_cmd() {
         echo "use --prompt or --prompt-file, not both" >&2
         exit 2
     fi
-    if [[ -z "$prompt" && -z "$prompt_file" ]]; then
-        echo "run requires --prompt or --prompt-file" >&2
+    if [[ -z "$prompt" && -z "$prompt_file" && -z "$template_name" && -z "$pr_ref" ]]; then
+        echo "run requires --prompt, --prompt-file, --template, or --pr" >&2
         exit 2
     fi
     [[ -x "$DX_RUNNER" ]] || { echo "dx-runner not executable: $DX_RUNNER" >&2; exit 2; }
 
     local run_dir="/tmp/dx-review/${beads}"
     mkdir -p "$run_dir"
-    if [[ -n "$prompt" ]]; then
+    if [[ -n "$template_name" || -n "$pr_ref" || "$read_only_shell" == "true" ]]; then
+        local addendum_file="$prompt_file"
+        prompt_file="$run_dir/review.prompt"
+        build_review_prompt "$prompt_file" "$template_name" "$pr_ref" "$prompt" "$addendum_file" "$read_only_shell"
+    elif [[ -n "$prompt" ]]; then
         prompt_file="$run_dir/review.prompt"
         printf '%s\n' "$prompt" > "$prompt_file"
     fi
@@ -266,6 +751,7 @@ run_cmd() {
     fi
 
     local deadline now all_done check_json state display_state
+    local timed_out=false
     deadline=$(($(date +%s) + timeout_sec))
     while true; do
         all_done=true
@@ -296,6 +782,7 @@ run_cmd() {
         if [[ "$now" -ge "$deadline" ]]; then
             echo "dx-review timed out after ${timeout_sec}s" >&2
             failures=$((failures + 1))
+            timed_out=true
             break
         fi
         sleep "$poll_sec"
@@ -322,6 +809,18 @@ run_cmd() {
         fi
     done
 
+    local summarize_rc
+    set +e
+    summarize_reviews "$beads" "$include_gemini" "false"
+    summarize_rc=$?
+    set -e
+    if [[ "$summarize_rc" -ne 0 ]]; then
+        failures=$((failures + 1))
+    fi
+
+    if [[ "$timed_out" == "true" ]]; then
+        exit 124
+    fi
     [[ "$failures" -eq 0 ]] || exit 1
 }
 
@@ -332,6 +831,7 @@ main() {
     case "$cmd" in
         doctor) doctor_cmd "$@" ;;
         run) run_cmd "$@" ;;
+        summarize) summarize_cmd "$@" ;;
         -h|--help|"") usage ;;
         *)
             echo "unknown command: $cmd" >&2
