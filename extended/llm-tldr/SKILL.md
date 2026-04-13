@@ -39,6 +39,28 @@ Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
 - Do not manually choose between MCP, daemon, or plain CLI paths
 - Do not substitute a different analysis stack unless `llm-tldr` is unavailable or fails after one reasonable attempt
 
+## Beads Memory Synergy
+
+Beads memory is discovery input, not source truth.
+
+Use memory first for cross-VM, cross-repo, vendor/API, infra/auth/workflow, or
+repeated-friction work:
+
+```bash
+bdx memories <keyword> --json
+bdx search <keyword> --label memory --status all --json
+bdx show <memory-id> --json
+bdx comments <memory-id> --json
+```
+
+Then validate memory claims with `llm-tldr` before acting:
+
+- use semantic discovery to confirm where behavior currently lives
+- use context/static analysis to verify referenced symbols and paths
+- use change-impact/impact tooling to evaluate `mem.stale_if_paths`
+
+Required framing for agents: memory is a lead, not proof.
+
 ### Codex Desktop Hydration Check
 
 Before escalating to fallback scripts, daemon debugging, or replacement-tool

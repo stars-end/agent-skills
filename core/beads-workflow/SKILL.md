@@ -43,6 +43,41 @@ Beads provides persistent task memory across sessions, enabling:
 - Discovering and filing new work during implementation
 - Finding ready tasks with no blockers
 - Managing dependencies between issues
+- Durable memory retrieval across VMs and repos
+
+## Beads Memory Tiers (Canonical)
+
+Use these tiers consistently:
+
+1. `bdx remember|memories|recall|forget` for short global facts in Beads KV.
+   These are prime-injected upstream and should use stable keys.
+2. Closed Beads issues labeled `memory` for structured durable knowledge with
+   metadata, provenance, staleness, and comments.
+3. `bdx comments add` for task-local history only.
+
+Do not use comments as fleet memory unless promoted to a memory record.
+
+### Structured Memory Metadata
+
+Required metadata for `memory` issues:
+
+- `mem.scope`: `global|repo|tool|vendor|workflow`
+- `mem.repo`: repo name or `global`
+- `mem.source_issue`: concrete Beads id or `none`
+- `mem.kind`: `decision|runbook|learning|gotcha|handoff|best_practice`
+- `mem.maturity`: `draft|validated|core`
+- `mem.confidence`: `low|medium|high`
+
+Optional metadata:
+
+- `mem.paths`
+- `mem.stale_if_paths`
+- `mem.source_commit`
+- `mem.query_hint`
+- `mem.symbols`
+
+Standalone/global memory records are valid when no single task is the source
+(`mem.source_issue=none`, `mem.repo=global`).
 
 ## Canonical Contract
 
@@ -69,6 +104,19 @@ bdx show <known-beads-id> --json
 ```
 
 Broad readiness queries can be slow enough on `macmini` to look hung even when the Beads hub is healthy.
+
+Before cross-VM, cross-repo, vendor/API, infra/auth/workflow, or repeated
+friction work, run targeted memory retrieval first:
+
+```bash
+bdx memories <keyword> --json
+bdx search <keyword> --label memory --status all --json
+bdx show <memory-id> --json
+bdx comments <memory-id> --json
+```
+
+Memory is a lead, not proof. Verify source-grounded claims with `llm-tldr`
+before acting, then use `serena` for symbol-aware edits when precision matters.
 
 Fail-loud remediation (first response):
 

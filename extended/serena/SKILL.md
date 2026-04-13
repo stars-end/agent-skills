@@ -98,6 +98,24 @@ changes, and search-driven edits that do not require symbol-aware operations.
 Project memory or session continuity is secondary. Do not reach for `serena`
 just to preserve context unless continuity itself is the task.
 
+## Beads Memory Synergy
+
+Use Beads memory to accelerate symbol targeting, then validate and edit in this
+order:
+
+1. retrieve memory (`bdx memories`, `bdx search --label memory`, `bdx show`)
+2. verify memory claims with `llm-tldr`
+3. execute symbol-aware edits with `serena`
+
+Memory can store `mem.paths` and `mem.symbols`, but those are hints. Do not
+treat them as proof without source verification.
+
+Remember memory tiers:
+
+- `bdx remember` / `memories` / `recall` / `forget`: short global facts
+- closed `memory` issues: structured durable knowledge
+- `bdx comments add`: task-local history only
+
 ## Key Commands
 
 | Command | Description |

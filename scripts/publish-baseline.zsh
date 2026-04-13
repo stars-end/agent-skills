@@ -203,6 +203,8 @@ If a named skill contains an explicit `BLOCKED` contract:
 - **Canonical active assistant stack**:
   - \`llm-tldr\`: semantic discovery + exact static analysis / trace / impact
   - \`serena\`: explicit symbol-aware edits
+- **Default durable memory surface**:
+  - Beads via `bdx remember` and closed `memory` issues
 - **Canonical non-default memory surface**:
   - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
 

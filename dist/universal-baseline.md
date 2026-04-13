@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 0c06ce39bedbe3ecf70cb96d92ab6d2f2cbe9a07 -->
-<!-- Last updated: 2026-04-12 20:41:12 UTC -->
+<!-- Source SHA: 9cd9a9ba6b2aebad69baf39ab014908c27330d9c -->
+<!-- Last updated: 2026-04-12 21:14:39 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -312,6 +312,8 @@ If a named skill contains an explicit `BLOCKED` contract:
 - **Canonical active assistant stack**:
   - \`llm-tldr\`: semantic discovery + exact static analysis / trace / impact
   - \`serena\`: explicit symbol-aware edits
+- **Default durable memory surface**:
+  - Beads via `bdx remember` and closed `memory` issues
 - **Canonical non-default memory surface**:
   - \`cass-memory\`: pilot-only CLI tool; not part of the default assistant loop
 
@@ -561,6 +563,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
+| **beads-memory** | Durable Beads memory workflow for cross-VM, cross-repo, and cross-agent knowledge. MUST BE USED when storing or retrieving reusable memory, gotchas, best practices, vendor/tool quirks, workflow learnings, or when the user says remember, recall, memory, "we learned", "document this for agents", or "make sure agents know". | — | workflow, beads, memory, cross-vm, cross-repo, agents |
 | **beads-workflow** | Beads issue tracking and workflow management with automatic git branch creation. MUST BE USED for Beads operations. Handles full epic→branch→work lifecycle, dependencies, and ready task queries. Uses `bdx` as the canonical Beads coordination wrapper with runtime at ~/.beads-runtime/.beads for canonical multi-VM reliability. Use when creating epics/features (auto-creates branch), tracking work, finding ready issues, or managing dependencies, or when user mentions "create issue", "track work", "bdx create", "find ready tasks", issue management, dependencies, work tracking, or Beads workflow operations. | — | workflow, beads, issue-tracking, git |
 | **create-pull-request** | Create GitHub pull request with atomic Beads issue closure. MUST BE USED for opening PRs. Asks if work is complete - if YES, closes Beads issue BEFORE creating PR. If NO, creates draft PR with issue still open. Automatically links Beads tracking and includes Feature-Key. Use when user wants to open a PR, submit work for review, merge into master, or prepare for deployment, or when user mentions "ready for review", "create PR", "open PR", "merge conflicts", "CI checks needed", "branch ahead of master", PR creation, opening pull requests, deployment preparation, or submitting for team review. | — | workflow, github, pr, beads, review |
 | **database-quickref** | Fail-fast quick reference for Railway Postgres operations. Use when user asks to check database, run queries, verify data, inspect tables, or mentions psql, postgres, database, "check the db", "validate data". | — | database, postgres, railway, psql |

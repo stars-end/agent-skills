@@ -1,134 +1,141 @@
 # Beads Memory Convention
 
-Use Beads as the durable memory layer before adding a separate memory service.
-The goal is cross-session, cross-VM recall with no new daemon, database, or
-manual founder monitoring.
+Use Beads as the durable memory layer across VMs, repos, and agents. The
+memory system is centralized through `bdx` on the canonical runtime and does
+not require a separate memory daemon.
 
 ## Decision
 
-`ALL_IN_NOW`: use existing Beads primitives for durable agent memory.
+`ALL_IN_NOW`: use Beads primitives as the canonical memory surface.
 
-`DEFER_TO_P2_PLUS`: add a dedicated `bd-mem` wrapper only if agents repeatedly
-misuse the command shape or retrieval convention.
+`DEFER_TO_P2_PLUS`: add a dedicated memory wrapper only after repeated operator
+friction proves the convention is not enough.
 
-## Routing
+Agent-facing workflow: use `core/beads-memory/SKILL.md` when storing or
+retrieving reusable cross-agent knowledge.
 
-- Current code truth: use `llm-tldr`, then inspect source as needed.
-- Durable task state: use normal Beads issues, dependencies, and comments.
-- Durable memory: use `bdx remember` for short facts and Beads issues labeled
-  `memory` for structured records.
-- Never trust memory over current code. Treat memory as a lead, then verify
-  source-grounded claims with `llm-tldr` or direct file inspection.
+## Three Memory Tiers
 
-## What To Store
+1) Short global facts (Beads KV, prime-injected upstream):
 
-Store memory only when it reduces future cognitive load:
+- `bdx remember`
+- `bdx memories`
+- `bdx recall`
+- `bdx forget`
 
-- Architectural decisions that should survive a thread or VM change.
-- Repeated gotchas, failed approaches, and recovery procedures.
-- Cross-repo conventions that are easy to forget.
-- Source-grounded facts that were expensive to discover.
-- Handoff notes that explain why work is shaped a certain way.
-
-Do not store ordinary task progress, speculative guesses, or facts that are
-trivial to rediscover from current code.
-
-## Short Facts
-
-Use `bdx remember` for small, global facts:
+Use stable keys and concise facts that should be visible across sessions.
 
 ```bash
-cd ~
 bdx remember \
-  "agent-skills changes must happen in /tmp/agents/<beads-id>/agent-skills, not ~/agent-skills" \
-  --key agent-skills-worktree-only
+  "z.ai web-reader behavior may use chat-style endpoints; verify endpoint shape before integration" \
+  --key vendor-zai-web-reader-chat-endpoint-gotcha
 ```
 
-Search and recall:
+2) Structured durable memory (closed Beads issues labeled `memory`):
+
+- Use normal Beads issues for provenance, metadata, comments, staleness, and
+  cross-repo lessons.
+- These records may be tied to a task or standalone/global.
+- Close memory records after capture to keep active queues clean.
 
 ```bash
-cd ~
-bdx memories worktree
-bdx recall agent-skills-worktree-only
-```
-
-## Structured Memory Records
-
-Use Beads issues for memory that needs provenance, metadata, comments, links, or
-staleness checks.
-
-```bash
-cd ~
 bdx create \
-  "Memory: agent-skills worktree-only editing policy" \
+  "Memory: z.ai web-reader endpoint behavior" \
   --type decision \
-  --priority 3 \
-  --labels memory,agent-skills,workflow \
-  --description "Agents must edit agent-skills through dx-worktree workspaces. Canonical ~/agent-skills is read-mostly." \
-  --notes "Verify current repo policy in AGENTS.md before mutating files." \
-  --metadata '{"mem.kind":"decision","mem.repo":"agent-skills","mem.maturity":"validated","mem.confidence":"high","mem.source_issue":"bd-q0f7s","mem.source_commit":"","mem.paths":["AGENTS.md","docs/BEADS_MEMORY_CONVENTION.md"]}'
+  --priority 4 \
+  --labels memory,vendor,zai,api \
+  --description "z.ai integrations may expose web-reader behavior via chat endpoints. Verify current docs and client behavior before assuming a separate reader endpoint." \
+  --metadata '{"mem.kind":"gotcha","mem.scope":"vendor","mem.repo":"global","mem.maturity":"validated","mem.confidence":"medium","mem.source_issue":"none","mem.query_hint":"zai web reader endpoint chat"}'
 ```
 
-Add provenance or follow-up detail as comments:
+3) Task-local history:
+
+- `bdx comments add <issue-id> ...`
+- Comments are for task-local chronology only.
+- Do not treat comments as global memory unless promoted into tier 1 or tier 2.
+
+## Required Structured Metadata
+
+Required fields on `memory` issues:
+
+- `mem.scope`: `global|repo|tool|vendor|workflow`
+- `mem.repo`: repo name or `global`
+- `mem.source_issue`: concrete issue id or `none`
+- `mem.kind`: `decision|runbook|learning|gotcha|handoff|best_practice`
+- `mem.maturity`: `draft|validated|core`
+- `mem.confidence`: `low|medium|high`
+
+Optional fields:
+
+- `mem.paths`
+- `mem.stale_if_paths`
+- `mem.source_commit`
+- `mem.query_hint`
+- `mem.symbols`
+
+## Standalone / Global Memory Records
+
+Standalone memory is explicitly allowed. Use it when a learning is not tied to
+a single task but should persist fleet-wide.
+
+Rules:
+
+- set `mem.scope` correctly (often `global`, `tool`, `vendor`, or `workflow`)
+- set `mem.repo=global` for cross-repo memory
+- set `mem.source_issue=none` when there is no originating issue
+- close the memory issue after capture
+
+## Cross-VM / Cross-Repo Usage
+
+- `bdx` is the canonical coordination and memory surface across all VMs/repos.
+- Search memory before:
+  - cross-VM work
+  - cross-repo work
+  - vendor/API decisions
+  - infra/auth/workflow fixes
+  - repeated-friction incidents
+- Do not require memory search for trivial, routine task edits.
+
+## Retrieval Workflow
+
+Use targeted retrieval before acting:
 
 ```bash
-bdx comments add <memory-id> \
-  "Source: discovered while documenting Beads memory convention. Verify with llm-tldr before applying to changed repo policy."
+bdx memories <keyword> --json
+bdx search <keyword> --label memory --status all --json
+bdx show <memory-id> --json
+bdx comments <memory-id> --json
 ```
 
-## Metadata Keys
+## llm-tldr Synergy (Verification)
 
-Use these keys for structured memory records:
+Memory is a lead, not proof.
 
-- `mem.kind`: `decision`, `runbook`, `learning`, `gotcha`, or `handoff`.
-- `mem.repo`: repo name such as `agent-skills`, `prime-radiant-ai`, or `llm-common`.
-- `mem.maturity`: `draft`, `validated`, or `core`.
-- `mem.confidence`: `low`, `medium`, or `high`.
-- `mem.source_issue`: Beads issue that produced the memory.
-- `mem.source_commit`: commit SHA when known.
-- `mem.paths`: source paths that ground the memory.
-- `mem.stale_if_paths`: paths whose changes should trigger revalidation.
+After retrieval:
 
-## Retrieval
+- verify memory claims against current source with `llm-tldr`
+- validate any `mem.stale_if_paths` and `mem.paths` before applying memory
+- update memory maturity/confidence if source changed materially
 
-Before cross-repo, repeated, or confusing work, search memory first:
+## serena Synergy (Execution)
 
-```bash
-cd ~
-bdx memories <keyword>
-bdx search <keyword> --label memory --status all
-bdx search memory --label memory --metadata-field mem.repo=agent-skills --status all
-bdx search gotcha --label memory --metadata-field mem.kind=gotcha --status all
-```
+Memory can store `mem.paths` and `mem.symbols` to accelerate editing, but
+symbol operations should still run through `serena` after memory + `llm-tldr`
+validation.
 
-Then inspect the specific record:
+Flow:
 
-```bash
-bdx show <memory-id>
-bdx comments <memory-id>
-```
+1. retrieve memory
+2. verify with `llm-tldr`
+3. execute precise symbol edits with `serena`
 
-## Staleness
+## Staleness Handling
 
-If a memory cites paths or commits, treat it as stale when those files changed
-materially after the recorded source commit. Update the memory by comment or
-metadata rather than silently relying on it.
+When source paths or commits changed, downgrade confidence and revalidate:
 
 ```bash
 bdx update <memory-id> \
   --set-metadata mem.maturity=draft \
   --set-metadata mem.confidence=medium \
-  --append-notes "Marked draft because cited source paths changed; revalidate before reuse."
+  --append-notes "Revalidation required: referenced source paths changed."
 ```
-
-## When A Wrapper Becomes Worth It
-
-Add a `bd-mem` helper only after observing repeated failures in one of these
-areas:
-
-- Agents forget required metadata.
-- Agents store memory in comments when it needs a searchable issue.
-- Agents cannot reliably retrieve records by repo/kind/maturity.
-- Stale-source checks become frequent enough to automate.
-
-Until then, the convention is the surface.
