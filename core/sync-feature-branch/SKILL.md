@@ -48,7 +48,7 @@ currentIssue=$(bdx show <FEATURE_KEY> --json)
 
 If not found, auto-create as safety net:
 ```bash
-bdx create --title <FEATURE_KEY> --type feature --priority 2 --desc "Auto-created during commit"
+bdx create --title <FEATURE_KEY> --type feature --priority 2 --description "Auto-created during commit"
 ```
 
 **Note:** Issue should ideally exist BEFORE coding (Issue-First Development), but this prevents orphaned commits.
@@ -72,7 +72,7 @@ Score risk level:
 
 If discovery found and risk <= "auto (notify)":
 ```bash
-childIssueId=$(bdx create --title "Bug: <detected-issue>" --type bug --priority 1 --dep ${currentIssueId} --json | jq -r .id)
+childIssueId=$(bdx create --title "Bug: <detected-issue>" --type bug --priority 1 --parent ${currentIssueId} --json | jq -r .id)
 ```
 
 Close child issue BEFORE commit:
@@ -192,10 +192,11 @@ bdx close $currentIssueId --reason "Completed in commit <hash>"
 
 ### 8. Auto Phase Transition
 
-After closing current issue, find next ready task:
+After closing current issue, use a bounded task selection surface:
 ```bash
-# Find ready tasks with priority 1
-bdx ready --priority 1
+bdx show <known-next-id> --json
+# or, for manual browsing only:
+bdx ready --priority 1 --limit 5
 ```
 
 If next task found:

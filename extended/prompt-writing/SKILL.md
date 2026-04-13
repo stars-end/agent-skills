@@ -161,7 +161,7 @@ STOP if ANY check fails:
 - [ ] `BEADS_SUBTASK` is concrete ID, not placeholder
 - [ ] No `/Users/...`, `/tmp/...`, or `/home/...` local paths
 - [ ] Paths are repo-relative or GitHub URLs
-- [ ] If Beads IDs unknown, resolve via `bdx ready` first
+- [ ] If Beads IDs are unknown, resolve with targeted lookup first: `bdx show <known-id> --json`, `bdx search ...`, or BV `robot-plan`; use `bdx ready --limit ...` only for manual queue browsing, not orchestration loops or health probes
 
 If you can't resolve: return blocker, don't emit prompt.
 
@@ -250,7 +250,7 @@ If blocked, return exactly:
 - NEEDS: <single dependency/info needed>
 - NEXT_COMMANDS:
    1) bdx show bd-sg2v.13
-   2) bdx ready
+   2) bdx search "<targeted keywords>" --json
 
 ## Done Gate (Mandatory)
 Do not claim complete until:

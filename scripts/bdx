@@ -7,7 +7,8 @@ REMOTE_HELPER="${BDX_REMOTE_HELPER:-\$HOME/agent-skills/scripts/bdx-remote}"
 SSH_BIN="${BDX_SSH_BIN:-ssh}"
 HOSTNAME_SHORT="${BDX_HOSTNAME:-$(hostname -s 2>/dev/null || hostname)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SSH_CONNECT_TIMEOUT="${BDX_SSH_CONNECT_TIMEOUT:-10}"
+SSH_CONNECT_TIMEOUT="${BDX_SSH_CONNECT_TIMEOUT_SECONDS:-${BDX_SSH_CONNECT_TIMEOUT:-5}}"
+WANT_JSON_ERRORS=0
 
 usage() {
   cat >&2 <<'EOF'
@@ -16,16 +17,57 @@ Usage:
 
 Canonical coordination commands:
   Reads: show, ready, list, search, comments, memories, recall, config get|list, dolt test
-  Writes: create, comments add, note, update, close, reopen, dep, label, epic, batch, relate, remember, forget
+  Writes: create, comments add, note, update, close, reopen, dep, label, epic, batch, remember, forget
+  Health: preflight --json
 
 Local only / rejected:
   init, where, context, doctor, dolt start|stop|set, unknown commands
 EOF
 }
 
+json_string() {
+  python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'
+}
+
+emit_json_error() {
+  local reason_code="$1"
+  local message="$2"
+  local command="${3:-${1:-}}"
+  local host="${4:-$REMOTE_HOST}"
+  printf '{"ok":false,"reason_code":%s,"message":%s,"command":%s,"host":%s}\n' \
+    "$(printf '%s' "$reason_code" | json_string)" \
+    "$(printf '%s' "$message" | json_string)" \
+    "$(printf '%s' "$command" | json_string)" \
+    "$(printf '%s' "$host" | json_string)" >&2
+}
+
 die() {
-  echo "bdx: $*" >&2
+  local reason_code="invalid_usage"
+  local message
+
+  if [[ $# -ge 2 ]]; then
+    reason_code="$1"
+    shift
+  fi
+  message="$*"
+
+  if [[ "$WANT_JSON_ERRORS" == "1" || "${BDX_JSON_ERRORS:-0}" == "1" ]]; then
+    emit_json_error "$reason_code" "bdx: $message" "${BDX_COMMAND_NAME:-${1:-}}"
+  else
+    echo "bdx: $message" >&2
+  fi
   exit 2
+}
+
+detect_json_errors() {
+  local arg
+  WANT_JSON_ERRORS="${BDX_JSON_ERRORS:-0}"
+  for arg in "$@"; do
+    if [[ "$arg" == "--json" ]]; then
+      WANT_JSON_ERRORS=1
+      return 0
+    fi
+  done
 }
 
 remote_host_key() {
@@ -80,7 +122,7 @@ classify_command() {
   local third="${3:-}"
 
   case "$cmd" in
-    create|note|update|close|reopen|dep|label|epic|batch|relate|remember|forget)
+    create|note|update|close|reopen|dep|label|epic|batch|remember|forget)
       echo "write"
       return 0
       ;;
@@ -97,7 +139,7 @@ classify_command() {
           echo "read"
           ;;
         *)
-          die "rejected comments subcommand '$sub' (allowed: add, list, show)"
+          die unsupported_command "rejected comments subcommand '$sub' (allowed: add, list, show)"
           ;;
       esac
       return 0
@@ -109,7 +151,7 @@ classify_command() {
           return 0
           ;;
         *)
-          die "rejected risky config subcommand '$sub' (allowed: get, list)"
+          die unsupported_command "rejected risky config subcommand '$sub' (allowed: get, list)"
           ;;
       esac
       ;;
@@ -120,22 +162,22 @@ classify_command() {
           return 0
           ;;
         start|stop|set)
-          die "rejected local-only dolt subcommand '$sub'"
+          die unsupported_command "rejected local-only dolt subcommand '$sub'"
           ;;
         *)
-          die "rejected dolt subcommand '$sub' (allowed via bdx: test)"
+          die unsupported_command "rejected dolt subcommand '$sub' (allowed via bdx: test)"
           ;;
       esac
       ;;
     init|where|context|doctor)
-      die "rejected local-only command '$cmd'"
+      die unsupported_command "rejected local-only command '$cmd'"
       ;;
     help|-h|--help|"")
       usage
       exit 0
       ;;
     *)
-      die "rejected unknown command '$cmd'"
+      die unsupported_command "rejected unknown command '$cmd'"
       ;;
   esac
 
@@ -158,6 +200,7 @@ run_local() {
 run_remote() {
   local mode="$1"
   shift
+  local rc
   local ssh_opts=(
     -o "BatchMode=yes"
     -o "ConnectTimeout=${SSH_CONNECT_TIMEOUT}"
@@ -165,7 +208,14 @@ run_remote() {
   )
 
   # NUL-delimited argv transport: user arguments never touch remote shell parsing.
+  set +e
   emit_argv "$@" | "$SSH_BIN" "${ssh_opts[@]}" "$REMOTE_HOST" "$REMOTE_HELPER" "--mode=$mode"
+  rc=${PIPESTATUS[1]}
+  set -e
+  if [[ "$rc" -eq 255 && ( "$WANT_JSON_ERRORS" == "1" || "${BDX_JSON_ERRORS:-0}" == "1" ) ]]; then
+    emit_json_error "ssh_unreachable" "bdx remote host is unreachable" "${BDX_COMMAND_NAME:-${1:-}}" "$REMOTE_HOST"
+  fi
+  return "$rc"
 }
 
 find_flag_match() {
@@ -212,26 +262,32 @@ preflight_remote_write() {
   for candidate in --body-file --design-file --file --graph --stdin; do
     if file_flag="$(find_flag_match "$candidate" "$@")"; then
       if [[ "$candidate" == "--stdin" ]]; then
-        die "remote bdx write rejected: '--stdin' body streaming is not supported over remote routing. Use inline body flags or run from epyc12."
+        die local_path_unavailable "remote bdx write rejected: '--stdin' body streaming is not supported over remote routing. Use inline body flags or run from epyc12."
       fi
-      die "remote bdx write rejected: local file-bearing flag '$file_flag' is not supported over remote routing. Use inline values or run from epyc12."
+      die local_path_unavailable "remote bdx write rejected: local file-bearing flag '$file_flag' is not supported over remote routing. Use inline values or run from epyc12."
     fi
   done
 
   local metadata_file_arg
   if metadata_file_arg="$(find_metadata_file_arg "$@")"; then
-    die "remote bdx write rejected: metadata file expansion '$metadata_file_arg' is not supported over remote routing. Use inline --metadata key=value or run from epyc12."
+    die local_path_unavailable "remote bdx write rejected: metadata file expansion '$metadata_file_arg' is not supported over remote routing. Use inline --metadata key=value or run from epyc12."
   fi
 
   if [[ "$cmd" == "create" ]] && find_flag_match "--repo" "$@" >/dev/null; then
-    die "remote bdx create rejected: '--repo' can trigger embedded-Dolt target-repo initialization. Use repo labels/metadata or run create on epyc12 with validated repo context."
+    die repo_runtime_error "remote bdx create rejected: '--repo' can trigger embedded-Dolt target-repo initialization. Use repo labels/metadata or run create on epyc12 with validated repo context."
   fi
 }
 
 main() {
   [[ $# -gt 0 ]] || { usage; exit 2; }
+  detect_json_errors "$@"
+  BDX_COMMAND_NAME="${1:-}"
 
   case "${1:-}" in
+    preflight)
+      shift
+      exec "$SCRIPT_DIR/bdx-preflight" "$@"
+      ;;
     help|-h|--help)
       usage
       exit 0

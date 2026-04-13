@@ -111,9 +111,8 @@ Default pattern:
 cd ~
 export BEADS_DIR="$HOME/.beads-runtime/.beads"
 bdx create --title "<epic title>" --type epic --priority 1
-bdx create --title "<phase or outcome>" --type feature --priority 1
-bdx dep add <child> <epic> --type parent-child
-bdx dep add <later-task> <earlier-task> --type blocks
+bdx create --title "<phase or outcome>" --type feature --priority 1 --parent <epic>
+bdx dep add <later-task> <earlier-task>
 ```
 
 Use:

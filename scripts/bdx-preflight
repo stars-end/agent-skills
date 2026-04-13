@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BDX_BIN="${BDX_BIN:-$SCRIPT_DIR/bdx}"
+PROBE_ID="${BDX_PREFLIGHT_ISSUE_ID:-bd-br7e4}"
+PROBE_TIMEOUT_SECONDS="${BDX_PREFLIGHT_TIMEOUT_SECONDS:-15}"
+WANT_JSON=0
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  bdx preflight --json [--probe-id bd-xxxx]
+
+Runs bounded, targeted Beads coordination probes through bdx. This is the
+agent health check; do not use broad bdx ready scans as startup health probes.
+EOF
+}
+
+json_string() {
+  python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'
+}
+
+now_ms() {
+  python3 -c 'import time; print(int(time.time() * 1000))'
+}
+
+classify_failure() {
+  local rc="$1"
+  local err_file="$2"
+
+  if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+    printf 'preflight_timeout'
+  elif [[ "$rc" -eq 255 ]] || grep -Fq '"reason_code":"ssh_unreachable"' "$err_file" 2>/dev/null; then
+    printf 'ssh_unreachable'
+  elif grep -Fq '"reason_code":"query_timeout"' "$err_file" 2>/dev/null; then
+    printf 'query_timeout'
+  elif grep -Fq '"reason_code":"remote_bd_missing"' "$err_file" 2>/dev/null; then
+    printf 'remote_bd_missing'
+  elif grep -Fq '"reason_code":"unsupported_command"' "$err_file" 2>/dev/null; then
+    printf 'unsupported_command'
+  else
+    printf 'remote_bd_failed'
+  fi
+}
+
+run_probe() {
+  local name="$1"
+  shift
+  local out_file="$tmpdir/${name}.out"
+  local err_file="$tmpdir/${name}.err"
+  local started ended pid rc waited reason message
+
+  started="$(now_ms)"
+  set +e
+  "$@" >"$out_file" 2>"$err_file" &
+  pid="$!"
+  waited=0
+  rc=0
+  while kill -0 "$pid" >/dev/null 2>&1; do
+    if (( waited >= PROBE_TIMEOUT_SECONDS )); then
+      kill "$pid" >/dev/null 2>&1 || true
+      wait "$pid" >/dev/null 2>&1 || true
+      rc=124
+      break
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  if [[ "$rc" -eq 0 ]]; then
+    wait "$pid"
+    rc=$?
+  fi
+  set -e
+  ended="$(now_ms)"
+
+  if [[ "$rc" -eq 0 ]]; then
+    DETAILS+=("$(printf '{"name":%s,"ok":true,"latency_ms":%s}' \
+      "$(printf '%s' "$name" | json_string)" \
+      "$((ended - started))")")
+    return 0
+  fi
+
+  reason="$(classify_failure "$rc" "$err_file")"
+  message="$(tail -n 1 "$err_file" 2>/dev/null || true)"
+  [[ -n "$message" ]] || message="probe '$name' failed with exit code $rc"
+  DETAILS+=("$(printf '{"name":%s,"ok":false,"latency_ms":%s,"reason_code":%s,"message":%s}' \
+    "$(printf '%s' "$name" | json_string)" \
+    "$((ended - started))" \
+    "$(printf '%s' "$reason" | json_string)" \
+    "$(printf '%s' "$message" | json_string)")")
+  if [[ -z "${FAIL_REASON:-}" ]]; then
+    FAIL_REASON="$reason"
+    FAIL_MESSAGE="$message"
+  fi
+  return 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json)
+      WANT_JSON=1
+      shift
+      ;;
+    --probe-id)
+      [[ $# -ge 2 ]] || { usage; exit 2; }
+      PROBE_ID="$2"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "bdx-preflight: unsupported argument '$1'" >&2
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+if [[ "$WANT_JSON" != "1" ]]; then
+  echo "bdx-preflight: use --json for agent-readable output" >&2
+  exit 2
+fi
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+DETAILS=()
+FAIL_REASON=""
+FAIL_MESSAGE=""
+overall_started="$(now_ms)"
+
+run_probe "dolt_test" env BDX_JSON_ERRORS=1 "$BDX_BIN" dolt test --json || true
+run_probe "targeted_show" env BDX_JSON_ERRORS=1 "$BDX_BIN" show "$PROBE_ID" --json || true
+
+overall_ended="$(now_ms)"
+IFS=,
+details_json="${DETAILS[*]}"
+unset IFS
+
+if [[ -z "$FAIL_REASON" ]]; then
+  printf '{"ok":true,"reason_code":"ok","probe_id":%s,"latency_ms":%s,"details":[%s]}\n' \
+    "$(printf '%s' "$PROBE_ID" | json_string)" \
+    "$((overall_ended - overall_started))" \
+    "$details_json"
+  exit 0
+fi
+
+printf '{"ok":false,"reason_code":%s,"message":%s,"probe_id":%s,"latency_ms":%s,"details":[%s]}\n' \
+  "$(printf '%s' "$FAIL_REASON" | json_string)" \
+  "$(printf '%s' "$FAIL_MESSAGE" | json_string)" \
+  "$(printf '%s' "$PROBE_ID" | json_string)" \
+  "$((overall_ended - overall_started))" \
+  "$details_json"
+exit 1
