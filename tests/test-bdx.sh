@@ -724,6 +724,35 @@ test_preflight_json_uses_targeted_probes() {
   fi
 }
 
+test_symlinked_bdx_finds_preflight_helper() {
+  local case_dir="$tmpdir/case_symlink_preflight"
+  local fake_bin="$case_dir/bin"
+  local link_dir="$case_dir/links"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home" "$link_dir"
+  setup_fake_common "$fake_bin"
+  ln -s "$BDX" "$link_dir/bdx"
+
+  local output
+  output="$(
+    FAKE_BD_LOG="$fake_bd_log" \
+    FAKE_SSH_LOG="$fake_ssh_log" \
+    HOME="$case_dir/home" \
+    PATH="$fake_bin:/usr/bin:/bin" \
+    BDX_SSH_BIN="$fake_bin/ssh" \
+    BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
+    BDX_REMOTE_HOST="epyc12" \
+    BDX_HOSTNAME="macbook" \
+    "$link_dir/bdx" preflight --json --probe-id bd-probe
+  )"
+
+  assert_contains "$output" '"ok":true' "symlinked bdx finds preflight helper"
+  assert_file_contains "$fake_bd_log" "arg=dolt" "symlinked bdx preflight checks Dolt connectivity"
+  assert_file_contains "$fake_bd_log" "arg=show" "symlinked bdx preflight uses targeted show"
+}
+
 main() {
   test_help_exits_zero
   test_remote_read_injection_safe
@@ -744,6 +773,7 @@ main() {
   test_local_read_timeout_json
   test_remote_write_timeout_json
   test_preflight_json_uses_targeted_probes
+  test_symlinked_bdx_finds_preflight_helper
 
   echo "Summary: pass=$pass_count fail=$fail_count"
   [[ $fail_count -eq 0 ]]

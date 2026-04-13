@@ -6,9 +6,23 @@ REMOTE_HOST="${BDX_REMOTE_HOST:-epyc12}"
 REMOTE_HELPER="${BDX_REMOTE_HELPER:-\$HOME/agent-skills/scripts/bdx-remote}"
 SSH_BIN="${BDX_SSH_BIN:-ssh}"
 HOSTNAME_SHORT="${BDX_HOSTNAME:-$(hostname -s 2>/dev/null || hostname)}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SSH_CONNECT_TIMEOUT="${BDX_SSH_CONNECT_TIMEOUT_SECONDS:-${BDX_SSH_CONNECT_TIMEOUT:-5}}"
 WANT_JSON_ERRORS=0
+
+resolve_script_dir() {
+  local source="${BASH_SOURCE[0]}"
+  local dir
+
+  while [[ -L "$source" ]]; do
+    dir="$(cd -P "$(dirname "$source")" && pwd)"
+    source="$(readlink "$source")"
+    [[ "$source" == /* ]] || source="$dir/$source"
+  done
+
+  cd -P "$(dirname "$source")" && pwd
+}
+
+SCRIPT_DIR="$(resolve_script_dir)"
 
 usage() {
   cat >&2 <<'EOF'
