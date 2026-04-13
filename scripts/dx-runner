@@ -610,7 +610,7 @@ job_paths() {
         LOG_DIR="/tmp/dx-runner/${provider}"
     else
         # Try to detect provider from meta (search all provider dirs)
-        provider="$(find_provider_for_beads "$beads")"
+        provider="$(find_provider_for_beads "$beads" 2>/dev/null || true)"
         if [[ -n "$provider" ]]; then
             LOG_DIR="/tmp/dx-runner/${provider}"
         else
