@@ -67,5 +67,6 @@ worktree preparation such as `mise trust` before strict provider preflight.
 - If `claude-code-review` fails preflight, check Claude Code auth/model availability with `dx-runner preflight --profile claude-code-review --worktree <path>`.
 - If `opencode-review` fails preflight, check `opencode models` and `dx-runner preflight --profile opencode-review --worktree <path>`.
 - If OpenCode reports `opencode_mise_untrusted`, run `dx-review doctor --worktree <path>` first; if it still fails, run the exact `mise trust '<path>'` command emitted by preflight.
+- `beads-mcp binary: MISSING` is an expected warning on hosts without the optional Beads MCP helper. It does not block the default OpenCode review lane unless a profile explicitly escalates `beads_mcp_missing` to error.
 - Do not retry repeatedly. One retry after fixing auth/tooling is enough.
 - Use `dx-runner report --beads <bd-id>.<reviewer> --format json` as the source of truth for logs and outcomes.

@@ -293,17 +293,27 @@ adapter_preflight() {
     # Noise policy: only evaluate trust when a concrete .mise-scoped target is in scope.
     echo -n "mise trust: "
     if command -v mise >/dev/null 2>&1; then
-        local trust_target=""
-        if [[ -n "${WORKTREE:-}" && -d "${WORKTREE:-}" && -f "${WORKTREE}/.mise.toml" ]]; then
-            trust_target="$(cd "$WORKTREE" 2>/dev/null && pwd -P || true)"
-        elif [[ -n "${DX_RUNNER_PREFLIGHT_WORKTREE:-}" && -d "${DX_RUNNER_PREFLIGHT_WORKTREE}" && -f "${DX_RUNNER_PREFLIGHT_WORKTREE}/.mise.toml" ]]; then
-            trust_target="$(cd "$DX_RUNNER_PREFLIGHT_WORKTREE" 2>/dev/null && pwd -P || true)"
-        elif [[ -f "$(pwd)/.mise.toml" ]]; then
+        local trust_target="" explicit_target=""
+        if [[ -n "${WORKTREE:-}" && -d "${WORKTREE:-}" ]]; then
+            explicit_target="$(cd "$WORKTREE" 2>/dev/null && pwd -P || true)"
+            if [[ -f "${WORKTREE}/.mise.toml" ]]; then
+                trust_target="$explicit_target"
+            fi
+        elif [[ -n "${DX_RUNNER_PREFLIGHT_WORKTREE:-}" && -d "${DX_RUNNER_PREFLIGHT_WORKTREE}" ]]; then
+            explicit_target="$(cd "$DX_RUNNER_PREFLIGHT_WORKTREE" 2>/dev/null && pwd -P || true)"
+            if [[ -f "${DX_RUNNER_PREFLIGHT_WORKTREE}/.mise.toml" ]]; then
+                trust_target="$explicit_target"
+            fi
+        elif [[ -z "${WORKTREE:-}" && -z "${DX_RUNNER_PREFLIGHT_WORKTREE:-}" && -f "$(pwd)/.mise.toml" ]]; then
             trust_target="$(pwd -P)"
         fi
 
         if [[ -z "$trust_target" ]]; then
-            echo "N/A (no .mise target)"
+            if [[ -n "$explicit_target" ]]; then
+                echo "N/A (explicit worktree has no .mise target: $explicit_target)"
+            else
+                echo "N/A (no .mise target)"
+            fi
         else
             local trust_state trust_alias
             trust_state="$(mise trust --show -C "$trust_target" 2>/dev/null || true)"

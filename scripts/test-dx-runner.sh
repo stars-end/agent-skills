@@ -351,7 +351,19 @@ test_json_output() {
     else
         fail "check --json missing reviewer output invalid: rc=$missing_rc output=$missing_json"
     fi
-    
+
+    local generic_missing_json generic_missing_rc
+    set +e
+    generic_missing_json="$("$DX_RUNNER" check --beads "bd-missinggeneric-$$" --json 2>&1)"
+    generic_missing_rc=$?
+    set -e
+    if [[ "$generic_missing_rc" -eq 1 ]] \
+        && echo "$generic_missing_json" | jq -e '.state == "missing" and .provider == "unknown" and .reason_code == "no_meta"' >/dev/null 2>&1; then
+        pass "check --json emits structured generic missing state"
+    else
+        fail "check --json generic missing output invalid: rc=$generic_missing_rc output=$generic_missing_json"
+    fi
+
     # Report JSON should have stable fields
     local beads="test-report-$$"
     local provider="cc-glm"
@@ -2186,6 +2198,76 @@ EOF
 }
 
 # ============================================================================
+# Test: OpenCode Preflight Worktree Authority
+# ============================================================================
+
+test_opencode_preflight_worktree_authority() {
+    echo "=== Testing OpenCode Preflight Worktree Authority ==="
+
+    local tmp caller target bin fake_op fake_mise out rc
+    tmp="$(mktemp -d)"
+    caller="$tmp/caller-with-mise"
+    target="$tmp/target-no-mise"
+    bin="$tmp/bin"
+    mkdir -p "$caller" "$target" "$bin"
+    echo 'node = "22"' > "$caller/.mise.toml"
+
+    fake_op="$bin/opencode"
+    cat > "$fake_op" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "models" ]]; then
+  echo "zhipuai/glm-5.1"
+  exit 0
+fi
+if [[ "${1:-}" == "run" ]]; then
+  echo '{"type":"assistant","content":"READY"}'
+  exit 0
+fi
+if [[ "${1:-}" == "--help" ]]; then
+  echo "opencode help"
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$fake_op"
+
+    fake_mise="$bin/mise"
+    cat > "$fake_mise" <<EOF
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "trust" && "\${2:-}" == "--show" ]]; then
+  shift 2
+  if [[ "\${1:-}" == "-C" ]]; then
+    target="\${2:-}"
+    if [[ "\$target" == "$caller" ]]; then
+      echo "$caller: untrusted"
+    fi
+  else
+    echo "$caller: untrusted"
+  fi
+  exit 0
+fi
+if [[ "\${1:-}" == "trust" ]]; then
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$fake_mise"
+
+    rm -f /tmp/dx-runner/opencode/.models_cache
+    set +e
+    out="$(cd "$caller" && PATH="$bin:$PATH" OPENCODE_MODELS_CACHE_TTL_SEC=0 BEADS_DIR="${BEADS_DIR:-$HOME/.beads-runtime/.beads}" "$DX_RUNNER" preflight --profile opencode-review --worktree "$target" 2>&1)"
+    rc=$?
+    set -e
+    if [[ "$rc" -eq 0 ]] && echo "$out" | grep -q "explicit worktree has no .mise target" && ! echo "$out" | grep -q "opencode_mise_untrusted"; then
+        pass "explicit --worktree suppresses caller cwd mise trust checks"
+    else
+        fail "explicit --worktree was not authoritative: rc=$rc output=$out"
+    fi
+
+    rm -rf "$tmp"
+}
+
+# ============================================================================
 # Test: Model Override Blocking (bd-8wdg.2)
 # ============================================================================
 
@@ -2562,6 +2644,7 @@ run_all_tests() {
     
     # bd-8wdg hardening tests
     test_profile_loading
+    test_opencode_preflight_worktree_authority
     test_model_override_blocking
     test_manual_stop_semantics
     test_slow_start_detection
