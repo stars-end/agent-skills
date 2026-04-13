@@ -260,74 +260,35 @@ git branch -d feature-$FEATURE_KEY 2>/dev/null || echo "Branch already deleted"
 (beads-dolt dolt test --json && beads-dolt status --json)
 ```
 
-### 7.5. Auto-Cache Docs to Serena (If Docs Exist)
+### 7.5. Optional Durable Memory Capture
 
-**After successful merge, cache docs for searchability:**
+After a successful merge, create durable memory only when the merge produced a
+reusable cross-session learning, gotcha, runbook, or decision. Do not cache
+merged docs automatically.
 
 ```bash
-DOC_DIR="docs/$FEATURE_KEY"
-
-if [ -d "$DOC_DIR" ]; then
-  echo "💾 Caching docs to Serena..."
-
-  # Get issue details
-  ISSUE_JSON=$(bdx show $FEATURE_KEY --json)
-  ISSUE_TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
-  ISSUE_TYPE=$(echo "$ISSUE_JSON" | jq -r '.type')
-
-  # Combine all markdown files into cache
-  CACHE_CONTENT="# $FEATURE_KEY: $ISSUE_TITLE
-
-**Status:** closed (merged in PR #$PR_NUMBER)
-**Type:** $ISSUE_TYPE
-**Merged:** $(date +%Y-%m-%d)
-**Source:** $DOC_DIR/
-
-**[CACHE]** This is a searchable cache. Source of truth: git ($DOC_DIR/)
-
----
-
-"
-
-  # Append all markdown files
-  find "$DOC_DIR" -name "*.md" -type f | while read file; do
-    echo "## $(basename $file .md)" >> /tmp/cache_${FEATURE_KEY}.tmp
-    echo "" >> /tmp/cache_${FEATURE_KEY}.tmp
-    cat "$file" >> /tmp/cache_${FEATURE_KEY}.tmp
-    echo "" >> /tmp/cache_${FEATURE_KEY}.tmp
-    echo "---" >> /tmp/cache_${FEATURE_KEY}.tmp
-    echo "" >> /tmp/cache_${FEATURE_KEY}.tmp
-  done
-
-  CACHE_CONTENT+=$(cat /tmp/cache_${FEATURE_KEY}.tmp)
-  rm /tmp/cache_${FEATURE_KEY}.tmp
-
-  # Write to Serena using MCP tool
-  mcp__serena__write_memory(
-    memory_file_name="${FEATURE_KEY}_merged",
-    content="$CACHE_CONTENT"
-  )
-
-  echo "✅ Cached to Serena: ${FEATURE_KEY}_merged"
-  echo "   Search with: /search '@serena ${FEATURE_KEY}'"
+if [ "${CREATE_MEMORY_RECORD:-0}" = "1" ]; then
+  bdx create \
+    "Memory: <short durable title>" \
+    --type decision \
+    --priority 4 \
+    --labels memory \
+    --description "<durable fact, decision, gotcha, or runbook>" \
+    --metadata '{"mem.kind":"learning","mem.scope":"repo","mem.repo":"<repo>","mem.maturity":"validated","mem.confidence":"medium","mem.source_issue":"'"$FEATURE_KEY"'"}'
 else
-  echo "ℹ️  No docs to cache (Beads only)"
+  echo "ℹ️  No durable memory record needed"
 fi
 ```
 
-**Why auto-cache:**
-- Merged work becomes searchable via Serena
-- Clearly marked as [CACHE] (not source of truth)
-- Enables fast cross-feature references
-- No manual step required
-- Only happens after successful merge
+Use `~/agent-skills/docs/BEADS_MEMORY_CONVENTION.md` for the full metadata
+contract. Serena is for symbol-aware editing, not shared durable memory.
 
 **Verification:**
 - ✅ On master branch
 - ✅ Latest merge pulled
 - ✅ Local feature branch deleted
 - ✅ Beads synced
-- ✅ Docs cached to Serena (if exist)
+- ✅ Durable memory captured only if reusable learning exists
 
 ### 8. Confirm Completion
 
@@ -409,7 +370,7 @@ Ready for next feature.
 ✅ Execute direct merge only after explicit current-session HITL approval
 ✅ Clean up local workspace after merge
 ✅ Sync Beads state from master
-✅ Auto-cache docs to Serena (if exist)
+✅ Optional durable memory capture (if reusable learning exists)
 
 ## What This Skill DOESN'T Do
 
@@ -452,7 +413,7 @@ AI:
 7. Switches to master, pulls
 8. Deletes local branch
 9. Syncs Beads
-10. Caches docs to Serena
+10. Captures durable Beads memory only when reusable learning exists
 11. Confirms: "✅ Merge complete, workspace clean"
 ```
 

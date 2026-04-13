@@ -32,7 +32,7 @@ Every output from this skill should include:
 - Create and mutate Beads from a non-app directory with `BEADS_DIR=~/.beads-runtime/.beads`.
 - Use worktrees for code/doc changes in canonical repos.
 - Prefer one epic plus a small number of meaningful child tasks over a noisy task explosion.
-- Model dependencies explicitly with `parent-child`, `blocks`, and `discovered-from`.
+- Model hierarchy with `--parent`, blocking dependencies with `bdx dep <blocker> --blocks <blocked>`, and typed origin edges with `--deps "discovered-from:<id>"` only when origin tracking is needed.
 - Make the active contract executable, not aspirational.
 - For cross-VM, cross-repo, vendor/API, infra/auth/workflow, or repeated-friction planning, retrieve memory first:
   - `bdx memories <keyword> --json`

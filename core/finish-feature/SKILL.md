@@ -159,17 +159,20 @@ fi
 - Some epics serve as ongoing reference (keep in docs/)
 - Others are completed and should archive (move to archive/)
 
-### 5. Memory Caching
+### 5. Durable Memory Capture
 
-**NOTE**: Memory caching is currently deferred.
+Default behavior: do not create memory automatically. Documentation remains in
+git for searchability.
 
-**Current behavior**: Skip memory caching step. Documentation remains in git for searchability.
+If finishing the work produced reusable cross-session knowledge, store it in
+Beads:
 
-**Migration status**:
-- Serena is DEPRECATED (V4.2.1) - do not use mcp__serena__write_memory
-- Supermemory is DEFERRED (de-scoped from V3.x)
-- No active memory caching system
-- Use git search for archival context
+- short global fact: `bdx remember ... --key <stable-key>`
+- structured durable memory: closed Beads issue labeled `memory`
+
+Use `~/agent-skills/docs/BEADS_MEMORY_CONVENTION.md` for required metadata and
+retrieval rules. Do not write merged docs to Serena memory; Serena is for
+symbol-aware editing, not the shared durable memory layer.
 
 ### 6. Close or Verify Beads Issue
 
@@ -265,7 +268,7 @@ if [ -d "$DOCS_SKILL" ]; then
     echo "📦 Archived skill: .claude/skills/archive/docs-$issueId/"
     echo "   To restore: mv .claude/skills/archive/docs-$issueId .claude/skills/"
 
-    # Note: Serena caching removed (V4.2.1) - Supermemory will replace this
+    # Durable memory, when needed, is captured through Beads memory records.
 
     # Stage for commit
     git add .claude/skills/archive/ .claude/skills/
@@ -292,7 +295,7 @@ if [ -n "$(git status --porcelain)" ]; then
   git commit -m "docs: archive $issueId on completion
 
 Moved docs to archive, closed issue.
-Note: Memory caching deferred (Serena deprecated, Supermemory out of scope).
+Note: Durable cross-agent memory, when needed, is captured through Beads.
 
 Feature-Key: $issueId
 Agent: claude-code
@@ -559,12 +562,12 @@ finish-feature:
 2. Verify: Commits merged ✓
 3. Offer archiving: User chooses [n] No (ongoing reference)
 4. Skip archiving
-5. Cache: Skipped (Supermemory not yet implemented)
+5. Memory: No reusable cross-agent memory captured
 6. Close: bdx close bd-docs --reason "Completed"
 
 ✅ Finished: bd-docs (epic)
 📄 Docs: Kept at docs/bd-docs/ (not archived)
-💾 Cache: Skipped (Supermemory pending)
+💾 Memory: No reusable cross-agent memory captured
 🧹 Cleanup: No changes
 
 Next: bdx ready
@@ -612,10 +615,11 @@ Next: bdx ready
 - Close command: `bdx close <id> --reason <reason>`
 - Dependencies: parent-child, discovered-from, blocks
 
-**Memory caching (V4.2.1):**
-- Serena is DEPRECATED (do not use mcp__serena__write_memory)
-- Supermemory is DEFERRED (de-scoped from V3.x)
-- Current: Skip memory caching step (docs remain in git for searchability)
+**Durable memory:**
+- Use Beads memory for reusable cross-agent knowledge.
+- Short facts: `bdx remember`.
+- Structured records: closed Beads issues labeled `memory`.
+- Do not use Serena memory for shared durable memory.
 
 ---
 

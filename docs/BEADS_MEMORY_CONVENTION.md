@@ -11,6 +11,9 @@ not require a separate memory daemon.
 `DEFER_TO_P2_PLUS`: add a dedicated memory wrapper only after repeated operator
 friction proves the convention is not enough.
 
+Agent-facing workflow: use `core/beads-memory/SKILL.md` when storing or
+retrieving reusable cross-agent knowledge.
+
 ## Three Memory Tiers
 
 1) Short global facts (Beads KV, prime-injected upstream):
