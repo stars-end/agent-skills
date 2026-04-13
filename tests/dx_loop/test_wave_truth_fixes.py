@@ -3,7 +3,7 @@
 Regression tests for dx-loop wave truth fixes (bd-5w5o.56):
 
 Fix A: approved review closes task in Beads truthfully
-  - close_beads_task() calls bd close and updates local status
+  - close_beads_task() calls the canonical Beads wrapper and updates local status
   - both completion paths surface close failures via stderr warning
 
 Fix B: rehydration timeout no longer traps fork/join tasks
@@ -169,7 +169,7 @@ def test_approved_review_path_warns_on_close_failure(monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert close_call_count["n"] == 1
-    assert "WARNING: bd close failed for bd-task" in captured.err
+    assert "WARNING: Beads close failed for bd-task" in captured.err
     assert "wave truth is complete but Beads may still show open" in captured.err
 
 
@@ -211,7 +211,7 @@ def test_no_review_path_warns_on_close_failure(monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert close_call_count["n"] == 1
-    assert "WARNING: bd close failed for bd-task" in captured.err
+    assert "WARNING: Beads close failed for bd-task" in captured.err
 
 
 def test_close_beads_task_round_trip_persistence():

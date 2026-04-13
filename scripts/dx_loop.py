@@ -1580,7 +1580,7 @@ class DxLoop:
                     )
                     if not closed_ok:
                         print(
-                            f"WARNING: bd close failed for {beads_id}; "
+                            f"WARNING: Beads close failed for {beads_id}; "
                             "wave truth is complete but Beads may still show open",
                             file=sys.stderr,
                         )
@@ -1770,7 +1770,7 @@ class DxLoop:
                     )
                     if not closed_ok:
                         print(
-                            f"WARNING: bd close failed for {beads_id}; "
+                            f"WARNING: Beads close failed for {beads_id}; "
                             "wave truth is complete but Beads may still show open",
                             file=sys.stderr,
                         )
