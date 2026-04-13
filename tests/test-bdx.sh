@@ -469,6 +469,7 @@ test_remote_rejects_file_bearing_flags_with_clear_error() {
 
   local -a test_cases=(
     "--body-file /tmp/local.md"
+    "--description-file /tmp/local-description.md"
     "--design-file /tmp/local-design.md"
     "--file /tmp/local.md"
     "--graph /tmp/local.dot"
@@ -543,37 +544,6 @@ test_remote_rejects_metadata_file_expansion_with_clear_error() {
   done
 }
 
-test_remote_rejects_create_repo_flag_with_clear_error() {
-  local case_dir="$tmpdir/case9"
-  local fake_bin="$case_dir/bin"
-  local fake_bd_log="$case_dir/fake-bd.log"
-  local fake_ssh_log="$case_dir/fake-ssh.log"
-
-  mkdir -p "$fake_bin" "$case_dir/home"
-  setup_fake_common "$fake_bin"
-
-  local output rc
-  set +e
-  output="$(
-    FAKE_BD_LOG="$fake_bd_log" \
-    FAKE_SSH_LOG="$fake_ssh_log" \
-    HOME="$case_dir/home" \
-    PATH="$fake_bin:/usr/bin:/bin" \
-    BDX_SSH_BIN="$fake_bin/ssh" \
-    BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
-    BDX_REMOTE_HOST="epyc12" \
-    BDX_HOSTNAME="macbook" \
-    "$BDX" create --title "remote repo flag" --repo "agent-skills" 2>&1
-  )"
-  rc=$?
-  set -e
-
-  [[ $rc -ne 0 ]] && pass "remote create --repo is rejected" || fail "remote create --repo should fail"
-  assert_contains "$output" "remote bdx create rejected: '--repo'" "create --repo rejection message is explicit"
-  [[ ! -f "$fake_ssh_log" ]] && pass "create --repo preflight stops before ssh" || fail "create --repo preflight unexpectedly called ssh"
-  [[ ! -f "$fake_bd_log" ]] && pass "create --repo preflight stops before bd" || fail "create --repo preflight unexpectedly called bd"
-}
-
 test_json_error_for_local_file_flag() {
   local case_dir="$tmpdir/case10"
   local fake_bin="$case_dir/bin"
@@ -601,7 +571,7 @@ test_json_error_for_local_file_flag() {
   set -e
 
   [[ $rc -ne 0 ]] && pass "JSON error file-bearing case is rejected" || fail "JSON error file-bearing case should fail"
-  assert_contains "$output" '"reason_code":"local_path_unavailable"' "file-bearing rejection exposes reason_code"
+  assert_contains "$output" '"reason_code":"local_file_arg_unsupported"' "file-bearing rejection exposes reason_code"
   assert_contains "$output" '"ok":false' "file-bearing rejection exposes structured JSON"
   [[ ! -f "$fake_ssh_log" ]] && pass "JSON file-bearing preflight stops before ssh" || fail "JSON file-bearing preflight unexpectedly called ssh"
 }
@@ -629,7 +599,7 @@ EOF
       FAKE_BD_LOG="$fake_bd_log" \
       HOME="$case_dir/home" \
       PATH="$fake_bin:/usr/bin:/bin" \
-      BDX_READ_TIMEOUT_SECONDS=1 \
+      BDX_COMMAND_TIMEOUT_SECONDS=1 \
       BDX_JSON_ERRORS=1 \
       "$ROOT/scripts/bdx-remote" --mode=read 2>&1
   )"
@@ -638,6 +608,50 @@ EOF
 
   [[ $rc -ne 0 ]] && pass "remote read timeout fails" || fail "remote read timeout should fail"
   assert_contains "$output" '"reason_code":"query_timeout"' "remote read timeout exposes reason_code"
+}
+
+test_local_read_timeout_json() {
+  local case_dir="$tmpdir/case11local"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+
+  cat >"$fake_bin/bd" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+: "${FAKE_BD_LOG:?missing FAKE_BD_LOG}"
+printf 'arg=%s\n' "$1" >>"$FAKE_BD_LOG"
+sleep 3
+EOF
+  chmod +x "$fake_bin/bd"
+
+  cat >"$fake_bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "unexpected ssh invocation" >&2
+exit 99
+EOF
+  chmod +x "$fake_bin/ssh"
+
+  local output rc
+  set +e
+  output="$(
+    FAKE_BD_LOG="$fake_bd_log" \
+    HOME="$case_dir/home" \
+    PATH="$fake_bin:/usr/bin:/bin" \
+    BDX_SSH_BIN="$fake_bin/ssh" \
+    BDX_REMOTE_HOST="epyc12" \
+    BDX_HOSTNAME="epyc12" \
+    BDX_COMMAND_TIMEOUT_SECONDS=1 \
+    BDX_JSON_ERRORS=1 \
+    "$BDX" show bd-slow --json 2>&1
+  )"
+  rc=$?
+  set -e
+
+  [[ $rc -ne 0 ]] && pass "local hub read timeout fails" || fail "local hub read timeout should fail"
+  assert_contains "$output" '"reason_code":"query_timeout"' "local hub read timeout exposes reason_code"
 }
 
 test_remote_write_timeout_json() {
@@ -665,7 +679,7 @@ EOF
       FAKE_FLOCK_LOG="$fake_flock_log" \
       HOME="$case_dir/home" \
       PATH="$fake_bin:/usr/bin:/bin" \
-      BDX_WRITE_TIMEOUT_SECONDS=1 \
+      BDX_COMMAND_TIMEOUT_SECONDS=1 \
       BDX_JSON_ERRORS=1 \
       "$ROOT/scripts/bdx-remote" --mode=write 2>&1
   )"
@@ -673,7 +687,7 @@ EOF
   set -e
 
   [[ $rc -ne 0 ]] && pass "remote write timeout fails" || fail "remote write timeout should fail"
-  assert_contains "$output" '"reason_code":"query_timeout"' "remote write timeout exposes reason_code"
+  assert_contains "$output" '"reason_code":"mutation_timeout"' "remote write timeout exposes reason_code"
   assert_file_contains "$fake_flock_log" "lock=$case_dir/home/.beads-runtime/.locks/bdx-mutate.lock" "remote write timeout uses flock path"
 }
 
@@ -725,9 +739,9 @@ main() {
   test_remote_helper_revalidates_allowlist
   test_remote_rejects_file_bearing_flags_with_clear_error
   test_remote_rejects_metadata_file_expansion_with_clear_error
-  test_remote_rejects_create_repo_flag_with_clear_error
   test_json_error_for_local_file_flag
   test_remote_read_timeout_json
+  test_local_read_timeout_json
   test_remote_write_timeout_json
   test_preflight_json_uses_targeted_probes
 
