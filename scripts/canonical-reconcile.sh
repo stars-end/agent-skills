@@ -6,6 +6,7 @@ set -euo pipefail
 
 REPO_ROOT="$HOME"
 CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
+CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
 LOG_DIR="$HOME/logs/dx"
 TRACKER_SCRIPT="$(dirname "$0")/canonical-dirty-tracker.sh"
 
@@ -31,6 +32,13 @@ reconcile_repo() {
         return 0
     fi
 
+    local current_branch
+    current_branch=$(git branch --show-current 2>/dev/null || true)
+    if [[ "$current_branch" != "$CANONICAL_TRUNK_BRANCH" ]]; then
+        log "SKIP: $repo (off trunk: ${current_branch:-detached})"
+        return 0
+    fi
+
     # Check if dirty
     if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
         log "SKIP: $repo (dirty) - updating tracker"
@@ -40,14 +48,14 @@ reconcile_repo() {
 
     # Clean - pull if behind
     local fetch_output
-    fetch_output=$(git fetch origin master 2>&1) || {
+    fetch_output=$(git fetch origin "$CANONICAL_TRUNK_BRANCH" 2>&1) || {
         log "WARN: $repo fetch failed: $fetch_output"
     }
-    local behind=$(git rev-list --count HEAD..origin/master 2>/dev/null || echo "0")
+    local behind=$(git rev-list --count "HEAD..origin/$CANONICAL_TRUNK_BRANCH" 2>/dev/null || echo "0")
 
     if [[ "$behind" -gt 0 ]]; then
         local pull_output
-        if pull_output=$(git pull --ff-only origin master 2>&1); then
+        if pull_output=$(git pull --ff-only origin "$CANONICAL_TRUNK_BRANCH" 2>&1); then
             log "OK: $repo pulled $behind commits"
         else
             log "FAIL: $repo pull failed: $pull_output"
