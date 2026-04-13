@@ -46,6 +46,12 @@ Keep all outbound DX invariants from `prompt-writing`, then add Spark-specific t
 - exact done gate
 - explicit stale/duplicate/trunk-already-satisfied handling
 
+## Boundary: Review Lanes
+
+Use this skill for outbound Spark implementation/verification prompt packs. For
+inbound reviewer lanes, call `dx-review --template <smoke|code-review|architecture-review|security-review>`
+and do not embed review prompt bodies manually.
+
 ## Spark Optimization Rules
 
 ### 1. Batch by outcome, not by file

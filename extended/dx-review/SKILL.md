@@ -27,7 +27,8 @@ Always pass a real worktree. Do not run review jobs from canonical repos.
 dx-review run \
   --beads bd-xxx \
   --worktree /tmp/agents/bd-xxx/repo \
-  --prompt-file /tmp/review.prompt \
+  --pr https://github.com/<owner>/<repo>/pull/<n> \
+  --template code-review \
   --wait
 ```
 
@@ -50,6 +51,36 @@ dx-review doctor --worktree /tmp/agents/bd-xxx/repo
 `doctor` checks both default review profiles and lets `dx-runner` perform safe
 worktree preparation such as `mise trust` before strict provider preflight.
 
+After reviewers complete, generate the merged artifact:
+
+```bash
+dx-review summarize --beads bd-xxx
+```
+
+Expected summarize output includes:
+- final quorum status (`2/2 completed, 0 failed`)
+- per-reviewer state/verdict/failure signals
+- findings counts
+- token/cost usage when available
+- log/report paths
+
+## Template Contract
+
+`dx-review` templates are inbound reviewer contracts, not outbound implementation prompts.
+
+Available templates:
+- `smoke`
+- `code-review`
+- `architecture-review`
+- `arch-review` (alias for `architecture-review`)
+- `security-review`
+
+Template assets:
+- `templates/dx-review/*.md`
+- `templates/dx-review/contracts/*.md`
+
+Review templates must not request PR creation, commits, pushes, or code fixes.
+
 ## Provider Contract
 
 - Claude Code is the `claude-code` provider, not `cc-glm`.
@@ -61,6 +92,11 @@ worktree preparation such as `mise trust` before strict provider preflight.
   be reported as `start_failed`, not polled until timeout.
 - A review run that exits 0 with no mutations is expected. `dx-review` summarizes
   that as `review_completed` while preserving the raw `dx-runner` JSON.
+- Read-only review enforcement is provider-specific best effort. Summaries should
+  report `READ_ONLY_ENFORCEMENT` as:
+  - `provider_enforced`
+  - `contract_only`
+  - `unavailable`
 
 ## Failure Handling
 
@@ -70,3 +106,10 @@ worktree preparation such as `mise trust` before strict provider preflight.
 - `beads-mcp binary: MISSING` is an expected warning on hosts without the optional Beads MCP helper. It does not block the default OpenCode review lane unless a profile explicitly escalates `beads_mcp_missing` to error.
 - Do not retry repeatedly. One retry after fixing auth/tooling is enough.
 - Use `dx-runner report --beads <bd-id>.<reviewer> --format json` as the source of truth for logs and outcomes.
+
+## Session Discovery Note
+
+After baseline or skill updates, already-running agent sessions may not advertise
+new skill entries immediately. If `dx-review` behavior changed but session skill
+discovery still looks stale, refresh or start a new session before debugging local
+CLI installation.
