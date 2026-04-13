@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 79f2d464bbc052a4bb50fb2f4c77bb950e4a8554 -->
-<!-- Last updated: 2026-04-12 16:17:04 UTC -->
+<!-- Source SHA: 81f4af0622ec89499acfee98206aa0b6a7576cb4 -->
+<!-- Last updated: 2026-04-12 20:11:15 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -635,7 +635,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
 | **canonical-targets** | Single source of truth for canonical VMs, canonical IDEs, and canonical trunk branch. Use this to keep dx-status, mcp-doctor, and setup scripts aligned across machines. | — | dx, ide, vm, canonical, targets |
-| **devops-dx** | GitHub/Railway housekeeping for CI env/secret management and DX maintenance. Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, or fixing CI failures due to missing env. | — | devops, github, auth, env, secrets, ci, railway |
+| **devops-dx** | GitHub/Railway housekeeping for CI env/secret management and DX maintenance. Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, auditing cross-repo GitHub Actions failure groups, or fixing CI failures due to missing env. | — | devops, github, auth, env, secrets, ci, railway |
 | **dx-alerts** | Lightweight “news wire” for DX changes and breakages, posted to Slack (no MCP required). | — |  |
 | **fleet-deploy** | Deploy changes across canonical VMs (macmini, homedesktop-wsl, epyc6, epyc12). MUST BE USED when deploying scripts, crontabs, or config changes to multiple VMs. Uses configs/fleet_hosts.yaml as authoritative source for SSH targets, with dx-runner governance. | `dx-runner start --provider opencode --beads bd-xyz --prompt-` | fleet, deploy, vm, canonical, dx-runner, ssh, infrastructure |
 | **fleet-sync** | Canonical Fleet Sync skill for cross-VM tool convergence, client visibility testing, and runtime-truth documentation. Use when the work involves Fleet Sync architecture, canonical VM rollout, MCP tool restoration, or end-to-end validation across codex, claude, gemini, and opencode. | — | fleet, mcp, vm, ide, rollout, validation |

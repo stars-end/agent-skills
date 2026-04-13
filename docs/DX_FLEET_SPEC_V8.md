@@ -57,7 +57,7 @@
 | queue-hygiene-enforcer.sh | Auto-merge policy enforcement + rescue PR cleanup (DX_CONTROLLER only) | */4h | bd-gdlr |
 | dx-spoke-cron-install.sh | Spoke-safe fetch/reconcile/cache cron supplement | install-time | bd-br7e4 |
 | dx-job-wrapper.sh | Wrap all above with state + Slack alerts | N/A | bd-suaw |
-| dx-audit.sh | V8 invariant audit (lookback rescue events, trailers) | Weekly | bd-rrb9 |
+| dx-audit.sh | V8 invariant audit plus active cross-repo GitHub Actions failure groups | Weekly | bd-rrb9 |
 
 Runbook: `docs/DX_V8_6_RESCUE_LOOP_RUNBOOK.md`
 
