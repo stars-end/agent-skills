@@ -62,11 +62,11 @@ classify_command() {
         add)
           echo "write"
           ;;
-        ""|list|show)
+        ""|list|show|bd-*)
           echo "read"
           ;;
         *)
-          die unsupported_command "rejected comments subcommand '$sub' (allowed: add, list, show)"
+          die unsupported_command "rejected comments subcommand '$sub' (allowed: add, list, show, <issue-id>)"
           ;;
       esac
       return 0
