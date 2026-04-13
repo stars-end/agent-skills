@@ -4,11 +4,16 @@ set -euo pipefail
 CANONICAL_BEADS_DIR="${BDX_BEADS_DIR:-$HOME/.beads-runtime/.beads}"
 LOCK_TIMEOUT_SECONDS="${BDX_LOCK_TIMEOUT_SECONDS:-15}"
 READ_TIMEOUT_SECONDS="${BDX_READ_TIMEOUT_SECONDS:-10}"
-WRITE_TIMEOUT_SECONDS="${BDX_WRITE_TIMEOUT_SECONDS:-45}"
+WRITE_TIMEOUT_SECONDS="${BDX_WRITE_TIMEOUT_SECONDS:-30}"
 LOCK_ROOT="${BDX_LOCK_ROOT:-$HOME/.beads-runtime/.locks}"
 LOCK_NAME="${BDX_LOCK_NAME:-bdx-mutate.lock}"
 LOCK_PATH="$LOCK_ROOT/$LOCK_NAME"
 WANT_JSON_ERRORS="${BDX_JSON_ERRORS:-0}"
+
+if [[ -n "${BDX_COMMAND_TIMEOUT_SECONDS:-}" ]]; then
+  READ_TIMEOUT_SECONDS="${BDX_COMMAND_TIMEOUT_SECONDS}"
+  WRITE_TIMEOUT_SECONDS="${BDX_COMMAND_TIMEOUT_SECONDS}"
+fi
 
 json_string() {
   python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'
@@ -152,6 +157,9 @@ run_bd_with_timeout() {
     rc=$?
     set -e
     if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+      if [[ "$mode" == "write" ]]; then
+        die mutation_timeout "bd command timed out after ${timeout_seconds}s"
+      fi
       die query_timeout "bd command timed out after ${timeout_seconds}s"
     fi
     return "$rc"
@@ -164,6 +172,9 @@ run_bd_with_timeout() {
     if (( waited >= timeout_seconds )); then
       kill "$pid" >/dev/null 2>&1 || true
       wait "$pid" >/dev/null 2>&1 || true
+      if [[ "$mode" == "write" ]]; then
+        die mutation_timeout "bd command timed out after ${timeout_seconds}s"
+      fi
       die query_timeout "bd command timed out after ${timeout_seconds}s"
     fi
     sleep 1
@@ -206,20 +217,36 @@ run_with_flock() {
   set -e
 
   if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
-    die query_timeout "bd command timed out after ${WRITE_TIMEOUT_SECONDS}s"
+    die mutation_timeout "bd command timed out after ${WRITE_TIMEOUT_SECONDS}s"
   fi
 
   return "$rc"
 }
 
-if [[ "$mode" == "write" ]]; then
-  mkdir -p "$LOCK_ROOT"
-  if [[ "${BDX_DISABLE_FLOCK:-0}" != "1" ]] && command -v flock >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
-    run_with_flock
-    exit $?
-  fi
-  run_with_mkdir_lock
-  exit $?
-fi
+run_command() {
+  local rc
 
-run_bd_with_timeout "$READ_TIMEOUT_SECONDS"
+  if [[ "$mode" == "write" ]]; then
+    mkdir -p "$LOCK_ROOT"
+    if [[ "${BDX_DISABLE_FLOCK:-0}" != "1" ]] && command -v flock >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+      run_with_flock
+      return $?
+    fi
+    run_with_mkdir_lock
+    return $?
+  fi
+
+  run_bd_with_timeout "$READ_TIMEOUT_SECONDS"
+  rc=$?
+  return "$rc"
+}
+
+set +e
+run_command
+rc=$?
+set -e
+
+if [[ "$rc" -ne 0 && "$WANT_JSON_ERRORS" == "1" ]]; then
+  emit_json_error "remote_bd_failed" "bd command failed with exit code $rc"
+fi
+exit "$rc"

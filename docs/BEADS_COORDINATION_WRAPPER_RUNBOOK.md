@@ -52,12 +52,11 @@ If a workflow needs smarter task selection, use Beads/BV/dx-runner product surfa
 
 ## Remote Write Guardrails
 
-`bdx` now rejects two high-friction remote write patterns before calling remote `bd`:
+`bdx` rejects local file-path/stream write patterns before calling remote `bd`:
 
-- File-bearing flags (`--body-file`, `--design-file`, `--file`, `--graph`, `--stdin`, and `--metadata @file`) are rejected on spoke hosts because those local paths or stdin streams do not exist on `epyc12`.
-- `bdx create --repo ...` is rejected on spoke hosts with a `bdx`-specific diagnostic, instead of leaking embedded-Dolt initialization errors.
+- File-bearing flags (at minimum `--body-file`, `--description-file`, `--stdin`, and `--metadata @file`) are rejected on spoke hosts because those local paths or stdin streams do not exist on `epyc12`.
 
-Use inline values for remote writes (`--description`, `--notes`, metadata key/value flags), or run those path/repo-sensitive commands directly on `epyc12`.
+Use inline values for remote writes (`--description`, `--notes`, metadata key/value flags), or run path-sensitive commands directly on `epyc12`.
 
 ## Quick Health Check
 
@@ -77,7 +76,8 @@ Defaults:
 
 - SSH connect: `BDX_SSH_CONNECT_TIMEOUT_SECONDS=5`
 - read commands: `BDX_READ_TIMEOUT_SECONDS=10`
-- write commands: `BDX_WRITE_TIMEOUT_SECONDS=45`
+- write commands: `BDX_WRITE_TIMEOUT_SECONDS=30`
+- unified override for both reads/writes: `BDX_COMMAND_TIMEOUT_SECONDS=<seconds>`
 - write lock acquisition: `BDX_LOCK_TIMEOUT_SECONDS=15`
 - preflight: `BDX_PREFLIGHT_TIMEOUT_SECONDS=15`
 
@@ -90,12 +90,12 @@ Set `BDX_JSON_ERRORS=1` or pass `--json` to receive structured failures on stder
 Common reason codes:
 
 - `ssh_unreachable`
-- `remote_bd_missing`
+- `remote_bd_failed`
 - `query_timeout`
+- `mutation_timeout`
 - `lock_timeout`
 - `unsupported_command`
-- `local_path_unavailable`
-- `repo_runtime_error`
+- `local_file_arg_unsupported`
 
 Backend diagnostics (only when debugging service/runtime):
 

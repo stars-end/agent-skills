@@ -189,18 +189,14 @@ run_local() {
   local mode="$1"
   shift
 
-  if [[ "$mode" == "write" ]]; then
-    emit_argv "$@" | BDX_BEADS_DIR="$CANONICAL_BEADS_DIR" "$SCRIPT_DIR/bdx-remote" "--mode=write"
-    return $?
-  fi
-
-  BEADS_DIR="$CANONICAL_BEADS_DIR" exec bd "$@"
+  emit_argv "$@" | BDX_BEADS_DIR="$CANONICAL_BEADS_DIR" "$SCRIPT_DIR/bdx-remote" "--mode=$mode"
 }
 
 run_remote() {
   local mode="$1"
   shift
   local rc
+  local err_file=""
   local ssh_opts=(
     -o "BatchMode=yes"
     -o "ConnectTimeout=${SSH_CONNECT_TIMEOUT}"
@@ -208,12 +204,31 @@ run_remote() {
   )
 
   # NUL-delimited argv transport: user arguments never touch remote shell parsing.
+  if [[ "$WANT_JSON_ERRORS" == "1" || "${BDX_JSON_ERRORS:-0}" == "1" ]]; then
+    err_file="$(mktemp)"
+    set +e
+    emit_argv "$@" | "$SSH_BIN" "${ssh_opts[@]}" "$REMOTE_HOST" "$REMOTE_HELPER" "--mode=$mode" 2> >(tee "$err_file" >&2)
+    rc=${PIPESTATUS[1]}
+    set -e
+    if [[ "$rc" -eq 255 ]]; then
+      if ! grep -Fq '"reason_code":"ssh_unreachable"' "$err_file" 2>/dev/null; then
+        emit_json_error "ssh_unreachable" "bdx remote host is unreachable" "${BDX_COMMAND_NAME:-${1:-}}" "$REMOTE_HOST"
+      fi
+    elif [[ "$rc" -ne 0 ]]; then
+      if ! grep -Fq '"reason_code":' "$err_file" 2>/dev/null; then
+        emit_json_error "remote_bd_failed" "bdx remote command failed with exit code $rc" "${BDX_COMMAND_NAME:-${1:-}}" "$REMOTE_HOST"
+      fi
+    fi
+    rm -f "$err_file"
+    return "$rc"
+  fi
+
   set +e
   emit_argv "$@" | "$SSH_BIN" "${ssh_opts[@]}" "$REMOTE_HOST" "$REMOTE_HELPER" "--mode=$mode"
   rc=${PIPESTATUS[1]}
   set -e
-  if [[ "$rc" -eq 255 && ( "$WANT_JSON_ERRORS" == "1" || "${BDX_JSON_ERRORS:-0}" == "1" ) ]]; then
-    emit_json_error "ssh_unreachable" "bdx remote host is unreachable" "${BDX_COMMAND_NAME:-${1:-}}" "$REMOTE_HOST"
+  if [[ "$rc" -eq 255 ]]; then
+    echo "bdx: remote host '$REMOTE_HOST' is unreachable" >&2
   fi
   return "$rc"
 }
@@ -259,22 +274,18 @@ preflight_remote_write() {
 
   local file_flag=""
   local candidate
-  for candidate in --body-file --design-file --file --graph --stdin; do
+  for candidate in --body-file --description-file --design-file --file --graph --stdin; do
     if file_flag="$(find_flag_match "$candidate" "$@")"; then
       if [[ "$candidate" == "--stdin" ]]; then
-        die local_path_unavailable "remote bdx write rejected: '--stdin' body streaming is not supported over remote routing. Use inline body flags or run from epyc12."
+        die local_file_arg_unsupported "remote bdx write rejected: '--stdin' body streaming is not supported over remote routing. Use inline body flags or run from epyc12."
       fi
-      die local_path_unavailable "remote bdx write rejected: local file-bearing flag '$file_flag' is not supported over remote routing. Use inline values or run from epyc12."
+      die local_file_arg_unsupported "remote bdx write rejected: local file-bearing flag '$file_flag' is not supported over remote routing. Use inline values or run from epyc12."
     fi
   done
 
   local metadata_file_arg
   if metadata_file_arg="$(find_metadata_file_arg "$@")"; then
-    die local_path_unavailable "remote bdx write rejected: metadata file expansion '$metadata_file_arg' is not supported over remote routing. Use inline --metadata key=value or run from epyc12."
-  fi
-
-  if [[ "$cmd" == "create" ]] && find_flag_match "--repo" "$@" >/dev/null; then
-    die repo_runtime_error "remote bdx create rejected: '--repo' can trigger embedded-Dolt target-repo initialization. Use repo labels/metadata or run create on epyc12 with validated repo context."
+    die local_file_arg_unsupported "remote bdx write rejected: metadata file expansion '$metadata_file_arg' is not supported over remote routing. Use inline --metadata key=value or run from epyc12."
   fi
 }
 
