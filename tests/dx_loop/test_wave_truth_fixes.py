@@ -3,7 +3,7 @@
 Regression tests for dx-loop wave truth fixes (bd-5w5o.56):
 
 Fix A: approved review closes task in Beads truthfully
-  - close_beads_task() calls bd close and updates local status
+  - close_beads_task() calls the canonical Beads wrapper and updates local status
   - both completion paths surface close failures via stderr warning
 
 Fix B: rehydration timeout no longer traps fork/join tasks
@@ -48,7 +48,8 @@ def test_close_beads_task_updates_status_on_success(monkeypatch):
     )
 
     def fake_run(cmd, **kwargs):
-        assert cmd[:3] == ["bd", "close", "bd-test"]
+        assert cmd[:3] == ["bdx", "close", "bd-test"]
+        assert kwargs["env"]["BEADS_DIR"].endswith("/.beads-runtime/.beads")
         return subprocess.CompletedProcess(cmd, 0, stdout="OK", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -100,6 +101,35 @@ def test_close_beads_task_returns_false_on_timeout(monkeypatch):
     assert manager.tasks["bd-test"].status == "open"
 
 
+def test_refresh_task_status_uses_bdx_default_and_runtime_env(monkeypatch):
+    """Runtime Beads calls should use bdx + canonical BEADS_DIR by default."""
+    manager = BeadsWaveManager()
+    manager.tasks["bd-test"] = BeadsTask(
+        beads_id="bd-test",
+        title="Test task",
+        status="open",
+    )
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["env"] = kwargs.get("env", {})
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout=json.dumps([{"id": "bd-test", "status": "closed"}]),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    status = manager.refresh_task_status("bd-test")
+
+    assert status == "closed"
+    assert seen["cmd"][0] == "bdx"
+    assert seen["env"]["BEADS_DIR"].endswith("/.beads-runtime/.beads")
+
+
 def test_approved_review_path_warns_on_close_failure(monkeypatch, capsys):
     """Review APPROVED path should log stderr warning when bd close fails."""
     loop = DxLoop("wave-test-close-warn")
@@ -139,7 +169,7 @@ def test_approved_review_path_warns_on_close_failure(monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert close_call_count["n"] == 1
-    assert "WARNING: bd close failed for bd-task" in captured.err
+    assert "WARNING: Beads close failed for bd-task" in captured.err
     assert "wave truth is complete but Beads may still show open" in captured.err
 
 
@@ -181,7 +211,7 @@ def test_no_review_path_warns_on_close_failure(monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert close_call_count["n"] == 1
-    assert "WARNING: bd close failed for bd-task" in captured.err
+    assert "WARNING: Beads close failed for bd-task" in captured.err
 
 
 def test_close_beads_task_round_trip_persistence():

@@ -38,6 +38,7 @@ from dx_loop import (
     BeadsWaveManager,
     NotificationManager,
 )
+from dx_loop.beads_cli import beads_command, beads_subprocess_env, control_plane_cwd
 from dx_loop.scheduler import DxLoopScheduler, SchedulerState
 from dx_loop.runner_adapter import RunnerAdapter, RunnerTaskState, RunnerStartResult
 
@@ -270,7 +271,7 @@ def _infer_epic_id_from_subtask_token(beads_id: str) -> Optional[str]:
 def _resolve_parent_epic_from_beads(
     beads_id: str,
     *,
-    beads_repo_path: Path = Path.home() / "bd",
+    beads_repo_path: Optional[Path] = None,
     timeout_seconds: int = SURFACE_BEADS_TIMEOUT_SECONDS,
 ) -> Optional[str]:
     """Resolve parent epic id from Beads metadata for first-use task lookups."""
@@ -279,9 +280,11 @@ def _resolve_parent_epic_from_beads(
         return inferred_epic
 
     try:
+        command_cwd = (beads_repo_path or control_plane_cwd()).expanduser()
         result = subprocess.run(
-            ["bd", "show", beads_id, "--json"],
-            cwd=str(beads_repo_path),
+            beads_command(["show", beads_id, "--json"]),
+            cwd=str(command_cwd),
+            env=beads_subprocess_env(),
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
@@ -384,7 +387,7 @@ def _missing_wave_diagnostics(
                 lines.append(
                     "First-use guidance: identify the parent epic and start a wave."
                 )
-                lines.append(f"`bd show {beads_id} --json`")
+                lines.append(f"`{beads_command([])[0]} show {beads_id} --json`")
                 lines.append("`dx-loop start --epic <epic-id>`")
 
     if len(lines) == 1:
@@ -1577,7 +1580,7 @@ class DxLoop:
                     )
                     if not closed_ok:
                         print(
-                            f"WARNING: bd close failed for {beads_id}; "
+                            f"WARNING: Beads close failed for {beads_id}; "
                             "wave truth is complete but Beads may still show open",
                             file=sys.stderr,
                         )
@@ -1767,7 +1770,7 @@ class DxLoop:
                     )
                     if not closed_ok:
                         print(
-                            f"WARNING: bd close failed for {beads_id}; "
+                            f"WARNING: Beads close failed for {beads_id}; "
                             "wave truth is complete but Beads may still show open",
                             file=sys.stderr,
                         )

@@ -158,7 +158,7 @@ For machine consumption (e.g., Slack webhooks, monitoring systems), use
 ### blocked (kickoff_env_blocked)
 
 1. Check worktree exists: `ls /tmp/agents/<beads-id>/<repo>`
-2. Check Beads Dolt is running: `bd dolt test --json`
+2. Check Beads Dolt is running: `bdx dolt test --json`
 3. Check auth: `op whoami && railway whoami`
 4. Fix the environment issue
 5. Re-trigger the wave: `dx-loop start --epic <epic-id>`

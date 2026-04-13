@@ -821,11 +821,11 @@ def test_start_implement_blocks_on_live_runner_worktree_mismatch(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_version_is_1_3_0():
-    """Version should be bumped to 1.3.0."""
-    assert VERSION == "1.3.0"
+def test_version_is_1_4_0():
+    """Version should be bumped to 1.4.0."""
+    assert VERSION == "1.4.0"
 
-    print("Version: 1.3.0")
+    print("Version: 1.4.0")
 
 
 def test_manual_takeover_in_allowed_transitions():

@@ -507,7 +507,9 @@ def test_load_epic_tasks_skips_closed_children(monkeypatch):
     """Closed epic children should count as satisfied, not pending dispatch."""
     manager = BeadsWaveManager()
 
-    def fake_run(cmd, cwd=None, capture_output=None, text=None, timeout=None):
+    def fake_run(
+        cmd, cwd=None, capture_output=None, text=None, timeout=None, env=None
+    ):
         beads_id = cmd[2]
         if beads_id == "bd-epic":
             payload = [
@@ -1264,7 +1266,8 @@ def test_status_missing_wave_for_first_use_beads_task_is_actionable(
     existing._save_state()
 
     def fake_run(cmd, **kwargs):
-        assert cmd == ["bd", "show", "bd-epyeg", "--json"]
+        assert cmd == ["bdx", "show", "bd-epyeg", "--json"]
+        assert kwargs["env"]["BEADS_DIR"].endswith("/.beads-runtime/.beads")
         payload = [
             {
                 "id": "bd-epyeg",
@@ -1308,7 +1311,8 @@ def test_explain_missing_wave_for_first_use_beads_task_is_actionable(
     """explain --beads-id should guide first-use tasks without persisted wave state."""
 
     def fake_run(cmd, **kwargs):
-        assert cmd == ["bd", "show", "bd-epyeg", "--json"]
+        assert cmd == ["bdx", "show", "bd-epyeg", "--json"]
+        assert kwargs["env"]["BEADS_DIR"].endswith("/.beads-runtime/.beads")
         payload = [
             {
                 "id": "bd-epyeg",
@@ -1463,7 +1467,7 @@ def test_status_reconciles_stale_closed_active_review_task(
     _build_stale_closed_review_wave(tmp_path, wave_id="wave-stale-status")
 
     def fake_run(cmd, **kwargs):
-        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco.2":
+        if cmd[:2] == ["bdx", "show"] and cmd[2] == "bd-bkco.2":
             payload = [
                 {
                     "id": "bd-bkco.2",
@@ -1509,7 +1513,7 @@ def test_explain_reconciles_stale_closed_task_and_avoids_continue_monitoring(
     _build_stale_closed_review_wave(tmp_path, wave_id="wave-stale-explain")
 
     def fake_run(cmd, **kwargs):
-        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco.2":
+        if cmd[:2] == ["bdx", "show"] and cmd[2] == "bd-bkco.2":
             payload = [
                 {
                     "id": "bd-bkco.2",
@@ -1553,7 +1557,7 @@ def test_status_retires_stale_dispatch_frontier_when_epic_closed(
     _build_stale_closed_epic_frontier_wave(tmp_path, wave_id="wave-stale-epic-closed")
 
     def fake_run(cmd, **kwargs):
-        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco":
+        if cmd[:2] == ["bdx", "show"] and cmd[2] == "bd-bkco":
             payload = [
                 {
                     "id": "bd-bkco",
@@ -1642,7 +1646,7 @@ def test_status_retires_closed_epic_waiting_wave_with_empty_dispatchable(
     calls = {"epic_refresh": 0}
 
     def fake_run(cmd, **kwargs):
-        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco":
+        if cmd[:2] == ["bdx", "show"] and cmd[2] == "bd-bkco":
             calls["epic_refresh"] += 1
             payload = [
                 {
@@ -1725,7 +1729,7 @@ def test_explain_reports_closed_epic_as_retired(tmp_path, monkeypatch, capsys):
     )
 
     def fake_run(cmd, **kwargs):
-        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco":
+        if cmd[:2] == ["bdx", "show"] and cmd[2] == "bd-bkco":
             payload = [
                 {
                     "id": "bd-bkco",
@@ -1777,7 +1781,7 @@ def test_status_reconciles_stale_closed_task_with_surface_timeout_budget(
     _build_stale_closed_review_wave(tmp_path, wave_id="wave-stale-timeout")
 
     def fake_run(cmd, **kwargs):
-        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco.2":
+        if cmd[:2] == ["bdx", "show"] and cmd[2] == "bd-bkco.2":
             timeout = kwargs.get("timeout")
             if timeout < dx_loop_script.SURFACE_BEADS_TIMEOUT_SECONDS:
                 raise subprocess.TimeoutExpired(cmd, timeout)
@@ -1876,7 +1880,7 @@ def test_status_reconciles_stale_closed_failed_blocked_task(
     loop._save_state()
 
     def fake_run(cmd, **kwargs):
-        if cmd[:2] == ["bd", "show"] and cmd[2] == "bd-bkco.2":
+        if cmd[:2] == ["bdx", "show"] and cmd[2] == "bd-bkco.2":
             payload = [
                 {
                     "id": "bd-bkco.2",
