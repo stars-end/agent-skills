@@ -2,13 +2,45 @@
 set -euo pipefail
 
 CANONICAL_BEADS_DIR="${BDX_BEADS_DIR:-$HOME/.beads-runtime/.beads}"
-LOCK_TIMEOUT_SECONDS="${BDX_LOCK_TIMEOUT_SECONDS:-45}"
+LOCK_TIMEOUT_SECONDS="${BDX_LOCK_TIMEOUT_SECONDS:-15}"
+READ_TIMEOUT_SECONDS="${BDX_READ_TIMEOUT_SECONDS:-10}"
+WRITE_TIMEOUT_SECONDS="${BDX_WRITE_TIMEOUT_SECONDS:-45}"
 LOCK_ROOT="${BDX_LOCK_ROOT:-$HOME/.beads-runtime/.locks}"
 LOCK_NAME="${BDX_LOCK_NAME:-bdx-mutate.lock}"
 LOCK_PATH="$LOCK_ROOT/$LOCK_NAME"
+WANT_JSON_ERRORS="${BDX_JSON_ERRORS:-0}"
+
+json_string() {
+  python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'
+}
+
+emit_json_error() {
+  local reason_code="$1"
+  local message="$2"
+  local command="${3:-${args[0]:-}}"
+  local host
+  host="$(hostname -s 2>/dev/null || hostname)"
+  printf '{"ok":false,"reason_code":%s,"message":%s,"command":%s,"host":%s}\n' \
+    "$(printf '%s' "$reason_code" | json_string)" \
+    "$(printf '%s' "$message" | json_string)" \
+    "$(printf '%s' "$command" | json_string)" \
+    "$(printf '%s' "$host" | json_string)" >&2
+}
 
 die() {
-  echo "bdx-remote: $*" >&2
+  local reason_code="invalid_usage"
+  local message
+  if [[ $# -ge 2 ]]; then
+    reason_code="$1"
+    shift
+  fi
+  message="$*"
+
+  if [[ "$WANT_JSON_ERRORS" == "1" ]]; then
+    emit_json_error "$reason_code" "bdx-remote: $message"
+  else
+    echo "bdx-remote: $message" >&2
+  fi
   exit 2
 }
 
@@ -17,7 +49,7 @@ classify_command() {
   local sub="${2:-}"
 
   case "$cmd" in
-    create|note|update|close|reopen|dep|label|epic|batch|relate|remember|forget)
+    create|note|update|close|reopen|dep|label|epic|batch|remember|forget)
       echo "write"
       return 0
       ;;
@@ -34,7 +66,7 @@ classify_command() {
           echo "read"
           ;;
         *)
-          die "rejected comments subcommand '$sub' (allowed: add, list, show)"
+          die unsupported_command "rejected comments subcommand '$sub' (allowed: add, list, show)"
           ;;
       esac
       return 0
@@ -46,7 +78,7 @@ classify_command() {
           return 0
           ;;
         *)
-          die "rejected risky config subcommand '$sub' (allowed: get, list)"
+          die unsupported_command "rejected risky config subcommand '$sub' (allowed: get, list)"
           ;;
       esac
       ;;
@@ -57,21 +89,21 @@ classify_command() {
           return 0
           ;;
         start|stop|set)
-          die "rejected local-only dolt subcommand '$sub'"
+          die unsupported_command "rejected local-only dolt subcommand '$sub'"
           ;;
         *)
-          die "rejected dolt subcommand '$sub' (allowed via bdx: test)"
+          die unsupported_command "rejected dolt subcommand '$sub' (allowed via bdx: test)"
           ;;
       esac
       ;;
     init|where|context|doctor)
-      die "rejected local-only command '$cmd'"
+      die unsupported_command "rejected local-only command '$cmd'"
       ;;
     help|-h|--help|"")
-      die "help must be handled by bdx, not bdx-remote"
+      die invalid_usage "help must be handled by bdx, not bdx-remote"
       ;;
     *)
-      die "rejected unknown command '$cmd'"
+      die unsupported_command "rejected unknown command '$cmd'"
       ;;
   esac
 }
@@ -83,7 +115,7 @@ for arg in "$@"; do
       mode="${arg#--mode=}"
       ;;
     *)
-      die "unsupported argument '$arg'"
+      die invalid_usage "unsupported argument '$arg'"
       ;;
   esac
 done
@@ -94,14 +126,54 @@ while IFS= read -r -d '' item; do
 done
 
 [[ ${#args[@]} -gt 0 ]] || die "missing command argv on stdin"
+for arg in "${args[@]}"; do
+  if [[ "$arg" == "--json" ]]; then
+    WANT_JSON_ERRORS=1
+    break
+  fi
+done
 
 actual_mode="$(classify_command "${args[@]}")"
 if [[ "$actual_mode" != "$mode" ]]; then
-  die "client mode '$mode' does not match command mode '$actual_mode'"
+  die invalid_usage "client mode '$mode' does not match command mode '$actual_mode'"
 fi
 
-run_bd() {
-  BEADS_DIR="$CANONICAL_BEADS_DIR" bd "${args[@]}"
+run_bd_with_timeout() {
+  local timeout_seconds="$1"
+  local pid waited rc
+
+  if ! command -v bd >/dev/null 2>&1; then
+    die remote_bd_missing "bd executable not found on remote host"
+  fi
+
+  if command -v timeout >/dev/null 2>&1; then
+    set +e
+    env BEADS_DIR="$CANONICAL_BEADS_DIR" timeout "${timeout_seconds}s" bd "${args[@]}"
+    rc=$?
+    set -e
+    if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+      die query_timeout "bd command timed out after ${timeout_seconds}s"
+    fi
+    return "$rc"
+  fi
+
+  BEADS_DIR="$CANONICAL_BEADS_DIR" bd "${args[@]}" &
+  pid="$!"
+  waited=0
+  while kill -0 "$pid" >/dev/null 2>&1; do
+    if (( waited >= timeout_seconds )); then
+      kill "$pid" >/dev/null 2>&1 || true
+      wait "$pid" >/dev/null 2>&1 || true
+      die query_timeout "bd command timed out after ${timeout_seconds}s"
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  set +e
+  wait "$pid"
+  rc=$?
+  set -e
+  return "$rc"
 }
 
 run_with_mkdir_lock() {
@@ -111,22 +183,43 @@ run_with_mkdir_lock() {
   mkdir -p "$LOCK_ROOT"
   while ! mkdir "$lockdir" 2>/dev/null; do
     if (( SECONDS >= deadline )); then
-      die "timed out acquiring lock: $lockdir"
+      die lock_timeout "timed out acquiring lock: $lockdir"
     fi
     sleep 0.1
   done
 
   trap "rmdir '$lockdir' 2>/dev/null || true" EXIT
-  run_bd
+  run_bd_with_timeout "$WRITE_TIMEOUT_SECONDS"
+}
+
+run_with_flock() {
+  local rc
+
+  if ! command -v bd >/dev/null 2>&1; then
+    die remote_bd_missing "bd executable not found on remote host"
+  fi
+
+  set +e
+  flock -w "$LOCK_TIMEOUT_SECONDS" "$LOCK_PATH" \
+    env BEADS_DIR="$CANONICAL_BEADS_DIR" timeout "${WRITE_TIMEOUT_SECONDS}s" bd "${args[@]}"
+  rc=$?
+  set -e
+
+  if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+    die query_timeout "bd command timed out after ${WRITE_TIMEOUT_SECONDS}s"
+  fi
+
+  return "$rc"
 }
 
 if [[ "$mode" == "write" ]]; then
   mkdir -p "$LOCK_ROOT"
-  if [[ "${BDX_DISABLE_FLOCK:-0}" != "1" ]] && command -v flock >/dev/null 2>&1; then
-    exec flock -w "$LOCK_TIMEOUT_SECONDS" "$LOCK_PATH" env BEADS_DIR="$CANONICAL_BEADS_DIR" bd "${args[@]}"
+  if [[ "${BDX_DISABLE_FLOCK:-0}" != "1" ]] && command -v flock >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+    run_with_flock
+    exit $?
   fi
   run_with_mkdir_lock
   exit $?
 fi
 
-run_bd
+run_bd_with_timeout "$READ_TIMEOUT_SECONDS"

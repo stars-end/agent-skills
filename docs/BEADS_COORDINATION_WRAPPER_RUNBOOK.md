@@ -12,7 +12,7 @@ Examples:
 bdx create --title "Task" --type task
 bdx show bd-xxxx --json
 bdx comments add bd-xxxx "note"
-bdx ready --json
+bdx preflight --json
 bdx dolt test --json
 ```
 
@@ -28,11 +28,33 @@ bdx dolt test --json
 - Direct remote Dolt SQL endpoint tuning is backend plumbing, not the agent coordination path.
 - Raw `bd` is reserved for local diagnostics/bootstrap/path-sensitive operations or explicit override.
 
+## Scope Guard
+
+`bdx` is a transport and safety shim only.
+
+Allowed behavior:
+
+- route allowed Beads commands to the canonical runtime
+- reject local/bootstrap commands that agents must not run in coordination mode
+- bound command duration
+- normalize transport failures into reason codes
+- protect remote argv transport
+
+Not allowed behavior:
+
+- choose the next task
+- interpret Beads dependency semantics
+- implement duplicate detection
+- rewrite issue payloads
+- maintain workflow state outside Beads
+
+If a workflow needs smarter task selection, use Beads/BV/dx-runner product surfaces. Do not add Beads semantics to `bdx`.
+
 ## Remote Write Guardrails
 
 `bdx` now rejects two high-friction remote write patterns before calling remote `bd`:
 
-- File-bearing flags (`--body-file`, `--design-file`, `--metadata-file`, `--acceptance-file`, `--notes-file`) are rejected on spoke hosts because those local paths do not exist on `epyc12`.
+- File-bearing flags (`--body-file`, `--design-file`, `--file`, `--graph`, `--stdin`, and `--metadata @file`) are rejected on spoke hosts because those local paths or stdin streams do not exist on `epyc12`.
 - `bdx create --repo ...` is rejected on spoke hosts with a `bdx`-specific diagnostic, instead of leaking embedded-Dolt initialization errors.
 
 Use inline values for remote writes (`--description`, `--notes`, metadata key/value flags), or run those path/repo-sensitive commands directly on `epyc12`.
@@ -42,9 +64,38 @@ Use inline values for remote writes (`--description`, `--notes`, metadata key/va
 From any host:
 
 ```bash
+bdx preflight --json
 bdx dolt test --json
 bdx show <known-beads-id> --json
 ```
+
+Do not use broad `bdx ready --json` as an agent startup health probe or orchestration heartbeat. Use targeted `bdx show`, `bdx search`, BV `robot-plan`, or `bdx ready --limit ...` only for deliberate manual queue browsing.
+
+## Timeouts And Error Contract
+
+Defaults:
+
+- SSH connect: `BDX_SSH_CONNECT_TIMEOUT_SECONDS=5`
+- read commands: `BDX_READ_TIMEOUT_SECONDS=10`
+- write commands: `BDX_WRITE_TIMEOUT_SECONDS=45`
+- write lock acquisition: `BDX_LOCK_TIMEOUT_SECONDS=15`
+- preflight: `BDX_PREFLIGHT_TIMEOUT_SECONDS=15`
+
+Set `BDX_JSON_ERRORS=1` or pass `--json` to receive structured failures on stderr:
+
+```json
+{"ok":false,"reason_code":"query_timeout","message":"...","command":"show","host":"epyc12"}
+```
+
+Common reason codes:
+
+- `ssh_unreachable`
+- `remote_bd_missing`
+- `query_timeout`
+- `lock_timeout`
+- `unsupported_command`
+- `local_path_unavailable`
+- `repo_runtime_error`
 
 Backend diagnostics (only when debugging service/runtime):
 

@@ -107,6 +107,28 @@ For comprehensive Railway environment validation, use the GraphQL-based validati
    - Runtime (Railway) → set in Railway dashboard or `railway variables set`.
 3) Re-run the affected workflow: `gh workflow run CI --ref master`.
 
+## Cross-Repo GitHub Actions Failure Audit
+
+For CI failure triage across canonical repos, use the shared audit surface:
+
+```bash
+scripts/dx-gh-actions-audit.py --json
+```
+
+Useful knobs:
+
+- `DX_GH_FAILURE_AUDIT_FAILED_LIMIT`: how many failed workflow runs to inspect per repo
+- `DX_GH_FAILURE_AUDIT_RECENT_LIMIT`: how many recent workflow runs to sample per repo
+
+Output contract:
+
+- `active_groups`: current recurring failure groups
+- `stale_groups`: historical groups no longer active
+- `repo_errors`: repo-level GitHub/API failures
+- `coverage_errors`: missing workflow or audit coverage
+
+Weekly `dx-audit` reports include active cross-repo GitHub Actions failure groups. Use this audit before opening one-off CI remediation work so agents do not chase the same failure independently in multiple repos.
+
 ## Notes
 
 - Keep stub/test fixtures in GH Actions vars, not Railway.

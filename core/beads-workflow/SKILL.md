@@ -58,6 +58,7 @@ Beads provides persistent task memory across sessions, enabling:
 
 ```bash
 bdx dolt test --json
+bdx preflight --json
 bdx show <known-beads-id> --json
 ```
 
@@ -91,28 +92,30 @@ hash -r
 
 ## ⚠️ CRITICAL: Always Set Dependencies
 
-**Problem**: Without dependencies, `bdx ready` and BV graph analysis can't identify blocked tasks or critical paths.
+**Problem**: Without dependencies, targeted task selection and BV graph analysis can't identify blocked tasks or critical paths.
 
 **Rule**: When creating ANY issue, ALWAYS ask yourself:
-1. **Does this block something?** → Add `--dep` with `blocks` type
-2. **Does this depend on something?** → Add `--dep` with the blocker ID
-3. **Is this discovered from parent work?** → Link with `discovered-from`
-4. **Is this an epic subtask?** → Link with `parent-child`
+1. **Does this block something?** → Add `bdx dep <blocker> --blocks <blocked>`
+2. **Does this depend on something?** → Add `bdx dep add <blocked> <blocker>`
+3. **Is this discovered from parent work?** → Create it with `--parent <parent-id>` or use `bdx dep relate`
+4. **Is this an epic subtask?** → Create it with `--parent <epic-id>`
 
 ### Dependency Commands
 
 ```bash
 # When creating with dependency
-bdx create --title "Impl: OAuth" --type feature --dep "bd-research-task"
+bdx create --title "Impl: OAuth" --type feature --deps "bd-research-task"
 
 # Add dependency to existing issue
-bdx dep bd-new-feature bd-required-api --type blocks
+bdx dep bd-required-api --blocks bd-new-feature
+# Equivalent:
+bdx dep add bd-new-feature bd-required-api
 
 # Discovery: I found a bug while working on a feature
-bdx dep bd-discovered-bug bd-parent-feature --type discovered-from
+bdx create --title "Bug: <short-description>" --type bug --parent bd-parent-feature
 
 # Epic subtask
-bdx dep bd-subtask bd-epic --type parent-child
+bdx create --title "Impl: OAuth" --type feature --parent bd-epic
 ```
 
 ### Dependency Types
@@ -147,7 +150,7 @@ bd-context
 
 # 2. Create epic
 # Use bdx create with JSON or flags
-bdx create --title "AUTHENTICATION_SYSTEM" --type epic --priority 1 --desc "OAuth + JWT..."
+bdx create --title "AUTHENTICATION_SYSTEM" --type epic --priority 1 --description "OAuth + JWT..."
 
 # Output: Created issue bd-xyz (AUTHENTICATION_SYSTEM)
 
@@ -155,10 +158,10 @@ bdx create --title "AUTHENTICATION_SYSTEM" --type epic --priority 1 --desc "OAut
 bdx create --title "Research: OAuth" --type task --priority 1
 # bd-xyz.1
 
-bdx create --title "Spec: Auth flow" --type task --priority 1 --dep "bd-xyz.1"
+bdx create --title "Spec: Auth flow" --type task --priority 1 --deps "bd-xyz.1" --parent bd-xyz
 # bd-xyz.2
 
-bdx create --title "Impl: OAuth" --type feature --priority 1 --dep "bd-xyz.2"
+bdx create --title "Impl: OAuth" --type feature --priority 1 --deps "bd-xyz.2" --parent bd-xyz
 # bd-xyz.3
 
 # 4. Create and checkout branch
@@ -191,7 +194,7 @@ echo "✅ Created epic bd-xyz with phase tasks"
 bd-context
 
 # 2. Create feature
-bdx create --title "OAUTH_LOGIN_BUTTON" --type feature --priority 2 --desc "Single OAuth login component..."
+bdx create --title "OAUTH_LOGIN_BUTTON" --type feature --priority 2 --description "Single OAuth login component..."
 # Output: Created issue bd-abc
 
 # 3. Create and checkout branch
@@ -256,12 +259,12 @@ bd-link-pr <pr-number>
 
 **Add blocker:**
 ```bash
-bdx dep bd-new-feature bd-required-api --type blocks
+bdx dep bd-required-api --blocks bd-new-feature
 ```
 
 **Track discovery:**
 ```bash
-bdx dep bd-discovered-bug bd-parent-feature --type discovered-from
+bdx create --title "Bug: <short-description>" --type bug --parent bd-parent-feature
 ```
 
 ## Integration with Workflow Skills
@@ -334,10 +337,10 @@ bdx dep bd-discovered-bug bd-parent-feature --type discovered-from
 - Requires: reason (what was done)
 - Use when: Work fully implemented and tested
 
-**mcp__plugin_beads_beads__dep**
-- Manage relationships
-- Types: blocks, related, parent-child, discovered-from
-- Use when: Linking dependent work
+**bdx dep**
+- Manage blocker edges
+- Use `bdx dep <blocker> --blocks <blocked>` or `bdx dep add <blocked> <blocker>`
+- Use `bdx dep relate <id-a> <id-b>` only for soft links
 
 **mcp__plugin_beads_beads__blocked**
 - Find blocked issues
@@ -402,11 +405,9 @@ mcp__plugin_beads_beads__create(
   priority=1
 )
 
-mcp__plugin_beads_beads__dep(
-  issue_id="<new-bug-id>",
-  depends_on_id="<current-feature-id>",
-  dep_type="discovered-from"
-)
+Use `bdx create --parent <current-feature-id>` for discovered child work, or
+`bdx create --deps "discovered-from:<current-feature-id>"` when a typed origin
+edge is specifically required.
 ```
 
 **Update progress:**
@@ -486,11 +487,8 @@ subtask1 = mcp__plugin_beads_beads__create(
   priority=1
 )
 
-mcp__plugin_beads_beads__dep(
-  issue_id=subtask1.id,
-  depends_on_id=epic.id,
-  dep_type="parent-child"
-)
+Create subtasks with `--parent "$epic_id"` so hierarchy is represented by the
+native parent field.
 ```
 
 ### Epic Patterns
@@ -498,7 +496,7 @@ mcp__plugin_beads_beads__dep(
 **Progressive breakdown:**
 1. Create epic for large feature
 2. Break into tasks as design clarifies
-3. Link tasks with parent-child deps
+3. Link tasks with `--parent`
 4. Track epic completion via dependencies
 
 ### Priority Filtering
@@ -518,7 +516,7 @@ Ref: https://github.com/steveyegge/beads/blob/main/docs/QUICKSTART.md#hierarchic
 ## Best Practices
 
 1. **File as you discover** - Don't lose TODO comments, file as issues
-2. **Link discoveries** - Use "discovered-from" to track origin
+2. **Link discoveries** - Use `--parent` or `--deps "discovered-from:<id>"` to track origin
 3. **Update status** - Keep Beads current (workflow skills do this)
 4. **Use Feature-Keys** - Match branch names to issue IDs
 5. **Close with context** - Explain what was done in reason

@@ -195,10 +195,8 @@ bdx create "Bug: <short-description>" \
   --type bug \
   --priority 1 \
   --description "<full-context>" \
-  --design "<how-to-fix>"
-
-# Link to parent (creates discovered-from dependency)
-bdx dep add <child-id> <parent-id> --type discovered-from
+  --design "<how-to-fix>" \
+  --parent <parent-id>
 ```
 
 **Issue type rules:**

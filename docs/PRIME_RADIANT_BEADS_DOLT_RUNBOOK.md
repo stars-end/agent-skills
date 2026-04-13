@@ -137,7 +137,9 @@ export BEADS_DOLT_SERVER_PORT=3307
 
 beads-dolt dolt test --json
 beads-dolt status --json
-# Optional responsiveness probe when you already have a current work item or probe ID
+# Agent coordination preflight: bounded, targeted, no broad ready scan
+bdx preflight --json
+# Optional direct responsiveness probe when you already have a current work item or probe ID
 beads-dolt show <known-beads-id> --json
 ```
 
