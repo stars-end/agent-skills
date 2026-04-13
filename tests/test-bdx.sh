@@ -419,6 +419,122 @@ test_remote_helper_revalidates_allowlist() {
   [[ ! -f "$fake_bd_log" ]] && pass "remote helper did not call bd for rejected command" || fail "remote helper called bd for rejected command"
 }
 
+test_remote_rejects_file_bearing_flags_with_clear_error() {
+  local case_dir="$tmpdir/case8"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+
+  local -a test_cases=(
+    "--body-file /tmp/local.md"
+    "--design-file /tmp/local-design.md"
+    "--file /tmp/local.md"
+    "--graph /tmp/local.dot"
+    "--stdin"
+  )
+
+  local case_spec output rc
+  for case_spec in "${test_cases[@]}"; do
+    rm -f "$fake_ssh_log" "$fake_bd_log"
+    set +e
+    output="$(
+      FAKE_BD_LOG="$fake_bd_log" \
+      FAKE_SSH_LOG="$fake_ssh_log" \
+      HOME="$case_dir/home" \
+      PATH="$fake_bin:/usr/bin:/bin" \
+      BDX_SSH_BIN="$fake_bin/ssh" \
+      BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
+      BDX_REMOTE_HOST="epyc12" \
+      BDX_HOSTNAME="macbook" \
+      "$BDX" create --title "remote file flag" ${case_spec} 2>&1
+    )"
+    rc=$?
+    set -e
+
+    [[ $rc -ne 0 ]] && pass "remote file-bearing case rejected: ${case_spec}" || fail "remote file-bearing case should fail: ${case_spec}"
+    if [[ "$case_spec" == "--stdin" ]]; then
+      assert_contains "$output" "'--stdin' body streaming is not supported" "stdin rejection message is explicit"
+    else
+      assert_contains "$output" "local file-bearing flag" "file-bearing rejection message is explicit"
+    fi
+    [[ ! -f "$fake_ssh_log" ]] && pass "file-bearing preflight stops before ssh (${case_spec})" || fail "file-bearing preflight unexpectedly called ssh (${case_spec})"
+    [[ ! -f "$fake_bd_log" ]] && pass "file-bearing preflight stops before bd (${case_spec})" || fail "file-bearing preflight unexpectedly called bd (${case_spec})"
+  done
+}
+
+test_remote_rejects_metadata_file_expansion_with_clear_error() {
+  local case_dir="$tmpdir/case8b"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+
+  local -a test_cases=(
+    "--metadata @/tmp/local-meta.json"
+    "--metadata=@/tmp/local-meta.json"
+  )
+
+  local case_spec output rc
+  for case_spec in "${test_cases[@]}"; do
+    rm -f "$fake_ssh_log" "$fake_bd_log"
+    set +e
+    output="$(
+      FAKE_BD_LOG="$fake_bd_log" \
+      FAKE_SSH_LOG="$fake_ssh_log" \
+      HOME="$case_dir/home" \
+      PATH="$fake_bin:/usr/bin:/bin" \
+      BDX_SSH_BIN="$fake_bin/ssh" \
+      BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
+      BDX_REMOTE_HOST="epyc12" \
+      BDX_HOSTNAME="macbook" \
+      "$BDX" create --title "remote metadata file" ${case_spec} 2>&1
+    )"
+    rc=$?
+    set -e
+
+    [[ $rc -ne 0 ]] && pass "remote metadata file expansion rejected: ${case_spec}" || fail "remote metadata file expansion should fail: ${case_spec}"
+    assert_contains "$output" "metadata file expansion" "metadata file rejection message is explicit"
+    [[ ! -f "$fake_ssh_log" ]] && pass "metadata-file preflight stops before ssh (${case_spec})" || fail "metadata-file preflight unexpectedly called ssh (${case_spec})"
+    [[ ! -f "$fake_bd_log" ]] && pass "metadata-file preflight stops before bd (${case_spec})" || fail "metadata-file preflight unexpectedly called bd (${case_spec})"
+  done
+}
+
+test_remote_rejects_create_repo_flag_with_clear_error() {
+  local case_dir="$tmpdir/case9"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+
+  local output rc
+  set +e
+  output="$(
+    FAKE_BD_LOG="$fake_bd_log" \
+    FAKE_SSH_LOG="$fake_ssh_log" \
+    HOME="$case_dir/home" \
+    PATH="$fake_bin:/usr/bin:/bin" \
+    BDX_SSH_BIN="$fake_bin/ssh" \
+    BDX_REMOTE_HELPER="$ROOT/scripts/bdx-remote" \
+    BDX_REMOTE_HOST="epyc12" \
+    BDX_HOSTNAME="macbook" \
+    "$BDX" create --title "remote repo flag" --repo "agent-skills" 2>&1
+  )"
+  rc=$?
+  set -e
+
+  [[ $rc -ne 0 ]] && pass "remote create --repo is rejected" || fail "remote create --repo should fail"
+  assert_contains "$output" "remote bdx create rejected: '--repo'" "create --repo rejection message is explicit"
+  [[ ! -f "$fake_ssh_log" ]] && pass "create --repo preflight stops before ssh" || fail "create --repo preflight unexpectedly called ssh"
+  [[ ! -f "$fake_bd_log" ]] && pass "create --repo preflight stops before bd" || fail "create --repo preflight unexpectedly called bd"
+}
+
 main() {
   test_help_exits_zero
   test_remote_read_injection_safe
@@ -431,6 +547,9 @@ main() {
   test_tailscale_hostname_detects_epyc12
   test_tailscale_peer_does_not_make_spoke_local
   test_remote_helper_revalidates_allowlist
+  test_remote_rejects_file_bearing_flags_with_clear_error
+  test_remote_rejects_metadata_file_expansion_with_clear_error
+  test_remote_rejects_create_repo_flag_with_clear_error
 
   echo "Summary: pass=$pass_count fail=$fail_count"
   [[ $fail_count -eq 0 ]]

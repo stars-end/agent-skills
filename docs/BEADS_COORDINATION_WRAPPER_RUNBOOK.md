@@ -28,6 +28,15 @@ bdx dolt test --json
 - Direct remote Dolt SQL endpoint tuning is backend plumbing, not the agent coordination path.
 - Raw `bd` is reserved for local diagnostics/bootstrap/path-sensitive operations or explicit override.
 
+## Remote Write Guardrails
+
+`bdx` now rejects two high-friction remote write patterns before calling remote `bd`:
+
+- File-bearing flags (`--body-file`, `--design-file`, `--metadata-file`, `--acceptance-file`, `--notes-file`) are rejected on spoke hosts because those local paths do not exist on `epyc12`.
+- `bdx create --repo ...` is rejected on spoke hosts with a `bdx`-specific diagnostic, instead of leaking embedded-Dolt initialization errors.
+
+Use inline values for remote writes (`--description`, `--notes`, metadata key/value flags), or run those path/repo-sensitive commands directly on `epyc12`.
+
 ## Quick Health Check
 
 From any host:
