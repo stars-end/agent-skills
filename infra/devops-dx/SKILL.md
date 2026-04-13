@@ -2,12 +2,15 @@
 name: devops-dx
 description: |
   GitHub/Railway housekeeping for CI env/secret management and DX maintenance.
-  Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, or fixing CI failures due to missing env.
+  Use when setting or auditing GitHub Actions variables/secrets, syncing Railway env → GitHub, auditing cross-repo GitHub Actions failure groups, or fixing CI failures due to missing env.
 tags: [devops, github, auth, env, secrets, ci, railway]
 allowed-tools:
   - Bash(gh:*)
   - Bash(railway:*)
   - Bash(curl:*)
+  - Bash(scripts/dx-gh-actions-audit.py:*)
+  - Bash(scripts/dx-audit.sh:*)
+  - Bash(scripts/dx-founder-daily.sh:*)
   - Read
   - Bash(jq:*)
 ---
@@ -15,6 +18,49 @@ allowed-tools:
 # DevOps DX Helper
 
 Lightweight playbook for CI/Railway env hygiene. Examples use this repo's Beads prefix (bd-); swap for your repo.
+
+## Cross-Repo GitHub Actions Failure Audit
+
+Use this when the question is "what CI failures are still active across the canonical repos?" or when `dx-audit`/founder-daily claims GitHub Actions failures exist.
+
+Run the collector directly for the most detailed machine-readable report:
+
+```bash
+~/agent-skills/scripts/dx-gh-actions-audit.py --json
+```
+
+Run the weekly audit surface when you need the same signal as automation:
+
+```bash
+~/agent-skills/scripts/dx-audit.sh --json | jq '.summary.github_actions, .github_actions.active_groups[:5]'
+```
+
+Run founder-daily when you need the founder-facing briefing payload:
+
+```bash
+~/agent-skills/scripts/dx-founder-daily.sh --json | jq '.github.failure_groups[:5], .github.repo_errors'
+```
+
+### Output Contract
+
+- `active_groups`: grouped failures that still matter on the default branch or an open PR branch/SHA.
+- `stale_groups`: historical failures superseded by success or on irrelevant closed/non-default branches.
+- `repo_errors`: repos the collector could not inspect; treat these as coverage gaps, not proof of green CI.
+- `summary.coverage_repo_errors`: count of repos with failed coverage.
+- `latest_failure.run_url`: first URL to inspect before opening individual workflow logs.
+
+### Tuning
+
+The automation surfaces default to a smaller, faster sample. Increase limits for manual investigations:
+
+```bash
+DX_GH_FAILURE_AUDIT_FAILED_LIMIT=30 DX_GH_FAILURE_AUDIT_RECENT_LIMIT=80 \
+  ~/agent-skills/scripts/dx-audit.sh --json | jq '.summary.github_actions'
+```
+
+### Triage Rule
+
+Fix `active_groups` first. Do not spend agent time on `stale_groups` unless the same signature reappears as active. If `repo_errors` is non-empty, fix collector coverage/auth before concluding the weekly audit is clean.
 
 ## Railway GraphQL Integration (NEW)
 

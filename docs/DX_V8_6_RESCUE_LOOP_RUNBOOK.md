@@ -12,6 +12,8 @@ Stop repeated `rescue-*` branch storms without hiding real canonical violations.
   - Returns non-zero when evacuation fails so `dx-job-wrapper` can surface real failures.
 - `scripts/dx-audit.sh`
   - Reports rescue events by lookback window (timestamp parsed from rescue branch suffix).
+  - Reports active cross-repo GitHub Actions failure groups through `scripts/dx-gh-actions-audit.py`.
+  - Distinguishes active failures from stale closed-branch or superseded failures.
 - `scripts/queue-hygiene-enforcer.sh`
   - Disables auto-merge for any open PR with auto-merge enabled.
 - `scripts/dx-alerts-digest.sh`
@@ -27,9 +29,42 @@ Stop repeated `rescue-*` branch storms without hiding real canonical violations.
 3. Audit output semantics:
    - `~/agent-skills/scripts/dx-audit.sh --json | jq '.summary'`
    - Confirm `rescue_branches_lookback` is present.
+   - `~/agent-skills/scripts/dx-audit.sh --json | jq '.summary.github_actions, .github_actions.active_groups[:5]'`
+   - Confirm `active_groups`, `stale_groups`, and `repo_errors` are present.
 4. Check enforcer logs:
    - `tail -80 ~/logs/dx/canonical-evacuate.log`
    - Confirm no repeated 15-minute dirty evacuations for `off_trunk + clean` state.
+
+## If GitHub Actions Failures Are Reported
+
+Use the collector first so active root causes are not hidden by stale closed-branch failures:
+
+```bash
+~/agent-skills/scripts/dx-gh-actions-audit.py --json \
+  | jq '.summary, .active_groups[:10] | .'
+```
+
+For a deeper manual sample:
+
+```bash
+DX_GH_FAILURE_AUDIT_FAILED_LIMIT=30 DX_GH_FAILURE_AUDIT_RECENT_LIMIT=80 \
+  ~/agent-skills/scripts/dx-gh-actions-audit.py --json \
+  | jq '.summary, .active_groups[:10], .repo_errors'
+```
+
+Interpretation:
+
+- `active_groups`: root-cause candidates to fix now.
+- `stale_groups`: historical failures; ignore unless the same signature returns as active.
+- `repo_errors`: collector coverage gaps; fix auth/API/rate-limit coverage before treating the audit as green.
+- `latest_failure.run_url`: start here when opening GitHub Actions logs.
+
+Founder-daily exposes the same signal under:
+
+```bash
+~/agent-skills/scripts/dx-founder-daily.sh --json \
+  | jq '.github.failure_groups[:5], .github.repo_errors'
+```
 
 ## V8.6 Schedule Contract (All Canonical VMs)
 - `canonical-evacuate-active`:
