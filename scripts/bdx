@@ -181,17 +181,47 @@ find_flag_match() {
   return 1
 }
 
+find_metadata_file_arg() {
+  local arg next
+  while [[ $# -gt 0 ]]; do
+    arg="$1"
+    shift
+    case "$arg" in
+      --metadata=@*)
+        printf '%s' "$arg"
+        return 0
+        ;;
+      --metadata)
+        next="${1:-}"
+        if [[ "$next" == @* ]]; then
+          printf '%s %s' "$arg" "$next"
+          return 0
+        fi
+        ;;
+    esac
+  done
+  return 1
+}
+
 preflight_remote_write() {
   local cmd="$1"
   shift
 
   local file_flag=""
   local candidate
-  for candidate in --body-file --design-file --metadata-file --acceptance-file --notes-file; do
+  for candidate in --body-file --design-file --file --graph --stdin; do
     if file_flag="$(find_flag_match "$candidate" "$@")"; then
+      if [[ "$candidate" == "--stdin" ]]; then
+        die "remote bdx write rejected: '--stdin' body streaming is not supported over remote routing. Use inline body flags or run from epyc12."
+      fi
       die "remote bdx write rejected: local file-bearing flag '$file_flag' is not supported over remote routing. Use inline values or run from epyc12."
     fi
   done
+
+  local metadata_file_arg
+  if metadata_file_arg="$(find_metadata_file_arg "$@")"; then
+    die "remote bdx write rejected: metadata file expansion '$metadata_file_arg' is not supported over remote routing. Use inline --metadata key=value or run from epyc12."
+  fi
 
   if [[ "$cmd" == "create" ]] && find_flag_match "--repo" "$@" >/dev/null; then
     die "remote bdx create rejected: '--repo' can trigger embedded-Dolt target-repo initialization. Use repo labels/metadata or run create on epyc12 with validated repo context."

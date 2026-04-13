@@ -136,10 +136,35 @@ def run_gh_text(args: list[str]) -> dict[str, Any]:
     return {"ok": True, "data": proc.stdout}
 
 
-def classify_group(group: dict[str, Any], repo_recent_runs: list[dict[str, Any]]) -> dict[str, Any]:
+def classify_group(
+    group: dict[str, Any],
+    repo_recent_runs: list[dict[str, Any]],
+    repo_relevance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     workflow = group["workflow"]
     branch = group.get("head_branch") or ""
+    head_sha = group.get("head_sha") or ""
     last_seen_ts = parse_iso(group.get("last_seen"))
+
+    relevance = repo_relevance or {}
+    default_branch = relevance.get("default_branch") or ""
+    open_pr_branches = set(relevance.get("open_pr_branches") or [])
+    open_pr_shas = set(relevance.get("open_pr_shas") or [])
+    if relevance.get("context_ok", False):
+        is_default_branch = bool(default_branch and branch == default_branch)
+        is_open_pr_branch = bool(branch and branch in open_pr_branches)
+        is_open_pr_sha = bool(head_sha and head_sha in open_pr_shas)
+        if not (is_default_branch or is_open_pr_branch or is_open_pr_sha):
+            return {
+                "status": "stale",
+                "reason": "irrelevant_closed_or_non_default_branch",
+                "reference_run": {
+                    "default_branch": default_branch,
+                    "head_branch": branch,
+                    "head_sha": head_sha,
+                },
+            }
+
     candidates: list[dict[str, Any]] = []
     for run in repo_recent_runs:
         if run.get("workflowName") != workflow:
@@ -208,6 +233,7 @@ def build_report(
     repo_errors: list[dict[str, Any]] = []
     grouped: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     recent_runs_by_repo: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    relevance_by_repo: dict[str, dict[str, Any]] = {}
 
     for repo in repos:
         repo_entry = {"repo": repo, "status": "ok", "failed_runs_fetched": 0, "recent_runs_fetched": 0}
@@ -273,6 +299,93 @@ def build_report(
                 recent_runs = []
             repo_entry["recent_runs_fetched"] = len(recent_runs)
         recent_runs_by_repo[repo] = recent_runs
+
+        repo_relevance = {
+            "default_branch": "",
+            "open_pr_branches": [],
+            "open_pr_shas": [],
+            "context_ok": True,
+        }
+        default_branch_result = gh_json_runner(
+            [
+                "repo",
+                "view",
+                repo,
+                "--json",
+                "defaultBranchRef",
+            ]
+        )
+        if not default_branch_result.get("ok"):
+            repo_relevance["context_ok"] = False
+            error_rec = {
+                "repo": repo,
+                "stage": "repo_default_branch",
+                "error_code": default_branch_result.get("error_code", "unknown_error"),
+                "message": "failed to fetch repo default branch",
+                "stderr": default_branch_result.get("stderr", ""),
+            }
+            repo_errors.append(error_rec)
+            repo_entry.setdefault("warnings", []).append(error_rec)
+        else:
+            branch_name = ((default_branch_result.get("data") or {}).get("defaultBranchRef") or {}).get("name")
+            if isinstance(branch_name, str):
+                repo_relevance["default_branch"] = branch_name
+            else:
+                repo_relevance["context_ok"] = False
+                error_rec = {
+                    "repo": repo,
+                    "stage": "repo_default_branch",
+                    "error_code": "missing_default_branch",
+                    "message": "repo default branch missing from API response",
+                    "stderr": "",
+                }
+                repo_errors.append(error_rec)
+                repo_entry.setdefault("warnings", []).append(error_rec)
+
+        open_pr_result = gh_json_runner(
+            [
+                "pr",
+                "list",
+                "--repo",
+                repo,
+                "--state",
+                "open",
+                "--limit",
+                "200",
+                "--json",
+                "headRefName,headRefOid",
+            ]
+        )
+        if not open_pr_result.get("ok"):
+            repo_relevance["context_ok"] = False
+            error_rec = {
+                "repo": repo,
+                "stage": "repo_open_pr_heads",
+                "error_code": open_pr_result.get("error_code", "unknown_error"),
+                "message": "failed to fetch open PR head refs",
+                "stderr": open_pr_result.get("stderr", ""),
+            }
+            repo_errors.append(error_rec)
+            repo_entry.setdefault("warnings", []).append(error_rec)
+        else:
+            prs = open_pr_result.get("data") or []
+            if not isinstance(prs, list):
+                prs = []
+            branches = []
+            shas = []
+            for pr in prs:
+                if not isinstance(pr, dict):
+                    continue
+                ref_name = pr.get("headRefName")
+                ref_oid = pr.get("headRefOid")
+                if isinstance(ref_name, str) and ref_name:
+                    branches.append(ref_name)
+                if isinstance(ref_oid, str) and ref_oid:
+                    shas.append(ref_oid)
+            repo_relevance["open_pr_branches"] = branches
+            repo_relevance["open_pr_shas"] = shas
+
+        relevance_by_repo[repo] = repo_relevance
 
         for run in failed_runs:
             run_id = run.get("databaseId")
@@ -376,7 +489,7 @@ def build_report(
         repo_statuses.append(repo_entry)
 
     groups = list(grouped.values())
-    log_cache: dict[tuple[str, int], dict[str, Any]] = {}
+    log_cache: dict[tuple[str, str], dict[str, Any]] = {}
     for group in groups:
         latest_failure = group.get("latest_failure") or {}
         run_id = latest_failure.get("run_id")
@@ -404,12 +517,22 @@ def build_report(
             repo_errors.append(error_rec)
 
     for group in groups:
-        group["classification"] = classify_group(group, recent_runs_by_repo.get(group["repo"], []))
+        group["classification"] = classify_group(
+            group,
+            recent_runs_by_repo.get(group["repo"], []),
+            relevance_by_repo.get(group["repo"]),
+        )
 
     groups.sort(key=lambda item: (parse_iso(item.get("last_seen")) or dt.datetime.min.replace(tzinfo=dt.timezone.utc), item.get("occurrences", 0)), reverse=True)
     active_groups = [g for g in groups if (g.get("classification") or {}).get("status") == "active"]
     stale_groups = [g for g in groups if (g.get("classification") or {}).get("status") == "stale"]
-    coverage_error_stages = {"run_list_failures", "run_list_recent", "collector_invocation"}
+    coverage_error_stages = {
+        "run_list_failures",
+        "run_list_recent",
+        "repo_default_branch",
+        "repo_open_pr_heads",
+        "collector_invocation",
+    }
     coverage_errors = [err for err in repo_errors if (err.get("stage") or "") in coverage_error_stages]
 
     return {

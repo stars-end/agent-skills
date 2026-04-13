@@ -21,10 +21,23 @@ def _result_err(code: str, message: str, stderr: str = ""):
     return {"ok": False, "error_code": code, "message": message, "stderr": stderr}
 
 
+def _relevance_calls(args, repo: str, default_branch: str = "master", open_prs=None):
+    if open_prs is None:
+        open_prs = []
+    if args[:3] == ["repo", "view", repo]:
+        return _result_ok({"defaultBranchRef": {"name": default_branch}})
+    if args[:4] == ["pr", "list", "--repo", repo]:
+        return _result_ok(open_prs)
+    return None
+
+
 def test_group_becomes_stale_when_newer_success_exists():
     repo = "stars-end/llm-common"
 
     def fake_json(args):
+        relevance = _relevance_calls(args, repo)
+        if relevance is not None:
+            return relevance
         if args[:4] == ["run", "list", "--repo", repo] and "--status" in args:
             return _result_ok(
                 [
@@ -84,6 +97,9 @@ def test_group_remains_active_without_newer_success():
     repo = "stars-end/prime-radiant-ai"
 
     def fake_json(args):
+        relevance = _relevance_calls(args, repo)
+        if relevance is not None:
+            return relevance
         if args[:4] == ["run", "list", "--repo", repo] and "--status" in args:
             return _result_ok(
                 [
@@ -163,6 +179,9 @@ def test_signature_normalization_groups_similar_failures():
     repo = "stars-end/agent-skills"
 
     def fake_json(args):
+        relevance = _relevance_calls(args, repo)
+        if relevance is not None:
+            return relevance
         if args[:4] == ["run", "list", "--repo", repo] and "--status" in args:
             return _result_ok(
                 [
@@ -213,3 +232,125 @@ def test_signature_normalization_groups_similar_failures():
 
     assert report["summary"]["total_groups"] == 1
     assert report["groups"][0]["occurrences"] == 2
+
+
+def test_closed_branch_group_is_not_active():
+    repo = "stars-end/agent-skills"
+
+    def fake_json(args):
+        relevance = _relevance_calls(args, repo, default_branch="master", open_prs=[])
+        if relevance is not None:
+            return relevance
+        if args[:4] == ["run", "list", "--repo", repo] and "--status" in args:
+            return _result_ok(
+                [
+                    {
+                        "databaseId": 4001,
+                        "workflowName": "CI",
+                        "headBranch": "feature/closed-pr",
+                        "headSha": "abcd1111",
+                        "createdAt": "2026-04-12T10:00:00Z",
+                        "displayTitle": "closed pr",
+                        "event": "pull_request",
+                        "conclusion": "failure",
+                    }
+                ]
+            )
+        if args[:4] == ["run", "list", "--repo", repo] and "--status" not in args:
+            return _result_ok(
+                [
+                    {
+                        "databaseId": 4001,
+                        "workflowName": "CI",
+                        "headBranch": "feature/closed-pr",
+                        "headSha": "abcd1111",
+                        "createdAt": "2026-04-12T10:00:00Z",
+                        "conclusion": "failure",
+                        "status": "completed",
+                        "event": "pull_request",
+                    }
+                ]
+            )
+        if args[:3] == ["run", "view", "4001"]:
+            return _result_ok({"jobs": [{"name": "tests", "conclusion": "failure"}]})
+        raise AssertionError(f"unexpected args: {args}")
+
+    def fake_text(args):
+        if args[:3] == ["run", "view", "4001"]:
+            return _result_ok("Error: failed tests")
+        raise AssertionError(f"unexpected args: {args}")
+
+    report = build_report(
+        repos=[repo],
+        failed_run_limit=30,
+        recent_run_limit=50,
+        gh_json_runner=fake_json,
+        gh_text_runner=fake_text,
+    )
+
+    assert report["summary"]["active_groups"] == 0
+    assert report["summary"]["stale_groups"] == 1
+    assert report["groups"][0]["classification"]["reason"] == "irrelevant_closed_or_non_default_branch"
+
+
+def test_open_pr_branch_group_remains_active():
+    repo = "stars-end/agent-skills"
+
+    def fake_json(args):
+        relevance = _relevance_calls(
+            args,
+            repo,
+            default_branch="master",
+            open_prs=[{"headRefName": "feature/open-pr", "headRefOid": "aaaa2222"}],
+        )
+        if relevance is not None:
+            return relevance
+        if args[:4] == ["run", "list", "--repo", repo] and "--status" in args:
+            return _result_ok(
+                [
+                    {
+                        "databaseId": 5001,
+                        "workflowName": "CI",
+                        "headBranch": "feature/open-pr",
+                        "headSha": "aaaa2222",
+                        "createdAt": "2026-04-12T12:00:00Z",
+                        "displayTitle": "open pr",
+                        "event": "pull_request",
+                        "conclusion": "failure",
+                    }
+                ]
+            )
+        if args[:4] == ["run", "list", "--repo", repo] and "--status" not in args:
+            return _result_ok(
+                [
+                    {
+                        "databaseId": 5001,
+                        "workflowName": "CI",
+                        "headBranch": "feature/open-pr",
+                        "headSha": "aaaa2222",
+                        "createdAt": "2026-04-12T12:00:00Z",
+                        "conclusion": "failure",
+                        "status": "completed",
+                        "event": "pull_request",
+                    }
+                ]
+            )
+        if args[:3] == ["run", "view", "5001"]:
+            return _result_ok({"jobs": [{"name": "tests", "conclusion": "failure"}]})
+        raise AssertionError(f"unexpected args: {args}")
+
+    def fake_text(args):
+        if args[:3] == ["run", "view", "5001"]:
+            return _result_ok("Error: failed tests")
+        raise AssertionError(f"unexpected args: {args}")
+
+    report = build_report(
+        repos=[repo],
+        failed_run_limit=30,
+        recent_run_limit=50,
+        gh_json_runner=fake_json,
+        gh_text_runner=fake_text,
+    )
+
+    assert report["summary"]["active_groups"] == 1
+    assert report["groups"][0]["classification"]["status"] == "active"
