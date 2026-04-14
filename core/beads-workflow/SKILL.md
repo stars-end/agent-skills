@@ -88,6 +88,7 @@ Standalone/global memory records are valid when no single task is the source
 - Run Beads mutations from non-app directories; app repos should use worktrees for code and reference Beads IDs.
 - Direct remote Dolt SQL endpoint settings are backend plumbing, not the normal agent coordination path.
 - In `agent-skills`, active context must resolve to a repo-compatible `bd-*` issue id before commit or PR work. If `bd-context` surfaces `af-*` or another non-`bd-*` prefix here, stop early and create or choose the correct `bd-*` issue instead of carrying the mismatch forward.
+- For mutating coordination commands, do not pass `--repo`/`--repo=<name>` to `bdx` writes. Use labels/metadata/cwd context to capture repo intent.
 - No SQLite fallback for active fleet operation. If you see `sqlite3: unable to open database file` or `unknown command "dolt"`, stop and repair runtime/binary first.
 - Before dispatch waves, verify:
 

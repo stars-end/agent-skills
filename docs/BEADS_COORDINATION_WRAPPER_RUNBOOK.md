@@ -55,8 +55,9 @@ If a workflow needs smarter task selection, use Beads/BV/dx-runner product surfa
 `bdx` rejects local file-path/stream write patterns before calling remote `bd`:
 
 - File-bearing flags (at minimum `--body-file`, `--description-file`, `--stdin`, and `--metadata @file`) are rejected on spoke hosts because those local paths or stdin streams do not exist on `epyc12`.
+- Mutating commands reject `--repo` / `--repo=<name>` with `reason_code=repo_flag_unsupported`. This avoids Beads target-repo initialization paths that can fall back to embedded Dolt.
 
-Use inline values for remote writes (`--description`, `--notes`, metadata key/value flags), or run path-sensitive commands directly on `epyc12`.
+Use inline values for remote writes (`--description`, `--notes`, metadata key/value flags) and express repo intent via labels/metadata/cwd context, or run path-sensitive commands directly on `epyc12`.
 
 ## Quick Health Check
 
@@ -96,6 +97,7 @@ Common reason codes:
 - `lock_timeout`
 - `unsupported_command`
 - `local_file_arg_unsupported`
+- `repo_flag_unsupported`
 
 Backend diagnostics (only when debugging service/runtime):
 
