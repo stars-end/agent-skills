@@ -303,6 +303,13 @@ preflight_remote_write() {
   fi
 }
 
+preflight_write_repo_flag() {
+  local repo_flag=""
+  if repo_flag="$(find_flag_match --repo "$@")"; then
+    die repo_flag_unsupported "bdx write rejected: '$repo_flag' is unsupported on mutating commands because Beads target-repo initialization can fall back to embedded Dolt. Use labels/metadata/cwd context instead."
+  fi
+}
+
 main() {
   [[ $# -gt 0 ]] || { usage; exit 2; }
   detect_json_errors "$@"
@@ -321,6 +328,10 @@ main() {
 
   local mode
   mode="$(classify_command "$@")"
+
+  if [[ "$mode" == "write" ]]; then
+    preflight_write_repo_flag "$@"
+  fi
 
   if is_hub_host; then
     run_local "$mode" "$@"

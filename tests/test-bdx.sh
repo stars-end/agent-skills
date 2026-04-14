@@ -292,6 +292,50 @@ test_rejections() {
   run_expect_fail "rejected unknown command 'xyz123'" env "${base_env[@]}" "$BDX" xyz123
 }
 
+test_write_rejects_repo_flag_before_routing() {
+  local case_dir="$tmpdir/case_repo_flag"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+
+  local -a base_env=(
+    "HOME=$case_dir/home"
+    "PATH=$fake_bin:/usr/bin:/bin"
+    "FAKE_BD_LOG=$fake_bd_log"
+    "FAKE_SSH_LOG=$fake_ssh_log"
+    "BDX_SSH_BIN=$fake_bin/ssh"
+    "BDX_REMOTE_HELPER=$ROOT/scripts/bdx-remote"
+    "BDX_REMOTE_HOST=epyc12"
+    "BDX_HOSTNAME=macbook"
+    "BDX_JSON_ERRORS=1"
+  )
+
+  local -a repo_cases=(
+    "--repo agent-skills"
+    "--repo=agent-skills"
+  )
+
+  local case_spec output rc
+  for case_spec in "${repo_cases[@]}"; do
+    rm -f "$fake_bd_log" "$fake_ssh_log"
+    set +e
+    output="$(
+      env "${base_env[@]}" "$BDX" create --title "repo-flag" ${case_spec} --json 2>&1
+    )"
+    rc=$?
+    set -e
+
+    [[ $rc -ne 0 ]] && pass "write repo-flag case rejected: ${case_spec}" || fail "write repo-flag case should fail: ${case_spec}"
+    assert_contains "$output" '"reason_code":"repo_flag_unsupported"' "repo-flag rejection exposes reason_code (${case_spec})"
+    assert_contains "$output" "Use labels/metadata/cwd context instead." "repo-flag rejection advises labels/metadata (${case_spec})"
+    [[ ! -f "$fake_ssh_log" ]] && pass "repo-flag preflight stops before ssh (${case_spec})" || fail "repo-flag preflight unexpectedly called ssh (${case_spec})"
+    [[ ! -f "$fake_bd_log" ]] && pass "repo-flag preflight stops before bd (${case_spec})" || fail "repo-flag preflight unexpectedly called bd (${case_spec})"
+  done
+}
+
 test_local_on_epyc12() {
   local case_dir="$tmpdir/case5"
   local fake_bin="$case_dir/bin"
@@ -761,6 +805,7 @@ main() {
   test_memory_commands
   test_comments_issue_id_read_shape
   test_rejections
+  test_write_rejects_repo_flag_before_routing
   test_local_on_epyc12
   test_local_epyc12_write_uses_lock
   test_tailscale_hostname_detects_epyc12
