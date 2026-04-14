@@ -16,7 +16,7 @@ allowed-tools:
 `dx-runner` is the **canonical entrypoint** for all agent dispatch. It provides:
 
 - **Single command surface**: start/status/check/restart/stop/watchdog/report/preflight
-- **Multi-provider support**: cc-glm (Z.ai/GLM reliability backstop), opencode (primary throughput), claude-code (native Claude Code review lane), gemini (optional burst)
+- **Multi-provider support**: cc-glm (Z.ai/GLM reliability backstop and primary `dx-review` GLM lane), opencode (primary throughput and `dx-review` fallback GLM transport), claude-code (native Claude Code review lane), gemini (optional burst)
 - **Unified governance**: preflight, permission gates, no-op detection, baseline/integrity/feature-key gates
 - **Deterministic outputs**: Machine-readable JSON with stable schemas
 
@@ -47,7 +47,8 @@ dx-runner start --beads bd-xxx --provider cc-glm --worktree /tmp/agents/bd-xxx/a
 # Start the native Claude Code review lane with Opus
 dx-runner start --beads bd-xxx.claude --profile claude-code-review --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/review.prompt
 
-# Run the minimal two-reviewer quorum wrapper: Claude Code Opus + OpenCode GLM-5.1
+# Run the minimal two-reviewer quorum wrapper: Claude Code Opus + cc-glm GLM-5
+# OpenCode GLM-5.1 is launched only if the cc-glm review lane fails at start/preflight.
 dx-review run --beads bd-xxx --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/review.prompt --wait
 
 # Check job status
@@ -236,7 +237,7 @@ Canonical repos are clean mirrors. Use: dx-worktree create bd-xxx agent-skills
 
 ## Providers
 
-### cc-glm (Reliability Backstop)
+### cc-glm (Reliability Backstop + Primary Review GLM Lane)
 
 Z.ai/GLM wrapper lane using `cc-glm-headless.sh` and proven patterns from `cc-glm-job.sh`. This is not native Claude Code provider support.
 
@@ -265,7 +266,8 @@ dx-runner start --beads bd-xxx --provider opencode --prompt-file /tmp/task.promp
 
 **Model policy:**
 - Review/default required: `zhipuai/glm-5.1`
-- If unavailable: fail fast and dispatch via `cc-glm` or `gemini`
+- For implementation throughput, if unavailable: fail fast and dispatch via `cc-glm` or `gemini`
+- For `dx-review`, OpenCode is fallback transport after `cc-glm-review` start/preflight failure
 
 ### claude-code (Native Claude Code Review Lane)
 
@@ -306,7 +308,7 @@ Profiles provide pre-configured settings for common workflows:
 dx-runner start --beads bd-xxx --profile opencode-prod --prompt-file /tmp/task.prompt
 
 # Use explicit review profile
-dx-runner start --beads bd-xxx --profile opencode-review --prompt-file /tmp/review.prompt
+dx-runner start --beads bd-xxx.glm --profile cc-glm-review --prompt-file /tmp/review.prompt --worktree /tmp/agents/bd-xxx/repo
 
 # Use native Claude Code Opus review profile
 dx-runner start --beads bd-xxx.claude --profile claude-code-review --prompt-file /tmp/review.prompt --worktree /tmp/agents/bd-xxx/repo
@@ -320,7 +322,8 @@ dx-runner profiles
 | Profile | Provider | Description |
 |---------|----------|-------------|
 | `opencode-prod` | opencode | Production: strict governance, canonical model only |
-| `opencode-review` | opencode | Review: strict governance, `zhipuai/glm-5.1` |
+| `cc-glm-review` | cc-glm | Review: primary GLM lane, `glm-5` |
+| `opencode-review` | opencode | Review fallback: strict governance, `zhipuai/glm-5.1` |
 | `claude-code-review` | claude-code | Review: strict governance, `opus` |
 | `cc-glm-fallback` | cc-glm | Reliability backstop for critical waves |
 | `gemini-burst` | gemini | Burst capacity with relaxed constraints |

@@ -54,6 +54,16 @@ case "$cmd" in
         sleep "${DX_REVIEW_FAKE_CLAUDE_START_SEC:-3}"
         echo "started beads=$beads provider=claude-code"
         ;;
+      cc-glm-review)
+        if [[ "${DX_REVIEW_FAKE_CC_GLM_START_FAIL:-0}" == "1" ]]; then
+          mkdir -p "$state_dir"
+          printf '1\n' > "$state_dir/${beads}.start_failed"
+          echo "reason_code=cc_glm_auth_missing"
+          echo "preflight gate failed for provider cc-glm" >&2
+          exit 22
+        fi
+        echo "started beads=$beads provider=cc-glm"
+        ;;
       opencode-review)
         if [[ "${DX_REVIEW_FAKE_OPENCODE_START_FAIL:-0}" == "1" ]]; then
           mkdir -p "$state_dir"
@@ -72,22 +82,34 @@ case "$cmd" in
   check)
     beads="$(arg_value --beads "$@")"
     echo "check:$beads:$(date +%s)" >> "$DX_REVIEW_FAKE_LOG"
-    if [[ -f "$state_dir/${beads}.start_failed" ]]; then
-      echo '{"beads":"'"$beads"'","provider":"opencode","state":"start_failed","reason_code":"dx_runner_start_failed"}'
-    elif [[ "${DX_REVIEW_FAKE_FORCE_START_FAILED:-0}" == "1" && "$beads" == *.opencode ]]; then
-      echo '{"beads":"'"$beads"'","provider":"opencode","state":"start_failed","reason_code":"dx_runner_start_failed"}'
+    if [[ "${DX_REVIEW_FAKE_REPORT_MISSING:-0}" == "1" && "$beads" == *.glm ]]; then
+      echo '{"beads":"'"$beads"'","state":"missing","reason_code":"no_meta"}'
+      exit 1
+    elif [[ -f "$state_dir/${beads}.start_failed" ]]; then
+      if [[ "$beads" == *.glm ]]; then provider="cc-glm"; elif [[ "$beads" == *.opencode ]]; then provider="opencode"; else provider="unknown"; fi
+      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"start_failed","reason_code":"dx_runner_start_failed"}'
+    elif [[ "${DX_REVIEW_FAKE_FORCE_START_FAILED:-0}" == "1" && "$beads" == *.glm ]]; then
+      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"start_failed","reason_code":"dx_runner_start_failed"}'
     elif [[ "$beads" == *.claude ]]; then
       echo '{"beads":"'"$beads"'","provider":"claude-code","state":"no_op_success","reason_code":"exit_zero_no_mutations"}'
+    elif [[ "$beads" == *.glm ]]; then
+      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc"}'
     else
       echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc"}'
     fi
     ;;
   report)
     beads="$(arg_value --beads "$@")"
-    if [[ "${DX_REVIEW_FAKE_REPORT_USAGE:-0}" == "1" ]]; then
-      echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc","input_tokens":101,"output_tokens":29,"total_tokens":130,"estimated_cost_usd":0.42}'
+    if [[ "${DX_REVIEW_FAKE_REPORT_MISSING:-0}" == "1" && "$beads" == *.glm ]]; then
+      echo '{"beads":"'"$beads"'","state":"missing","reason_code":"no_meta"}'
+      exit 1
+    elif [[ "${DX_REVIEW_FAKE_REPORT_USAGE:-0}" == "1" ]]; then
+      if [[ "$beads" == *.glm ]]; then provider="cc-glm"; elif [[ "$beads" == *.opencode ]]; then provider="opencode"; else provider="claude-code"; fi
+      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"exited_ok","reason_code":"process_exit_with_rc","input_tokens":101,"output_tokens":29,"total_tokens":130,"estimated_cost_usd":0.42}'
     elif [[ "$beads" == *.opencode ]]; then
       echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc"}'
+    elif [[ "$beads" == *.glm ]]; then
+      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc"}'
     else
       echo '{"beads":"'"$beads"'","provider":"claude-code","state":"no_op_success","reason_code":"exit_zero_no_mutations"}'
     fi
@@ -134,10 +156,10 @@ EOF
     chmod +x "$path"
 }
 
-test_parallel_start_and_start_failure_terminal() {
-    echo "=== Testing dx-review parallel start + start failure handling ==="
+test_parallel_start_and_glm_fallback() {
+    echo "=== Testing dx-review parallel start + GLM fallback handling ==="
 
-    local tmp fake worktree out rc claude_ts opencode_ts diff_sec
+    local tmp fake worktree out rc claude_ts glm_ts opencode_ts diff_sec
     local summary_json summary_md
     tmp="$(mktemp -d)"
     fake="$tmp/dx-runner"
@@ -147,7 +169,8 @@ test_parallel_start_and_start_failure_terminal() {
     export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
     export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
     export DX_REVIEW_FAKE_CLAUDE_START_SEC=3
-    export DX_REVIEW_FAKE_OPENCODE_START_FAIL=1
+    export DX_REVIEW_FAKE_CC_GLM_START_FAIL=1
+    unset DX_REVIEW_FAKE_OPENCODE_START_FAIL
 
     set +e
     out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" run --beads bd-test --worktree "$worktree" --prompt "review only" --wait --timeout-sec 8 --poll-sec 1 2>&1)"
@@ -155,26 +178,28 @@ test_parallel_start_and_start_failure_terminal() {
     set -e
 
     claude_ts="$(awk -F: '$3=="claude-code-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
+    glm_ts="$(awk -F: '$3=="cc-glm-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
     opencode_ts="$(awk -F: '$3=="opencode-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
-    diff_sec=$((opencode_ts - claude_ts))
+    diff_sec=$((claude_ts - glm_ts))
+    if [[ "$diff_sec" -lt 0 ]]; then diff_sec=$((0 - diff_sec)); fi
     if [[ "$diff_sec" -lt 2 ]]; then
-        pass "reviewers are started in parallel"
+        pass "primary reviewers are started in parallel"
     else
-        fail "reviewers appear serial (opencode started ${diff_sec}s after claude)"
+        fail "primary reviewers appear serial (claude/glm start delta ${diff_sec}s)"
     fi
 
-    if [[ "$rc" -ne 0 ]] && echo "$out" | grep -q "state=start_failed" && echo "$out" | grep -q '"state":"start_failed"'; then
-        pass "start failure is terminal and reported"
+    if [[ "$rc" -eq 0 ]] && echo "$out" | grep -q "glm_primary_start_failed" && [[ -n "$opencode_ts" ]]; then
+        pass "cc-glm start failure launches OpenCode fallback and preserves successful logical quorum"
     else
-        fail "start failure was not reported as terminal: rc=$rc output=$out"
+        fail "cc-glm fallback behavior incorrect: rc=$rc output=$out"
     fi
 
-    local opencode_checks
-    opencode_checks="$(grep -c "check:bd-test.opencode" "$DX_REVIEW_FAKE_LOG" || true)"
-    if [[ "$opencode_checks" -le 1 ]]; then
-        pass "start-failed reviewer is not polled during wait loop (only summarize probes once)"
+    local glm_checks
+    glm_checks="$(grep -c "check:bd-test.glm" "$DX_REVIEW_FAKE_LOG" || true)"
+    if [[ "$glm_checks" -le 1 ]]; then
+        pass "start-failed cc-glm primary is not polled during wait loop (only summarize probes once)"
     else
-        fail "start-failed reviewer was polled repeatedly: count=$opencode_checks"
+        fail "start-failed cc-glm primary was polled repeatedly: count=$glm_checks"
     fi
 
     if echo "$out" | grep -q "state=review_completed raw_state=no_op_success"; then
@@ -191,8 +216,10 @@ test_parallel_start_and_start_failure_terminal() {
         fail "run --wait did not write summary artifacts"
     fi
 
-    if echo "$out" | grep -q "quorum: 1/2 completed, 1 failed" && echo "$out" | grep -q "summary.json:"; then
-        pass "run --wait prints quorum and summary artifact paths"
+    if echo "$out" | grep -q "effective quorum: 2/2 completed, 0 failed" \
+        && echo "$out" | grep -q "provider outcomes: 2 completed, 1 failed" \
+        && echo "$out" | grep -q "summary.json:"; then
+        pass "run --wait prints effective quorum, provider outcomes, and summary artifact paths"
     else
         fail "run --wait missing quorum/summary output: $out"
     fi
@@ -239,7 +266,7 @@ test_summarize_default_reviewers_and_usage_unavailable() {
         fail "summary JSON usage shape is incomplete"
     fi
 
-    if echo "$out" | grep -q "quorum: 2/2 completed, 0 failed"; then
+    if echo "$out" | grep -q "effective quorum: 2/2 completed, 0 failed"; then
         pass "summarize prints expected quorum line"
     else
         fail "summarize quorum output incorrect: $out"
@@ -267,7 +294,7 @@ test_summarize_start_failed_exit_semantics() {
     set -e
 
     summary_json="/tmp/dx-review/bd-sf/summary.json"
-    if [[ "$rc" -eq 2 ]] && grep -q '"reviewer":"bd-sf.opencode"' "$summary_json" && grep -q '"state":"start_failed"' "$summary_json"; then
+    if [[ "$rc" -eq 2 ]] && grep -q '"reviewer":"bd-sf.glm"' "$summary_json" && grep -q '"state":"start_failed"' "$summary_json"; then
         pass "summarize returns exit 2 and records start_failed reviewer"
     else
         fail "summarize start_failed semantics incorrect: rc=$rc output=$out"
@@ -289,10 +316,10 @@ test_doctor_runs_both_profiles() {
     export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
 
     out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" doctor --worktree "$worktree" 2>&1)"
-    if echo "$out" | grep -q "doctor profile=claude-code-review" && echo "$out" | grep -q "doctor profile=opencode-review"; then
-        pass "doctor checks both default review profiles"
+    if echo "$out" | grep -q "doctor profile=claude-code-review" && echo "$out" | grep -q "doctor profile=cc-glm-review" && ! echo "$out" | grep -q "doctor profile=opencode-review"; then
+        pass "doctor checks primary review profiles without requiring fallback"
     else
-        fail "doctor did not check both profiles: $out"
+        fail "doctor profile coverage incorrect: $out"
     fi
 
     rm -rf "$tmp"
@@ -363,7 +390,7 @@ test_summarize_parses_log_schema_usage() {
     unset DX_REVIEW_FAKE_REPORT_USAGE
 
     rm -rf /tmp/dx-review/bd-logparse
-    log_path="/tmp/dx-runner/opencode/bd-logparse.opencode.log"
+    log_path="/tmp/dx-runner/cc-glm/bd-logparse.glm.log"
     mkdir -p "$(dirname "$log_path")"
     cat > "$log_path" <<'EOF'
 **VERDICT: pass_with_findings**
@@ -394,13 +421,53 @@ EOF
     rm -rf "$tmp"
 }
 
+test_summarize_start_log_reason_when_metadata_missing() {
+    echo "=== Testing dx-review summarize uses start log root cause when metadata is missing ==="
+
+    local tmp fake out rc summary_json start_log
+    tmp="$(mktemp -d)"
+    fake="$tmp/dx-runner"
+    make_fake_runner "$fake"
+    export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
+    export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
+    export DX_REVIEW_FAKE_REPORT_MISSING=1
+    unset DX_REVIEW_FAKE_FORCE_START_FAILED
+    unset DX_REVIEW_FAKE_REPORT_USAGE
+
+    rm -rf /tmp/dx-review/bd-nometa
+    mkdir -p /tmp/dx-review/bd-nometa
+    start_log="/tmp/dx-review/bd-nometa/bd-nometa.glm.start.log"
+    cat > "$start_log" <<'EOF'
+reason_code=canonical_model_probe_timeout
+model probe timed out for zhipuai/glm-5.1
+EOF
+
+    set +e
+    out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" summarize --beads bd-nometa 2>&1)"
+    rc=$?
+    set -e
+    summary_json="/tmp/dx-review/bd-nometa/summary.json"
+
+    if [[ "$rc" -eq 2 ]] \
+        && grep -q '"reviewer":"bd-nometa.glm"' "$summary_json" \
+        && grep -q '"state":"start_failed"' "$summary_json" \
+        && grep -q '"reason_code":"canonical_model_probe_timeout"' "$summary_json"; then
+        pass "summarize preserves useful start-log root cause when runner metadata is missing"
+    else
+        fail "summarize did not preserve start-log root cause: rc=$rc output=$out"
+    fi
+
+    rm -rf "$tmp"
+}
+
 main() {
-    test_parallel_start_and_start_failure_terminal
+    test_parallel_start_and_glm_fallback
     test_summarize_default_reviewers_and_usage_unavailable
     test_summarize_start_failed_exit_semantics
     test_doctor_runs_both_profiles
     test_template_pr_prompt_generation
     test_summarize_parses_log_schema_usage
+    test_summarize_start_log_reason_when_metadata_missing
     echo ""
     echo "=== Summary ==="
     echo -e "Passed: ${GREEN}$PASS${NC}"

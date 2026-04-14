@@ -1,17 +1,17 @@
-# dx-runner profile: opencode-review
-# Fallback review-lane OpenCode dispatch using the canonical locally advertised model ID.
+# dx-runner profile: cc-glm-review
+# Primary GLM review lane using the Z.ai/GLM cc-glm wrapper.
 
 profile:
-  name: opencode-review
-  description: Review-safe OpenCode fallback dispatch with zhipuai/glm-5.1
+  name: cc-glm-review
+  description: Review-safe GLM dispatch through cc-glm
   version: "1.0.0"
 
 provider:
-  name: opencode
-  model: zhipuai/glm-5.1
+  name: cc-glm
+  model: glm-5
   allow_model_override: false
   execution_mode: run
-  fallback_provider: null
+  fallback_provider: opencode
 
 concurrency:
   max_parallel: 2
@@ -20,13 +20,10 @@ concurrency:
 preflight:
   strict: true
   policy:
-    opencode_binary_missing: error
-    model_unavailable: error
-    auth_or_quota_blocked: error
+    auth_missing: error
+    token_file_error: error
+    provider_unavailable: error
     worktree_missing: error
-    canonical_model_probe_timeout: error
-    mise_untrusted: error
-    beads_mcp_missing: warn
 
 timeouts:
   max_runtime_minutes: 90
