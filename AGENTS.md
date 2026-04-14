@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 2c7980f103043799d2a62aeaba61090cd630d0bf -->
-<!-- Last updated: 2026-04-14 06:08:33 UTC -->
+<!-- Source SHA: d426b99b9299d9cbafa53a9483d56a9cd6b643ba -->
+<!-- Last updated: 2026-04-14 06:36:05 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -616,6 +616,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lightweight locking). Uses direct Slack Web API calls and/or the slack-coordinator systemd service. Does not require MCP. | — | slack, coordination, workflow, optional |
 | **spark-prompt-writer** | Write tightly scoped, execution-ready prompts optimized for `gpt-5.3-codex-spark` implementation batches and short verification passes. Use when the user wants a Spark-specific overnight batch prompt, a large grouped-fix prompt, or a follow-on integrated verification prompt after fix waves. Preserve the `prompt-writing` DX contract: worktree-first, no canonical writes, Beads traceability, cross-VM-safe context, and required `PR_URL` + `PR_HEAD_SHA`. | — | workflow, prompts, orchestration, spark, dx |
 | **stitch-loop** | Teaches agents to iteratively build websites using Stitch with an autonomous baton-passing loop pattern | — |  |
+| **structured-source-audit** | Audit free, easily ingestible structured public-data sources before adding them to product ingestion. Use when evaluating OpenStates, Legistar Web API, Socrata, ArcGIS, CKAN, OpenDataSoft, static CSV/XLSX, or deciding whether a civic source belongs in the structured-source lane vs scrape/reader lane. | — | data, ingestion, public-data, affordabot, architecture, audit |
 | **wooyun-legacy** | WooYun漏洞分析专家系统。提供基于88,636个真实漏洞案例提炼的元思考方法论、测试流程和绕过技巧。适用于漏洞挖掘、渗透测试、安全审计及代码审计。支持SQL注入、XSS、命令执行、逻辑漏洞、文件上传、未授权访问等多种漏洞类型。 | — |  |
 | **worktree-workflow** | Workspace-first git worktree management (DX V8.6). Create, open, resume, and recover workspaces while keeping canonical repos clean. All mutating work happens in /tmp/agents/<beads-id>/<repo>. Commands: create <beads-id> <repo> - Create workspace (prints path) open <beads-id> <repo> [-- <cmd>] - Show status or exec command resume <beads-id> <repo> [-- <cmd>] - Resume workspace evacuate-canonical <repo> - Recover dirty canonical repo cleanup <beads-id> - Remove workspace prune <repo> - Prune worktree metadata explain - Show workspace-first policy Use when starting work on a Beads ID, when an agent needs a clean workspace, or when recovering from dirty canonical repos. | `dx-worktree create <beads-id> <repo>` | dx, git, worktree, workspace, workflow, v86 |
 
