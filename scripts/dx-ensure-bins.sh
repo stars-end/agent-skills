@@ -32,6 +32,8 @@ link "$AGENTS_ROOT/scripts/dx-wave" "$BIN_DIR/dx-wave"
 link "$AGENTS_ROOT/scripts/dx-loop" "$BIN_DIR/dx-loop"
 # dx-review is the minimal multi-provider review quorum wrapper
 link "$AGENTS_ROOT/scripts/dx-review" "$BIN_DIR/dx-review"
+# dx-research is the source-backed research artifact wrapper
+link "$AGENTS_ROOT/scripts/dx-research" "$BIN_DIR/dx-research"
 # dx-dispatch shell shim is canonical compatibility entrypoint.
 # Fall back to the legacy Python implementation only if shell shim is missing.
 if [[ -x "$AGENTS_ROOT/scripts/dx-dispatch" ]]; then
