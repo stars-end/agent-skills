@@ -35,6 +35,14 @@ OpenCode behavior in this skill is grounded in official docs and live CLI help:
 - Checking job health with governance gates
 - Generating job reports
 
+Task-specific shims should be the default agent entrypoint:
+
+| Outcome Needed | Preferred Surface | Notes |
+|---|---|---|
+| Independent code/design/security review | `dx-review` | Review quorum wrapper over `dx-runner` |
+| Source-backed web/deep research + decision memo | `dx-research` | Research artifact wrapper over `dx-runner` |
+| Provider debugging, custom orchestration, manual profile control | `dx-runner` | Substrate/manual escape hatch |
+
 ## Quick Start
 
 ```bash
@@ -50,6 +58,10 @@ dx-runner start --beads bd-xxx.claude --profile claude-code-review --worktree /t
 # Run the minimal two-reviewer quorum wrapper: Claude Code Opus + cc-glm GLM-5
 # OpenCode GLM-5.1 is launched only if the cc-glm review lane fails at start/preflight.
 dx-review run --beads bd-xxx --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/review.prompt --wait
+
+# Run source-backed research wrapper and read merged summary first.
+dx-research run --beads bd-xxx --topic "compare option A vs B" --depth deep --wait
+dx-research summarize --beads bd-xxx
 
 # Check job status
 dx-runner status

@@ -1,0 +1,762 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+if [[ -L "$SCRIPT_SOURCE" ]]; then
+    SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+DX_RUNNER="${DX_RUNNER_BIN:-$SCRIPT_DIR/dx-runner}"
+
+usage() {
+    cat <<'EOF'
+dx-research
+
+Usage:
+  dx-research run --beads <bd-id> [--topic <text> | --prompt-file <path>] [options]
+  dx-research summarize --beads <bd-id>
+  dx-research doctor [--worktree <path>] [--with-fallback]
+
+Options:
+  --worktree <path>    Research worktree/context path (default: current directory).
+  --depth <quick|deep>  Research depth (default: deep).
+  --web                 Force web-capable research mode.
+  --no-web              Force local-only/no-web mode.
+  --local-only          Scope to repository/local artifacts only.
+  --wait                Wait for run completion.
+  --timeout-sec <n>     Wait timeout in seconds (default: 300).
+  --poll-sec <n>        Poll interval in seconds (default: 5).
+  --with-fallback       In doctor mode, include cc-glm-research profile checks.
+
+Examples:
+  dx-research run --beads bd-abc --topic "compare A vs B" --depth deep --wait
+  dx-research run --beads bd-abc --prompt-file /tmp/research.md --no-web --local-only --wait
+  dx-research summarize --beads bd-abc
+EOF
+}
+
+require_bash() {
+    if [[ -z "${BASH_VERSION:-}" ]] || (( ${BASH_VERSINFO[0]:-0} < 4 )); then
+        echo "dx-research requires bash >= 4." >&2
+        exit 2
+    fi
+}
+
+valid_beads_id() {
+    local id="$1"
+    [[ "$id" =~ ^bd-[a-z0-9]+(\.[a-z0-9]+)*$ ]]
+}
+
+json_escape() {
+    local s="${1:-}"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+researcher_id_for_profile() {
+    local beads="$1"
+    local profile="$2"
+    case "$profile" in
+        gemini-research) printf '%s.gemini' "$beads" ;;
+        cc-glm-research) printf '%s.ccglm' "$beads" ;;
+        *) printf '%s.%s' "$beads" "$(printf '%s' "$profile" | tr -cd 'a-z0-9')" ;;
+    esac
+}
+
+state_from_json() {
+    sed -n 's/.*"state"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+reason_from_json() {
+    sed -n 's/.*"reason_code"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+provider_from_json() {
+    sed -n 's/.*"provider"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+usage_number_from_text() {
+    local key="$1"
+    local text="${2:-}"
+    local value alt_key=""
+    value="$(printf '%s\n' "$text" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\\{0,1\\}\\([-0-9.][0-9.]*\\)\"\\{0,1\\}.*/\\1/p" | head -n 1)"
+    if [[ -z "$value" ]]; then
+        case "$key" in
+            input_tokens) alt_key="input" ;;
+            output_tokens) alt_key="output" ;;
+            total_tokens) alt_key="total" ;;
+            estimated_cost_usd) alt_key="cost" ;;
+        esac
+        if [[ -n "$alt_key" ]]; then
+            value="$(printf '%s\n' "$text" | sed -n "s/.*\"${alt_key}\"[[:space:]]*:[[:space:]]*\"\\{0,1\\}\\([-0-9.][0-9.]*\\)\"\\{0,1\\}.*/\\1/p" | head -n 1)"
+        fi
+    fi
+    printf '%s' "$value"
+}
+
+result_state_for_display() {
+    case "$1" in
+        no_op_success) printf 'research_completed' ;;
+        exited_ok) printf 'research_completed' ;;
+        start_failed) printf 'start_failed' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+is_terminal_state() {
+    case "$1" in
+        exited_ok|exited_err|no_op_success|stopped|blocked|missing|start_failed)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+reason_from_start_log() {
+    local text="${1:-}"
+    local value=""
+    value="$(printf '%s\n' "$text" | reason_from_json)"
+    if [[ -z "$value" ]]; then
+        value="$(printf '%s\n' "$text" | sed -n 's/.*reason_code[=:][[:space:]]*\([^[:space:]]*\).*/\1/p' | head -n 1)"
+    fi
+    if [[ -z "$value" ]]; then
+        case "$text" in
+            *canonical_model_probe_timeout*|*"model probe timed out"*|*"probe timed out"*)
+                value="canonical_model_probe_timeout"
+                ;;
+            *model_unavailable*|*"model unavailable"*)
+                value="model_unavailable"
+                ;;
+            *auth_or_quota_blocked*|*"auth or quota"*)
+                value="auth_or_quota_blocked"
+                ;;
+            *auth_missing*)
+                value="auth_missing"
+                ;;
+            *preflight*failed*)
+                value="provider_preflight_failed"
+                ;;
+        esac
+    fi
+    printf '%s' "$value"
+}
+
+profile_for_researcher() {
+    case "$1" in
+        *.gemini) printf 'gemini-research' ;;
+        *.ccglm) printf 'cc-glm-research' ;;
+        *) printf 'unknown' ;;
+    esac
+}
+
+provider_hint_for_researcher() {
+    case "$1" in
+        *.gemini) printf 'gemini' ;;
+        *.ccglm) printf 'cc-glm' ;;
+        *) printf 'unknown' ;;
+    esac
+}
+
+researcher_attempted() {
+    local researcher="$1"
+    local provider="$2"
+    local run_dir="$3"
+    [[ -f "$run_dir/${researcher}.start.log" ]] && return 0
+    [[ -f "/tmp/dx-runner/${provider}/${researcher}.log" ]] && return 0
+    return 1
+}
+
+extract_array_from_text() {
+    local key="$1"
+    local text="$2"
+    if command -v jq >/dev/null 2>&1; then
+        local parsed
+        set +e
+        parsed="$(printf '%s\n' "$text" | jq -c "if has(\"${key}\") and (.${key}|type)==\"array\" then .${key} else empty end" 2>/dev/null | head -n 1)"
+        set -e
+        if [[ -n "$parsed" ]]; then
+            printf '%s' "$parsed"
+            return 0
+        fi
+    fi
+    printf '[]'
+}
+
+build_research_prompt() {
+    local out="$1"
+    local topic="$2"
+    local prompt_file="$3"
+    local depth="$4"
+    local web_mode="$5"
+    local local_only="$6"
+
+    : > "$out"
+    {
+        printf '# dx-research prompt\n\n'
+        printf '## Operating Contract\n\n'
+        printf -- '- You are in read-only research mode.\n'
+        printf -- '- Do not mutate files, create commits, push branches, or modify runtime state.\n'
+        printf -- '- Gather evidence, compare options, and produce a decision-oriented analysis.\n\n'
+        printf '## Scope\n\n'
+        printf -- '- Depth: `%s`\n' "$depth"
+        printf -- '- Web mode: `%s`\n' "$web_mode"
+        printf -- '- Local-only: `%s`\n\n' "$local_only"
+        if [[ "$web_mode" == "no-web" ]]; then
+            printf -- '- External web research is forbidden for this run.\n'
+        fi
+        if [[ "$local_only" == "true" ]]; then
+            printf -- '- Use only repository/local evidence; do not cite external sources.\n'
+        fi
+        printf '\n'
+        printf '## Required Output\n\n'
+        printf -- '- Provide a concise `Answer` first.\n'
+        printf -- '- Then include: `Evidence`, `Contradictions`, `Confidence`, `Decision Impact`, `Open Questions`, `Next Action`.\n'
+        printf -- '- Emit machine-readable blocks at the end:\n'
+        printf -- '  - `SOURCES_JSON=<json array>` where each source has at least `id`, `kind`, `reference`, and `supports`.\n'
+        printf -- '  - `CLAIMS_JSON=<json array>` where each claim has at least `id`, `claim`, `source_ids`, and `inference`.\n'
+        printf -- '- If no sources are available, return empty arrays and explain the gap.\n\n'
+        if [[ -n "$topic" ]]; then
+            printf '## Research Topic\n\n%s\n\n' "$topic"
+        fi
+    } >> "$out"
+
+    if [[ -n "$prompt_file" ]]; then
+        [[ -f "$prompt_file" ]] || { echo "prompt file not found: $prompt_file" >&2; return 1; }
+        {
+            printf '## Additional Instructions\n\n'
+            cat "$prompt_file"
+            printf '\n'
+        } >> "$out"
+    fi
+}
+
+summarize_research() {
+    local beads="$1"
+    local quiet="${2:-false}"
+    local run_dir="/tmp/dx-research/${beads}"
+    local summary_json="$run_dir/summary.json"
+    local summary_md="$run_dir/summary.md"
+    local sources_json_file="$run_dir/sources.json"
+    local claims_json_file="$run_dir/claims.json"
+    local -a researchers=()
+    local -a entries=()
+    local -a md_rows=()
+    local providers_attempted=0 providers_completed=0 providers_failed=0 providers_not_reached=0
+    local effective_status="failed"
+    local effective_reason="no_completed_research_lane"
+    local fallback_attempted=false fallback_used=false fallback_reason=""
+    local sources_json="[]"
+    local claims_json="[]"
+    local source_grounding="unavailable"
+    local exit_code=1
+
+    mkdir -p "$run_dir"
+
+    if researcher_attempted "$(researcher_id_for_profile "$beads" "gemini-research")" "gemini" "$run_dir"; then
+        researchers+=("$(researcher_id_for_profile "$beads" "gemini-research")")
+    fi
+    if researcher_attempted "$(researcher_id_for_profile "$beads" "cc-glm-research")" "cc-glm" "$run_dir"; then
+        researchers+=("$(researcher_id_for_profile "$beads" "cc-glm-research")")
+        fallback_attempted=true
+    fi
+
+    local researcher
+    for researcher in "${researchers[@]}"; do
+        providers_attempted=$((providers_attempted + 1))
+        local profile state reason provider display_state report_path log_path start_log
+        local check_json check_rc report_json report_rc start_log_text start_reason parse_text
+        local input_tokens output_tokens total_tokens estimated_cost usage_available usage_source
+        local this_sources this_claims report_state
+
+        profile="$(profile_for_researcher "$researcher")"
+        start_log="$run_dir/${researcher}.start.log"
+        report_path="$run_dir/${researcher}.report.json"
+        start_log_text=""
+        if [[ -f "$start_log" ]]; then
+            start_log_text="$(cat "$start_log" 2>/dev/null || true)"
+        fi
+
+        set +e
+        check_json="$("$DX_RUNNER" check --beads "$researcher" --json 2>&1)"
+        check_rc=$?
+        set -e
+        state="$(printf '%s\n' "$check_json" | state_from_json)"
+        reason="$(printf '%s\n' "$check_json" | reason_from_json)"
+        provider="$(printf '%s\n' "$check_json" | provider_from_json)"
+
+        set +e
+        report_json="$("$DX_RUNNER" report --beads "$researcher" --format json 2>&1)"
+        report_rc=$?
+        set -e
+        printf '%s\n' "$report_json" > "$report_path"
+        report_state="$(printf '%s\n' "$report_json" | state_from_json)"
+
+        if [[ -z "$state" ]]; then
+            state="$report_state"
+        fi
+        if [[ -z "$reason" ]]; then
+            reason="$(printf '%s\n' "$report_json" | reason_from_json)"
+        fi
+        start_reason="$(reason_from_start_log "$start_log_text")"
+        if [[ (-z "$state" || "$state" == "missing" || "$state" == "unknown") && -n "$start_log_text" && "$check_rc" -ne 0 && "$report_rc" -ne 0 ]]; then
+            state="start_failed"
+        fi
+        if [[ (-z "$reason" || "$reason" == "no_meta" || "$reason" == "unknown") && -n "$start_reason" ]]; then
+            reason="$start_reason"
+        fi
+        if [[ -z "$provider" ]]; then
+            provider="$(printf '%s\n' "$report_json" | provider_from_json)"
+        fi
+
+        state="${state:-unknown}"
+        reason="${reason:-unknown}"
+        provider="${provider:-$(provider_hint_for_researcher "$researcher")}"
+        display_state="$(result_state_for_display "$state")"
+        log_path="/tmp/dx-runner/${provider}/${researcher}.log"
+        local log_text=""
+        if [[ -f "$log_path" ]]; then
+            log_text="$(cat "$log_path" 2>/dev/null || true)"
+        else
+            log_path=""
+        fi
+        local normalized_log_text
+        normalized_log_text="$(printf '%s' "$log_text" | sed 's/\\n/\
+/g')"
+        parse_text="${report_json}"$'\n'"${check_json}"$'\n'"${normalized_log_text}"
+
+        input_tokens="$(usage_number_from_text "input_tokens" "$parse_text")"
+        output_tokens="$(usage_number_from_text "output_tokens" "$parse_text")"
+        total_tokens="$(usage_number_from_text "total_tokens" "$parse_text")"
+        estimated_cost="$(usage_number_from_text "estimated_cost_usd" "$parse_text")"
+        usage_available=false
+        usage_source="null"
+        if [[ -n "$input_tokens" || -n "$output_tokens" || -n "$total_tokens" || -n "$estimated_cost" ]]; then
+            usage_available=true
+            usage_source="\"dx-runner-report-or-log\""
+        fi
+
+        [[ -n "$input_tokens" ]] || input_tokens="null"
+        [[ -n "$output_tokens" ]] || output_tokens="null"
+        [[ -n "$total_tokens" ]] || total_tokens="null"
+        [[ -n "$estimated_cost" ]] || estimated_cost="null"
+
+        this_sources="$(extract_array_from_text "sources" "$report_json")"
+        this_claims="$(extract_array_from_text "claims" "$report_json")"
+        if [[ "$this_sources" != "[]" && "$sources_json" == "[]" ]]; then
+            sources_json="$this_sources"
+        fi
+        if [[ "$this_claims" != "[]" && "$claims_json" == "[]" ]]; then
+            claims_json="$this_claims"
+        fi
+
+        if [[ "$state" == "research_completed" || "$state" == "exited_ok" || "$state" == "no_op_success" || "$display_state" == "research_completed" ]]; then
+            providers_completed=$((providers_completed + 1))
+            if [[ "$effective_status" != "completed" ]]; then
+                effective_status="completed"
+                effective_reason="research_completed"
+            fi
+        elif [[ "$state" == "missing" || "$state" == "start_failed" || "$state" == "running" || "$state" == "unknown" ]]; then
+            providers_not_reached=$((providers_not_reached + 1))
+            if [[ "$effective_status" != "completed" ]]; then
+                effective_status="not_reached"
+                effective_reason="$reason"
+            fi
+        else
+            providers_failed=$((providers_failed + 1))
+            if [[ "$effective_status" != "completed" && "$effective_status" != "not_reached" ]]; then
+                effective_status="failed"
+                effective_reason="$reason"
+            fi
+        fi
+
+        if [[ "$researcher" == *.ccglm ]]; then
+            fallback_reason="$reason"
+            if [[ "$display_state" == "research_completed" ]]; then
+                fallback_used=true
+            fi
+        fi
+
+        entries+=("$(cat <<EOF
+{"researcher":"$(json_escape "$researcher")","profile":"$(json_escape "$profile")","state":"$(json_escape "$display_state")","reason_code":"$(json_escape "$reason")","report_path":"$(json_escape "$report_path")","log_path":"$(json_escape "$log_path")","start_log":"$(json_escape "$start_log")","usage":{"available":${usage_available},"input_tokens":${input_tokens},"output_tokens":${output_tokens},"total_tokens":${total_tokens},"estimated_cost_usd":${estimated_cost},"source":${usage_source}}}
+EOF
+)")
+        md_rows+=("| ${researcher} | ${profile} | ${display_state} | ${reason} | available=${usage_available} |")
+    done
+
+    if [[ "${#researchers[@]}" -eq 0 ]]; then
+        effective_status="not_reached"
+        effective_reason="no_attempted_researchers"
+        providers_not_reached=1
+    fi
+
+    if [[ "$sources_json" == "[]" && "$claims_json" == "[]" ]]; then
+        if [[ "$effective_status" == "completed" ]]; then
+            source_grounding="incomplete"
+        else
+            source_grounding="unavailable"
+        fi
+    elif [[ "$sources_json" != "[]" && "$claims_json" != "[]" ]]; then
+        source_grounding="available"
+    else
+        source_grounding="incomplete"
+    fi
+
+    printf '%s\n' "$sources_json" > "$sources_json_file"
+    printf '%s\n' "$claims_json" > "$claims_json_file"
+
+    local i researchers_json=""
+    for i in "${!entries[@]}"; do
+        if [[ "$i" -gt 0 ]]; then
+            researchers_json+=","
+        fi
+        researchers_json+="${entries[$i]}"
+    done
+
+    case "$effective_status" in
+        completed) exit_code=0 ;;
+        not_reached) exit_code=2 ;;
+        *) exit_code=1 ;;
+    esac
+
+    cat > "$summary_json" <<EOF
+{"beads":"$(json_escape "$beads")","run_dir":"$(json_escape "$run_dir")","prompt_file":"$(json_escape "$run_dir/research.prompt")","summary_json":"$(json_escape "$summary_json")","summary_md":"$(json_escape "$summary_md")","sources_json":"$(json_escape "$sources_json_file")","claims_json":"$(json_escape "$claims_json_file")","effective_result":{"status":"$(json_escape "$effective_status")","reason":"$(json_escape "$effective_reason")","exit_code":${exit_code}},"provider_outcomes":{"attempted":${providers_attempted},"completed":${providers_completed},"failed":${providers_failed},"not_reached":${providers_not_reached}},"fallback":{"attempted":${fallback_attempted},"used":${fallback_used},"reason":"$(json_escape "$fallback_reason")"},"source_grounding":"$(json_escape "$source_grounding")","researchers":[${researchers_json}]}
+EOF
+
+    {
+        printf '# dx-research summary: %s\n\n' "$beads"
+        printf 'effective result: %s (%s)\n' "$effective_status" "$effective_reason"
+        printf 'provider outcomes: %s attempted, %s completed, %s failed, %s not reached\n' \
+            "$providers_attempted" "$providers_completed" "$providers_failed" "$providers_not_reached"
+        printf 'fallback: attempted=%s used=%s reason=%s\n' "$fallback_attempted" "$fallback_used" "${fallback_reason:-n/a}"
+        printf 'source_grounding: %s\n\n' "$source_grounding"
+        printf '| researcher | profile | state | reason | usage |\n'
+        printf '|---|---|---|---|---|\n'
+        local row
+        for row in "${md_rows[@]}"; do
+            printf '%s\n' "$row"
+        done
+        printf '\n## Answer\n\n'
+        if [[ "$effective_status" == "completed" ]]; then
+            printf 'Research completed. Read the provider report/log for the full narrative until structured memo extraction is available.\n\n'
+        else
+            printf 'Research did not complete: %s.\n\n' "$effective_reason"
+        fi
+        printf '## Evidence\n\n'
+        printf 'Source grounding: `%s`. See `%s`.\n\n' "$source_grounding" "$sources_json_file"
+        printf '## Contradictions\n\n'
+        printf 'No structured contradiction extraction is available yet. Inspect provider output if needed.\n\n'
+        printf '## Confidence\n\n'
+        case "$source_grounding" in
+            available) printf 'medium: structured sources and claims were emitted.\n\n' ;;
+            incomplete) printf 'low: research completed but source/claim structure is incomplete.\n\n' ;;
+            *) printf 'low: no source grounding available.\n\n' ;;
+        esac
+        printf '## Decision Impact\n\n'
+        printf 'Use this run as evidence only if source grounding is `available` or the relevant claims are explicitly marked as inference.\n\n'
+        printf '## Open Questions\n\n'
+        printf -- '- Verify uncited or inference-only claims before acting.\n\n'
+        printf '## Next Action\n\n'
+        printf 'Read `summary.md` first, then inspect raw provider reports only if the answer or grounding is insufficient.\n'
+        printf '\n- summary.json: `%s`\n' "$summary_json"
+        printf -- '- summary.md: `%s`\n' "$summary_md"
+        printf -- '- sources.json: `%s`\n' "$sources_json_file"
+        printf -- '- claims.json: `%s`\n' "$claims_json_file"
+    } > "$summary_md"
+
+    if [[ "$quiet" != "true" ]]; then
+        echo "effective result: ${effective_status} (${effective_reason})"
+        echo "provider outcomes: ${providers_attempted} attempted, ${providers_completed} completed, ${providers_failed} failed, ${providers_not_reached} not reached"
+        echo "fallback: attempted=${fallback_attempted} used=${fallback_used} reason=${fallback_reason:-n/a}"
+        echo "source_grounding: ${source_grounding}"
+        echo "summary.json: $summary_json"
+        echo "summary.md: $summary_md"
+        echo "sources.json: $sources_json_file"
+        echo "claims.json: $claims_json_file"
+    fi
+
+    return "$exit_code"
+}
+
+run_doctor_for_profiles() {
+    local worktree="$1"
+    local with_fallback="$2"
+    local failures=0 profile rc
+    local -a profiles=("gemini-research")
+
+    if [[ "$with_fallback" == "true" ]]; then
+        profiles+=("cc-glm-research")
+    fi
+
+    for profile in "${profiles[@]}"; do
+        echo "doctor profile=$profile"
+        set +e
+        if [[ -n "$worktree" ]]; then
+            DX_RUNNER_PREFLIGHT_WORKTREE="$worktree" "$DX_RUNNER" preflight --profile "$profile" --worktree "$worktree"
+        else
+            "$DX_RUNNER" preflight --profile "$profile"
+        fi
+        rc=$?
+        set -e
+        if [[ "$rc" -ne 0 ]]; then
+            failures=$((failures + 1))
+        fi
+    done
+
+    [[ "$failures" -eq 0 ]]
+}
+
+doctor_cmd() {
+    local worktree="" with_fallback=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --worktree)
+                worktree="${2:-}"
+                shift 2
+                ;;
+            --with-fallback)
+                with_fallback=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo "unknown arg: $1" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
+    done
+    run_doctor_for_profiles "$worktree" "$with_fallback"
+}
+
+summarize_cmd() {
+    local beads=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --beads)
+                beads="${2:-}"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo "unknown arg: $1" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
+    done
+
+    [[ -n "$beads" ]] || { echo "summarize requires --beads" >&2; exit 2; }
+    valid_beads_id "$beads" || { echo "invalid Beads id: $beads" >&2; exit 2; }
+    summarize_research "$beads" "false"
+}
+
+run_cmd() {
+    local beads="" topic="" prompt_file="" worktree="$PWD" depth="deep" web_mode="auto" local_only=false wait=false timeout_sec=300 poll_sec=5
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --beads)
+                beads="${2:-}"
+                shift 2
+                ;;
+            --topic)
+                topic="${2:-}"
+                shift 2
+                ;;
+            --prompt-file)
+                prompt_file="${2:-}"
+                shift 2
+                ;;
+            --worktree)
+                worktree="${2:-}"
+                shift 2
+                ;;
+            --depth)
+                depth="${2:-deep}"
+                shift 2
+                ;;
+            --web)
+                web_mode="web"
+                shift
+                ;;
+            --no-web)
+                web_mode="no-web"
+                shift
+                ;;
+            --local-only)
+                local_only=true
+                shift
+                ;;
+            --wait)
+                wait=true
+                shift
+                ;;
+            --timeout-sec)
+                timeout_sec="${2:-300}"
+                shift 2
+                ;;
+            --poll-sec)
+                poll_sec="${2:-5}"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo "unknown arg: $1" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
+    done
+
+    [[ -n "$beads" ]] || { echo "run requires --beads" >&2; exit 2; }
+    valid_beads_id "$beads" || { echo "invalid Beads id: $beads" >&2; exit 2; }
+    [[ "$depth" == "quick" || "$depth" == "deep" ]] || { echo "invalid --depth: $depth (expected quick|deep)" >&2; exit 2; }
+    [[ -n "$topic" || -n "$prompt_file" ]] || { echo "run requires --topic or --prompt-file" >&2; exit 2; }
+    [[ -n "$worktree" && -d "$worktree" ]] || { echo "run requires existing --worktree when provided" >&2; exit 2; }
+    [[ -x "$DX_RUNNER" ]] || { echo "dx-runner not executable: $DX_RUNNER" >&2; exit 2; }
+
+    local run_dir="/tmp/dx-research/${beads}"
+    local rendered_prompt="$run_dir/research.prompt"
+    mkdir -p "$run_dir"
+    build_research_prompt "$rendered_prompt" "$topic" "$prompt_file" "$depth" "$web_mode" "$local_only"
+
+    local primary_profile="gemini-research"
+    local fallback_profile="cc-glm-research"
+    local primary_researcher fallback_researcher primary_start_log fallback_start_log
+    local primary_start_rc fallback_start_rc
+    local fallback_attempted=false
+    local -a active_researchers=()
+    local failures=0
+
+    primary_researcher="$(researcher_id_for_profile "$beads" "$primary_profile")"
+    fallback_researcher="$(researcher_id_for_profile "$beads" "$fallback_profile")"
+    primary_start_log="$run_dir/${primary_researcher}.start.log"
+    fallback_start_log="$run_dir/${fallback_researcher}.start.log"
+
+    echo "dx-research primary profile=$primary_profile researcher=$primary_researcher"
+    set +e
+    "$DX_RUNNER" start --profile "$primary_profile" --beads "$primary_researcher" --prompt-file "$rendered_prompt" --worktree "$worktree" >"$primary_start_log" 2>&1
+    primary_start_rc=$?
+    set -e
+    echo "start result researcher=$primary_researcher profile=$primary_profile rc=$primary_start_rc"
+    sed -n '1,220p' "$primary_start_log"
+
+    if [[ "$primary_start_rc" -ne 0 ]]; then
+        echo "researcher_start_failed researcher=$primary_researcher profile=$primary_profile rc=$primary_start_rc start_log=$primary_start_log" >&2
+        fallback_attempted=true
+        echo "primary_start_failed researcher=$primary_researcher; launching fallback researcher=$fallback_researcher profile=$fallback_profile" >&2
+        set +e
+        "$DX_RUNNER" start --profile "$fallback_profile" --beads "$fallback_researcher" --prompt-file "$rendered_prompt" --worktree "$worktree" >"$fallback_start_log" 2>&1
+        fallback_start_rc=$?
+        set -e
+        echo "start result researcher=$fallback_researcher profile=$fallback_profile rc=$fallback_start_rc"
+        sed -n '1,220p' "$fallback_start_log"
+        if [[ "$fallback_start_rc" -ne 0 ]]; then
+            echo "researcher_start_failed researcher=$fallback_researcher profile=$fallback_profile rc=$fallback_start_rc start_log=$fallback_start_log" >&2
+            failures=$((failures + 1))
+        else
+            active_researchers+=("$fallback_researcher")
+        fi
+    else
+        active_researchers+=("$primary_researcher")
+    fi
+
+    if [[ "$wait" != "true" ]]; then
+        [[ "${#active_researchers[@]}" -gt 0 ]] || exit 1
+        return 0
+    fi
+
+    local deadline now timed_out=false all_done researcher check_json check_rc state display_state
+    deadline=$(($(date +%s) + timeout_sec))
+    while true; do
+        all_done=true
+        for researcher in "${active_researchers[@]}"; do
+            set +e
+            check_json="$("$DX_RUNNER" check --beads "$researcher" --json 2>&1)"
+            check_rc=$?
+            set -e
+            state="$(printf '%s\n' "$check_json" | state_from_json)"
+            state="${state:-unknown}"
+            display_state="$(result_state_for_display "$state")"
+            echo "researcher=$researcher state=$display_state raw_state=$state rc=$check_rc"
+            if ! is_terminal_state "$state"; then
+                all_done=false
+            fi
+        done
+
+        if [[ "$all_done" == "true" ]]; then
+            break
+        fi
+        now="$(date +%s)"
+        if [[ "$now" -ge "$deadline" ]]; then
+            echo "dx-research timed out after ${timeout_sec}s" >&2
+            timed_out=true
+            failures=$((failures + 1))
+            break
+        fi
+        sleep "$poll_sec"
+    done
+
+    if [[ "$timed_out" == "true" ]]; then
+        exit 124
+    fi
+
+    echo "dx-research reports:"
+    for researcher in "${active_researchers[@]}"; do
+        echo "--- $researcher ---"
+        set +e
+        local report_json report_rc
+        report_json="$("$DX_RUNNER" report --beads "$researcher" --format json 2>&1)"
+        report_rc=$?
+        set -e
+        printf '%s\n' "$report_json"
+        if [[ "$report_rc" -ne 0 ]]; then
+            failures=$((failures + 1))
+        fi
+    done
+
+    local summarize_rc
+    set +e
+    summarize_research "$beads" "false"
+    summarize_rc=$?
+    set -e
+    if [[ "$summarize_rc" -ne 0 ]]; then
+        failures=$((failures + 1))
+    fi
+
+    [[ "$failures" -eq 0 ]] || exit 1
+}
+
+main() {
+    require_bash
+    local cmd="${1:-}"
+    shift || true
+    case "$cmd" in
+        run) run_cmd "$@" ;;
+        summarize) summarize_cmd "$@" ;;
+        doctor) doctor_cmd "$@" ;;
+        -h|--help|"") usage ;;
+        *)
+            echo "unknown command: $cmd" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+}
+
+main "$@"

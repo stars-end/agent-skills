@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 2c7980f103043799d2a62aeaba61090cd630d0bf -->
-<!-- Last updated: 2026-04-14 06:08:33 UTC -->
+<!-- Source SHA: d426b99b9299d9cbafa53a9483d56a9cd6b643ba -->
+<!-- Last updated: 2026-04-14 06:49:48 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -600,6 +600,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **dx-batch** | Deterministic orchestration over dx-runner for autonomous implement->review waves. Orchestrates 2-3 parallel tasks across 15-20 Beads items with strict lease locking, persistent ledger, and machine-readable contracts. Use for batch execution of implementation tasks with automatic review cycles. | `dx-batch start --items bd-aaa,bd-bbb,bd-ccc [--max-parallel ` | workflow, orchestration, batch, dx-runner, governance, parallel |
 | **dx-loop-review-contract** | Deterministic review contract for dx-loop reviewer runs. Enforces findings-first review style, concrete verdicts, and machine-actionable end states for baton automation. | — | workflow, review, dx-loop, baton |
 | **dx-loop** | `dx-loop` is the default execution surface for chained Beads work, multi-step outcomes, and implement/review baton flows. It is a PR-aware orchestration surface that reuses Ralph's proven patterns (baton, topological dependencies, checkpoint/resume) while replacing the control plane with governed `dx-runner` dispatch and enforcing PR artifact contracts. | `dx-ensure-bins.sh` |  |
+| **dx-research** | Source-backed deep research wrapper over dx-runner for agent use. Use when the goal is evidence-based research and decision memo output, not implementation dispatch or code-review quorum. | `dx-research run \` | workflow, research, evidence, decision-memo, dx-runner, gemini, cc-glm |
 | **dx-review** | Dispatch a low-friction review quorum through dx-review: native Claude Code Opus plus cc-glm GLM-5, with OpenCode GLM-5.1 as fallback and optional Gemini as a third reviewer. Use when the user asks for multi-model review, review quorum, Claude Code + GLM review, or a quick POC of reviewer lanes. | `dx-review run \` | workflow, review, dispatch, claude-code, cc-glm, opencode, dx-runner |
 | **dx-runner** | Canonical unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, claude-code, or gemini providers with unified preflight, gates, and failure taxonomy. Use when dispatching agent tasks, running headless jobs, or managing parallel agent sessions. | `dx-runner start --beads bd-xxx --provider cc-glm --worktree ` | workflow, dispatch, governance, multi-provider, automation |
 | **fleet-sync** | Fleet Sync orchestrator for MCP tool convergence, health checks, and IDE config management across canonical VMs. | — |  |
