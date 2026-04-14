@@ -98,12 +98,17 @@ case "$cmd" in
       echo '{"beads":"'"$beads"'","state":"missing","reason_code":"no_meta"}'
       exit 1
     fi
+    if [[ "${DX_RESEARCH_FAKE_TIMEOUT_MODE:-0}" == "1" ]]; then
+      if [[ "$beads" == *.gemini ]]; then provider="gemini"; else provider="cc-glm"; fi
+      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"running","reason_code":"still_running","mutations":0}'
+      exit 0
+    fi
     if [[ "${DX_RESEARCH_FAKE_REPORT_WITH_SOURCES:-0}" == "1" ]]; then
       if [[ "$beads" == *.gemini ]]; then provider="gemini"; else provider="cc-glm"; fi
-      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"exited_ok","reason_code":"process_exit_with_rc","input_tokens":120,"output_tokens":30,"total_tokens":150,"estimated_cost_usd":0.12,"sources":[{"id":"s1","kind":"url","reference":"https://example.com","supports":["c1"]}],"claims":[{"id":"c1","claim":"A is faster than B","source_ids":["s1"],"inference":false}]}'
+      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"exited_ok","reason_code":"process_exit_with_rc","mutations":0,"input_tokens":120,"output_tokens":30,"total_tokens":150,"estimated_cost_usd":0.12,"sources":[{"id":"s1","kind":"url","reference":"https://example.com","supports":["c1"]}],"claims":[{"id":"c1","claim":"A is faster than B","source_ids":["s1"],"inference":false}]}'
     else
       if [[ "$beads" == *.gemini ]]; then provider="gemini"; else provider="cc-glm"; fi
-      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"exited_ok","reason_code":"process_exit_with_rc"}'
+      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"exited_ok","reason_code":"process_exit_with_rc","mutations":0}'
     fi
     ;;
   preflight)
@@ -265,6 +270,7 @@ test_prompt_content_flags() {
     if grep -q 'Depth: `quick`' "$prompt_path" \
         && grep -q 'Web mode: `no-web`' "$prompt_path" \
         && grep -q 'Local-only: `true`' "$prompt_path" \
+        && grep -q 'Quick mode: produce a bounded decision memo' "$prompt_path" \
         && grep -q 'External web research is forbidden' "$prompt_path" \
         && grep -q 'Use only repository/local evidence' "$prompt_path"; then
         pass "prompt captures depth/no-web/local-only contract"
@@ -309,6 +315,12 @@ test_summarize_artifact_creation_and_source_grounding() {
         fail "source grounding was not marked available"
     fi
 
+    if grep -q '"mutations":0' "$run_dir/summary.json" && grep -q 'mutations=0' "$run_dir/summary.md"; then
+        pass "summary surfaces mutation count from provider report"
+    else
+        fail "summary did not surface mutation count"
+    fi
+
     if grep -q '^## Answer' "$run_dir/summary.md" \
         && grep -q '^## Evidence' "$run_dir/summary.md" \
         && grep -q '^## Contradictions' "$run_dir/summary.md" \
@@ -324,9 +336,49 @@ test_summarize_artifact_creation_and_source_grounding() {
     rm -rf "$tmp"
 }
 
+test_summarize_extracts_labeled_json_from_log() {
+    echo "=== Testing summarize extracts SOURCES_JSON/CLAIMS_JSON from provider log ==="
+    local tmp fake out rc run_dir log_dir log_path
+    tmp="$(mktemp -d)"
+    fake="$tmp/dx-runner"
+    make_fake_runner "$fake"
+    export DX_RESEARCH_FAKE_LOG="$tmp/fake.log"
+    export DX_RESEARCH_FAKE_STATE_DIR="$tmp/state"
+    unset DX_RESEARCH_FAKE_REPORT_WITH_SOURCES
+    unset DX_RESEARCH_FAKE_REPORT_MISSING
+    unset DX_RESEARCH_FAKE_GEMINI_START_FAIL
+
+    run_dir="/tmp/dx-research/bd-rs7"
+    log_dir="/tmp/dx-runner/gemini"
+    log_path="$log_dir/bd-rs7.gemini.log"
+    rm -rf "$run_dir"
+    mkdir -p "$run_dir" "$log_dir"
+    printf 'started beads=bd-rs7.gemini provider=gemini\n' > "$run_dir/bd-rs7.gemini.start.log"
+    {
+        printf 'Answer: local docs are sufficient.\n'
+        printf 'SOURCES_JSON=[{"id":"slog1","kind":"file","reference":"extended/dx-research/SKILL.md","supports":["clog1"]}]\n'
+        printf 'CLAIMS_JSON=[{"id":"clog1","claim":"dx-research has a skill contract","source_ids":["slog1"],"inference":false}]\n'
+    } > "$log_path"
+
+    set +e
+    out="$(DX_RUNNER_BIN="$fake" "$DX_RESEARCH" summarize --beads bd-rs7 2>&1)"
+    rc=$?
+    set -e
+
+    if [[ "$rc" -eq 0 ]] && grep -q '"source_grounding":"available"' "$run_dir/summary.json" \
+        && grep -q 'slog1' "$run_dir/sources.json" \
+        && grep -q 'clog1' "$run_dir/claims.json"; then
+        pass "summarize extracts labeled structured output from provider log"
+    else
+        fail "labeled log extraction failed: rc=$rc output=$out"
+    fi
+
+    rm -rf "$tmp"
+}
+
 test_timeout_behavior() {
     echo "=== Testing timeout behavior ==="
-    local tmp fake out rc
+    local tmp fake out rc run_dir
     tmp="$(mktemp -d)"
     fake="$tmp/dx-runner"
     make_fake_runner "$fake"
@@ -341,11 +393,20 @@ test_timeout_behavior() {
     out="$(DX_RUNNER_BIN="$fake" "$DX_RESEARCH" run --beads bd-rs6 --topic "timeout" --wait --timeout-sec 2 --poll-sec 1 2>&1)"
     rc=$?
     set -e
+    run_dir="/tmp/dx-research/bd-rs6"
 
     if [[ "$rc" -eq 124 ]] && echo "$out" | grep -q "timed out"; then
         pass "run exits 124 on timeout with timeout message"
     else
         fail "timeout behavior incorrect: rc=$rc output=$out"
+    fi
+
+    if [[ -f "$run_dir/summary.json" && -f "$run_dir/summary.md" ]] \
+        && grep -q '"status":"not_reached"' "$run_dir/summary.json" \
+        && grep -q "Research did not complete" "$run_dir/summary.md"; then
+        pass "timeout still writes partial summary artifacts"
+    else
+        fail "timeout did not write useful partial summary artifacts"
     fi
 
     rm -rf "$tmp"
@@ -389,6 +450,7 @@ main() {
     test_no_meta_reason_replaced_by_start_log_root_cause
     test_prompt_content_flags
     test_summarize_artifact_creation_and_source_grounding
+    test_summarize_extracts_labeled_json_from_log
     test_timeout_behavior
     test_doctor_default_and_with_fallback
 

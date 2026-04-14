@@ -44,6 +44,19 @@ Then read the merged artifact first:
 dx-research summarize --beads bd-xxx
 ```
 
+For a bounded smoke or narrow local answer, prefer:
+
+```bash
+dx-research run \
+  --beads bd-xxx \
+  --worktree /tmp/agents/bd-xxx/repo \
+  --topic "answer the narrow question" \
+  --depth quick \
+  --no-web \
+  --local-only \
+  --wait
+```
+
 ## Artifacts
 
 Per run, artifacts live under:
@@ -62,6 +75,10 @@ Required files:
 Low cognitive load rule:
 - Agents read `summary.md` first.
 - Raw logs/reports are for debugging only.
+- If `run --wait` times out, `dx-research` still writes partial summary
+  artifacts before exiting non-zero.
+- For read-only confidence, note the mutation count in `summary.json`; run from
+  a clean worktree when possible, or explicitly identify pre-existing changes.
 
 ## summary.md Contract
 
@@ -93,3 +110,17 @@ must not use external sources.
 
 Both modes still require explicit claim grounding in `sources.json` and
 `claims.json` (or explicit inference labels).
+
+## Failure Handling
+
+- Run `dx-research doctor --worktree <path> --with-fallback` before debugging
+  provider auth or model issues.
+- If Gemini start/preflight fails, `dx-research run` tries `cc-glm-research`
+  once as fallback.
+- If the wait loop times out, read `/tmp/dx-research/<beads>/summary.md` before
+  inspecting raw `/tmp/dx-runner/...` logs.
+- Do not repeatedly retry the same research prompt. Narrow the question, switch
+  to `--depth quick`, or file a follow-up issue if provider latency is the
+  blocker.
+
+Runbook: `docs/DX_RESEARCH_RUNBOOK.md`.

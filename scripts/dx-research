@@ -175,11 +175,24 @@ researcher_attempted() {
 extract_array_from_text() {
     local key="$1"
     local text="$2"
+    local label parsed
     if command -v jq >/dev/null 2>&1; then
-        local parsed
         set +e
         parsed="$(printf '%s\n' "$text" | jq -c "if has(\"${key}\") and (.${key}|type)==\"array\" then .${key} else empty end" 2>/dev/null | head -n 1)"
         set -e
+        if [[ -n "$parsed" ]]; then
+            printf '%s' "$parsed"
+            return 0
+        fi
+    fi
+    label="$(printf '%s_JSON' "$key" | tr '[:lower:]' '[:upper:]')"
+    parsed="$(printf '%s\n' "$text" | sed -n "s/^${label}=\\(\\[.*\\]\\)[[:space:]]*$/\\1/p" | tail -n 1)"
+    if [[ -n "$parsed" ]]; then
+        if command -v jq >/dev/null 2>&1; then
+            set +e
+            parsed="$(printf '%s' "$parsed" | jq -c 'if type=="array" then . else empty end' 2>/dev/null)"
+            set -e
+        fi
         if [[ -n "$parsed" ]]; then
             printf '%s' "$parsed"
             return 0
@@ -207,6 +220,15 @@ build_research_prompt() {
         printf -- '- Depth: `%s`\n' "$depth"
         printf -- '- Web mode: `%s`\n' "$web_mode"
         printf -- '- Local-only: `%s`\n\n' "$local_only"
+        case "$depth" in
+            quick)
+                printf -- '- Quick mode: produce a bounded decision memo; inspect only the few most relevant sources needed to answer confidently.\n'
+                printf -- '- Quick mode: keep the answer concise and prioritize finishing over exhaustive exploration.\n'
+                ;;
+            deep)
+                printf -- '- Deep mode: compare alternatives carefully and surface uncertainty, contradictions, and decision impact.\n'
+                ;;
+        esac
         if [[ "$web_mode" == "no-web" ]]; then
             printf -- '- External web research is forbidden for this run.\n'
         fi
@@ -271,7 +293,7 @@ summarize_research() {
         providers_attempted=$((providers_attempted + 1))
         local profile state reason provider display_state report_path log_path start_log
         local check_json check_rc report_json report_rc start_log_text start_reason parse_text
-        local input_tokens output_tokens total_tokens estimated_cost usage_available usage_source
+        local input_tokens output_tokens total_tokens estimated_cost usage_available usage_source mutations
         local this_sources this_claims report_state
 
         profile="$(profile_for_researcher "$researcher")"
@@ -334,6 +356,7 @@ summarize_research() {
         output_tokens="$(usage_number_from_text "output_tokens" "$parse_text")"
         total_tokens="$(usage_number_from_text "total_tokens" "$parse_text")"
         estimated_cost="$(usage_number_from_text "estimated_cost_usd" "$parse_text")"
+        mutations="$(usage_number_from_text "mutations" "$report_json")"
         usage_available=false
         usage_source="null"
         if [[ -n "$input_tokens" || -n "$output_tokens" || -n "$total_tokens" || -n "$estimated_cost" ]]; then
@@ -345,9 +368,10 @@ summarize_research() {
         [[ -n "$output_tokens" ]] || output_tokens="null"
         [[ -n "$total_tokens" ]] || total_tokens="null"
         [[ -n "$estimated_cost" ]] || estimated_cost="null"
+        [[ -n "$mutations" ]] || mutations="null"
 
-        this_sources="$(extract_array_from_text "sources" "$report_json")"
-        this_claims="$(extract_array_from_text "claims" "$report_json")"
+        this_sources="$(extract_array_from_text "sources" "$parse_text")"
+        this_claims="$(extract_array_from_text "claims" "$parse_text")"
         if [[ "$this_sources" != "[]" && "$sources_json" == "[]" ]]; then
             sources_json="$this_sources"
         fi
@@ -383,10 +407,10 @@ summarize_research() {
         fi
 
         entries+=("$(cat <<EOF
-{"researcher":"$(json_escape "$researcher")","profile":"$(json_escape "$profile")","state":"$(json_escape "$display_state")","reason_code":"$(json_escape "$reason")","report_path":"$(json_escape "$report_path")","log_path":"$(json_escape "$log_path")","start_log":"$(json_escape "$start_log")","usage":{"available":${usage_available},"input_tokens":${input_tokens},"output_tokens":${output_tokens},"total_tokens":${total_tokens},"estimated_cost_usd":${estimated_cost},"source":${usage_source}}}
+{"researcher":"$(json_escape "$researcher")","profile":"$(json_escape "$profile")","state":"$(json_escape "$display_state")","reason_code":"$(json_escape "$reason")","report_path":"$(json_escape "$report_path")","log_path":"$(json_escape "$log_path")","start_log":"$(json_escape "$start_log")","mutations":${mutations},"usage":{"available":${usage_available},"input_tokens":${input_tokens},"output_tokens":${output_tokens},"total_tokens":${total_tokens},"estimated_cost_usd":${estimated_cost},"source":${usage_source}}}
 EOF
 )")
-        md_rows+=("| ${researcher} | ${profile} | ${display_state} | ${reason} | available=${usage_available} |")
+        md_rows+=("| ${researcher} | ${profile} | ${display_state} | ${reason} | mutations=${mutations} usage_available=${usage_available} |")
     done
 
     if [[ "${#researchers[@]}" -eq 0 ]]; then
@@ -443,7 +467,11 @@ EOF
         done
         printf '\n## Answer\n\n'
         if [[ "$effective_status" == "completed" ]]; then
-            printf 'Research completed. Read the provider report/log for the full narrative until structured memo extraction is available.\n\n'
+            if [[ "$source_grounding" == "available" ]]; then
+                printf 'Research completed with structured sources and claims. Use `claims.json` and `sources.json` for grounded claims; inspect the provider log only if the narrative detail is needed.\n\n'
+            else
+                printf 'Research completed, but structured sources and claims were incomplete. Inspect the provider log before acting on the result.\n\n'
+            fi
         else
             printf 'Research did not complete: %s.\n\n' "$effective_reason"
         fi
@@ -480,6 +508,7 @@ EOF
         echo "claims.json: $claims_json_file"
     fi
 
+    set +e
     return "$exit_code"
 }
 
@@ -712,10 +741,6 @@ run_cmd() {
         sleep "$poll_sec"
     done
 
-    if [[ "$timed_out" == "true" ]]; then
-        exit 124
-    fi
-
     echo "dx-research reports:"
     for researcher in "${active_researchers[@]}"; do
         echo "--- $researcher ---"
@@ -739,6 +764,9 @@ run_cmd() {
         failures=$((failures + 1))
     fi
 
+    if [[ "$timed_out" == "true" ]]; then
+        exit 124
+    fi
     [[ "$failures" -eq 0 ]] || exit 1
 }
 

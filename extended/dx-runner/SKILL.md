@@ -60,7 +60,7 @@ dx-runner start --beads bd-xxx.claude --profile claude-code-review --worktree /t
 dx-review run --beads bd-xxx --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/review.prompt --wait
 
 # Run source-backed research wrapper and read merged summary first.
-dx-research run --beads bd-xxx --topic "compare option A vs B" --depth deep --wait
+dx-research run --beads bd-xxx --worktree /tmp/agents/bd-xxx/agent-skills --topic "compare option A vs B" --depth deep --wait
 dx-research summarize --beads bd-xxx
 
 # Check job status
