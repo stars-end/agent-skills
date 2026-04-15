@@ -8,7 +8,9 @@
 # does not try to auto-fix anything.
 #
 # Environment Variables:
-#   DX_VERIFY_ALLOW_STASHES=1  Allow stashes (use when you've verified they're safe)
+#   DX_VERIFY_FAIL_ON_STASHES=1  Treat canonical stashes as blocking hidden state
+#   DX_VERIFY_ALLOW_STASHES=1    Compatibility override; stashes are warn-only
+#                                by default for worker done gates
 #
 set -euo pipefail
 
@@ -55,17 +57,19 @@ for repo in "${CANONICAL_REPOS[@]}"; do
     fail=1
   fi
 
-  # Check for stashes
+  # Check for stashes. Stashes can predate a worker session and should not make
+  # unrelated agents fail their done gate by default. Strict fleet audits can opt
+  # into failing on hidden stashes with DX_VERIFY_FAIL_ON_STASHES=1.
   stashes="$(git -C "$repo_path" stash list 2>/dev/null || true)"
   if [[ -n "$stashes" ]]; then
     stash_count=$(echo "$stashes" | wc -l | tr -d ' ')
-    if [[ "${DX_VERIFY_ALLOW_STASHES:-0}" == "1" ]]; then
-      echo "⚠️  $repo: has $stash_count stash(es) (hidden state - allowed by DX_VERIFY_ALLOW_STASHES)"
-      echo "$stashes" | sed 's/^/   /'
-    else
-      echo "❌ $repo: has $stash_count stash(es) (hidden state)"
+    if [[ "${DX_VERIFY_FAIL_ON_STASHES:-0}" == "1" && "${DX_VERIFY_ALLOW_STASHES:-0}" != "1" ]]; then
+      echo "❌ $repo: has $stash_count stash(es) (hidden state; strict stash failure enabled)"
       echo "$stashes" | sed 's/^/   /'
       fail=1
+    else
+      echo "⚠️  $repo: has $stash_count stash(es) (hidden state; non-blocking for worker done gate)"
+      echo "$stashes" | sed 's/^/   /'
     fi
   fi
 done
@@ -74,9 +78,9 @@ if [[ "$fail" -ne 0 ]]; then
   echo ""
   echo "🚨 FAIL: Canonical clones must be clean. Move work to a worktree and open a PR."
   echo ""
-  echo "💡 TIP: If stashes are verified safe, run with DX_VERIFY_ALLOW_STASHES=1"
+  echo "💡 TIP: Pre-existing stashes are warn-only by default. Use DX_VERIFY_FAIL_ON_STASHES=1 for strict fleet audits."
   exit 1
 fi
 
 echo ""
-echo "✅ PASS: All canonical clones are clean."
+echo "✅ PASS: All canonical clones have no blocking hygiene issues."

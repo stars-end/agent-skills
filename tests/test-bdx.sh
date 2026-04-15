@@ -31,6 +31,17 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+  local msg="$3"
+  if [[ "$haystack" != *"$needle"* ]]; then
+    pass "$msg"
+  else
+    fail "$msg (unexpected '$needle')"
+  fi
+}
+
 assert_file_contains() {
   local file="$1"
   local needle="$2"
@@ -148,6 +159,23 @@ test_remote_read_injection_safe() {
 
 test_help_exits_zero() {
   "$BDX" --help >/dev/null 2>&1 && pass "help exits zero" || fail "help exits non-zero"
+}
+
+test_bdx_specific_help_hides_unsupported_repo_create() {
+  local output
+  output="$("$BDX" create --help 2>&1)"
+
+  assert_contains "$output" "BDX safety overrides" "create help is bdx-specific"
+  assert_contains "$output" "repo_flag_unsupported" "create help explains repo flag rejection"
+  assert_not_contains "$output" "Target repository for issue" "create help does not advertise upstream --repo behavior"
+}
+
+test_comments_add_help_shows_positional_text() {
+  local output
+  output="$("$BDX" comments add --help 2>&1)"
+
+  assert_contains "$output" "bdx comments add <issue-id> \"comment text\"" "comments add help shows positional text"
+  assert_contains "$output" "Do not use --body" "comments add help rejects body flag pattern"
 }
 
 test_remote_write_uses_flock() {
@@ -333,6 +361,50 @@ test_write_rejects_repo_flag_before_routing() {
     assert_contains "$output" "Use labels/metadata/cwd context instead." "repo-flag rejection advises labels/metadata (${case_spec})"
     [[ ! -f "$fake_ssh_log" ]] && pass "repo-flag preflight stops before ssh (${case_spec})" || fail "repo-flag preflight unexpectedly called ssh (${case_spec})"
     [[ ! -f "$fake_bd_log" ]] && pass "repo-flag preflight stops before bd (${case_spec})" || fail "repo-flag preflight unexpectedly called bd (${case_spec})"
+  done
+}
+
+test_comments_add_rejects_body_flag_before_routing() {
+  local case_dir="$tmpdir/case_comments_body"
+  local fake_bin="$case_dir/bin"
+  local fake_bd_log="$case_dir/fake-bd.log"
+  local fake_ssh_log="$case_dir/fake-ssh.log"
+
+  mkdir -p "$fake_bin" "$case_dir/home"
+  setup_fake_common "$fake_bin"
+
+  local -a base_env=(
+    "HOME=$case_dir/home"
+    "PATH=$fake_bin:/usr/bin:/bin"
+    "FAKE_BD_LOG=$fake_bd_log"
+    "FAKE_SSH_LOG=$fake_ssh_log"
+    "BDX_SSH_BIN=$fake_bin/ssh"
+    "BDX_REMOTE_HELPER=$ROOT/scripts/bdx-remote"
+    "BDX_REMOTE_HOST=epyc12"
+    "BDX_HOSTNAME=macbook"
+    "BDX_JSON_ERRORS=1"
+  )
+
+  local -a body_cases=(
+    "--body hello"
+    "--body=hello"
+  )
+
+  local case_spec output rc
+  for case_spec in "${body_cases[@]}"; do
+    rm -f "$fake_bd_log" "$fake_ssh_log"
+    set +e
+    output="$(
+      env "${base_env[@]}" "$BDX" comments add bd-test ${case_spec} --json 2>&1
+    )"
+    rc=$?
+    set -e
+
+    [[ $rc -ne 0 ]] && pass "comments add body-flag case rejected: ${case_spec}" || fail "comments add body-flag case should fail: ${case_spec}"
+    assert_contains "$output" '"reason_code":"comments_body_unsupported"' "comments body rejection exposes reason_code (${case_spec})"
+    assert_contains "$output" "Comment text is positional" "comments body rejection gives positional syntax (${case_spec})"
+    [[ ! -f "$fake_ssh_log" ]] && pass "comments body preflight stops before ssh (${case_spec})" || fail "comments body preflight unexpectedly called ssh (${case_spec})"
+    [[ ! -f "$fake_bd_log" ]] && pass "comments body preflight stops before bd (${case_spec})" || fail "comments body preflight unexpectedly called bd (${case_spec})"
   done
 }
 
@@ -799,6 +871,8 @@ test_symlinked_bdx_finds_preflight_helper() {
 
 main() {
   test_help_exits_zero
+  test_bdx_specific_help_hides_unsupported_repo_create
+  test_comments_add_help_shows_positional_text
   test_remote_read_injection_safe
   test_remote_write_uses_flock
   test_remote_write_mkdir_fallback
@@ -806,6 +880,7 @@ main() {
   test_comments_issue_id_read_shape
   test_rejections
   test_write_rejects_repo_flag_before_routing
+  test_comments_add_rejects_body_flag_before_routing
   test_local_on_epyc12
   test_local_epyc12_write_uses_lock
   test_tailscale_hostname_detects_epyc12

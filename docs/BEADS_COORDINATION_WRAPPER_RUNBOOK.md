@@ -56,6 +56,7 @@ If a workflow needs smarter task selection, use Beads/BV/dx-runner product surfa
 
 - File-bearing flags (at minimum `--body-file`, `--description-file`, `--stdin`, and `--metadata @file`) are rejected on spoke hosts because those local paths or stdin streams do not exist on `epyc12`.
 - Mutating commands reject `--repo` / `--repo=<name>` with `reason_code=repo_flag_unsupported`. This avoids Beads target-repo initialization paths that can fall back to embedded Dolt.
+- `bdx comments add` expects positional comment text (`bdx comments add bd-xxxx "note"`). `--body` is rejected with `reason_code=comments_body_unsupported`.
 
 Use inline values for remote writes (`--description`, `--notes`, metadata key/value flags) and express repo intent via labels/metadata/cwd context, or run path-sensitive commands directly on `epyc12`.
 
@@ -98,6 +99,7 @@ Common reason codes:
 - `unsupported_command`
 - `local_file_arg_unsupported`
 - `repo_flag_unsupported`
+- `comments_body_unsupported`
 
 Backend diagnostics (only when debugging service/runtime):
 
