@@ -128,7 +128,7 @@ Every generated delegation prompt MUST enforce:
   - `bdx show <memory-id> --json`
   - `bdx comments <memory-id> --json`
 - Do not require memory lookup for trivial routine edits.
-- Clarify in prompts: `bdx comments add` is task-local history; durable cross-agent memory belongs in `bdx remember` or closed `memory` issues.
+- Clarify in prompts: `bdx comments add <issue-id> "comment text"` is task-local history; durable cross-agent memory belongs in `bdx remember` or closed `memory` issues. Do not generate `bdx comments add --body ...`; comment text is positional.
 
 ## Outcome Enforcement Options
 
@@ -193,7 +193,7 @@ you're a full-stack dev agent at a tiny fintech startup:
 ## DX Global Constraints (Always-On)
 1) NO WRITES in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
 2) Worktree first: `dx-worktree create bd-sg2v.13.1 prime-radiant-ai`
-3) Before "done": run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS)
+3) Before "done": run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS; pre-existing canonical stash warnings are non-blocking unless strict stash failure is explicitly requested)
 4) Open draft PR after first real commit
 5) Final response MUST include `PR_URL` and `PR_HEAD_SHA`
 
@@ -274,7 +274,7 @@ If blocked, return exactly:
 Do not claim complete until:
 - Changes committed/pushed
 - Draft PR exists
-- `dx-verify-clean.sh` passes
+- `dx-verify-clean.sh` passes; canonical stash warnings are non-blocking for worker done gates unless the task explicitly set `DX_VERIFY_FAIL_ON_STASHES=1`
 - Final response includes PR_URL and PR_HEAD_SHA
 ```
 

@@ -39,6 +39,39 @@ Local only / rejected:
 EOF
 }
 
+usage_create() {
+  cat >&2 <<'EOF'
+Usage:
+  bdx create --title "Task" --type task [flags...]
+  bdx create "Task title" [flags...]
+
+Common agent-safe flags:
+  --title, --description, --type, --priority, --parent, --deps, --labels,
+  --metadata, --notes, --acceptance, --id, --force, --json
+
+BDX safety overrides:
+  --repo / --repo=<name> is rejected on mutating bdx writes
+  (reason_code=repo_flag_unsupported) because Beads target-repo
+  initialization can fall back to embedded Dolt. Use labels, metadata, or cwd
+  context to express repo intent instead.
+
+Path-sensitive flags such as --body-file, --description-file, --graph, and
+--stdin are rejected on spoke hosts. Use inline values or run directly on
+epyc12 for path-sensitive diagnostics.
+EOF
+}
+
+usage_comments_add() {
+  cat >&2 <<'EOF'
+Usage:
+  bdx comments add <issue-id> "comment text"
+  bdx comments add <issue-id> -f notes.txt
+
+Do not use --body with bdx comments add. Comment text is positional, or use
+-f/--file when running directly on a host that can read that file.
+EOF
+}
+
 json_string() {
   python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'
 }
@@ -310,6 +343,15 @@ preflight_write_repo_flag() {
   fi
 }
 
+preflight_comments_add_body_flag() {
+  [[ "${1:-}" == "comments" && "${2:-}" == "add" ]] || return 0
+
+  local body_flag=""
+  if body_flag="$(find_flag_match --body "$@")"; then
+    die comments_body_unsupported "bdx comments add rejected: '$body_flag' is not supported. Comment text is positional: bdx comments add <issue-id> \"comment text\". Use -f/--file only when the file is readable by the command host."
+  fi
+}
+
 main() {
   [[ $# -gt 0 ]] || { usage; exit 2; }
   detect_json_errors "$@"
@@ -326,10 +368,21 @@ main() {
       ;;
   esac
 
+  if [[ "${1:-}" == "create" && ( "${2:-}" == "--help" || "${2:-}" == "-h" ) ]]; then
+    usage_create
+    exit 0
+  fi
+
+  if [[ "${1:-}" == "comments" && "${2:-}" == "add" && ( "${3:-}" == "--help" || "${3:-}" == "-h" ) ]]; then
+    usage_comments_add
+    exit 0
+  fi
+
   local mode
   mode="$(classify_command "$@")"
 
   if [[ "$mode" == "write" ]]; then
+    preflight_comments_add_body_flag "$@"
     preflight_write_repo_flag "$@"
   fi
 
