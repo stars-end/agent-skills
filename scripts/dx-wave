@@ -94,7 +94,7 @@ Examples:
   # Check job status
   dx-wave check --beads bd-abc
 
-  # Start a batch wave (preferred)
+  # Start a compatibility/operator batch wave
   dx-wave batch-start --items bd-a,bd-b,bd-c --prompt-file /tmp/task.prompt
 
   # Generate report

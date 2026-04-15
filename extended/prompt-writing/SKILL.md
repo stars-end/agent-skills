@@ -113,6 +113,7 @@ Every generated delegation prompt MUST enforce:
 
 7) **dx-loop-first contract for chained/non-trivial work**
 - When the task is chained Beads work, multi-step, or expected to need implement/review baton flow, the prompt should make `dx-loop` the primary execution surface.
+- Frame the hierarchy explicitly when relevant: `dx-loop` is the default agent-facing orchestrator, `dx-runner` is the lower-level provider runner, and `dx-batch` is legacy/compatibility/internal substrate.
 - Prompts should tell delegates to use:
   - `dx-loop status --beads-id <id>` as the default task lookup surface
   - `dx-loop explain --beads-id <id>` as the default blocker diagnosis surface

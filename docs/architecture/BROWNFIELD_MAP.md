@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: e90ac84583a457cc2b3580fee522fb2a047c10b7
-last_verified_at: 2026-04-15T21:20:00Z
+last_verified_commit: f94ee66824c6754c6619aeced3ffc4ce92e34b9c
+last_verified_at: 2026-04-15T16:21:14Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -39,6 +39,20 @@ The repo ships:
 4. Templates provide prompt/review contract skeletons used by orchestration
    tooling.
 
+## Current Orchestration Boundary
+
+1. `dx-loop` owns the default agent-facing orchestration workflow for chained
+   Beads work, implement/review loops, PR-aware follow-up, and autonomous
+   "continue until reviewed or blocked" sessions.
+2. `dx-runner` owns provider execution, preflight, status, reports, and failure
+   taxonomy. Higher-level orchestrators call it rather than duplicating provider
+   semantics.
+3. `dx-batch` remains a legacy compatibility and internal batch substrate. It
+   is still shipped, but new agent-facing guidance should route to `dx-loop`
+   first unless a task is explicitly maintaining batch internals.
+4. `dx-wave` is an operator/compatibility wrapper over the legacy batch
+   substrate, not the default agent path.
+
 ## Brownfield Entry Points
 
 For changes that touch architecture or workflow behavior, read in this order:
@@ -55,6 +69,9 @@ For changes that touch architecture or workflow behavior, read in this order:
 - review/orchestration templates under `templates/dx-review`
 - routing contracts for `llm-tldr`, Serena, and Beads runtime assumptions
 - scripts that enforce cross-repo policy (`dx-*` checks, dispatch helpers)
+- stale "canonical dx-batch" wording in generated baselines, skill metadata,
+  or wrapper help text; treat this as policy drift and route through the
+  baseline source fragments rather than editing generated artifacts directly
 
 ## AGENTS Routing Integration Note
 
@@ -64,4 +81,3 @@ Expected link target for AGENTS routing:
 
 This file should be linked from AGENTS routing text in a centralized baseline
 regeneration pass, not by ad hoc local edits.
-

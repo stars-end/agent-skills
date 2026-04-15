@@ -1,9 +1,9 @@
 ---
 name: dx-runner
 description: |
-  Canonical unified runner for multi-provider dispatch with shared governance.
+  Lower-level unified runner for multi-provider dispatch with shared governance.
   Routes to cc-glm, opencode, claude-code, or gemini providers with unified preflight, gates, and failure taxonomy.
-  Use when dispatching agent tasks, running headless jobs, or managing parallel agent sessions.
+  Use directly for provider debugging, custom orchestration, headless jobs, or when a task-specific shim such as dx-loop, dx-review, or dx-research delegates to it.
 tags: [workflow, dispatch, governance, multi-provider, automation]
 allowed-tools:
   - Bash
@@ -13,7 +13,9 @@ allowed-tools:
 
 ## Overview
 
-`dx-runner` is the **canonical entrypoint** for all agent dispatch. It provides:
+`dx-runner` is the lower-level governed execution substrate for agent dispatch. For chained Beads work, multi-step outcomes, implement/review baton flow, or PR-aware follow-up, use `dx-loop` first.
+
+It provides:
 
 - **Single command surface**: start/status/check/restart/stop/watchdog/report/preflight
 - **Multi-provider support**: cc-glm (Z.ai/GLM reliability backstop and primary `dx-review` GLM lane), opencode (primary throughput and `dx-review` fallback GLM transport), claude-code (native Claude Code review lane), gemini (optional burst)
@@ -29,7 +31,7 @@ OpenCode behavior in this skill is grounded in official docs and live CLI help:
 
 ## When To Use
 
-- Dispatching any agent task (replaces cc-glm-job.sh, dx-dispatch)
+- Provider debugging or custom orchestration that needs direct runner control
 - Running headless agent sessions
 - Managing parallel agent jobs
 - Checking job health with governance gates
@@ -39,6 +41,7 @@ Task-specific shims should be the default agent entrypoint:
 
 | Outcome Needed | Preferred Surface | Notes |
 |---|---|---|
+| Chained Beads work / implement-review baton / PR-aware follow-up | `dx-loop` | Default agent-facing orchestrator over `dx-runner` |
 | Independent code/design/security review | `dx-review` | Review quorum wrapper over `dx-runner` |
 | Source-backed web/deep research + decision memo | `dx-research` | Research artifact wrapper over `dx-runner` |
 | Provider debugging, custom orchestration, manual profile control | `dx-runner` | Substrate/manual escape hatch |
@@ -650,7 +653,7 @@ dx-wave profiles
 # Show help
 dx-wave --help
 
-# Preferred batch entrypoint
+# Compatibility/operator batch entrypoint
 dx-wave batch-start --items bd-a,bd-b --prompt-file /tmp/task.prompt
 ```
 
@@ -658,7 +661,7 @@ Key differences from direct `dx-runner`:
 - Requires `--profile` (defaults to `opencode-prod`)
 - Enforces profile-first workflow
 - Simplified interface for wave operators
-- Includes deterministic batch fallback:
+- Includes deterministic compatibility batch fallback:
   - Emits `WARN_CODE=dx_batch_unavailable_fallback_runner`
   - Falls back to per-item `dx-runner start` dispatch
 

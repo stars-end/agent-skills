@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: e90ac84583a457cc2b3580fee522fb2a047c10b7
-last_verified_at: 2026-04-15T21:20:00Z
+last_verified_commit: f94ee66824c6754c6619aeced3ffc4ce92e34b9c
+last_verified_at: 2026-04-15T16:21:14Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -36,6 +36,19 @@ not rediscover them from scratch.
 - use Serena for symbol-aware edits where symbol safety matters
 - use patch/diff edits for non-symbolic changes
 
+## Core Pattern: Orchestration Surface Hierarchy
+
+- `dx-loop` is the default agent-facing surface for chained Beads work,
+  implement/review baton flows, PR-aware follow-up, and "keep going until
+  reviewed or blocked" work.
+- `dx-runner` is the lower-level provider runner. Use it directly for
+  provider preflight, diagnostics, and one-off governed provider execution.
+- `dx-batch` is a legacy compatibility and internal substrate. It remains
+  installed for existing operators and wrappers, but agents should not choose
+  it first for new orchestration work.
+- `dx-wave` is a compatibility/operator entrypoint over the legacy batch
+  substrate, not the preferred agent entrypoint.
+
 ## Core Pattern: Review Contracts
 
 Templates under `templates/dx-review/` define expected reviewer behavior.
@@ -54,4 +67,3 @@ Architecture review should evaluate:
 - stale-if coverage exists for map docs
 - brownfield tasks route through map docs first
 - review prompts check repo-memory compliance
-
