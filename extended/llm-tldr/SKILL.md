@@ -270,6 +270,22 @@ turn. Operators can opt into the older cold-build behavior with
 `TLDR_FALLBACK_SEMANTIC_AUTOBUILD=1`; agents should not use that override
 inside ordinary tool routing.
 
+### Semantic Prewarm Maintenance
+
+Canonical DX now has two proactive prewarm paths:
+- `worktree-setup.sh` starts a best-effort background prewarm for each
+  `/tmp/agents/<beads-id>/<repo>` path and logs to
+  `~/logs/dx/tldr-semantic-prewarm-worktree.log`.
+- `dx-spoke-cron-install.sh` installs a 6-hour cron prewarm job for canonical
+  repos and recent active worktrees (`--since-hours 48`) using
+  `scripts/tldr-semantic-prewarm.sh`.
+
+Manual run surface (same script used by cron/worktree hook):
+```bash
+~/agent-skills/scripts/tldr-semantic-prewarm.sh --canonical --active-worktrees --since-hours 48
+~/agent-skills/scripts/tldr-semantic-prewarm.sh --path /tmp/agents/<beads-id>/<repo>
+```
+
 Current command surface mirrors the practical MCP tools:
 `tree`, `structure`, `search`, `extract`, `context`, `cfg`, `dfg`, `slice`,
 `impact`, `dead`, `arch`, `calls`, `imports`, `importers`, `semantic`,
