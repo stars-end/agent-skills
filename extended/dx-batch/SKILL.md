@@ -1,18 +1,26 @@
 ---
 name: dx-batch
 description: |
-  Deterministic orchestration over dx-runner for autonomous implement->review waves.
-  Orchestrates 2-3 parallel tasks across 15-20 Beads items with strict lease locking,
-  persistent ledger, and machine-readable contracts. Use for batch execution of
-  implementation tasks with automatic review cycles.
-tags: [workflow, orchestration, batch, dx-runner, governance, parallel]
+  Legacy/compatibility/internal batch substrate over dx-runner. Still installed
+  for existing batch workflows and operator compatibility, but agents should use
+  dx-loop first for chained Beads work, implement/review baton flow, PR-aware
+  follow-up, and "keep going until reviewed or blocked."
+tags: [workflow, orchestration, batch, dx-runner, governance, parallel, compatibility, legacy]
 allowed-tools:
   - Bash
 ---
 
-# dx-batch: Deterministic Batch Orchestration
+# dx-batch: Legacy Compatibility Batch Substrate
 
 ## Overview
+
+`dx-batch` is no longer the default agent-facing orchestration surface.
+
+Use `dx-loop` first for chained Beads work, multi-step outcomes, implement/review baton flow, PR-aware follow-up, and "keep going until reviewed or blocked."
+
+Use `dx-runner` as the lower-level provider runner.
+
+Keep `dx-batch` for legacy/compatibility/internal batch workflows where an existing operator runbook or wrapper explicitly asks for it.
 
 `dx-batch` is a thin deterministic state machine that orchestrates parallel tasks using `dx-runner` as the ONLY execution backend. It provides:
 
@@ -121,7 +129,7 @@ Stop conditions before redispatch:
 
 ## Capability Fallback (dx-wave wrapper)
 
-- Preferred batch entrypoint: `dx-wave batch-start ...`
+- Compatibility/operator batch entrypoint: `dx-wave batch-start ...`
 - If `dx-batch` is unavailable on PATH, wrapper emits:
   - `WARN_CODE=dx_batch_unavailable_fallback_runner`
 - Fallback behavior is deterministic:

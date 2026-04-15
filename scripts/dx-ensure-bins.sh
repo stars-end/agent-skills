@@ -24,7 +24,7 @@ link() {
 # Core control-plane CLIs
 # dx-runner is the canonical dispatch surface (bd-xga8.14.8)
 link "$AGENTS_ROOT/scripts/dx-runner" "$BIN_DIR/dx-runner"
-# dx-batch is the orchestration plane over dx-runner (bd-cbsb.25)
+# dx-batch is the legacy/compatibility/internal batch substrate over dx-runner
 link "$AGENTS_ROOT/scripts/dx-batch" "$BIN_DIR/dx-batch"
 # dx-wave is the profile-first operator wrapper for safe dispatch
 link "$AGENTS_ROOT/scripts/dx-wave" "$BIN_DIR/dx-wave"

@@ -26,7 +26,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **\`~/bd\` is legacy/rollback Git-backed state, not active runtime truth**.
 - **Use \`bdx\` for Beads coordination commands** (\`create\`, \`show\`, \`comments add\`, \`ready\`, \`search\`, memory commands, etc.).
 - **Raw \`bd\` is reserved for local diagnostics/bootstrap/path-sensitive operations or explicit override.**
-- **Run \`dx-runner\` / \`dx-batch\` control-plane commands from non-app directories; use \`bdx\` for Beads coordination around those runs.**
+- **Run \`dx-loop\`, lower-level \`dx-runner\`, and compatibility/internal \`dx-batch\` control-plane commands from non-app directories; use \`bdx\` for Beads coordination around those runs.**
 - **Set \`BEADS_DIR=~/.beads-runtime/.beads\` in normal agent shells**.
 - **Never run mutating Beads commands from app repos** (\`~/prime-radiant-ai\`, \`~/agent-skills\`, etc.) unless explicitly using a documented override.
 - **Backend must be Dolt server mode on \`epyc12\`** for multi-VM/multi-agent reliability.
@@ -56,7 +56,9 @@ cd /tmp/agents/bd-xxxx/repo-name
 ## 4) Delegation Rule (V8.6 - Batch by Outcome)
 - **Primary rule**: batch by outcome, not by file. One agent per coherent change set.
 - **Default parallelism**: 2 agents, scale to 3-4 only when independent and stable.
-- **Default orchestration rule**: use \`dx-batch\` over \`dx-runner\` for chained Beads work, multi-step outcomes, or implement/review baton flow.
+- **Default orchestration rule**: use \`dx-loop\` for chained Beads work, multi-step outcomes, implement/review baton flow, PR-aware follow-up, or "keep going until reviewed or blocked."
+- **Execution substrate rule**: use \`dx-runner\` as the lower-level provider runner when directly dispatching a single governed task or when \`dx-loop\` instructs it.
+- **Compatibility rule**: \`dx-batch\` remains installed as a legacy/compatibility/internal batch substrate, but it is not the default surface agents should reach for first.
 - **Direct/manual fallback**: implement directly only for isolated single-task work or when the orchestration surface itself is the active blocker.
 - **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
 - **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
@@ -229,13 +231,13 @@ Fallback to shell/file reads or ordinary patch editing is allowed only when:
 
 If the agent does not use the matching MCP tool on a qualifying task, it MUST state \`Tool routing exception: <reason>\` in the final response or handoff.
 
-## 6) Parallel Agent Orchestration (V8.4)
+## 6) Parallel Agent Orchestration (V8.6)
 
-### Pattern: Plan-First, Batch-Second, Commit-Only
+### Pattern: Plan-First, dx-loop-First, Commit-Only
 
 1. **Create plan** (file for large/cross-repo, Beads notes for small)
 2. **Batch by outcome** (1 agent per repo or coherent change set)
-3. **Execute in waves** (parallel where dependencies allow)
+3. **Execute with \`dx-loop\` by default** for chained work, multi-step outcomes, implement/review baton flow, and PR-aware follow-up
 4. **Commit-only** (agents commit, orchestrator pushes once per batch)
 
 ### Task Batching Rules
@@ -248,7 +250,18 @@ If the agent does not use the matching MCP tool on a qualifying task, it MUST st
 
 ### Dispatch Method
 
-**Canonical: dx-runner (governed multi-provider runner)**
+**Default agent-facing orchestrator: dx-loop**
+
+\`\`\`bash
+# Chained Beads work / implement-review baton
+dx-loop start --epic bd-xxx --repo agent-skills
+
+# Task-oriented status and blocker diagnosis
+dx-loop status --beads-id bd-xxx.1
+dx-loop explain --beads-id bd-xxx.1
+\`\`\`
+
+**Lower-level runner: dx-runner (governed multi-provider runner)**
 
 \`\`\`bash
 # OpenCode throughput lane
@@ -259,10 +272,10 @@ dx-runner status --json
 dx-runner check --beads bd-xxx --json
 \`\`\`
 
-**Canonical batch orchestrator: dx-batch (orchestration-only over dx-runner)**
+**Legacy/compatibility/internal batch substrate: dx-batch**
 
 \`\`\`bash
-# Execute implement -> review waves with deterministic ledger/contracts
+# Compatibility path only; prefer dx-loop for agent-facing orchestration
 dx-batch start --items bd-aaa,bd-bbb --max-parallel 2
 
 # Diagnose stuck waves
@@ -358,6 +371,7 @@ References:
 - \`~/agent-skills/docs/ENV_SOURCES_CONTRACT.md\`
 - \`~/agent-skills/docs/SECRET_MANAGEMENT.md\`
 - \`~/agent-skills/scripts/benchmarks/opencode_cc_glm/README.md\`
+- \`~/agent-skills/extended/dx-loop/SKILL.md\`
 - \`~/agent-skills/extended/dx-runner/SKILL.md\`
 - \`~/agent-skills/extended/cc-glm/SKILL.md\`
 

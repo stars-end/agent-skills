@@ -6,6 +6,8 @@
 
 `dx-loop` is the default execution surface for chained Beads work, multi-step outcomes, and implement/review baton flows. It is a PR-aware orchestration surface that reuses Ralph's proven patterns (baton, topological dependencies, checkpoint/resume) while replacing the control plane with governed `dx-runner` dispatch and enforcing PR artifact contracts.
 
+Hierarchy: `dx-loop` is the default agent-facing orchestrator, `dx-runner` is the lower-level provider runner, and `dx-batch` is a legacy/compatibility/internal batch substrate rather than the first choice for agents.
+
 ## Default Execution Policy
 
 Use `dx-loop` as the default execution surface for:
