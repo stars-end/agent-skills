@@ -258,6 +258,24 @@ Feature-Key: bd-s6yjk.9" >/dev/null
   fi
 }
 
+acquire_lock() {
+  local lock_file="$1"
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$lock_file"
+    if ! flock -n 9; then
+      die "another repo-memory refresh is already running"
+    fi
+    return 0
+  fi
+
+  local lock_dir="${lock_file}.d"
+  if ! mkdir "$lock_dir" 2>/dev/null; then
+    die "another repo-memory refresh is already running"
+  fi
+  DX_REPO_MEMORY_LOCK_DIR="$lock_dir"
+  trap 'rm -rf "$DX_REPO_MEMORY_LOCK_DIR"' EXIT
+}
+
 main() {
   parse_args "$@"
   CURRENT_RUN_ID="${CURRENT_RUN_ID:-$(date -u +'%Y%m%dT%H%M%SZ')-$REPO_NAME-$RUN_MODE}"
@@ -266,10 +284,7 @@ main() {
   local lock_file="$STATE_ROOT/refresh.lock"
   mkdir -p "$run_root" "$STATE_ROOT"
 
-  exec 9>"$lock_file"
-  if ! flock -n 9; then
-    die "another repo-memory refresh is already running"
-  fi
+  acquire_lock "$lock_file"
 
   {
     preflight
