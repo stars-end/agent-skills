@@ -61,8 +61,8 @@ fi
 # Option 1: Interactive shell (recommended for local dev)
 railway shell
 
-# Option 2: Set token from 1Password (for CI/automation)
-export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
+# Option 2: Load token through the agent-safe cache (for CI/automation)
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 ```
 
 ### 2. Dev Server Check

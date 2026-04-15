@@ -10,17 +10,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:docs.z.ai)",
       "Bash(git checkout:*)",
-      "Bash(op read:*)",
-      "Bash(op item list:*)",
-      "Bash(echo \"$ZAI_API_KEY:0:10...\")",
-      "Bash(op whoami:*)",
       "Bash(env)",
       "Bash(cat:*)",
-      "Bash(ls:*)",
-      "Bash(bash -c 'export OP_SERVICE_ACCOUNT_TOKEN=$(cat ~/.config/systemd/user/op_token) && op item list 2>&1')",
-      "Bash(bash -c 'export OP_SERVICE_ACCOUNT_TOKEN=$(cat ~/.config/systemd/user/op_token) && op read \"op://dev/Zhipu-Config/ZAI_API_KEY\" 2>&1')",
-      "Bash(bash -c 'export OP_SERVICE_ACCOUNT_TOKEN=$(cat ~/.config/systemd/user/op_token) && op read \"op://dev/gz4ahkc3fldjqtdnack6rjzijy/o7i32t3d5qf25qsfii23x4fnyi\" 2>&1')",
-      "Bash(bash -c 'export OP_SERVICE_ACCOUNT_TOKEN=$(cat ~/.config/systemd/user/op_token) && op read \"op://dev/gz4ahkc3fldjqtdnack6rjzijy/o7i32t3d5qf25qsfii23x4fnyi\" 2>&1')"
+      "Bash(ls:*)"
     ]
   }
 }

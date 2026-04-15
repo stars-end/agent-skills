@@ -1885,6 +1885,105 @@ EOF
     rm -f "$prompt" "$adapter" /tmp/preflight-test.out
 }
 
+test_cc_glm_preflight_uses_headless_auth_check() {
+    echo "=== Testing cc-glm preflight uses headless auth check ==="
+
+    local tmp fake_headless fake_claude old_path out rc
+    tmp="$(mktemp -d)"
+    fake_headless="$tmp/cc-glm-headless.sh"
+    fake_claude="$tmp/claude"
+    old_path="$PATH"
+
+    cat > "$fake_claude" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+    chmod +x "$fake_claude"
+
+    cat > "$fake_headless" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "--auth-check" ]]; then
+  echo "[cc-glm-headless] ERROR: AUTH_CHECK_FAILED source_category=op-ref:default-Agent-Secrets-Production-ZAI_API_KEY" >&2
+  echo "reason_code=secret_auth_resolution_failed_after_preflight" >&2
+  echo "secret_ref_category=op-ref:default-Agent-Secrets-Production-ZAI_API_KEY" >&2
+  exit 10
+fi
+exit 2
+EOF
+    chmod +x "$fake_headless"
+
+    source "$ADAPTERS_DIR/cc-glm.sh"
+    CC_GLM_SCRIPTS="$tmp"
+    set +e
+    out="$(PATH="$tmp:$old_path" adapter_preflight 2>&1)"
+    rc=$?
+    set -e
+
+    if [[ "$rc" -ne 0 ]] \
+        && echo "$out" | grep -q "reason_code=secret_auth_resolution_failed_after_preflight" \
+        && echo "$out" | grep -q "secret_ref_category=op-ref:default-Agent-Secrets-Production-ZAI_API_KEY" \
+        && ! echo "$out" | grep -q "op://dev/Agent-Secrets-Production/ZAI_API_KEY"; then
+        pass "cc-glm preflight fails through headless auth check with redacted secret category"
+    else
+        fail "cc-glm preflight did not surface headless auth failure correctly: rc=$rc out=$out"
+    fi
+
+    cat > "$fake_headless" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "--auth-check" ]]; then
+  echo "[cc-glm-headless] AUTH_CHECK_OK source_category=env:CC_GLM_AUTH_TOKEN" >&2
+  exit 0
+fi
+exit 2
+EOF
+    chmod +x "$fake_headless"
+
+    set +e
+    out="$(PATH="$tmp:$old_path" adapter_preflight 2>&1)"
+    rc=$?
+    set -e
+    if [[ "$rc" -eq 0 ]] && echo "$out" | grep -q "auth resolution: OK (env:CC_GLM_AUTH_TOKEN)"; then
+        pass "cc-glm preflight passes when headless auth check passes"
+    else
+        fail "cc-glm preflight did not pass through successful headless auth check: rc=$rc out=$out"
+    fi
+
+    rm -rf "$tmp"
+}
+
+test_cc_glm_headless_uses_cache_only_op_resolution() {
+    echo "=== Testing cc-glm runtime uses cache-only OP resolution ==="
+
+    local headless="$ROOT_DIR/extended/cc-glm/scripts/cc-glm-headless.sh"
+    local job="$ROOT_DIR/extended/cc-glm/scripts/cc-glm-job.sh"
+
+    if grep -nE '\bop[[:space:]]+(read|whoami|item[[:space:]]+(get|list))\b' "$headless" "$job" >/tmp/cc-glm-op-grep.out 2>&1; then
+        fail "cc-glm runtime contains forbidden raw OP command: $(cat /tmp/cc-glm-op-grep.out)"
+    else
+        pass "cc-glm runtime does not call raw op read/whoami/item"
+    fi
+
+    if grep -q 'DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached' "$headless"; then
+        pass "cc-glm-headless resolves op:// through cache-only dx-auth helper"
+    else
+        fail "cc-glm-headless missing cache-only dx-auth resolution"
+    fi
+
+    if grep -q 'DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached' "$ADAPTERS_DIR/cc-glm.sh"; then
+        pass "cc-glm adapter probe path resolves op:// through cache-only dx-auth helper"
+    else
+        fail "cc-glm adapter probe path missing cache-only dx-auth resolution"
+    fi
+
+    if grep -q 'DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached' "$job"; then
+        pass "cc-glm job preflight resolves op:// through cache-only dx-auth helper"
+    else
+        fail "cc-glm job preflight missing cache-only dx-auth resolution"
+    fi
+
+    rm -f /tmp/cc-glm-op-grep.out
+}
+
 # ============================================================================
 # Test: Worktree Resolution Guard (home-cwd external_directory edge)
 # ============================================================================
@@ -2610,6 +2709,8 @@ run_all_tests() {
     test_adapter_stop_parity
     test_governance_gates
     test_start_preflight
+    test_cc_glm_preflight_uses_headless_auth_check
+    test_cc_glm_headless_uses_cache_only_op_resolution
     test_worktree_resolution_guard
     test_beads_gate
     test_beads_gate_json_schema

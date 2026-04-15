@@ -42,8 +42,8 @@ for f in ~/agent-skills/scripts/dx-*.sh; do [ -x "$f" ] && echo "✅ $f" || echo
 ls -lhrt ~/logs/*.log ~/logs/dx/*.log | tail -5
 
 # Verify service-account auth using canonical host alias resolution
-~/agent-skills/scripts/dx-load-railway-auth.sh -- op whoami \
-  >/dev/null 2>&1 && echo "✅ OP service account valid" || echo "❌ OP service account invalid"
+~/agent-skills/scripts/dx-op-auth-status.sh --json \
+  >/dev/null 2>&1 && echo "✅ OP auth valid" || echo "❌ OP auth invalid"
 
 # Verify canonical repos use SSH remotes for non-interactive rescue pushes
 for r in agent-skills prime-radiant-ai affordabot llm-common; do

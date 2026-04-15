@@ -19,7 +19,8 @@ This doc is the single “getting started” for configuring the canonical IDE s
 2) Provide Slack credentials via environment (do not store in dotfiles like `~/.zshenv`):
 
 ```bash
-export SLACK_MCP_XOXP_TOKEN=$(op item get --vault dev Slack-MCP-Secrets --fields label=xoxp_token)
+source ~/agent-skills/scripts/lib/dx-auth.sh
+export SLACK_MCP_XOXP_TOKEN=$(DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/SLACK_APP_TOKEN" "slack_app_token")
 export SLACK_MCP_ADD_MESSAGE_TOOL=true
 ```
 

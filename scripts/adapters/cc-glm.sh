@@ -34,14 +34,14 @@ adapter_resolve_auth_token() {
 
     if [[ -n "${ZAI_API_KEY:-}" ]]; then
         if [[ "$ZAI_API_KEY" == op://* ]]; then
-            dx_auth_read_secret_cached "$ZAI_API_KEY" "zai_api_key"
+            DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "$ZAI_API_KEY" "zai_api_key"
             return $?
         fi
         printf '%s\n' "$ZAI_API_KEY"
         return 0
     fi
 
-    dx_auth_read_secret_cached "$default_ref" "zai_api_key"
+    DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "$default_ref" "zai_api_key"
 }
 
 adapter_find_cc_glm() {
@@ -75,6 +75,7 @@ adapter_resolve_model() {
 
 adapter_preflight() {
     local errors=0
+    local headless="${CC_GLM_SCRIPTS}/cc-glm-headless.sh"
     
     # Check 1: Claude binary
     echo -n "claude binary: "
@@ -86,63 +87,29 @@ adapter_preflight() {
         errors=$((errors + 1))
     fi
     
-    # Check 2: Auth resolution
+    # Check 2: Auth resolution. Use cc-glm-headless --auth-check so preflight
+    # exercises the exact same strict token resolver used by live review jobs.
     echo -n "auth resolution: "
-    local auth_ok=false
-    local auth_source=""
-    
-    if [[ -n "${CC_GLM_AUTH_TOKEN:-}" ]]; then
-        auth_ok=true
-        auth_source="CC_GLM_AUTH_TOKEN"
-    elif [[ -n "${CC_GLM_TOKEN_FILE:-}" ]]; then
-        if [[ -f "${CC_GLM_TOKEN_FILE}" ]]; then
-            auth_ok=true
-            auth_source="CC_GLM_TOKEN_FILE"
-        else
-            echo "TOKEN_FILE_MISSING"
-            echo "  ERROR: CC_GLM_TOKEN_FILE=${CC_GLM_TOKEN_FILE} not found"
-            errors=$((errors + 1))
-        fi
-    elif [[ -n "${ZAI_API_KEY:-}" ]]; then
-        if [[ "$ZAI_API_KEY" == op://* ]]; then
-            if command -v dx_auth_read_secret_cached >/dev/null 2>&1; then
-                auth_source="ZAI_API_KEY (op://)"
-                if dx_auth_read_secret_cached "$ZAI_API_KEY" "zai_api_key" >/dev/null 2>&1; then
-                    auth_ok=true
-                else
-                    echo "OP_RESOLUTION_FAILED"
-                    echo "  ERROR: Cannot resolve op:// reference"
-                    errors=$((errors + 1))
-                fi
-            else
-                echo "OP_CLI_MISSING"
-                echo "  ERROR: ZAI_API_KEY is op:// reference but op CLI not found"
-                errors=$((errors + 1))
-            fi
-        else
-            auth_ok=true
-            auth_source="ZAI_API_KEY"
-        fi
+    if [[ ! -x "$headless" ]]; then
+        echo "HEADLESS_MISSING"
+        echo "  ERROR: cc-glm-headless.sh not found at $headless"
+        errors=$((errors + 1))
     else
-        # Try default op:// path
-        if command -v dx_auth_read_secret_cached >/dev/null 2>&1; then
-            auth_source="default op://"
-            if dx_auth_read_secret_cached "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" "zai_api_key" >/dev/null 2>&1; then
-                auth_ok=true
-            else
-                echo "NO_AUTH_SOURCE"
-                echo "  ERROR: No auth source configured and default op:// resolution failed"
-                errors=$((errors + 1))
-            fi
+        local auth_check auth_rc auth_category
+        set +e
+        auth_check="$("$headless" --auth-check 2>&1)"
+        auth_rc=$?
+        set -e
+        auth_category="$(printf '%s\n' "$auth_check" | sed -n 's/.*source_category=\([^[:space:]]*\).*/\1/p' | tail -n 1)"
+        if [[ "$auth_rc" -eq 0 ]]; then
+            echo "OK (${auth_category:-headless-resolver})"
         else
-            echo "NO_AUTH_SOURCE"
-            echo "  ERROR: No auth source configured"
+            echo "SECRET_AUTH_RESOLUTION_FAILED"
+            echo "reason_code=secret_auth_resolution_failed_after_preflight"
+            echo "secret_ref_category=${auth_category:-unknown}"
+            echo "  ERROR: cc-glm-headless auth resolution failed before launch"
             errors=$((errors + 1))
         fi
-    fi
-    
-    if [[ "$auth_ok" == "true" ]]; then
-        echo "OK ($auth_source)"
     fi
     
     # Check 3: Model config

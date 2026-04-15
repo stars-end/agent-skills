@@ -451,7 +451,7 @@ check_op_auth_readiness() {
     echo "pass|low|OP service-account token resolved"
     return
   fi
-  if command -v op >/dev/null 2>&1 && [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && op whoami >/dev/null 2>&1; then
+  if command -v dx_auth_op_token_valid >/dev/null 2>&1 && [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && dx_auth_op_token_valid "$OP_SERVICE_ACCOUNT_TOKEN"; then
     echo "pass|low|OP service-account token verified"
     return
   fi

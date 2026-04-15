@@ -10,7 +10,7 @@ set -euo pipefail
 # Auth resolution precedence (deterministic):
 #   1) CC_GLM_AUTH_TOKEN (plain token - highest priority)
 #   2) CC_GLM_TOKEN_FILE (file containing token - explicit path)
-#   3) ZAI_API_KEY (plain token OR op:// reference resolved via op CLI)
+#   3) ZAI_API_KEY (plain token OR op:// reference resolved via agent-safe cache)
 #   4) CC_GLM_OP_URI (op:// reference)
 #   5) Default op:// fallback: op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY
 #
@@ -18,8 +18,8 @@ set -euo pipefail
 #   CC_GLM_ALLOW_FALLBACK=1  - Allow fallback to zsh/cc-glm path on auth failure
 #   CC_GLM_AUTH_TOKEN        - Direct auth token (bypasses all resolution)
 #   CC_GLM_TOKEN_FILE        - Path to file containing auth token
-#   ZAI_API_KEY              - Token or op:// reference
-#   CC_GLM_OP_URI            - op:// reference for token
+#   ZAI_API_KEY              - Token or op:// reference resolved via cache only
+#   CC_GLM_OP_URI            - op:// reference resolved via cache only
 #   CC_GLM_OP_VAULT          - 1Password vault name (default: dev)
 #   CC_GLM_BASE_URL          - API base URL (default: https://api.z.ai/api/anthropic)
 #   CC_GLM_MODEL             - Model name (default: glm-5)
@@ -35,6 +35,9 @@ set -euo pipefail
 
 # Version for debugging/logging
 CC_GLM_HEADLESS_VERSION="3.0.0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+DX_AUTH_LIB="$REPO_ROOT/scripts/lib/dx-auth.sh"
 
 usage() {
   cat >&2 <<'EOF'
@@ -45,18 +48,20 @@ Run cc-glm in headless mode with deterministic auth resolution.
 Usage:
   cc-glm-headless.sh --prompt "..."
   cc-glm-headless.sh --prompt-file /path/to/prompt.txt
+  cc-glm-headless.sh --auth-check
   echo "..." | cc-glm-headless.sh
 
 Auth resolution order (first match wins):
   1. CC_GLM_AUTH_TOKEN env (plain token)
   2. CC_GLM_TOKEN_FILE env (path to file containing token)
-  3. ZAI_API_KEY env (plain token or op:// reference)
+  3. ZAI_API_KEY env (plain token or op:// reference resolved via cache only)
   4. CC_GLM_OP_URI env (op:// reference)
   5. Default: op://dev/Agent-Secrets-Production/ZAI_API_KEY
 
 Options:
   --prompt TEXT       Inline prompt text
   --prompt-file FILE  Read prompt from file
+  --auth-check        Validate the exact headless auth path without running a prompt
   --version           Show version
   -h, --help          Show this help
 
@@ -72,7 +77,7 @@ Examples:
   # Token file (recommended for mounted secrets)
   CC_GLM_TOKEN_FILE=/run/secrets/zai-api-key cc-glm-headless.sh --prompt "task"
 
-  # Using op:// reference in ZAI_API_KEY
+  # Using cached op:// reference in ZAI_API_KEY
   ZAI_API_KEY="op://dev/Vault/item" cc-glm-headless.sh --prompt "task"
 
   # With fallback allowed (legacy behavior)
@@ -98,6 +103,7 @@ log_debug() {
 
 PROMPT="${PROMPT:-}"
 PROMPT_FILE=""
+AUTH_CHECK_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -108,6 +114,10 @@ while [[ $# -gt 0 ]]; do
     --prompt-file)
       PROMPT_FILE="${2:-}"
       shift 2
+      ;;
+    --auth-check)
+      AUTH_CHECK_ONLY=1
+      shift
       ;;
     --version)
       echo "cc-glm-headless.sh version $CC_GLM_HEADLESS_VERSION"
@@ -125,7 +135,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -n "$PROMPT_FILE" ]]; then
+if [[ "$AUTH_CHECK_ONLY" != "1" && -n "$PROMPT_FILE" ]]; then
   if [[ ! -f "$PROMPT_FILE" ]]; then
     log_error "--prompt-file not found: $PROMPT_FILE"
     exit 1
@@ -133,14 +143,14 @@ if [[ -n "$PROMPT_FILE" ]]; then
   PROMPT="$(cat "$PROMPT_FILE")"
 fi
 
-if [[ -z "${PROMPT}" ]]; then
+if [[ "$AUTH_CHECK_ONLY" != "1" && -z "${PROMPT}" ]]; then
   # If stdin is a pipe, read it.
   if [[ ! -t 0 ]]; then
     PROMPT="$(cat)"
   fi
 fi
 
-if [[ -z "${PROMPT}" ]]; then
+if [[ "$AUTH_CHECK_ONLY" != "1" && -z "${PROMPT}" ]]; then
   log_error "missing prompt (use --prompt, --prompt-file, or stdin)"
   exit 1
 fi
@@ -157,7 +167,7 @@ printf "%s" "$PROMPT" > "$tmp"
 # Resolution precedence (strict, in order):
 #   1. CC_GLM_AUTH_TOKEN - direct token, no processing needed
 #   2. CC_GLM_TOKEN_FILE - file path containing token (explicit, no discovery)
-#   3. ZAI_API_KEY - may be plain token OR op:// reference
+#   3. ZAI_API_KEY - may be plain token OR op:// reference resolved via cache only
 #   4. CC_GLM_OP_URI - explicit op:// reference
 #   5. Default op:// URI constructed from CC_GLM_OP_VAULT
 #
@@ -232,8 +242,25 @@ resolve_glm_auth_token() {
   return $?
 }
 
-# Resolve an op:// reference using the 1Password CLI.
-# Handles OP_SERVICE_ACCOUNT_TOKEN auto-discovery from hostname-based token files.
+auth_source_category() {
+  if [[ -n "${CC_GLM_AUTH_TOKEN:-}" ]]; then
+    printf 'env:CC_GLM_AUTH_TOKEN\n'
+  elif [[ -n "${CC_GLM_TOKEN_FILE:-}" ]]; then
+    printf 'file:CC_GLM_TOKEN_FILE\n'
+  elif [[ -n "${ZAI_API_KEY:-}" ]]; then
+    if [[ "$ZAI_API_KEY" == op://* ]]; then
+      printf 'op-ref:ZAI_API_KEY\n'
+    else
+      printf 'env:ZAI_API_KEY\n'
+    fi
+  elif [[ -n "${CC_GLM_OP_URI:-}" ]]; then
+    printf 'op-ref:CC_GLM_OP_URI\n'
+  else
+    printf 'op-ref:default-Agent-Secrets-Production-ZAI_API_KEY\n'
+  fi
+}
+
+# Resolve an op:// reference using the agent-safe secret cache.
 #
 # Arguments:
 #   $1 - op:// reference URI
@@ -249,59 +276,23 @@ _resolve_op_reference() {
     return 1
   fi
 
-  # Check if op CLI is available
-  if ! command -v op >/dev/null 2>&1; then
-    log_error "op CLI not found. Install 1Password CLI to use op:// references."
-    log_error "  See: https://developer.1password.com/docs/cli/get-started/"
+  if [[ ! -r "$DX_AUTH_LIB" ]]; then
+    log_error "dx-auth helper not found: $DX_AUTH_LIB"
     return 1
   fi
 
-  # Auto-discover OP_SERVICE_ACCOUNT_TOKEN if not set
-  # Resolution order (deterministic):
-  #   1. OP_SERVICE_ACCOUNT_TOKEN_FILE (explicit path)
-  #   2. Hostname-based path: $HOME/.config/systemd/user/op-$(hostname)-token
-  #   3. Canonical epyc12 path: /home/fengning/.config/systemd/user/op-epyc12-token
-  #   4. Legacy macmini path: $HOME/.config/systemd/user/op-macmini-token
-  if [[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
-    local host token_file epyc12_file legacy_file
+  # shellcheck disable=SC1090
+  source "$DX_AUTH_LIB"
 
-    host="$(hostname)"
-    token_file="${OP_SERVICE_ACCOUNT_TOKEN_FILE:-$HOME/.config/systemd/user/op-${host}-token}"
-    epyc12_file="/home/fengning/.config/systemd/user/op-epyc12-token"
-    legacy_file="$HOME/.config/systemd/user/op-macmini-token"
-
-    if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN_FILE:-}" && -f "$token_file" ]]; then
-      log_debug "loading OP_SERVICE_ACCOUNT_TOKEN from explicit path: $token_file"
-      OP_SERVICE_ACCOUNT_TOKEN="$(cat "$token_file" 2>/dev/null || true)"
-      export OP_SERVICE_ACCOUNT_TOKEN
-    elif [[ -f "$epyc12_file" ]]; then
-      # Explicit, stable fallback for the canonical epyc12 runtime.
-      log_debug "loading OP_SERVICE_ACCOUNT_TOKEN from epyc12 path: $epyc12_file"
-      OP_SERVICE_ACCOUNT_TOKEN="$(cat "$epyc12_file" 2>/dev/null || true)"
-      export OP_SERVICE_ACCOUNT_TOKEN
-    elif [[ -f "$token_file" ]]; then
-      log_debug "loading OP_SERVICE_ACCOUNT_TOKEN from host path: $token_file"
-      OP_SERVICE_ACCOUNT_TOKEN="$(cat "$token_file" 2>/dev/null || true)"
-      export OP_SERVICE_ACCOUNT_TOKEN
-    elif [[ -f "$legacy_file" ]]; then
-      log_debug "loading OP_SERVICE_ACCOUNT_TOKEN from legacy: $legacy_file"
-      OP_SERVICE_ACCOUNT_TOKEN="$(cat "$legacy_file" 2>/dev/null || true)"
-      export OP_SERVICE_ACCOUNT_TOKEN
-    fi
-  fi
-
-  # Attempt to read from 1Password
-  # Redirect stderr to suppress op's verbose error messages
   local token
-  if ! token="$(op read "$ref" 2>/dev/null)"; then
+  if ! token="$(DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "$ref" "zai_api_key" 2>/dev/null)"; then
     _print_op_resolution_error "$ref"
     return 1
   fi
 
   # Validate we got something
   if [[ -z "$token" ]]; then
-    log_error "op read returned empty value for: $ref"
-    log_error "  The secret may be empty or you may not have access."
+    log_error "cached secret lookup returned empty value for category: $(auth_source_category)"
     return 1
   fi
 
@@ -314,20 +305,18 @@ _resolve_op_reference() {
 _print_op_resolution_error() {
   local ref="$1"
 
-  log_error "Failed to resolve op:// reference."
+  log_error "Failed to resolve op:// reference from agent-safe cache."
   log_error ""
-  log_error "Resolution path attempted: $ref"
+  log_error "Secret reference category: $(auth_source_category)"
   log_error ""
   log_error "Possible causes:"
-  log_error "  1. OP_SERVICE_ACCOUNT_TOKEN not set or expired"
-  log_error "  2. Token file not found at expected location"
-  log_error "  3. 1Password CLI (op) not authenticated"
-  log_error "  4. Service account lacks access to specified vault/item"
+  log_error "  1. Synced OP cache is missing or stale"
+  log_error "  2. Agent-Secrets-Production cache lacks the requested field"
+  log_error "  3. This host is relying on human GUI-backed op instead of agent cache"
   log_error ""
   log_error "Remediation:"
-  log_error "  - For remote hosts: Run ~/agent-skills/scripts/create-op-credential.sh"
-  log_error "  - For local dev: Ensure 'op signin' has been run"
-  log_error "  - For CI: Set OP_SERVICE_ACCOUNT_TOKEN directly"
+  log_error "  - Sync the agent-safe OP cache from epyc12 or run the bootstrap auth flow"
+  log_error "  - For CI/remote hosts: provide CC_GLM_TOKEN_FILE or CC_GLM_AUTH_TOKEN"
   log_error "  - Alternative: Set CC_GLM_AUTH_TOKEN, CC_GLM_TOKEN_FILE, or ZAI_API_KEY directly"
   log_error ""
   log_error "To bypass this error (not recommended): CC_GLM_ALLOW_FALLBACK=1"
@@ -352,6 +341,20 @@ resolve_exit=0
 # Try to resolve token using the unified resolver.
 # Capture stdout only so debug/error logs on stderr never pollute token parsing.
 token="$(resolve_glm_auth_token)" || resolve_exit=$?
+
+if [[ "$AUTH_CHECK_ONLY" == "1" ]]; then
+  if [[ -n "${token:-}" ]]; then
+    log_info "AUTH_CHECK_OK source_category=$(auth_source_category)"
+    exit 0
+  fi
+  log_error "AUTH_CHECK_FAILED source_category=$(auth_source_category)"
+  echo "reason_code=secret_auth_resolution_failed_after_preflight" >&2
+  echo "secret_ref_category=$(auth_source_category)" >&2
+  if [[ "$resolve_exit" -eq 11 ]]; then
+    exit 11
+  fi
+  exit 10
+fi
 
 # Determine token source for logging
 if [[ -n "${token:-}" ]]; then
@@ -399,9 +402,9 @@ if [[ -z "${token:-}" ]]; then
     log_error "No auth token could be resolved from:"
     log_error "  1. CC_GLM_AUTH_TOKEN (not set)"
     log_error "  2. CC_GLM_TOKEN_FILE (not set or file error)"
-    log_error "  3. ZAI_API_KEY (not set or op:// resolution failed)"
-    log_error "  4. CC_GLM_OP_URI (not set or op:// resolution failed)"
-    log_error "  5. Default op:// fallback (resolution failed)"
+    log_error "  3. ZAI_API_KEY (not set or cached op:// resolution failed)"
+    log_error "  4. CC_GLM_OP_URI (not set or cached op:// resolution failed)"
+    log_error "  5. Default op:// fallback (cached resolution failed)"
     log_error ""
     log_error "Required action: Set one of these environment variables:"
     log_error ""
@@ -411,14 +414,13 @@ if [[ -z "${token:-}" ]]; then
     log_error "  Option B (recommended for CI/remote with env vars):"
     log_error "    export CC_GLM_AUTH_TOKEN='your-token-here'"
     log_error ""
-    log_error "  Option C (with 1Password CLI):"
+    log_error "  Option C (agent-safe cache or direct token):"
     log_error "    export ZAI_API_KEY='your-token-or-op://reference'"
     log_error ""
     log_error "  Option D (explicit op:// reference):"
     log_error "    export CC_GLM_OP_URI='op://vault/item/field'"
     log_error ""
-    log_error "For remote hosts, ensure OP_SERVICE_ACCOUNT_TOKEN is available:"
-    log_error "  ~/agent-skills/scripts/create-op-credential.sh"
+    log_error "For agents, ensure the synced OP cache is available; do not rely on raw op."
     log_error ""
     log_error "To allow fallback (not recommended for parallel jobs):"
     log_error "  CC_GLM_ALLOW_FALLBACK=1 cc-glm-headless.sh ..."

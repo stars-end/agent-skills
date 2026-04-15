@@ -456,7 +456,7 @@ if command -v railway >/dev/null 2>&1; then
     echo "✅ railway: inside Railway shell context (PROJECT_ID/ENVIRONMENT set)"
   else
     echo "⚠️  railway: NOT IN SHELL (optional for local dev, see ENV_SOURCES_CONTRACT.md)"
-    echo "   For CI/CD: export RAILWAY_API_TOKEN=\$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')"
+    echo "   For CI/CD: use ~/agent-skills/scripts/dx-load-railway-auth.sh -- <command>"
     missing_optional=$((missing_optional+1))
   fi
 else

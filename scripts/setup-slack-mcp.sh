@@ -30,8 +30,7 @@ fi
 if [ -z "${SLACK_MCP_XOXP_TOKEN:-}" ]; then
     echo "⚠️  SLACK_MCP_XOXP_TOKEN not set (optional for config setup)"
     echo "   Set in your shell profile: export SLACK_MCP_XOXP_TOKEN='xoxp-...'"
-    echo "   Or load from 1Password:"
-    echo "   export SLACK_MCP_XOXP_TOKEN=\$(op read 'op://dev/Agent-Secrets-Production/SLACK_MCP_XOXP_TOKEN')"
+    echo "   Or load via the agent-safe secret cache before running this setup."
 else
     echo "✅ SLACK_MCP_XOXP_TOKEN is set"
 fi
@@ -180,8 +179,7 @@ echo "Provide these per-session (recommended):"
 echo "  export SLACK_MCP_XOXP_TOKEN=...          # load from 1Password"
 echo "  export SLACK_MCP_ADD_MESSAGE_TOOL=true   # optional"
 echo ""
-echo "Load from 1Password (recommended):"
-echo "  export SLACK_MCP_XOXP_TOKEN=\$(op item get --vault dev Slack-MCP-Secrets --fields label=xoxp_token)"
+echo "Load from the agent-safe secret cache when automation needs this token."
 echo ""
 echo "=== Verification Commands ==="
 echo "After restarting your IDE/CLI session, verify Slack MCP is configured:"

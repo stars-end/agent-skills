@@ -263,8 +263,9 @@ The cached ZAI_API_KEY may expire and need refresh. Symptoms:
 
 **To refresh the key:**
 ```bash
-# Method 1: From 1Password (if op is signed in)
-op read "op://dev/gz4ahkc3fldjqtdnack6rjzijy/o7i32t3d5qf25qsfii23x4fnyi" > ~/.config/secret-cache/secrets.env.new
+# Method 1: From the agent-safe cache helper
+source ~/agent-skills/scripts/lib/dx-auth.sh
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/gz4ahkc3fldjqtdnack6rjzijy/o7i32t3d5qf25qsfii23x4fnyi" "zai_api_key" > ~/.config/secret-cache/secrets.env.new
 mv ~/.config/secret-cache/secrets.env.new ~/.config/secret-cache/secrets.env
 
 # Method 2: From .zshrc (if recently updated there)

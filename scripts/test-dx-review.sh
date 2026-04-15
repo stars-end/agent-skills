@@ -58,7 +58,8 @@ case "$cmd" in
         if [[ "${DX_REVIEW_FAKE_CC_GLM_START_FAIL:-0}" == "1" ]]; then
           mkdir -p "$state_dir"
           printf '1\n' > "$state_dir/${beads}.start_failed"
-          echo "reason_code=cc_glm_auth_missing"
+          echo "reason_code=secret_auth_resolution_failed_after_preflight"
+          echo "secret_ref_category=op-ref:default-Agent-Secrets-Production-ZAI_API_KEY"
           echo "preflight gate failed for provider cc-glm" >&2
           exit 22
         fi
@@ -192,6 +193,12 @@ test_parallel_start_and_glm_fallback() {
         pass "cc-glm start failure launches OpenCode fallback and preserves successful logical quorum"
     else
         fail "cc-glm fallback behavior incorrect: rc=$rc output=$out"
+    fi
+
+    if echo "$out" | grep -q "secret_auth_resolution_failed_after_preflight"; then
+        pass "cc-glm auth start failure preserves specific secret resolution reason"
+    else
+        fail "cc-glm auth start failure did not preserve specific reason: $out"
     fi
 
     local glm_checks

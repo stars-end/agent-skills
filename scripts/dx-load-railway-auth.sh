@@ -42,7 +42,12 @@ case "${1:-}" in
     fi
     dx_auth_load_railway_api_token
     if [[ "$op_service_loaded" == "1" ]]; then
-      op whoami
+      if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]] && dx_auth_op_token_valid "$OP_SERVICE_ACCOUNT_TOKEN"; then
+        echo "OP: service-account-token verified"
+      else
+        echo "OP: service-account-token invalid" >&2
+        exit 1
+      fi
     else
       echo "OP: cache-only/no-service-account-token"
     fi

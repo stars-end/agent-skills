@@ -14,8 +14,9 @@
 
 **Access pattern:**
 ```bash
-op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
-op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN"
+source ~/agent-skills/scripts/lib/dx-auth.sh
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/ZAI_API_KEY" "zai_api_key"
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN" "railway_api_token"
 ```
 
 **Rationale for single-item approach:**
@@ -118,7 +119,8 @@ SLACK_APP_TOKEN=op://dev/Agent-Secrets-Production/SLACK_APP_TOKEN
 
 ### Railway Context
 ```bash
-export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
+source ~/agent-skills/scripts/lib/dx-auth.sh
+export RAILWAY_API_TOKEN=$(DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN" "railway_api_token")
 ```
 
 ## Migration Guide (To Per-Service Items)

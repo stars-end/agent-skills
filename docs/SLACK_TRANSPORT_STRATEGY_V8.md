@@ -44,16 +44,16 @@ Canonical fields:
 
 Load env with service account in non-interactive contexts:
 ```bash
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat ~/.config/systemd/user/op-$(hostname)-token)"
-op whoami
-
-export RAILWAY_API_TOKEN="$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')"
+~/agent-skills/scripts/dx-op-auth-status.sh --json
+source ~/agent-skills/scripts/lib/dx-auth.sh
+export RAILWAY_API_TOKEN="$(DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN' 'railway_api_token')"
 ```
 
 Read Slack tokens directly when needed for verification:
 ```bash
-op read 'op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN'
-op read 'op://dev/Agent-Secrets-Production/SLACK_APP_TOKEN'
+source ~/agent-skills/scripts/lib/dx-auth.sh
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached 'op://dev/Agent-Secrets-Production/SLACK_BOT_TOKEN' 'slack_bot_token'
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached 'op://dev/Agent-Secrets-Production/SLACK_APP_TOKEN' 'slack_app_token'
 ```
 
 Implementation is resolved in:

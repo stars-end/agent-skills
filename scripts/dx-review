@@ -123,6 +123,9 @@ reason_from_start_log() {
             *auth_or_quota_blocked*|*"auth or quota"*)
                 value="auth_or_quota_blocked"
                 ;;
+            *secret_auth_resolution_failed_after_preflight*|*"AUTH TOKEN RESOLUTION FAILED"*|*"Failed to resolve op:// reference"*|*"No auth token could be resolved"*)
+                value="secret_auth_resolution_failed_after_preflight"
+                ;;
             *mise_untrusted*)
                 value="opencode_mise_untrusted"
                 ;;

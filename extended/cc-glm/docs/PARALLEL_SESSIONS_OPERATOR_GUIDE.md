@@ -14,8 +14,8 @@
 # Ensure cc-glm scripts are on PATH
 export PATH="$HOME/agent-skills/extended/cc-glm/scripts:$PATH"
 
-# Verify 1Password CLI auth (for API keys)
-op user get --me || op signin
+# Verify agent-safe 1Password auth (for API keys)
+~/agent-skills/scripts/dx-op-auth-status.sh --json
 
 # Create log directory
 mkdir -p /tmp/cc-glm-jobs

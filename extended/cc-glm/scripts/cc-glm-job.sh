@@ -58,8 +58,12 @@ set -euo pipefail
 #   - Operator guardrails: ANSI stripping
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 HEADLESS="${SCRIPT_DIR}/cc-glm-headless.sh"
 PTY_RUN="${SCRIPT_DIR}/pty-run.sh"
+
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/scripts/lib/dx-auth.sh"
 
 # Version for debugging
 CC_GLM_JOB_VERSION="3.4.0"
@@ -422,20 +426,12 @@ preflight_check() {
     fi
   elif [[ -n "${ZAI_API_KEY:-}" ]]; then
     if [[ "$ZAI_API_KEY" == op://* ]]; then
-      # op:// reference - check op CLI and try to resolve
-      if command -v op >/dev/null 2>&1; then
-        auth_source="ZAI_API_KEY (op://)"
-        # Try resolution (may fail if op not authenticated)
-        if op read "$ZAI_API_KEY" >/dev/null 2>&1; then
-          auth_ok=true
-        else
-          echo "OP_RESOLUTION_FAILED"
-          echo "  ERROR: Cannot resolve op:// reference - op not authenticated or token expired"
-          errors=$((errors + 1))
-        fi
+      auth_source="ZAI_API_KEY (op:// cache)"
+      if DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "$ZAI_API_KEY" "zai_api_key" >/dev/null 2>&1; then
+        auth_ok=true
       else
-        echo "OP_CLI_MISSING"
-        echo "  ERROR: ZAI_API_KEY is op:// reference but op CLI not found"
+        echo "OP_CACHE_RESOLUTION_FAILED"
+        echo "  ERROR: Cannot resolve ZAI_API_KEY from agent-safe OP cache"
         errors=$((errors + 1))
       fi
     else
@@ -443,35 +439,22 @@ preflight_check() {
       auth_source="ZAI_API_KEY"
     fi
   elif [[ -n "${CC_GLM_OP_URI:-}" ]]; then
-    auth_source="CC_GLM_OP_URI"
-    if command -v op >/dev/null 2>&1; then
-      if op read "$CC_GLM_OP_URI" >/dev/null 2>&1; then
-        auth_ok=true
-      else
-        echo "OP_RESOLUTION_FAILED"
-        echo "  ERROR: Cannot resolve CC_GLM_OP_URI"
-        errors=$((errors + 1))
-      fi
+    auth_source="CC_GLM_OP_URI (op:// cache)"
+    if DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "$CC_GLM_OP_URI" "zai_api_key" >/dev/null 2>&1; then
+      auth_ok=true
     else
-      echo "OP_CLI_MISSING"
-      echo "  ERROR: CC_GLM_OP_URI requires op CLI"
+      echo "OP_CACHE_RESOLUTION_FAILED"
+      echo "  ERROR: Cannot resolve CC_GLM_OP_URI from agent-safe OP cache"
       errors=$((errors + 1))
     fi
   else
-    # Try default op:// path
-    if command -v op >/dev/null 2>&1; then
-      auth_source="default op://"
-      if op read "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" >/dev/null 2>&1; then
-        auth_ok=true
-      else
-        echo "NO_AUTH_SOURCE"
-        echo "  ERROR: No auth source configured and default op:// resolution failed"
-        echo "  Set CC_GLM_AUTH_TOKEN, ZAI_API_KEY, or CC_GLM_OP_URI"
-        errors=$((errors + 1))
-      fi
+    auth_source="default op:// cache"
+    if DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://${CC_GLM_OP_VAULT:-dev}/Agent-Secrets-Production/ZAI_API_KEY" "zai_api_key" >/dev/null 2>&1; then
+      auth_ok=true
     else
       echo "NO_AUTH_SOURCE"
-      echo "  ERROR: No auth source configured"
+      echo "  ERROR: No auth source configured and default agent-safe OP cache resolution failed"
+      echo "  Set CC_GLM_AUTH_TOKEN, ZAI_API_KEY, or CC_GLM_OP_URI"
       errors=$((errors + 1))
     fi
   fi

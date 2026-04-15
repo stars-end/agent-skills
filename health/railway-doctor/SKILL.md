@@ -48,8 +48,8 @@ railway shell
 # Worktree/automation-safe context (no local link required):
 railway run -p <project-id> -e dev -s backend -- env | grep RAILWAY_SERVICE
 
-# Or for CI/automation, set RAILWAY_API_TOKEN from 1Password:
-export RAILWAY_API_TOKEN=$(op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN")
+# Or for CI/automation, load RAILWAY_API_TOKEN through the agent-safe cache:
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami
 ```
 
 For DB-heavy host workflows, do not hand-roll `railway run ... psql "$DATABASE_URL"` if the service injects internal-only hosts. Prefer:
