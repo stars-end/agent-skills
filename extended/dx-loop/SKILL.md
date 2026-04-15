@@ -24,6 +24,11 @@ Current baton contract:
 - implementers must return a `tech-lead-handoff` compatible `MODE: implementation_return`
 - review prompts consume that structured return and enforce the `dx-loop-review-contract`
 
+Model routing contract:
+- implementation lane: OpenCode `zhipuai/glm-5-turbo`
+- implementation fallback: OpenCode `zhipuai/glm-5`
+- review/oversight lane: GLM-5.1 where OpenCode/cc-glm review profiles are used
+
 ## When To Use
 
 - Default lane for chained and non-trivial Beads execution

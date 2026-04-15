@@ -73,7 +73,7 @@ OpenCode CLI contract is grounded in official docs:
 **Pass criteria:**
 - Binary found
 - API credentials valid
-- Canonical model available: `zhipuai/glm-5.1`
+- Canonical implementation model available: `zhipuai/glm-5-turbo`
 - If unavailable, route to `cc-glm` or `gemini`
 - Host/cwd context is emitted to aid multi-host debugging
 
@@ -215,7 +215,7 @@ reason_code=process_exit
 completed_at=2026-02-19T12:05:00Z
 duration_sec=300
 retries=0
-selected_model=zhipuai/glm-5.1
+selected_model=zhipuai/glm-5-turbo
 fallback_reason=none
 run_instance=20260219120000-opencode-12345
 host=epyc12

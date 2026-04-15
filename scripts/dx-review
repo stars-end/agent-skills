@@ -5,7 +5,7 @@ set -euo pipefail
 # Minimal review quorum wrapper over dx-runner profiles.
 # Default reviewers:
 #   - claude-code-review -> Claude Code Opus
-#   - cc-glm-review      -> GLM-5 via cc-glm transport
+#   - cc-glm-review      -> GLM-5.1 via cc-glm transport
 # Fallback:
 #   - opencode-review    -> OpenCode GLM-5.1 if cc-glm fails at start/preflight
 

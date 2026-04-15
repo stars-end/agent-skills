@@ -12,7 +12,8 @@ implement_provider: null  # defaults to provider if not set
 review_provider: null     # defaults to provider if not set
 # Phase-specific model selection (bd-5w5o.41):
 #   When null, the opencode adapter resolves the canonical default per phase.
-#   Canonical implement model: zhipuai/glm-5.1
+#   Canonical implement model: zhipuai/glm-5-turbo
+#   Canonical implement fallback model: zhipuai/glm-5
 #   Canonical review model:    zhipuai/glm-5.1
 #   Override here only when deviating from the canonical phase defaults.
 implement_model: null

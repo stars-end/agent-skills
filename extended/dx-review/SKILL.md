@@ -1,6 +1,6 @@
 ---
 name: dx-review
-description: Dispatch a low-friction review quorum through dx-review: native Claude Code Opus plus cc-glm GLM-5, with OpenCode GLM-5.1 as fallback and optional Gemini as a third reviewer. Use when the user asks for multi-model review, review quorum, Claude Code + GLM review, or a quick POC of reviewer lanes.
+description: Dispatch a low-friction review quorum through dx-review: native Claude Code Opus plus cc-glm GLM-5.1, with OpenCode GLM-5.1 as fallback and optional Gemini as a third reviewer. Use when the user asks for multi-model review, review quorum, Claude Code + GLM review, or a quick POC of reviewer lanes.
 tags: [workflow, review, dispatch, claude-code, cc-glm, opencode, dx-runner]
 allowed-tools:
   - Bash
@@ -11,7 +11,7 @@ allowed-tools:
 `dx-review` is the minimal review quorum wrapper over `dx-runner`. It launches:
 
 - `claude-code-review`: native Claude Code CLI with Opus
-- `cc-glm-review`: GLM-5 through the cc-glm wrapper
+- `cc-glm-review`: GLM-5.1 through the cc-glm wrapper
 - `opencode-review`: fallback GLM transport with `zhipuai/glm-5.1`, launched only if `cc-glm-review` fails at start/preflight
 - optional `gemini-burst`: Gemini CLI, opt-in only with `--gemini`
 
@@ -91,6 +91,7 @@ Review templates must not request PR creation, commits, pushes, or code fixes.
 - Claude Code is the `claude-code` provider, not `cc-glm`.
 - `cc-glm-review` is the primary GLM lane for `dx-review`.
 - `opencode-review` is the GLM fallback lane, not a default second GLM reviewer.
+- `cc-glm-review` model is `glm-5.1`.
 - OpenCode fallback model is `zhipuai/glm-5.1`.
 - Claude Code review model is `opus`.
 - Gemini is optional and should not block the default two-reviewer path.

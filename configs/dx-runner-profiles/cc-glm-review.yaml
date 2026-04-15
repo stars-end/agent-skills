@@ -3,12 +3,12 @@
 
 profile:
   name: cc-glm-review
-  description: Review-safe GLM dispatch through cc-glm
+  description: Review-safe GLM-5.1 dispatch through cc-glm
   version: "1.0.0"
 
 provider:
   name: cc-glm
-  model: glm-5
+  model: glm-5.1
   allow_model_override: false
   execution_mode: run
   fallback_provider: opencode

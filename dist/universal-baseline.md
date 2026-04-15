@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: e90ac84583a457cc2b3580fee522fb2a047c10b7 -->
-<!-- Last updated: 2026-04-15 05:45:27 UTC -->
+<!-- Source SHA: 52c248de1b63f0d729d694f492979187e913f92d -->
+<!-- Last updated: 2026-04-15 06:13:19 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -163,7 +163,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **\`~/bd\` is legacy/rollback Git-backed state, not active runtime truth**.
 - **Use \`bdx\` for Beads coordination commands** (\`create\`, \`show\`, \`comments add\`, \`ready\`, \`search\`, memory commands, etc.).
 - **Raw \`bd\` is reserved for local diagnostics/bootstrap/path-sensitive operations or explicit override.**
-- **Run \`dx-runner\` / \`dx-batch\` control-plane commands from non-app directories; use \`bdx\` for Beads coordination around those runs.**
+- **Run \`dx-loop\` / \`dx-runner\` / compatibility \`dx-batch\` control-plane commands from non-app directories; use \`bdx\` for Beads coordination around those runs.**
 - **Set \`BEADS_DIR=~/.beads-runtime/.beads\` in normal agent shells**.
 - **Never run mutating Beads commands from app repos** (\`~/prime-radiant-ai\`, \`~/agent-skills\`, etc.) unless explicitly using a documented override.
 - **Backend must be Dolt server mode on \`epyc12\`** for multi-VM/multi-agent reliability.
@@ -193,7 +193,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 ## 4) Delegation Rule (V8.6 - Batch by Outcome)
 - **Primary rule**: batch by outcome, not by file. One agent per coherent change set.
 - **Default parallelism**: 2 agents, scale to 3-4 only when independent and stable.
-- **Default orchestration rule**: use \`dx-batch\` over \`dx-runner\` for chained Beads work, multi-step outcomes, or implement/review baton flow.
+- **Default orchestration rule**: use \`dx-loop\` for chained Beads work, multi-step outcomes, or implement/review baton flow.
 - **Direct/manual fallback**: implement directly only for isolated single-task work or when the orchestration surface itself is the active blocker.
 - **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
 - **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
@@ -396,25 +396,31 @@ dx-runner status --json
 dx-runner check --beads bd-xxx --json
 \`\`\`
 
-**Canonical batch orchestrator: dx-batch (orchestration-only over dx-runner)**
+**Canonical batch/loop orchestrator: dx-loop (PR-aware orchestration over dx-runner)**
 
 \`\`\`bash
-# Execute implement -> review waves with deterministic ledger/contracts
-dx-batch start --items bd-aaa,bd-bbb --max-parallel 2
+# Execute implement -> review waves from a Beads epic
+dx-loop start --epic bd-aaa --repo repo-name
 
-# Diagnose stuck waves
-dx-batch doctor --wave-id <wave-id> --json
+# Diagnose task or wave state
+dx-loop explain --epic bd-aaa
+dx-loop status --epic bd-aaa --json
 \`\`\`
+
+**Compatibility/internal batch substrate: dx-batch**
+
+Use \`dx-batch\` only for legacy waves, compatibility recovery, or when the
+\`dx-loop\` surface itself is the active blocker.
 
 **Direct OpenCode lane (advanced, non-governed)**
 
 \`\`\`bash
 # Headless single-run lane
-opencode run -m zhipuai/glm-5.1 "Implement task T1 from plan.md"
+opencode run -m zhipuai/glm-5-turbo "Implement task T1 from plan.md"
 
 # Legacy server lane for parallel clients (opt-in only)
 opencode serve --hostname 127.0.0.1 --port 4096
-opencode run --attach http://127.0.0.1:4096 -m zhipuai/glm-5.1 "Implement task T2 from plan.md"
+opencode run --attach http://127.0.0.1:4096 -m zhipuai/glm-5-turbo "Implement task T2 from plan.md"
 \`\`\`
 
 **Reliability backstop: cc-glm via dx-runner**
@@ -459,7 +465,7 @@ Task:
 - Use \`report --format json\` as the source of truth for outcome and metrics.
 - Prefer one controlled restart max; then escalate using failure taxonomy.
 - Run \`dx-runner prune\` periodically to clear stale PID ghosts.
-- For OpenCode, enforce canonical model \`zhipuai/glm-5.1\`; fallback provider if unavailable.
+- For OpenCode implementation, enforce canonical model \`zhipuai/glm-5-turbo\`; fallback to \`zhipuai/glm-5\` if turbo is unavailable. Review/oversight lanes use \`zhipuai/glm-5.1\`.
 
 ### Monitoring (Simplified)
 
@@ -592,17 +598,17 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **brownfield-map-first** | Route brownfield implementation work through repo-owned architecture maps before code changes. Use when tracing existing pipelines, data/storage boundaries, frontend read models, or when avoiding repeated rediscovery in large existing systems. | — | workflow, brownfield, repo-memory, architecture |
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban views, dependency graphs, and the robot-plan API for auto-selecting next tasks. Keywords: beads, viewer, kanban, dependency graph, robot-plan, task selection, bottleneck | — | workflow, beads, visualization, task-selection |
 | **cass-memory** | Pilot-only CLI episodic memory workflow for explicit cross-agent memory experiments. | — |  |
-| **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary implementation dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. For dx-review, cc-glm is the primary GLM review lane and OpenCode is fallback. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode |
+| **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary implementation dispatch is OpenCode glm-5-turbo with glm-5 fallback; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. For dx-review, cc-glm is the primary GLM-5.1 review lane and OpenCode is fallback. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode |
 | **cli-mastery** | CLI environment and command-line usage guidance for Railway, GitHub, and general repo workflows. | — |  |
 | **context-plus** | REMOVED from canonical fleet contract (bd-rb0c.8). context-plus was fully removed in favor of llm-tldr for semantic discovery and serena for symbol-aware edits. This skill is retained as a tombstone only. | — |  |
 | **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with dx-runner as canonical governance surface, OpenCode as primary execution lane, and cc-glm as reliability backstop. dx-dispatch is break-glass only. | — |  |
 | **design-md** | Analyze Stitch projects and synthesize a semantic design system into DESIGN.md files | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty or WIP repositories. Standardizes snapshotting uncommitted work to a WIP branch before destructive operations. | — |  |
-| **dx-batch** | Deterministic orchestration over dx-runner for autonomous implement->review waves. Orchestrates 2-3 parallel tasks across 15-20 Beads items with strict lease locking, persistent ledger, and machine-readable contracts. Use for batch execution of implementation tasks with automatic review cycles. | `dx-batch start --items bd-aaa,bd-bbb,bd-ccc [--max-parallel ` | workflow, orchestration, batch, dx-runner, governance, parallel |
+| **dx-batch** | Compatibility/internal batch substrate over dx-runner for legacy autonomous implement->review waves. Prefer dx-loop for new chained Beads work, multi-step outcomes, and implement/review baton flow. Use dx-batch only for legacy wave recovery, compatibility debugging, or when dx-loop itself is the active blocker. | `dx-batch start --items bd-aaa,bd-bbb,bd-ccc [--max-parallel ` | workflow, orchestration, batch, dx-runner, governance, parallel, compatibility |
 | **dx-loop-review-contract** | Deterministic review contract for dx-loop reviewer runs. Enforces findings-first review style, concrete verdicts, and machine-actionable end states for baton automation. | — | workflow, review, dx-loop, baton |
 | **dx-loop** | `dx-loop` is the default execution surface for chained Beads work, multi-step outcomes, and implement/review baton flows. It is a PR-aware orchestration surface that reuses Ralph's proven patterns (baton, topological dependencies, checkpoint/resume) while replacing the control plane with governed `dx-runner` dispatch and enforcing PR artifact contracts. | `dx-ensure-bins.sh` |  |
 | **dx-research** | Source-backed deep research wrapper over dx-runner for agent use. Use when the goal is evidence-based research and decision memo output, not implementation dispatch or code-review quorum. | `dx-research run \` | workflow, research, evidence, decision-memo, dx-runner, gemini, cc-glm |
-| **dx-review** | Dispatch a low-friction review quorum through dx-review: native Claude Code Opus plus cc-glm GLM-5, with OpenCode GLM-5.1 as fallback and optional Gemini as a third reviewer. Use when the user asks for multi-model review, review quorum, Claude Code + GLM review, or a quick POC of reviewer lanes. | `dx-review run \` | workflow, review, dispatch, claude-code, cc-glm, opencode, dx-runner |
+| **dx-review** | Dispatch a low-friction review quorum through dx-review: native Claude Code Opus plus cc-glm GLM-5.1, with OpenCode GLM-5.1 as fallback and optional Gemini as a third reviewer. Use when the user asks for multi-model review, review quorum, Claude Code + GLM review, or a quick POC of reviewer lanes. | `dx-review run \` | workflow, review, dispatch, claude-code, cc-glm, opencode, dx-runner |
 | **dx-runner** | Canonical unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, claude-code, or gemini providers with unified preflight, gates, and failure taxonomy. Use when dispatching agent tasks, running headless jobs, or managing parallel agent sessions. | `dx-runner start --beads bd-xxx --provider cc-glm --worktree ` | workflow, dispatch, governance, multi-provider, automation |
 | **fleet-sync** | Fleet Sync orchestrator for MCP tool convergence, health checks, and IDE config management across canonical VMs. | — |  |
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |

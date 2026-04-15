@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: e90ac84583a457cc2b3580fee522fb2a047c10b7
-last_verified_at: 2026-04-15T21:20:00Z
+last_verified_commit: bed553a7b838847b158a726afbf2ab3df1434e04
+last_verified_at: 2026-04-15T16:24:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -48,10 +48,23 @@ Architecture review should evaluate:
 - complexity budget
 - repo-memory compliance for brownfield work
 
+## Core Pattern: Runner Surfaces
+
+- `dx-loop` is the canonical batch/loop surface for chained Beads work and
+  implement/review baton flow.
+- `dx-review` is review-only: Claude Opus plus GLM-5.1 quorum, with optional
+  Gemini.
+- `dx-runner` owns provider launch, preflight, logs, failure taxonomy, and
+  model enforcement.
+- OpenCode implementation defaults to `zhipuai/glm-5-turbo`; if unavailable,
+  the implementation fallback is `zhipuai/glm-5`. Review/oversight lanes remain
+  on GLM-5.1.
+- `dx-batch` remains compatibility/internal substrate, not the default
+  agent-facing orchestration surface.
+
 ## Pilot Adoption Checklist
 
 - map docs exist and are linked by AGENTS routing policy
 - stale-if coverage exists for map docs
 - brownfield tasks route through map docs first
 - review prompts check repo-memory compliance
-
