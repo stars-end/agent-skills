@@ -17,6 +17,7 @@ REPO_PATH="$HOME/agent-skills"
 STATE_ROOT="${DX_REPO_MEMORY_STATE_ROOT:-$HOME/.dx-state/repo-memory}"
 AGE_DAYS="${DX_REPO_MEMORY_AGE_DAYS:-30}"
 BRANCH="automation/repo-memory-refresh"
+DEFAULT_BRANCH=""
 MODEL="${DX_REPO_MEMORY_MODEL:-gpt-5.4}"
 EFFORT="${DX_REPO_MEMORY_EFFORT:-high}"
 CODEX_SANDBOX="${DX_REPO_MEMORY_CODEX_SANDBOX:-danger-full-access}"
@@ -108,6 +109,9 @@ preflight() {
   [[ -f "$PROMPT_FILE" ]] || die "prompt file missing: $PROMPT_FILE"
   [[ -d "$REPO_PATH/.git" || -f "$REPO_PATH/.git" ]] || die "repo path is not a git checkout: $REPO_PATH"
 
+  DEFAULT_BRANCH="$(git -C "$REPO_PATH" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || true)"
+  [[ -n "$DEFAULT_BRANCH" ]] || DEFAULT_BRANCH="master"
+
   if ! codex login status >/dev/null 2>&1; then
     die "codex login status failed"
   fi
@@ -151,11 +155,7 @@ invoke_fallback() {
 
 prepare_worktree() {
   local worktree="$1"
-  local default_branch
-  default_branch="$(git -C "$REPO_PATH" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || true)"
-  [[ -n "$default_branch" ]] || default_branch="master"
-
-  git -C "$REPO_PATH" fetch origin "$default_branch" "$BRANCH" >/dev/null 2>&1 || git -C "$REPO_PATH" fetch origin "$default_branch" >/dev/null
+  git -C "$REPO_PATH" fetch origin "$DEFAULT_BRANCH" "$BRANCH" >/dev/null 2>&1 || git -C "$REPO_PATH" fetch origin "$DEFAULT_BRANCH" >/dev/null
   git -C "$REPO_PATH" worktree prune >/dev/null 2>&1 || true
 
   local existing_worktree
@@ -167,7 +167,7 @@ prepare_worktree() {
 
   rm -rf "$worktree"
   mkdir -p "$(dirname "$worktree")"
-  git -C "$REPO_PATH" worktree add -B "$BRANCH" "$worktree" "origin/$default_branch" >/dev/null || die "failed to create refresh worktree"
+  git -C "$REPO_PATH" worktree add -B "$BRANCH" "$worktree" "origin/$DEFAULT_BRANCH" >/dev/null || die "failed to create refresh worktree"
   [[ -d "$worktree/.git" || -f "$worktree/.git" ]] || die "refresh worktree was not created: $worktree"
   git -C "$worktree" config user.name "repo-memory-refresh"
   git -C "$worktree" config user.email "repo-memory-refresh@users.noreply.github.com"
@@ -237,24 +237,37 @@ commit_push_pr() {
   fi
 
   if [[ "$CREATE_PR" -eq 1 ]]; then
-    if gh -R "stars-end/$REPO_NAME" pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty' | grep -q .; then
-      local pr
-      pr="$(gh -R "stars-end/$REPO_NAME" pr list --head "$BRANCH" --state open --json number --jq '.[0].number')"
-      gh -R "stars-end/$REPO_NAME" pr comment "$pr" --body "Repo-memory refresh updated by run $run_id." >/dev/null || true
+    local repo_slug="stars-end/$REPO_NAME"
+    local pr
+
+    if ! pr="$(gh -R "$repo_slug" pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"; then
+      die "gh failed while listing PRs for branch $BRANCH"
+    fi
+
+    if [[ -n "$pr" ]]; then
+      gh -R "$repo_slug" pr comment "$pr" --body "Repo-memory refresh updated by run $run_id." >/dev/null || true
       log "updated existing PR #$pr"
-    else
-      gh -R "stars-end/$REPO_NAME" pr create \
-        --draft \
-        --title "bd-s6yjk.9: automated repo-memory refresh" \
-        --body "Agent: codex-oauth-runner
+      return 0
+    fi
+
+    gh -R "$repo_slug" pr create \
+      --head "$BRANCH" \
+      --base "$DEFAULT_BRANCH" \
+      --draft \
+      --title "bd-s6yjk.9: automated repo-memory refresh" \
+      --body "Agent: codex-oauth-runner
 
 Automated repo-memory refresh.
 
 Run ID: $run_id
 
 Feature-Key: bd-s6yjk.9" >/dev/null
-      log "created draft PR for $BRANCH"
+
+    if ! pr="$(gh -R "$repo_slug" pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"; then
+      die "gh failed while verifying PR creation for branch $BRANCH"
     fi
+    [[ -n "$pr" ]] || die "gh pr create returned success but no open PR found for branch $BRANCH"
+    log "created draft PR #$pr for $BRANCH"
   fi
 }
 
@@ -309,7 +322,7 @@ main() {
     run_codex "$worktree" "$report" "$codex_output"
     log "codex output=$codex_output"
 
-    "$AGENTS_ROOT/scripts/dx-repo-memory-guard" --repo "$worktree" --base-ref "origin/master" --json > "$run_root/guard-report.json"
+    "$AGENTS_ROOT/scripts/dx-repo-memory-guard" --repo "$worktree" --base-ref "origin/$DEFAULT_BRANCH" --json > "$run_root/guard-report.json"
     "$AGENTS_ROOT/scripts/dx-repo-memory-check" --repo "$worktree" --json > "$run_root/check-report.json"
     commit_push_pr "$worktree" "$CURRENT_RUN_ID" "$action_needed"
     log "complete run_id=$CURRENT_RUN_ID"
