@@ -140,6 +140,12 @@ install_fetch_jobs() {
     "0 */2 * * * $BASH_PATH $WRAPPER reconcile -- $AGENTS_ROOT/scripts/canonical-reconcile.sh >> $HOME/logs/dx/reconcile.log 2>&1"
 }
 
+install_tldr_semantic_prewarm_job() {
+  remove_wrapper_job_entries "tldr-semantic-prewarm" "tldr-semantic-prewarm.sh"
+  install_cron_entry "DX spoke: tldr-semantic-prewarm" \
+    "27 */6 * * * $BASH_PATH $WRAPPER tldr-semantic-prewarm -- $AGENTS_ROOT/scripts/tldr-semantic-prewarm.sh --canonical --active-worktrees --since-hours 48 >> $HOME/logs/dx/tldr-semantic-prewarm.log 2>&1"
+}
+
 install_cache_sync_job() {
   if [[ "$(host_key)" == "epyc12" ]]; then
     printf 'Skipping OP cache sync on epyc12 cache source host\n'
@@ -153,6 +159,7 @@ install_cache_sync_job() {
 
 main() {
   install_fetch_jobs
+  install_tldr_semantic_prewarm_job
   install_cache_sync_job
 }
 
