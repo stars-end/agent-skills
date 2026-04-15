@@ -64,6 +64,9 @@ Expected summarize output includes:
 - `process_success`, `review_success`, and `usable_review` so process exit 0
   is not confused with a usable review body
 - per-reviewer state/verdict/failure signals
+- runtime failure diagnostics from `dx-runner` when available:
+  `failure_class`, `failure_detail`, `retryable`, `provider`, `model`,
+  `provider_exit_code`, `log_excerpt`, and `next_action`
 - findings counts
 - token/cost usage when available
 - mutation count/warnings in read-only runs
@@ -115,6 +118,10 @@ Review templates must not request PR creation, commits, pushes, or code fixes.
 
 - If `claude-code-review` fails preflight, check Claude Code auth/model availability with `dx-runner preflight --profile claude-code-review --worktree <path>`.
 - If `cc-glm-review` fails preflight, `dx-review run` tries `opencode-review` once as GLM fallback. Check `dx-runner preflight --profile cc-glm-review --worktree <path>` before debugging OpenCode.
+- If a reviewer fails after start with `provider_rate_limited`, treat it as a
+  retryable provider/runtime failure, not a review verdict. Follow the
+  `next_action` in `summary.json` / `summary.md`; typical action is retry after
+  backoff or rerun with a fallback reviewer.
 - `cc-glm-review` preflight must exercise the same `cc-glm-headless`
   token-resolution path as live runs. A Z.ai secret failure should surface as
   `secret_auth_resolution_failed_after_preflight` with a redacted

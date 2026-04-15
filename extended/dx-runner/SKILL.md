@@ -161,6 +161,17 @@ Generate job report:
 dx-runner report --beads <id> [--format json|markdown]
 ```
 
+JSON reports include provider/runtime failure diagnostics when available:
+- `failure_class`
+- `failure_detail`
+- `retryable`
+- `provider_exit_code`
+- `log_excerpt`
+- `next_action`
+
+Rate-limit and quota failures detected in provider logs should classify as
+`provider_rate_limited` and set `retryable=true`.
+
 ### preflight
 
 Run preflight checks:
