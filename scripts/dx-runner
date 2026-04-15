@@ -1014,6 +1014,16 @@ classify_exit_reason() {
         fi
     fi
 
+    if [[ "$provider" == "cc-glm" ]]; then
+        if [[ "$lowered" == *"auth token resolution failed"* \
+            || "$lowered" == *"auth_check_failed"* \
+            || "$lowered" == *"failed to resolve op:// reference"* \
+            || "$lowered" == *"no auth token could be resolved"* ]]; then
+            echo "secret_auth_resolution_failed_after_preflight"
+            return 0
+        fi
+    fi
+
     echo "$fallback_reason"
 }
 
@@ -1046,6 +1056,9 @@ next_action_for_reason() {
             ;;
         opencode_attach_mode_unavailable|opencode_attach_missing_url)
             echo "use_headless_run_or_provide_attach_url_with_supported_cli"
+            ;;
+        secret_auth_resolution_failed_after_preflight)
+            echo "repair_cc_glm_secret_resolution_or_use_opencode_fallback"
             ;;
         worktree_missing_for_opencode)
             echo "pass_valid_worktree_or_run_from_task_worktree"

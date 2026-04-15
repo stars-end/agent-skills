@@ -164,8 +164,8 @@ if [[ -n "${RAILWAY_API_TOKEN:-}" ]]; then
     echo "✅ RAILWAY_API_TOKEN: Set"
 else
     echo "⚠️  RAILWAY_API_TOKEN: Not set"
-    echo "   Load from 1Password:"
-    echo "   export RAILWAY_API_TOKEN=\$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')"
+    echo "   Load from the agent-safe cache:"
+    echo "   ~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami"
 fi
 echo ""
 
@@ -197,8 +197,8 @@ if [[ "$RAILWAY_REQUIRED" == "true" ]]; then
         echo "❌ FAIL: RAILWAY_API_TOKEN must be set for '$MODE' mode" >&2
         echo "" >&2
         echo "Required actions:" >&2
-        echo "  1. Load token from 1Password:" >&2
-        echo "     export RAILWAY_API_TOKEN=\$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')" >&2
+        echo "  1. Load token through the agent-safe cache:" >&2
+        echo "     ~/agent-skills/scripts/dx-load-railway-auth.sh -- railway whoami" >&2
         echo "  2. Or use interactive mode: railway login" >&2
         echo "  3. Or use local-dev mode (if Railway not needed)" >&2
         exit 1

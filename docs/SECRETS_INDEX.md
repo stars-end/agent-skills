@@ -42,14 +42,12 @@ This is the **canonical source** for all DX/dev workflow secrets. All agents and
 ### Reading Secrets (No jq Required)
 
 ```bash
-# List all field labels (portable, no jq)
-op item get --vault dev Agent-Secrets-Production | grep -E "^[A-Z_]+:" | cut -d: -f1
-
-# Read a single secret
-op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+# Read a single secret through the cache helper
+source ~/agent-skills/scripts/lib/dx-auth.sh
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/ZAI_API_KEY" "zai_api_key"
 
 # Read Railway token
-op read "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN"
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN" "railway_api_token"
 ```
 
 ---
@@ -105,6 +103,7 @@ Use them inside Railway context:
 Do not do this:
 
 ```bash
+# HUMAN_RECOVERY_ONLY: raw `op read` against runtime secrets is not for agents.
 op read "op://dev/prime-radiant-dev/EODHD_CRON_SHARED_SECRET"
 ```
 
@@ -127,7 +126,8 @@ Acceptable agent modes:
 
 `human_interactive_only` means 1Password GUI-backed `op` works for a human on
 macOS, but the agent-safe cache/service-account path still needs to be fixed.
-This path can require `op signin` again after the device or 1Password locks.
+This path can require the 1Password app to be unlocked again after the device
+or 1Password locks. That is human bootstrap only.
 
 ### One-Time Service-Account Setup (When Cache Is Not Enough)
 
@@ -153,6 +153,7 @@ This creates:
 ### Human macOS Bootstrap Verification
 
 ```bash
+# HUMAN_RECOVERY_ONLY: human macOS bootstrap verification
 op signin
 op whoami
 ```
@@ -162,7 +163,7 @@ human setup/recovery. It is not agent readiness because it depends on local
 unlock/session state.
 
 ```bash
-# List available items after GUI-backed CLI integration is enabled.
+# HUMAN_RECOVERY_ONLY: list available items after GUI-backed CLI integration is enabled.
 op item list --vault dev
 ```
 
@@ -212,6 +213,7 @@ All services use `Agent-Secrets-Production` as their secrets source:
 Field labels are case-sensitive. Verify exact label name:
 
 ```bash
+# HUMAN_RECOVERY_ONLY: verify exact field labels with raw `op item get`.
 op item get --vault dev Agent-Secrets-Production
 ```
 

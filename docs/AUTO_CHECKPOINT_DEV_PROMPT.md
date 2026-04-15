@@ -31,8 +31,9 @@ You're implementing an auto-checkpoint system for a multi-VM development environ
 mkdir -p ~/.config/secret-cache
 chmod 700 ~/.config/secret-cache
 
-# 2. Get ZAI_API_KEY from 1Password (one-time, manual)
-op read "op://dev/Zhipu-Config/ZAI_API_KEY"
+# 2. Get ZAI_API_KEY from the cache helper (one-time)
+source ~/agent-skills/scripts/lib/dx-auth.sh
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Zhipu-Config/ZAI_API_KEY" "zai_api_key"
 
 # 3. Create secrets.env
 cat > ~/.config/secret-cache/secrets.env << 'EOF'

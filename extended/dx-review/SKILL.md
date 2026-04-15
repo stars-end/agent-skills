@@ -106,6 +106,10 @@ Review templates must not request PR creation, commits, pushes, or code fixes.
 
 - If `claude-code-review` fails preflight, check Claude Code auth/model availability with `dx-runner preflight --profile claude-code-review --worktree <path>`.
 - If `cc-glm-review` fails preflight, `dx-review run` tries `opencode-review` once as GLM fallback. Check `dx-runner preflight --profile cc-glm-review --worktree <path>` before debugging OpenCode.
+- `cc-glm-review` preflight must exercise the same `cc-glm-headless`
+  token-resolution path as live runs. A Z.ai secret failure should surface as
+  `secret_auth_resolution_failed_after_preflight` with a redacted
+  `secret_ref_category`, not a raw secret or full `op://` URI.
 - If `opencode-review` fallback fails preflight, check `opencode models` and `dx-runner preflight --profile opencode-review --worktree <path>`.
 - If OpenCode fallback reports `opencode_mise_untrusted`, run the exact `mise trust '<path>'` command emitted by preflight.
 - `beads-mcp binary: MISSING` is an expected warning on hosts without the optional Beads MCP helper. It does not block the fallback OpenCode review lane unless a profile explicitly escalates `beads_mcp_missing` to error.

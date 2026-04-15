@@ -20,7 +20,8 @@ For Agent Coordination Slack transport precedence and when OpenClaw is used for 
 
 **Access pattern:**
 ```bash
-op read "op://dev/Agent-Secrets-Production/<FIELD>"
+source ~/agent-skills/scripts/lib/dx-auth.sh
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/<FIELD>" "<field_name>"
 ```
 
 **Benefits:**
@@ -49,10 +50,11 @@ op run -- -- your-command-here
 ### ✅ SAFE: Read Individual Secrets (for verification only)
 
 ```bash
-# Read a single secret value (outputs to stdout only)
-op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+# Read a single secret value through the cache helper
+source ~/agent-skills/scripts/lib/dx-auth.sh
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/ZAI_API_KEY" "zai_api_key"
 
-# Or get all fields
+# HUMAN_RECOVERY_ONLY: use the GUI or raw `op item get` to inspect all fields.
 op item get --vault dev "Agent-Secrets-Production"
 ```
 
@@ -116,7 +118,8 @@ shred -u secret_template.json
 **Option 2: Use Environment Variable + op run**
 ```bash
 # Load secret into environment (from secure source)
-export API_KEY="$(op read "op://dev/Item/SECRET")"
+source ~/agent-skills/scripts/lib/dx-auth.sh
+export API_KEY="$(DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached 'op://dev/Item/SECRET' 'secret')"
 
 # Edit with op run (resolves op:// but doesn't log value)
 echo "API_KEY[password]=$API_KEY" | op item edit "Item" --vault dev -
@@ -198,8 +201,8 @@ For the canonical dev/staging VM fleet, unattended `op` access is centralized on
 
 - macOS 1Password GUI + `op` CLI integration is a human bootstrap and recovery
   path.
-- GUI-backed `op` may require `op signin` again after device lock or 1Password
-  lock.
+- GUI-backed `op` may require re-auth after device lock or 1Password lock.
+  HUMAN_RECOVERY_ONLY.
 - Agents, cron jobs, and LaunchAgents must not rely on GUI unlock state.
 - A Mac is agent-ready only when `~/agent-skills/scripts/dx-bootstrap-auth.sh
   --json` reports green with `agent_ready_cache` or
@@ -296,8 +299,8 @@ echo "SECRET CLEANUP" > ~/.bash_history  # or ~/.zsh_history
 **Cause:** op:// references can't be resolved (missing item or field)
 **Fix:**
 1. Check journalctl: `journalctl --user -u opencode -n 50`
-2. Verify item exists: `op item list --vault dev`
-3. Verify field exists: `op item get "Agent-Secrets-Production" --vault dev`
+2. HUMAN_RECOVERY_ONLY: verify item exists with `op item list --vault dev`
+3. HUMAN_RECOVERY_ONLY: verify field exists with `op item get "Agent-Secrets-Production" --vault dev`
 
 ## References
 

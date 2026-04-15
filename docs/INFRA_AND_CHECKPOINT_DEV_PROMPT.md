@@ -93,7 +93,7 @@ chmod 600 ~/.config/systemd/user/dx-dispatch-token
 ```bash
 # On each VM, verify token is readable
 export OP_SERVICE_ACCOUNT_TOKEN=$(cat ~/.config/systemd/user/<service-account>-token)
-op whoami
+~/agent-skills/scripts/dx-op-auth-status.sh --json
 # Should show: "User Type: SERVICE ACCOUNT"
 ```
 
@@ -247,7 +247,8 @@ cat > ~/.config/secret-cache/secrets.env << 'EOF'
 # Rotation: 30 days
 
 ZAI_API_KEY=REPLACE_WITH_ACTUAL_KEY_FROM_1PASSWORD
-# To get the key, run: op read "op://dev/Zhipu-Config/ZAI_API_KEY"
+# To get the key, source ~/agent-skills/scripts/lib/dx-auth.sh and use:
+# DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Zhipu-Config/ZAI_API_KEY" "zai_api_key"
 EOF
 
 # 3. Set restrictive permissions

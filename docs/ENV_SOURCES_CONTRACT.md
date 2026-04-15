@@ -45,9 +45,8 @@ directly.
 - macOS unattended cron paths must not invoke live `op` refreshes.
 - macOS GUI-backed `op` is allowed for a human bootstrap terminal only; it is
   not an agent or cron dependency.
-- Human macOS terminals may require `op signin` after each device/1Password
-  unlock before `op whoami` or `op read` succeeds.
-- Agent readiness is checked with
+- Human macOS terminals may require the 1Password app to be unlocked before
+  legacy GUI-backed `op` verification succeeds. Agents check readiness with
   `~/agent-skills/scripts/dx-op-auth-status.sh --json`.
 
 ### 2. Railway CLI Login (Authenticated Session)
@@ -140,7 +139,7 @@ set -euo pipefail
 # Fail hard if Railway token required but not set
 if [[ -z "${RAILWAY_API_TOKEN:-}" ]]; then
     echo "ERROR: RAILWAY_API_TOKEN must be set for this script" >&2
-    echo "Load from 1Password: export RAILWAY_API_TOKEN=\$(op read 'op://dev/Agent-Secrets-Production/RAILWAY_API_TOKEN')" >&2
+    echo "Load Railway auth with: ~/agent-skills/scripts/dx-load-railway-auth.sh -- <command>" >&2
     exit 1
 fi
 ```
@@ -166,8 +165,9 @@ esac
 ### Rule 3: Secret Loading
 Scripts MUST use 1Password for secrets, NEVER hardcode:
 ```bash
-# CORRECT: Load from 1Password
-ANTHROPIC_AUTH_TOKEN=$(op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY")
+# CORRECT: Load from 1Password cache helper
+source ~/agent-skills/scripts/lib/dx-auth.sh
+ANTHROPIC_AUTH_TOKEN=$(DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/ZAI_API_KEY" "zai_api_key")
 
 # CORRECT: Use op run for multiple secrets
 op run --env-file=.env -- python3 script.py

@@ -410,7 +410,8 @@ cc-glm-job.sh start --beads bd-xxx --prompt-file /tmp/p.prompt
 ~/agent-skills/scripts/create-op-credential.sh
 
 # Verify
-op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+source ~/agent-skills/scripts/lib/dx-auth.sh
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/ZAI_API_KEY" "zai_api_key"
 ```
 
 The script auto-discovers `OP_SERVICE_ACCOUNT_TOKEN` from:
@@ -486,8 +487,9 @@ cc-glm-headless.sh --prompt "task"
 # Check if OP token file exists
 ls -la ~/.config/systemd/user/op-$(hostname)-token
 
-# Test op CLI directly
-op read "op://dev/Agent-Secrets-Production/ZAI_API_KEY"
+# Test cache-only secret resolution directly
+source ~/agent-skills/scripts/lib/dx-auth.sh
+DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/ZAI_API_KEY" "zai_api_key"
 
 # Enable debug logging
 CC_GLM_DEBUG=1 cc-glm-headless.sh --prompt "test"

@@ -47,7 +47,8 @@ All secrets are in Agent-Secrets-Production (dev vault):
   - SLACK_APP_TOKEN
 
 Access pattern:
-  op read "op://dev/Agent-Secrets-Production/<FIELD>"
+  source ~/agent-skills/scripts/lib/dx-auth.sh
+  DX_AUTH_CACHE_ONLY=1 dx_auth_read_secret_cached "op://dev/Agent-Secrets-Production/<FIELD>" "<field_name>"
 
 ================================================================================
 BELOW IS HISTORICAL CONTENT - NOT APPLICABLE
@@ -94,6 +95,7 @@ STEP 2: Verify Items Created
 
 Run this command to list all items in the dev vault:
 
+  # HUMAN_RECOVERY_ONLY: raw 1Password item listing is for a human bootstrap terminal.
   op item list --vault dev
 
 You should see:

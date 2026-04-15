@@ -159,7 +159,7 @@ For machine consumption (e.g., Slack webhooks, monitoring systems), use
 
 1. Check worktree exists: `ls /tmp/agents/<beads-id>/<repo>`
 2. Check Beads Dolt is running: `bdx dolt test --json`
-3. Check auth: `op whoami && railway whoami`
+3. Check auth: `~/agent-skills/scripts/dx-op-auth-status.sh --json && railway whoami`
 4. Fix the environment issue
 5. Re-trigger the wave: `dx-loop start --epic <epic-id>`
 
