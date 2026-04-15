@@ -20,6 +20,10 @@ You are refreshing repo-owned brownfield architecture maps.
 - If evidence is insufficient, leave files unchanged and explain why.
 - If `repo-memory-report.json` says no refresh is needed, leave files
   unchanged.
+- Do not use web search. This is a source-code documentation refresh, not an
+  internet research task.
+- Do not include general session reminders, founder reminders, or motivational
+  text in the final response.
 
 ## Required Process
 
@@ -29,6 +33,9 @@ You are refreshing repo-owned brownfield architecture maps.
 4. Update `last_verified_commit` and `last_verified_at` only for docs you
    actually verified.
 5. Keep the existing document style and scope.
+6. If the audit failure is only an unreachable historical
+   `last_verified_commit`, verify the doc against current source and then
+   refresh the metadata instead of rewriting the prose.
 
 ## Final Response
 

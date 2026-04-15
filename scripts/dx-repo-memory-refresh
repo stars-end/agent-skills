@@ -19,6 +19,7 @@ AGE_DAYS="${DX_REPO_MEMORY_AGE_DAYS:-30}"
 BRANCH="automation/repo-memory-refresh"
 MODEL="${DX_REPO_MEMORY_MODEL:-gpt-5.4}"
 EFFORT="${DX_REPO_MEMORY_EFFORT:-high}"
+CODEX_SANDBOX="${DX_REPO_MEMORY_CODEX_SANDBOX:-danger-full-access}"
 FALLBACK_HOST=""
 RUN_MODE="primary"
 PUSH=0
@@ -41,6 +42,7 @@ Options:
   --branch NAME          Rolling branch name (default: automation/repo-memory-refresh)
   --model MODEL          Codex model (default: gpt-5.4)
   --effort EFFORT        Codex reasoning effort (default: high)
+  --codex-sandbox MODE   Codex sandbox mode (default: danger-full-access)
   --fallback-host HOST   SSH host used only for primary host/runtime failure
   --mode MODE            primary|fallback (default: primary)
   --push                 Push branch after successful doc-only changes
@@ -77,6 +79,7 @@ parse_args() {
       --branch) BRANCH="$2"; shift 2 ;;
       --model) MODEL="$2"; shift 2 ;;
       --effort) EFFORT="$2"; shift 2 ;;
+      --codex-sandbox) CODEX_SANDBOX="$2"; shift 2 ;;
       --fallback-host) FALLBACK_HOST="$2"; shift 2 ;;
       --mode) RUN_MODE="$2"; shift 2 ;;
       --push) PUSH=1; shift ;;
@@ -135,7 +138,7 @@ invoke_fallback() {
   [[ "$FORCE_AGENT" -eq 1 ]] && remote_flags="$remote_flags --force-agent"
 
   ssh -o BatchMode=yes -o ConnectTimeout=10 "$FALLBACK_HOST" \
-    "DX_REPO_MEMORY_RUN_ID='$CURRENT_RUN_ID' \"\$HOME/agent-skills/scripts/dx-repo-memory-refresh\" --repo-name '$REPO_NAME' --repo-path '$remote_repo_path' --state-root '$remote_state_root' --age-days '$AGE_DAYS' --branch '$BRANCH' --model '$MODEL' --effort '$EFFORT' --mode fallback $remote_flags --skip-fallback"
+    "DX_REPO_MEMORY_RUN_ID='$CURRENT_RUN_ID' \"\$HOME/agent-skills/scripts/dx-repo-memory-refresh\" --repo-name '$REPO_NAME' --repo-path '$remote_repo_path' --state-root '$remote_state_root' --age-days '$AGE_DAYS' --branch '$BRANCH' --model '$MODEL' --effort '$EFFORT' --codex-sandbox '$CODEX_SANDBOX' --mode fallback $remote_flags --skip-fallback"
 }
 
 prepare_worktree() {
@@ -173,7 +176,7 @@ run_codex() {
   codex exec \
     -C "$worktree" \
     --ephemeral \
-    -s workspace-write \
+    -s "$CODEX_SANDBOX" \
     -m "$MODEL" \
     -c "model_reasoning_effort=\"$EFFORT\"" \
     --output-last-message "$output" \
@@ -185,8 +188,12 @@ run_codex() {
 commit_push_pr() {
   local worktree="$1"
   local run_id="$2"
+  local action_needed="$3"
   if git -C "$worktree" diff --quiet; then
     log "no repo-memory changes after Codex"
+    if [[ "$action_needed" == "true" ]]; then
+      die "audit required action but Codex produced no diff"
+    fi
     return 0
   fi
 
@@ -266,7 +273,7 @@ main() {
 
     "$AGENTS_ROOT/scripts/dx-repo-memory-guard" --repo "$worktree" --base-ref "origin/master" --json > "$run_root/guard-report.json"
     "$AGENTS_ROOT/scripts/dx-repo-memory-check" --repo "$worktree" --json > "$run_root/check-report.json"
-    commit_push_pr "$worktree" "$CURRENT_RUN_ID"
+    commit_push_pr "$worktree" "$CURRENT_RUN_ID" "$action_needed"
     log "complete run_id=$CURRENT_RUN_ID"
   } || {
     local rc=$?
