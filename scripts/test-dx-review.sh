@@ -91,6 +91,8 @@ case "$cmd" in
       echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"start_failed","reason_code":"dx_runner_start_failed"}'
     elif [[ "${DX_REVIEW_FAKE_FORCE_START_FAILED:-0}" == "1" && "$beads" == *.glm ]]; then
       echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"start_failed","reason_code":"dx_runner_start_failed"}'
+    elif [[ "${DX_REVIEW_FAKE_GEMINI_STOPPED:-0}" == "1" && "$beads" == *.gemini ]]; then
+      echo '{"beads":"'"$beads"'","provider":"gemini","state":"stopped","reason_code":"manual_stop","mutation_count":1}'
     elif [[ "$beads" == *.claude ]]; then
       echo '{"beads":"'"$beads"'","provider":"claude-code","state":"no_op_success","reason_code":"exit_zero_no_mutations"}'
     elif [[ "$beads" == *.glm ]]; then
@@ -104,15 +106,19 @@ case "$cmd" in
     if [[ "${DX_REVIEW_FAKE_REPORT_MISSING:-0}" == "1" && "$beads" == *.glm ]]; then
       echo '{"beads":"'"$beads"'","state":"missing","reason_code":"no_meta"}'
       exit 1
+    elif [[ "${DX_REVIEW_FAKE_GEMINI_STOPPED:-0}" == "1" && "$beads" == *.gemini ]]; then
+      echo '{"beads":"'"$beads"'","provider":"gemini","state":"stopped","reason_code":"manual_stop","mutations":1}'
+    elif [[ "${DX_REVIEW_FAKE_EMPTY_SUCCESS:-0}" == "1" && "$beads" == *.glm ]]; then
+      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc"}'
     elif [[ "${DX_REVIEW_FAKE_REPORT_USAGE:-0}" == "1" ]]; then
       if [[ "$beads" == *.glm ]]; then provider="cc-glm"; elif [[ "$beads" == *.opencode ]]; then provider="opencode"; else provider="claude-code"; fi
-      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"exited_ok","reason_code":"process_exit_with_rc","input_tokens":101,"output_tokens":29,"total_tokens":130,"estimated_cost_usd":0.42}'
+      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":2,"read_only_enforcement":"contract_only","input_tokens":101,"output_tokens":29,"total_tokens":130,"estimated_cost_usd":0.42}'
     elif [[ "$beads" == *.opencode ]]; then
-      echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc"}'
+      echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass","findings_count":0,"read_only_enforcement":"contract_only"}'
     elif [[ "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc"}'
+      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":1,"read_only_enforcement":"contract_only"}'
     else
-      echo '{"beads":"'"$beads"'","provider":"claude-code","state":"no_op_success","reason_code":"exit_zero_no_mutations"}'
+      echo '{"beads":"'"$beads"'","provider":"claude-code","state":"no_op_success","reason_code":"exit_zero_no_mutations","verdict":"approve_with_changes","findings_count":2,"read_only_enforcement":"contract_only"}'
     fi
     ;;
   preflight)
@@ -224,7 +230,7 @@ test_parallel_start_and_glm_fallback() {
     fi
 
     if echo "$out" | grep -q "effective quorum: 2/2 completed, 0 failed" \
-        && echo "$out" | grep -q "provider outcomes: 2 completed, 1 failed" \
+        && echo "$out" | grep -q "provider outcomes: 2 completed, 0 failed, 1 not reached" \
         && echo "$out" | grep -q "summary.json:"; then
         pass "run --wait prints effective quorum, provider outcomes, and summary artifact paths"
     else
@@ -428,6 +434,128 @@ EOF
     rm -rf "$tmp"
 }
 
+test_summarize_empty_success_is_unusable() {
+    echo "=== Testing dx-review summarize treats empty success as unusable ==="
+
+    local tmp fake out rc summary_json
+    tmp="$(mktemp -d)"
+    fake="$tmp/dx-runner"
+    make_fake_runner "$fake"
+    export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
+    export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
+    export DX_REVIEW_FAKE_EMPTY_SUCCESS=1
+    unset DX_REVIEW_FAKE_FORCE_START_FAILED
+    unset DX_REVIEW_FAKE_REPORT_USAGE
+
+    rm -rf /tmp/dx-review/bd-empty
+    set +e
+    out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" summarize --beads bd-empty 2>&1)"
+    rc=$?
+    set -e
+    summary_json="/tmp/dx-review/bd-empty/summary.json"
+
+    if [[ "$rc" -eq 1 ]] \
+        && grep -q '"reviewer":"bd-empty.glm"' "$summary_json" \
+        && grep -q '"state":"review_unusable"' "$summary_json" \
+        && grep -q '"usable_review":false' "$summary_json" \
+        && grep -q '"review_status_reason":"missing_review_schema"' "$summary_json" \
+        && echo "$out" | grep -q "effective quorum: 1/2 completed, 1 failed"; then
+        pass "empty process success does not count as usable review quorum"
+    else
+        fail "empty process success was not degraded correctly: rc=$rc output=$out"
+    fi
+
+    unset DX_REVIEW_FAKE_EMPTY_SUCCESS
+    rm -rf "$tmp"
+}
+
+test_summarize_ignores_prose_without_schema() {
+    echo "=== Testing dx-review summarize ignores prose without reviewer schema ==="
+
+    local tmp fake out rc summary_json log_path
+    tmp="$(mktemp -d)"
+    fake="$tmp/dx-runner"
+    make_fake_runner "$fake"
+    export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
+    export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
+    export DX_REVIEW_FAKE_EMPTY_SUCCESS=1
+    unset DX_REVIEW_FAKE_FORCE_START_FAILED
+    unset DX_REVIEW_FAKE_REPORT_USAGE
+
+    rm -rf /tmp/dx-review/bd-prose
+    log_path="/tmp/dx-runner/cc-glm/bd-prose.glm.log"
+    mkdir -p "$(dirname "$log_path")"
+    cat > "$log_path" <<'EOF'
+## Verdict
+pass_with_findings
+
+## Findings
+- This is useful to a human, but it is not the required dx-review footer.
+EOF
+
+    set +e
+    out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" summarize --beads bd-prose 2>&1)"
+    rc=$?
+    set -e
+    summary_json="/tmp/dx-review/bd-prose/summary.json"
+
+    if [[ "$rc" -eq 1 ]] \
+        && grep -q '"reviewer":"bd-prose.glm"' "$summary_json" \
+        && grep -q '"state":"review_unusable"' "$summary_json" \
+        && grep -q '"usable_review":false' "$summary_json" \
+        && grep -q '"review_status_reason":"missing_review_schema"' "$summary_json"; then
+        pass "heading-style prose does not count as review quorum without explicit schema"
+    else
+        fail "prose without schema was counted as usable: rc=$rc output=$out"
+    fi
+
+    unset DX_REVIEW_FAKE_EMPTY_SUCCESS
+    rm -f "$log_path"
+    rm -rf "$tmp"
+}
+
+test_summarize_gemini_stopped_is_incomplete() {
+    echo "=== Testing dx-review summarize treats stopped Gemini as incomplete ==="
+
+    local tmp fake out rc summary_json run_dir
+    tmp="$(mktemp -d)"
+    fake="$tmp/dx-runner"
+    make_fake_runner "$fake"
+    export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
+    export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
+    export DX_REVIEW_FAKE_GEMINI_STOPPED=1
+    unset DX_REVIEW_FAKE_FORCE_START_FAILED
+    unset DX_REVIEW_FAKE_REPORT_USAGE
+
+    run_dir="/tmp/dx-review/bd-gemstop"
+    rm -rf "$run_dir"
+    mkdir -p "$run_dir"
+    printf '## Read-Only Review Mode\n' > "$run_dir/review.prompt"
+
+    set +e
+    out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" summarize --beads bd-gemstop --gemini 2>&1)"
+    rc=$?
+    set -e
+    summary_json="$run_dir/summary.json"
+
+    if [[ "$rc" -eq 2 ]] \
+        && grep -q '"reviewer":"bd-gemstop.gemini"' "$summary_json" \
+        && grep -q '"state":"timeout_manual_stop"' "$summary_json" \
+        && grep -q '"reason_code":"timeout_manual_stop"' "$summary_json" \
+        && grep -q '"process_success":false' "$summary_json" \
+        && grep -q '"usable_review":false' "$summary_json" \
+        && grep -q '"mutation_count":1' "$summary_json" \
+        && grep -q '"mutation_warning":"read_only_mutation_detected"' "$summary_json" \
+        && echo "$out" | grep -q "effective quorum: 2/3 completed, 0 failed"; then
+        pass "stopped optional Gemini lane is incomplete and mutation-warning aware"
+    else
+        fail "stopped Gemini lane was not classified correctly: rc=$rc output=$out"
+    fi
+
+    unset DX_REVIEW_FAKE_GEMINI_STOPPED
+    rm -rf "$tmp"
+}
+
 test_summarize_start_log_reason_when_metadata_missing() {
     echo "=== Testing dx-review summarize uses start log root cause when metadata is missing ==="
 
@@ -474,6 +602,9 @@ main() {
     test_doctor_runs_both_profiles
     test_template_pr_prompt_generation
     test_summarize_parses_log_schema_usage
+    test_summarize_empty_success_is_unusable
+    test_summarize_ignores_prose_without_schema
+    test_summarize_gemini_stopped_is_incomplete
     test_summarize_start_log_reason_when_metadata_missing
     echo ""
     echo "=== Summary ==="

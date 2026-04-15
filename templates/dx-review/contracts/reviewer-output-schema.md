@@ -1,6 +1,8 @@
 ## Reviewer Output Schema
 
 End every review response with this block so `dx-review summarize` can parse results consistently.
+The footer is required for quorum: process exit 0 without `VERDICT` and
+`FINDINGS_COUNT` is reported as `review_unusable`.
 
 ```text
 VERDICT: pass|pass_with_findings|fail|blocked
@@ -16,7 +18,7 @@ USAGE:
 - output_tokens: <number|unavailable>
 - total_tokens: <number|unavailable>
 - estimated_cost_usd: <number|unavailable>
-READ_ONLY_ENFORCEMENT: provider_enforced|contract_only|unavailable
+READ_ONLY_ENFORCEMENT: provider_enforced|contract_only|not_enforced
 ```
 
 Rules:

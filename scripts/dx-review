@@ -86,6 +86,7 @@ review_state_for_display() {
     case "$1" in
         no_op_success) printf 'review_completed' ;;
         start_failed) printf 'start_failed' ;;
+        stopped) printf 'timeout_manual_stop' ;;
         *) printf '%s' "$1" ;;
     esac
 }
@@ -204,12 +205,34 @@ read_only_enforcement_from_text() {
     local value
     value="$(printf '%s\n' "$text" | sed -n 's/.*"read_only_enforcement"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
     if [[ -z "$value" ]]; then
-        value="$(printf '%s\n' "$text" | sed -E -n 's/.*READ_ONLY_ENFORCEMENT:[*[:space:]]*(provider_enforced|contract_only|unavailable).*/\1/p' | head -n 1)"
+        value="$(printf '%s\n' "$text" | sed -E -n 's/.*READ_ONLY_ENFORCEMENT:[*[:space:]]*(provider_enforced|contract_only|not_enforced|unavailable).*/\1/p' | head -n 1)"
     fi
     case "$value" in
-        provider_enforced|contract_only|unavailable) printf '%s' "$value" ;;
-        *) printf 'unavailable' ;;
+        provider_enforced|contract_only|not_enforced) printf '%s' "$value" ;;
+        unavailable|"") printf 'not_enforced' ;;
+        *) printf 'not_enforced' ;;
     esac
+}
+
+review_schema_present_from_text() {
+    local text="${1:-}"
+    local verdict findings_count
+    verdict="$(verdict_from_text "$text")"
+    findings_count="$(findings_count_from_text "$text")"
+    [[ -n "$verdict" && "$findings_count" != "null" ]]
+}
+
+mutation_count_from_text() {
+    local text="${1:-}"
+    local value
+    value="$(json_number_from_text "mutation_count" "$text")"
+    if [[ -z "$value" ]]; then
+        value="$(json_number_from_text "mutations" "$text")"
+    fi
+    if [[ -z "$value" ]]; then
+        value="$(printf '%s\n' "$text" | sed -n 's/^[[:space:]-]*[Mm]utations:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n 1)"
+    fi
+    printf '%s' "$value"
 }
 
 template_path() {
@@ -383,7 +406,7 @@ reviewer_is_failed() {
     local state="$1"
     local verdict="$2"
     case "$state" in
-        start_failed|blocked|missing|exited_err|unknown|running)
+        start_failed|blocked|missing|exited_err|unknown|running|stopped)
             return 0
             ;;
     esac
@@ -398,7 +421,7 @@ reviewer_is_failed() {
 reviewer_is_completed() {
     local state="$1"
     case "$state" in
-        exited_ok|no_op_success|stopped)
+        exited_ok|no_op_success)
             return 0
             ;;
         *)
@@ -444,7 +467,9 @@ summarize_reviews() {
         local input_tokens output_tokens total_tokens estimated_cost usage_available usage_source
         local findings_count read_only_enforcement log_text normalized_log_text parse_text
         local usage_json verdict_json
-        local reviewer_failed=false reviewer_completed=false
+        local process_success=false review_success=false usable_review=false review_schema_present=false
+        local mutation_count mutation_source mutation_warning review_body_path review_status_reason
+        local reviewer_failed=false reviewer_completed=false reviewer_not_reached=false
         local lane
 
         reviewer_profile="$(profile_for_reviewer "$reviewer")"
@@ -496,8 +521,10 @@ summarize_reviews() {
         log_text=""
         if [[ -f "$log_path" ]]; then
             log_text="$(cat "$log_path" 2>/dev/null || true)"
+            review_body_path="$log_path"
         else
             log_path=""
+            review_body_path=""
         fi
         normalized_log_text="$(printf '%s' "$log_text" | sed 's/\\n/\
 /g')"
@@ -505,6 +532,23 @@ summarize_reviews() {
         verdict="$(verdict_from_text "$parse_text")"
         findings_count="$(findings_count_from_text "$parse_text")"
         read_only_enforcement="$(read_only_enforcement_from_text "$parse_text")"
+        mutation_count="$(mutation_count_from_text "$check_json"$'\n'"$report_json")"
+        mutation_source=""
+        mutation_warning=""
+        if [[ -n "$mutation_count" ]]; then
+            mutation_source="dx-runner-check-or-report"
+            if [[ -f "$run_dir/review.prompt" ]] && grep -q "Read-Only Review Mode" "$run_dir/review.prompt" && [[ "$mutation_count" =~ ^[0-9]+$ ]] && [[ "$mutation_count" -gt 0 ]]; then
+                mutation_warning="read_only_mutation_detected"
+            fi
+        else
+            mutation_count="null"
+        fi
+        if review_schema_present_from_text "$parse_text"; then
+            review_schema_present=true
+            if [[ -z "$review_body_path" ]]; then
+                review_body_path="$report_path"
+            fi
+        fi
 
         input_tokens="$(usage_number_from_text "input_tokens" "$parse_text")"
         output_tokens="$(usage_number_from_text "output_tokens" "$parse_text")"
@@ -542,16 +586,41 @@ EOF
             verdict_json="null"
         fi
 
+        if reviewer_is_completed "$state"; then
+            process_success=true
+        fi
+
         if reviewer_is_failed "$state" "$verdict"; then
             reviewer_failed=true
+        fi
+        if [[ "$process_success" == "true" && "$reviewer_failed" != "true" ]]; then
+            raw_completed=$((raw_completed + 1))
+        elif [[ "$state" == "missing" || "$state" == "start_failed" || "$state" == "running" || "$state" == "unknown" || "$state" == "stopped" ]]; then
+            reviewer_not_reached=true
+            raw_not_reached=$((raw_not_reached + 1))
+        else
             raw_failed=$((raw_failed + 1))
         fi
-        if reviewer_is_completed "$state" && [[ "$reviewer_failed" != "true" ]]; then
-            reviewer_completed=true
-            raw_completed=$((raw_completed + 1))
-        fi
-        if [[ "$state" == "missing" || "$state" == "start_failed" || "$state" == "running" || "$state" == "unknown" ]]; then
-            raw_not_reached=$((raw_not_reached + 1))
+        if [[ "$process_success" == "true" && "$reviewer_failed" != "true" ]]; then
+            if [[ "$review_schema_present" == "true" ]]; then
+                usable_review=true
+                review_success=true
+                reviewer_completed=true
+                review_status_reason="review_schema_present"
+            else
+                review_status_reason="missing_review_schema"
+                if [[ "$reason" == "unknown" || "$reason" == "process_exit_with_rc" || "$reason" == "exit_zero_no_mutations" || "$reason" == "outcome_exit_0" ]]; then
+                    reason="missing_review_schema"
+                fi
+                display_state="review_unusable"
+            fi
+        elif [[ "$state" == "stopped" ]]; then
+            review_status_reason="timeout_manual_stop"
+            if [[ "$reason" == "unknown" || "$reason" == "manual_stop" || "$reason" == "outcome_exit_nonzero" ]]; then
+                reason="timeout_manual_stop"
+            fi
+        else
+            review_status_reason="$reason"
         fi
 
         lane="$(logical_lane_for_reviewer "$reviewer")"
@@ -559,25 +628,25 @@ EOF
             claude)
                 [[ "$reviewer_completed" == "true" ]] && claude_completed=true
                 [[ "$reviewer_failed" == "true" ]] && claude_failed=true
-                [[ "$state" == "missing" || "$state" == "start_failed" || "$state" == "running" || "$state" == "unknown" ]] && claude_not_reached=true
+                [[ "$reviewer_not_reached" == "true" ]] && claude_not_reached=true
                 ;;
             glm)
                 [[ "$reviewer_completed" == "true" ]] && glm_completed=true
                 [[ "$reviewer_failed" == "true" ]] && glm_failed=true
-                [[ "$state" == "missing" || "$state" == "start_failed" || "$state" == "running" || "$state" == "unknown" ]] && glm_not_reached=true
+                [[ "$reviewer_not_reached" == "true" ]] && glm_not_reached=true
                 ;;
             gemini)
                 [[ "$reviewer_completed" == "true" ]] && gemini_completed=true
                 [[ "$reviewer_failed" == "true" ]] && gemini_failed=true
-                [[ "$state" == "missing" || "$state" == "start_failed" || "$state" == "running" || "$state" == "unknown" ]] && gemini_not_reached=true
+                [[ "$reviewer_not_reached" == "true" ]] && gemini_not_reached=true
                 ;;
         esac
 
         entries+=("$(cat <<EOF
-{"reviewer":"$(json_escape "$reviewer")","profile":"$(json_escape "$reviewer_profile")","state":"$(json_escape "$display_state")","reason_code":"$(json_escape "$reason")","verdict":${verdict_json},"findings_count":${findings_count},"read_only_enforcement":"$(json_escape "$read_only_enforcement")","report_path":"$(json_escape "$report_path")","log_path":"$(json_escape "$log_path")","start_log":"$(json_escape "$start_log")","usage":${usage_json}}
+{"reviewer":"$(json_escape "$reviewer")","profile":"$(json_escape "$reviewer_profile")","state":"$(json_escape "$display_state")","process_success":${process_success},"review_success":${review_success},"usable_review":${usable_review},"review_status_reason":"$(json_escape "$review_status_reason")","reason_code":"$(json_escape "$reason")","verdict":${verdict_json},"findings_count":${findings_count},"read_only_enforcement":"$(json_escape "$read_only_enforcement")","mutation_count":${mutation_count},"mutation_source":"$(json_escape "$mutation_source")","mutation_warning":"$(json_escape "$mutation_warning")","report_path":"$(json_escape "$report_path")","log_path":"$(json_escape "$log_path")","review_body_path":"$(json_escape "$review_body_path")","start_log":"$(json_escape "$start_log")","usage":${usage_json}}
 EOF
 )")
-        md_rows+=("| ${reviewer} | ${reviewer_profile} | ${display_state} | ${reason} | ${verdict:-n/a} | ${findings_count} | ${read_only_enforcement} | available=${usage_available} |")
+        md_rows+=("| ${reviewer} | ${reviewer_profile} | ${display_state} | process=${process_success} review=${review_success} usable=${usable_review} | ${reason} | ${verdict:-n/a} | ${findings_count} | ${read_only_enforcement} | ${mutation_count} ${mutation_warning} | available=${usage_available} | ${review_body_path:-n/a} |")
     done
 
     local i exit_code
@@ -614,8 +683,8 @@ EOF
         printf '# dx-review summary: %s\n\n' "$beads"
         printf 'effective quorum: %s/%s completed, %s failed\n' "$completed" "$total" "$failed"
         printf 'provider outcomes: %s completed, %s failed, %s not reached\n\n' "$raw_completed" "$raw_failed" "$raw_not_reached"
-        printf '| reviewer | profile | state | reason | verdict | findings | read-only | usage |\n'
-        printf '|---|---|---|---|---|---|---|---|\n'
+        printf '| reviewer | profile | state | success | reason | verdict | findings | read-only | mutations | usage | review body |\n'
+        printf '|---|---|---|---|---|---|---|---|---|---|---|\n'
         local row
         for row in "${md_rows[@]}"; do
             printf '%s\n' "$row"

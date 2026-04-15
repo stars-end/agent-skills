@@ -59,12 +59,15 @@ dx-review summarize --beads bd-xxx
 ```
 
 Expected summarize output includes:
-- effective logical quorum status (`2/2 completed, 0 failed`)
-- raw provider outcomes, including any failed fallback attempts
+- effective usable-review quorum status (`2/2 completed, 0 failed`)
+- raw/process provider outcomes, including any failed fallback attempts
+- `process_success`, `review_success`, and `usable_review` so process exit 0
+  is not confused with a usable review body
 - per-reviewer state/verdict/failure signals
 - findings counts
 - token/cost usage when available
-- log/report paths
+- mutation count/warnings in read-only runs
+- log/report/review-body paths
 
 ## Template Contract
 
@@ -94,13 +97,19 @@ Review templates must not request PR creation, commits, pushes, or code fixes.
 - Start-time provider failures are terminal for that provider attempt and should
   be reported as `start_failed`, not polled until timeout. If the failed provider
   is `cc-glm-review`, `dx-review` launches `opencode-review` as the GLM fallback.
-- A review run that exits 0 with no mutations is expected. `dx-review` summarizes
-  that as `review_completed` while preserving the raw `dx-runner` JSON.
+- A review run that exits 0 with no mutations can be a valid process result, but
+  it only counts toward quorum when `dx-review summarize` can find the explicit
+  reviewer schema (`VERDICT` and `FINDINGS_COUNT`, or equivalent structured JSON).
+  Human-readable prose without that schema is useful context but not quorum.
+- Empty process success is summarized as `review_unusable` with
+  `usable_review=false` and `review_status_reason=missing_review_schema`.
+- A manually stopped or timed-out lane is summarized as `timeout_manual_stop`
+  and does not count as a usable review.
 - Read-only review enforcement is provider-specific best effort. Summaries should
   report `READ_ONLY_ENFORCEMENT` as:
   - `provider_enforced`
   - `contract_only`
-  - `unavailable`
+  - `not_enforced`
 
 ## Failure Handling
 
