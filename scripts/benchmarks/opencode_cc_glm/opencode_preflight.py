@@ -9,8 +9,9 @@ Deterministic preflight checks for OpenCode dispatch environments:
 - node + pnpm presence
 
 Model policy:
-- preferred: zhipuai/glm-5.1
-- fail fast if unavailable; route to the next provider instead of silently changing models
+- preferred implementation model: zhipuai/glm-5-turbo
+- fallback implementation model: zhipuai/glm-5
+- fail fast if both are unavailable; route to the next provider instead of silently changing to any other model
 
 Outputs machine-readable JSON with:
 - selected_model
@@ -55,8 +56,8 @@ class PreflightResult:
 
 HOST_FALLBACK_MAPS: dict[str, dict[str, str]] = {}
 
-PREFERRED_MODEL = "zhipuai/glm-5.1"
-FALLBACK_CHAIN: list[str] = []
+PREFERRED_MODEL = "zhipuai/glm-5-turbo"
+FALLBACK_CHAIN: list[str] = ["zhipuai/glm-5"]
 
 
 def run_cmd(

@@ -43,7 +43,7 @@ Decision: NO-GO (conditional)
   - Post-run reporting can understate real job activity and confuse operator decisions.
 
 ## What Passed
-- OpenCode canonical model policy is enforced (`zhipuai/glm-5.1`).
+- OpenCode canonical implementation model policy is enforced (`zhipuai/glm-5-turbo`, fallback `zhipuai/glm-5`).
 - Unified runner, adapter structure, compat shims, and cutover docs are merged.
 - Soak runner and unit tests exist and pass locally (`21 passed`).
 

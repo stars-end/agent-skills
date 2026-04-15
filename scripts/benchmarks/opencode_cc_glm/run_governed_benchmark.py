@@ -54,7 +54,7 @@ def parse_args() -> argparse.Namespace:
             "scripts/benchmarks/opencode_cc_glm/benchmark_prompts.json"
         ),
     )
-    parser.add_argument("--model", default="zhipuai/glm-5.1")
+    parser.add_argument("--model", default="zhipuai/glm-5-turbo")
     parser.add_argument("--parallel", type=int, default=6)
     parser.add_argument("--max-retries", type=int, default=1)
     parser.add_argument("--timeout-sec", type=float, default=300.0)

@@ -85,13 +85,13 @@ LOG_DIR="/tmp/dx-runner"
 # Provider configuration
 declare -A PROVIDER_DEFAULT_MODEL=(
     ["cc-glm"]="glm-5"
-    ["opencode"]="zhipuai/glm-5.1"
+    ["opencode"]="zhipuai/glm-5-turbo"
     ["claude-code"]="opus"
     ["gemini"]="gemini-3-flash-preview"
 )
 
 declare -A PROVIDER_FALLBACK_CHAIN=(
-    ["opencode"]="zhipuai/glm-5.1"
+    ["opencode"]="zhipuai/glm-5"
 )
 
 # bd-8wdg.10: Startup-aware health thresholds
@@ -2415,7 +2415,7 @@ Usage:
 
 Providers:
   cc-glm    Z.ai/GLM wrapper lane (reliability backstop)
-  opencode  OpenCode headless (primary throughput, strict canonical zhipuai/glm-5.1)
+  opencode  OpenCode headless (primary implementation throughput, strict canonical zhipuai/glm-5-turbo)
   claude-code Native Claude Code CLI (review lane, strict canonical opus)
   gemini    Gemini CLI (parallel capacity)
 

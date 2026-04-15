@@ -24,7 +24,8 @@
 #   25 - Model unavailable (canonical model not found)
 #   28 - Model override blocked (drift protection)
 
-CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zhipuai/glm-5.1}"
+CANONICAL_MODEL="${OPENCODE_CANONICAL_MODEL:-zhipuai/glm-5-turbo}"
+IMPLEMENT_FALLBACK_MODEL="${OPENCODE_IMPLEMENT_FALLBACK_MODEL:-zhipuai/glm-5}"
 OPENCODE_EXECUTION_MODE="${OPENCODE_EXECUTION_MODE:-run}"
 
 # bd-8wdg.2: Model override policy
@@ -36,6 +37,10 @@ MODEL_OVERRIDE_AUDIT_LOG=""
 adapter_canonical_model_aliases() {
     local model="$1"
     case "$model" in
+        zhipuai/glm-5-turbo)
+            printf '%s\n' "zhipuai-coding-plan/glm-5-turbo"
+            printf '%s\n' "zai-coding-plan/glm-5-turbo"
+            ;;
         zhipuai/glm-5.1)
             printf '%s\n' "zhipuai-coding-plan/glm-5.1"
             printf '%s\n' "zai-coding-plan/glm-5.1"
@@ -45,12 +50,19 @@ adapter_canonical_model_aliases() {
             printf '%s\n' "zai-coding-plan/glm-5.1"
             ;;
         zai-coding-plan/glm-5-turbo)
+            printf '%s\n' "zhipuai/glm-5-turbo"
             printf '%s\n' "zhipuai-coding-plan/glm-5-turbo"
             ;;
         zhipuai-coding-plan/glm-5-turbo)
+            printf '%s\n' "zhipuai/glm-5-turbo"
             printf '%s\n' "zai-coding-plan/glm-5-turbo"
             ;;
+        zhipuai/glm-5)
+            printf '%s\n' "zhipuai-coding-plan/glm-5"
+            printf '%s\n' "zai-coding-plan/glm-5"
+            ;;
         zai-coding-plan/glm-5)
+            printf '%s\n' "zhipuai/glm-5"
             printf '%s\n' "zhipuai-coding-plan/glm-5"
             ;;
         zai-coding-plan/glm-5.1)
@@ -58,7 +70,18 @@ adapter_canonical_model_aliases() {
             printf '%s\n' "zhipuai-coding-plan/glm-5.1"
             ;;
         zhipuai-coding-plan/glm-5)
+            printf '%s\n' "zhipuai/glm-5"
             printf '%s\n' "zai-coding-plan/glm-5"
+            ;;
+    esac
+}
+
+adapter_model_fallbacks() {
+    local model="$1"
+    case "$model" in
+        zhipuai/glm-5-turbo|zhipuai-coding-plan/glm-5-turbo|zai-coding-plan/glm-5-turbo)
+            printf '%s\n' "$IMPLEMENT_FALLBACK_MODEL"
+            adapter_canonical_model_aliases "$IMPLEMENT_FALLBACK_MODEL"
             ;;
     esac
 }
@@ -66,7 +89,9 @@ adapter_canonical_model_aliases() {
 adapter_is_allowed_phase_model() {
     local model="$1"
     case "$model" in
+        zhipuai/glm-5-turbo|zai-coding-plan/glm-5-turbo|zhipuai-coding-plan/glm-5-turbo) return 0 ;;
         zhipuai/glm-5.1|zai-coding-plan/glm-5.1|zhipuai-coding-plan/glm-5.1) return 0 ;;
+        zhipuai/glm-5|zai-coding-plan/glm-5|zhipuai-coding-plan/glm-5) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -425,7 +450,16 @@ adapter_resolve_model() {
         fi
     done < <(adapter_canonical_model_aliases "$required")
 
-    echo "|unavailable|model '$required' unavailable; use cc-glm or gemini"
+    local fallback_model
+    while IFS= read -r fallback_model; do
+        [[ -n "$fallback_model" ]] || continue
+        if printf '%s\n' "$available_models" | grep -qxF "$fallback_model"; then
+            echo "$fallback_model|model_fallback|preferred $required unavailable"
+            return 0
+        fi
+    done < <(adapter_model_fallbacks "$required")
+
+    echo "|unavailable|model '$required' unavailable; fallback '$IMPLEMENT_FALLBACK_MODEL' unavailable; use cc-glm or gemini"
     return 1
 }
 

@@ -1,20 +1,29 @@
 ---
 name: dx-batch
 description: |
-  Deterministic orchestration over dx-runner for autonomous implement->review waves.
-  Orchestrates 2-3 parallel tasks across 15-20 Beads items with strict lease locking,
-  persistent ledger, and machine-readable contracts. Use for batch execution of
-  implementation tasks with automatic review cycles.
-tags: [workflow, orchestration, batch, dx-runner, governance, parallel]
+  Compatibility/internal batch substrate over dx-runner for legacy autonomous implement->review waves.
+  Prefer dx-loop for new chained Beads work, multi-step outcomes, and implement/review baton flow.
+  Use dx-batch only for legacy wave recovery, compatibility debugging, or when dx-loop itself is the active blocker.
+tags: [workflow, orchestration, batch, dx-runner, governance, parallel, compatibility]
 allowed-tools:
   - Bash
 ---
 
-# dx-batch: Deterministic Batch Orchestration
+# dx-batch: Compatibility Batch Substrate
 
 ## Overview
 
-`dx-batch` is a thin deterministic state machine that orchestrates parallel tasks using `dx-runner` as the ONLY execution backend. It provides:
+`dx-loop` is the canonical agent-facing batch/looping surface. `dx-batch` remains
+available as a compatibility/internal deterministic state machine that
+orchestrates parallel tasks using `dx-runner` as the ONLY execution backend.
+
+Use `dx-batch` only for:
+- legacy wave recovery
+- compatibility debugging
+- internal substrate diagnostics
+- cases where `dx-loop` itself is the active blocker
+
+It provides:
 
 - **Orchestration-only**: Never calls model APIs directly
 - **Strict lease locking**: Per-item locks scoped by `beads_id + attempt`

@@ -2,7 +2,7 @@
 name: cc-glm
 description: |
   Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution.
-  Batch by outcome (not file). Primary implementation dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. For dx-review, cc-glm is the primary GLM review lane and OpenCode is fallback.
+  Batch by outcome (not file). Primary implementation dispatch is OpenCode glm-5-turbo with glm-5 fallback; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. For dx-review, cc-glm is the primary GLM-5.1 review lane and OpenCode is fallback.
   Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution.
 tags: [workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode]
 allowed-tools:
@@ -18,9 +18,9 @@ allowed-tools:
 
 ## Lane Positioning
 
-- Primary implementation throughput lane: OpenCode headless CLI (`opencode run`)
+- Primary implementation throughput lane: OpenCode headless CLI (`opencode run`) with `zhipuai/glm-5-turbo`
 - Reliability backstop implementation lane: cc-glm via `dx-runner --provider cc-glm` with baseline/integrity/feature-key gates
-- Primary `dx-review` GLM lane: `cc-glm-review` profile, with `opencode-review` as fallback transport
+- Primary `dx-review` GLM-5.1 lane: `cc-glm-review` profile, with `opencode-review` as fallback transport
 - Use cc-glm when OpenCode misses SLOs, fails governance gates, or the wave is marked critical
 
 `cc-glm` is **not native Claude Code provider support**. It is the existing Z.ai/GLM wrapper path that uses the `claude` CLI as a transport with explicit Z.ai auth/routing and `glm-*` models. Do not infer Anthropic account auth, Claude Code model aliases, or generic Claude Code session semantics from `dx-runner --provider cc-glm`.
@@ -151,7 +151,7 @@ dx-runner report --beads bd-xxx --format markdown
 └── bd-xxx.contract    # Runtime contract (auth_source, model, base_url)
 ```
 
-**Model selection (glm-5 recommended for complex tasks):**
+**Model selection (glm-5 remains the implementation fallback/backstop):**
 ```bash
 # Pin to glm-5 for better reasoning
 CC_GLM_MODEL=glm-5 dx-runner start --provider cc-glm --beads bd-xxx --prompt-file /tmp/p.prompt

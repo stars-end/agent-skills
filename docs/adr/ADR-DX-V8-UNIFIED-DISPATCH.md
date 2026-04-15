@@ -51,7 +51,7 @@ Additional reliability contract (2026-02-21 hardening):
 ## Provider Policy
 
 1. **Canonical Model Constraints**:
-   - Providers (especially OpenCode) MUST enforce strict canonical model usage (e.g., `zhipuai/glm-5.1`) to ensure result quality and reliability.
+   - Providers (especially OpenCode) MUST enforce strict canonical model usage (implementation: `zhipuai/glm-5-turbo`; review/oversight: `zhipuai/glm-5.1`) to ensure result quality and reliability.
    - If the preferred model is unavailable, the runner MUST fail-fast rather than silently falling back to a weaker model.
 2. **Fail-Fast Behavior**:
    - Preflight failures are blocking.

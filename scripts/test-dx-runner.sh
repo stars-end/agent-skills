@@ -492,23 +492,32 @@ EOF
     source "$ADAPTERS_DIR/opencode.sh"
 
     cat > "$models_file" <<'EOF'
-zhipuai/glm-5.1
-zhipuai-coding-plan/glm-5.1
+zhipuai/glm-5-turbo
+zhipuai-coding-plan/glm-5-turbo
 opencode/glm-5-free
 EOF
     export FAKE_MODELS_FILE="$models_file"
     local r1
-    r1="$(adapter_resolve_model "zhipuai/glm-5.1" "epyc12")"
-    [[ "$r1" == zhipuai/glm-5.1* ]] && pass "model resolution accepts canonical zhipuai model" || fail "canonical resolution failed: $r1"
+    r1="$(adapter_resolve_model "zhipuai/glm-5-turbo" "epyc12")"
+    [[ "$r1" == zhipuai/glm-5-turbo* ]] && pass "model resolution accepts canonical zhipuai turbo model" || fail "canonical resolution failed: $r1"
 
     cat > "$models_file" <<'EOF'
-zhipuai-coding-plan/glm-5.1
+zhipuai-coding-plan/glm-5-turbo
 opencode/glm-5-free
 EOF
     local r2
     rm -f /tmp/dx-runner/opencode/.models_cache
-    r2="$(adapter_resolve_model "zhipuai/glm-5.1" "epyc12" || true)"
-    [[ "$r2" == "zhipuai-coding-plan/glm-5.1|canonical_alias|"* ]] && pass "model resolution accepts canonical alias when provider renamed the model" || fail "expected canonical alias resolution: $r2"
+    r2="$(adapter_resolve_model "zhipuai/glm-5-turbo" "epyc12" || true)"
+    [[ "$r2" == "zhipuai-coding-plan/glm-5-turbo|canonical_alias|"* ]] && pass "model resolution accepts canonical alias when provider renamed the model" || fail "expected canonical alias resolution: $r2"
+
+    cat > "$models_file" <<'EOF'
+zhipuai/glm-5
+opencode/glm-5-free
+EOF
+    local r2b
+    rm -f /tmp/dx-runner/opencode/.models_cache
+    r2b="$(adapter_resolve_model "zhipuai/glm-5-turbo" "epyc12" || true)"
+    [[ "$r2b" == "zhipuai/glm-5|model_fallback|"* ]] && pass "model resolution falls back from turbo to glm-5 for implementation" || fail "expected glm-5 implementation fallback: $r2b"
 
     local r3
     r3="$(adapter_resolve_model "opencode/glm-5-free" "epyc12" || true)"
@@ -519,13 +528,17 @@ EOF
     prompt_file="$(mktemp)"
     log_file="$(mktemp)"
     echo "READY" > "$prompt_file"
+    cat > "$models_file" <<'EOF'
+zhipuai-coding-plan/glm-5-turbo
+opencode/glm-5-free
+EOF
     local worktree
     worktree="$(mktemp -d)"
     set +e
     rm -f /tmp/dx-runner/opencode/.models_cache
     start_out="$(adapter_start "test-opencode-model-missing-$$" "$prompt_file" "$worktree" "$log_file" 2>/dev/null)"
     rc=$?
-    if [[ "$rc" -eq 0 ]] && echo "$start_out" | grep -q "selected_model=zhipuai-coding-plan/glm-5.1"; then
+    if [[ "$rc" -eq 0 ]] && echo "$start_out" | grep -q "selected_model=zhipuai-coding-plan/glm-5-turbo"; then
         pass "opencode start uses canonical alias when provider renamed the model"
     else
         fail "expected alias-backed start success (rc=$rc, out=$start_out)"
@@ -1587,7 +1600,7 @@ test_opencode_attach_mode_failfast() {
     prompt="$(mktemp)"
     repo_dir="$(mktemp -d /tmp/agents/test-attach-mode-XXXXXX)"
     beads="test-opencode-attach-$$"
-    echo "zhipuai/glm-5.1" > "$models_file"
+    echo "zhipuai/glm-5-turbo" > "$models_file"
     echo "READY" > "$prompt"
     git -C "$repo_dir" init --quiet
     git -C "$repo_dir" config user.email "test@example.com"
@@ -1618,7 +1631,7 @@ EOF
     out="$(PATH="$tmp_bin:$PATH" FAKE_MODELS_FILE="$models_file" OPENCODE_EXECUTION_MODE=attach OPENCODE_ATTACH_URL="http://127.0.0.1:4096" "$DX_RUNNER" start --beads "$beads" --provider opencode --prompt-file "$prompt" --worktree "$repo_dir" 2>&1)"
     rc=$?
     set -e
-    if [[ "$rc" -eq 21 ]] && echo "$out" | grep -q "opencode_attach_mode_unavailable"; then
+    if [[ "$rc" -eq 21 && "$out" == *"opencode_attach_mode_unavailable"* ]]; then
         pass "attach mode unsupported path fails fast with deterministic reason code"
     else
         fail "attach mode fail-fast missing (rc=$rc): $out"
@@ -2249,7 +2262,7 @@ test_profile_loading() {
     # Test profile show command
     local show_output
     show_output="$("$DX_RUNNER" profiles --show opencode-prod 2>&1)" || true
-    if echo "$show_output" | grep -qE "provider:|model:"; then
+    if [[ "$show_output" == *"provider:"* || "$show_output" == *"model:"* ]]; then
         pass "profiles --show displays profile content"
     else
         fail "profiles --show did not display profile content"
@@ -2286,7 +2299,7 @@ EOF
     chmod +x "$adapter"
 
     profile_preflight="$(HOME="$tmp_home" BEADS_DIR="${BEADS_DIR:-$HOME/.beads-runtime/.beads}" "$DX_RUNNER" preflight --profile mock-profile 2>&1)" || true
-    if echo "$profile_preflight" | grep -q "provider: mock-profile-test" && echo "$profile_preflight" | grep -q "=== Preflight PASSED ==="; then
+    if [[ "$profile_preflight" == *"provider: mock-profile-test"* && "$profile_preflight" == *"=== Preflight PASSED ==="* ]]; then
         pass "preflight applies profile provider in current shell"
     else
         fail "preflight did not apply profile provider: $profile_preflight"
@@ -2372,24 +2385,14 @@ EOF
 
 test_model_override_blocking() {
     echo "=== Testing Model Override Blocking ==="
-    
-    local tmp_bin fake_op models_file prompt repo_dir beads out rc
+
+    local tmp_bin fake_op models_file out rc
     tmp_bin="$(mktemp -d)"
     fake_op="$tmp_bin/opencode"
     models_file="$(mktemp)"
-    prompt="$(mktemp)"
-    repo_dir="$(mktemp -d /tmp/agents/test-override-XXXXXX)"
-    beads="test-override-$$"
-    
-    echo "zhipuai/glm-5.1" > "$models_file"
-    echo "READY" > "$prompt"
-    git -C "$repo_dir" init --quiet
-    git -C "$repo_dir" config user.email "test@example.com"
-    git -C "$repo_dir" config user.name "Test Runner"
-    echo "x" > "$repo_dir/a.txt"
-    git -C "$repo_dir" add a.txt
-    git -C "$repo_dir" commit -m "init" --quiet
-    
+
+    echo "zhipuai/glm-5-turbo" > "$models_file"
+
     cat > "$fake_op" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$1" == "models" ]]; then
@@ -2403,23 +2406,28 @@ fi
 exit 0
 EOF
     chmod +x "$fake_op"
-    
+
     # Test 1: OPENCODE_MODEL should be ignored by default
     set +e
-    out="$(PATH="$tmp_bin:$PATH" FAKE_MODELS_FILE="$models_file" OPENCODE_MODEL="some-other-model" "$DX_RUNNER" start --beads "$beads" --provider opencode --prompt-file "$prompt" --worktree "$repo_dir" --json 2>&1)"
+    out="$(
+        PATH="$tmp_bin:$PATH" \
+        FAKE_MODELS_FILE="$models_file" \
+        OPENCODE_MODELS_CACHE_TTL_SEC=0 \
+        OPENCODE_MODEL="some-other-model" \
+        bash -c 'source "$1"; adapter_resolve_model "zhipuai/glm-5-turbo"' bash "$ADAPTERS_DIR/opencode.sh" 2>&1
+    )"
     rc=$?
     set -e
-    
-    # Should still work because we fall back to canonical model
-    if [[ "$rc" -eq 0 ]] || echo "$out" | grep -q "started"; then
+
+    # Should still resolve canonical turbo because env override is blocked by default.
+    if [[ "$rc" -eq 0 && "$out" == *"zhipuai/glm-5-turbo|"* ]]; then
         pass "OPENCODE_MODEL is ignored when override not allowed"
     else
-        fail "start failed when OPENCODE_MODEL set without override: $out"
+        fail "model resolution failed when OPENCODE_MODEL set without override: $out"
     fi
-    
-    rm -rf "$tmp_bin" "$repo_dir"
-    rm -f "$models_file" "$prompt"
-    rm -f /tmp/dx-runner/opencode/"${beads}".*
+
+    rm -rf "$tmp_bin"
+    rm -f "$models_file"
 }
 
 # ============================================================================

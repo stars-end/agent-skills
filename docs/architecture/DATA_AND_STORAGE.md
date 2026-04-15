@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: e90ac84583a457cc2b3580fee522fb2a047c10b7
-last_verified_at: 2026-04-15T21:20:00Z
+last_verified_commit: bed553a7b838847b158a726afbf2ab3df1434e04
+last_verified_at: 2026-04-15T16:24:00Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -28,6 +28,11 @@ surfaces. This file records their ownership boundaries.
 3. External tool state (not committed)
    - e.g., `llm-tldr` contained state under external cache locations
    - runtime caches are operational state, not canonical repo memory
+4. Runner artifacts (not committed)
+   - `dx-runner`, `dx-review`, and `dx-loop` write process logs/reports under
+     `/tmp/dx-runner`, `/tmp/dx-review`, and `/tmp/dx-loop`
+   - these artifacts are evidence for a run, but the committed source of truth
+     is the profile/config/skill contract in this repo
 
 ## Memory Surface Policy
 
@@ -35,6 +40,9 @@ surfaces. This file records their ownership boundaries.
 - Beads KV/structured memory are pointer and decision surfaces.
 - Skills are workflow guidance only.
 - `llm-tldr` verifies source; Serena edits symbols.
+- Runner model policy is repo-owned configuration: OpenCode implementation uses
+  `zhipuai/glm-5-turbo` with `zhipuai/glm-5` fallback, while review/oversight
+  uses GLM-5.1 lanes.
 
 ## What This Repo Does Not Own
 
@@ -49,4 +57,3 @@ For this pilot, "storage" is intentionally lightweight:
 - map where knowledge is stored
 - define stale-if ownership
 - avoid introducing new storage backends or memory wrappers
-

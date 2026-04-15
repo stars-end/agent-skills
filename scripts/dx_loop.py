@@ -46,7 +46,7 @@ VERSION = "1.4.0"
 SURFACE_BEADS_TIMEOUT_SECONDS = 15
 ARTIFACT_BASE = Path("/tmp/dx-loop")
 ACTIVE_EPIC_DIR = ARTIFACT_BASE / "active-epics"
-OPENCODE_IMPLEMENT_MODEL = "zhipuai/glm-5.1"
+OPENCODE_IMPLEMENT_MODEL = "zhipuai/glm-5-turbo"
 OPENCODE_REVIEW_MODEL = "zhipuai/glm-5.1"
 DEFAULT_CONFIG = {
     "max_attempts": 3,

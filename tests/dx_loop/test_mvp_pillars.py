@@ -592,7 +592,7 @@ def test_opencode_phase_defaults_are_applied_when_models_unset(tmp_path):
         },
     )
 
-    assert loop.implement_model == "zhipuai/glm-5.1"
+    assert loop.implement_model == "zhipuai/glm-5-turbo"
     assert loop.review_model == "zhipuai/glm-5.1"
 
 
@@ -621,7 +621,7 @@ def test_start_implement_uses_implement_runner(tmp_path):
             "cadence_seconds": 0,
             "implement_provider": "opencode",
             "review_provider": "cc-glm",
-            "implement_model": "zhipuai/glm-5.1",
+            "implement_model": "zhipuai/glm-5-turbo",
         },
     )
     loop.wave_dir = tmp_path / "waves" / wave_id
@@ -652,7 +652,7 @@ def test_start_implement_uses_implement_runner(tmp_path):
 
     assert loop._start_implement("bd-test") is True
     assert dispatched_provider["provider"] == "opencode"
-    assert dispatched_provider["model"] == "zhipuai/glm-5.1"
+    assert dispatched_provider["model"] == "zhipuai/glm-5-turbo"
 
     print("Pillar C: _start_implement uses implement runner with model")
 

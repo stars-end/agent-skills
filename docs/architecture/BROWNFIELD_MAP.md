@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: e90ac84583a457cc2b3580fee522fb2a047c10b7
-last_verified_at: 2026-04-15T21:20:00Z
+last_verified_commit: bed553a7b838847b158a726afbf2ab3df1434e04
+last_verified_at: 2026-04-15T16:24:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -55,6 +55,9 @@ For changes that touch architecture or workflow behavior, read in this order:
 - review/orchestration templates under `templates/dx-review`
 - routing contracts for `llm-tldr`, Serena, and Beads runtime assumptions
 - scripts that enforce cross-repo policy (`dx-*` checks, dispatch helpers)
+- model-lane policy across `dx-loop`, `dx-review`, and `dx-runner`; agents
+  should see `dx-loop` as the batch/loop surface, `dx-review` as review-only,
+  and `dx-runner` as the provider substrate
 
 ## AGENTS Routing Integration Note
 
@@ -64,4 +67,3 @@ Expected link target for AGENTS routing:
 
 This file should be linked from AGENTS routing text in a centralized baseline
 regeneration pass, not by ad hoc local edits.
-

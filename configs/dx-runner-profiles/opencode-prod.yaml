@@ -1,14 +1,14 @@
 # dx-runner profile: opencode-prod
-# Production-safe OpenCode dispatch with strict governance
+# Production-safe OpenCode implementation dispatch with strict governance
 
 profile:
   name: opencode-prod
-  description: Production-safe OpenCode dispatch with strict canonical review model enforcement
+  description: Production-safe OpenCode implementation dispatch with strict canonical model enforcement
   version: "1.2.0"
 
 provider:
   name: opencode
-  model: zhipuai/glm-5.1
+  model: zhipuai/glm-5-turbo
   allow_model_override: false
   execution_mode: run
   fallback_provider: cc-glm

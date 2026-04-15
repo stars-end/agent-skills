@@ -26,7 +26,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 - **\`~/bd\` is legacy/rollback Git-backed state, not active runtime truth**.
 - **Use \`bdx\` for Beads coordination commands** (\`create\`, \`show\`, \`comments add\`, \`ready\`, \`search\`, memory commands, etc.).
 - **Raw \`bd\` is reserved for local diagnostics/bootstrap/path-sensitive operations or explicit override.**
-- **Run \`dx-runner\` / \`dx-batch\` control-plane commands from non-app directories; use \`bdx\` for Beads coordination around those runs.**
+- **Run \`dx-loop\` / \`dx-runner\` / compatibility \`dx-batch\` control-plane commands from non-app directories; use \`bdx\` for Beads coordination around those runs.**
 - **Set \`BEADS_DIR=~/.beads-runtime/.beads\` in normal agent shells**.
 - **Never run mutating Beads commands from app repos** (\`~/prime-radiant-ai\`, \`~/agent-skills\`, etc.) unless explicitly using a documented override.
 - **Backend must be Dolt server mode on \`epyc12\`** for multi-VM/multi-agent reliability.
@@ -56,7 +56,7 @@ cd /tmp/agents/bd-xxxx/repo-name
 ## 4) Delegation Rule (V8.6 - Batch by Outcome)
 - **Primary rule**: batch by outcome, not by file. One agent per coherent change set.
 - **Default parallelism**: 2 agents, scale to 3-4 only when independent and stable.
-- **Default orchestration rule**: use \`dx-batch\` over \`dx-runner\` for chained Beads work, multi-step outcomes, or implement/review baton flow.
+- **Default orchestration rule**: use \`dx-loop\` for chained Beads work, multi-step outcomes, or implement/review baton flow.
 - **Direct/manual fallback**: implement directly only for isolated single-task work or when the orchestration surface itself is the active blocker.
 - **Do not delegate**: security-sensitive changes, architectural decisions, or high-blast-radius refactors.
 - **Orchestrator owns outcomes**: review diffs, run validation, commit/push with required trailers.
@@ -259,25 +259,31 @@ dx-runner status --json
 dx-runner check --beads bd-xxx --json
 \`\`\`
 
-**Canonical batch orchestrator: dx-batch (orchestration-only over dx-runner)**
+**Canonical batch/loop orchestrator: dx-loop (PR-aware orchestration over dx-runner)**
 
 \`\`\`bash
-# Execute implement -> review waves with deterministic ledger/contracts
-dx-batch start --items bd-aaa,bd-bbb --max-parallel 2
+# Execute implement -> review waves from a Beads epic
+dx-loop start --epic bd-aaa --repo repo-name
 
-# Diagnose stuck waves
-dx-batch doctor --wave-id <wave-id> --json
+# Diagnose task or wave state
+dx-loop explain --epic bd-aaa
+dx-loop status --epic bd-aaa --json
 \`\`\`
+
+**Compatibility/internal batch substrate: dx-batch**
+
+Use \`dx-batch\` only for legacy waves, compatibility recovery, or when the
+\`dx-loop\` surface itself is the active blocker.
 
 **Direct OpenCode lane (advanced, non-governed)**
 
 \`\`\`bash
 # Headless single-run lane
-opencode run -m zhipuai/glm-5.1 "Implement task T1 from plan.md"
+opencode run -m zhipuai/glm-5-turbo "Implement task T1 from plan.md"
 
 # Legacy server lane for parallel clients (opt-in only)
 opencode serve --hostname 127.0.0.1 --port 4096
-opencode run --attach http://127.0.0.1:4096 -m zhipuai/glm-5.1 "Implement task T2 from plan.md"
+opencode run --attach http://127.0.0.1:4096 -m zhipuai/glm-5-turbo "Implement task T2 from plan.md"
 \`\`\`
 
 **Reliability backstop: cc-glm via dx-runner**
@@ -322,7 +328,7 @@ Task:
 - Use \`report --format json\` as the source of truth for outcome and metrics.
 - Prefer one controlled restart max; then escalate using failure taxonomy.
 - Run \`dx-runner prune\` periodically to clear stale PID ghosts.
-- For OpenCode, enforce canonical model \`zhipuai/glm-5.1\`; fallback provider if unavailable.
+- For OpenCode implementation, enforce canonical model \`zhipuai/glm-5-turbo\`; fallback to \`zhipuai/glm-5\` if turbo is unavailable. Review/oversight lanes use \`zhipuai/glm-5.1\`.
 
 ### Monitoring (Simplified)
 
