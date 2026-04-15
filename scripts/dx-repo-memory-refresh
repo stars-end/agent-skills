@@ -69,6 +69,14 @@ print("true" if json.load(open(sys.argv[1])).get("action_needed") else "false")
 PY
 }
 
+worktree_for_branch() {
+  local branch="$1"
+  git -C "$REPO_PATH" worktree list --porcelain | awk -v branch="refs/heads/$branch" '
+    /^worktree / { current=$2 }
+    /^branch / && $2 == branch { print current; exit }
+  '
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -148,9 +156,19 @@ prepare_worktree() {
   [[ -n "$default_branch" ]] || default_branch="master"
 
   git -C "$REPO_PATH" fetch origin "$default_branch" "$BRANCH" >/dev/null 2>&1 || git -C "$REPO_PATH" fetch origin "$default_branch" >/dev/null
+  git -C "$REPO_PATH" worktree prune >/dev/null 2>&1 || true
+
+  local existing_worktree
+  existing_worktree="$(worktree_for_branch "$BRANCH" || true)"
+  if [[ -n "$existing_worktree" && "$existing_worktree" != "$worktree" ]]; then
+    log "removing stale worktree for $BRANCH: $existing_worktree"
+    git -C "$REPO_PATH" worktree remove --force "$existing_worktree" >/dev/null 2>&1 || rm -rf "$existing_worktree"
+  fi
+
   rm -rf "$worktree"
   mkdir -p "$(dirname "$worktree")"
-  git -C "$REPO_PATH" worktree add -B "$BRANCH" "$worktree" "origin/$default_branch" >/dev/null
+  git -C "$REPO_PATH" worktree add -B "$BRANCH" "$worktree" "origin/$default_branch" >/dev/null || die "failed to create refresh worktree"
+  [[ -d "$worktree/.git" || -f "$worktree/.git" ]] || die "refresh worktree was not created: $worktree"
   git -C "$worktree" config user.name "repo-memory-refresh"
   git -C "$worktree" config user.email "repo-memory-refresh@users.noreply.github.com"
 }
@@ -260,7 +278,9 @@ main() {
     log "audit rc=$audit_rc report=$report"
 
     local action_needed
-    action_needed="$(json_get_action_needed "$report")"
+    if ! action_needed="$(json_get_action_needed "$report")"; then
+      die "audit did not produce valid JSON report: $report"
+    fi
     if [[ "$FORCE_AGENT" -ne 1 && "$action_needed" != "true" ]]; then
       log "audit clean; no Codex run needed"
       exit 0
