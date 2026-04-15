@@ -1,9 +1,3 @@
-## Canonical bd prefix cutover (2026-04-02)
-
-- `agent-skills` new-work Feature-Key / branch / PR metadata should use `bd-*`.
-- Canonical Beads now defaults to `bd-*` for new issues, so the repo workflow and Beads default are aligned again.
-- Legacy `af-*` or other historical prefixes may still resolve in Beads, but they are not the default contract for new `agent-skills` work.
-
 ---
 name: sync-feature-branch
 description: |
@@ -21,6 +15,12 @@ allowed-tools:
   - Bash(scripts/bd-*:*)
   - Read
 ---
+
+## Canonical bd prefix cutover (2026-04-02)
+
+- `agent-skills` new-work Feature-Key / branch / PR metadata should use `bd-*`.
+- Canonical Beads now defaults to `bd-*` for new issues, so the repo workflow and Beads default are aligned again.
+- Legacy `af-*` or other historical prefixes may still resolve in Beads, but they are not the default contract for new `agent-skills` work.
 
 # Sync Feature Branch
 
