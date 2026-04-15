@@ -215,7 +215,10 @@ commit_push_pr() {
     return 0
   fi
 
-  git -C "$worktree" add docs/architecture AGENTS.md AGENTS.local.md 2>/dev/null || true
+  local add_targets=("docs/architecture")
+  [[ -f "$worktree/AGENTS.md" ]] && add_targets+=("AGENTS.md")
+  [[ -f "$worktree/AGENTS.local.md" ]] && add_targets+=("AGENTS.local.md")
+  git -C "$worktree" add "${add_targets[@]}"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log "dry-run diff follows"
     git -C "$worktree" diff --cached --stat
