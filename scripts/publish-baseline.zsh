@@ -79,6 +79,7 @@ designing or editing:
 
 - `docs/architecture/BROWNFIELD_MAP.md`
 - `docs/architecture/DATA_AND_STORAGE.md`
+- `docs/architecture/README.md`
 - `docs/architecture/WORKFLOWS_AND_PATTERNS.md`
 
 Use `dx-repo-memory-check --repo .` to validate map freshness.

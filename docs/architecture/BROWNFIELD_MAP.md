@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: f94ee66824c6754c6619aeced3ffc4ce92e34b9c
-last_verified_at: 2026-04-15T16:21:14Z
+last_verified_commit: dd2437b7dec5d86f92e42af52c90d761e68e0898
+last_verified_at: 2026-04-15T18:51:07Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -38,6 +38,8 @@ The repo ships:
    and publish artifacts.
 4. Templates provide prompt/review contract skeletons used by orchestration
    tooling.
+5. Repo-memory refresh tooling audits architecture maps and opens narrow
+   doc-only PRs when those maps fall behind mapped source changes.
 
 ## Current Orchestration Boundary
 
@@ -72,6 +74,9 @@ For changes that touch architecture or workflow behavior, read in this order:
 - stale "canonical dx-batch" wording in generated baselines, skill metadata,
   or wrapper help text; treat this as policy drift and route through the
   baseline source fragments rather than editing generated artifacts directly
+- repo-memory automation (`dx-repo-memory-*`, systemd templates, and Codex
+  prompts); keep this path conservative because it is allowed to create
+  scheduled documentation PRs
 
 ## AGENTS Routing Integration Note
 

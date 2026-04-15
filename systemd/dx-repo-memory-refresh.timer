@@ -1,0 +1,11 @@
+[Unit]
+Description=Run DX Repo Memory Refresh daily at 1am Pacific
+
+[Timer]
+OnCalendar=*-*-* 01:00:00 America/Los_Angeles
+Persistent=true
+RandomizedDelaySec=10m
+Unit=dx-repo-memory-refresh.service
+
+[Install]
+WantedBy=timers.target

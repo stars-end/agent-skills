@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: f94ee66824c6754c6619aeced3ffc4ce92e34b9c
-last_verified_at: 2026-04-15T16:21:14Z
+last_verified_commit: dd2437b7dec5d86f92e42af52c90d761e68e0898
+last_verified_at: 2026-04-15T18:51:07Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -60,6 +60,18 @@ Architecture review should evaluate:
 - operational ergonomics
 - complexity budget
 - repo-memory compliance for brownfield work
+
+## Core Pattern: Scheduled Repo-Memory Refresh
+
+- `dx-repo-memory-check` is the deterministic gate for map freshness.
+- `dx-repo-memory-refresh` is the scheduled agent runner: audit first, invoke
+  Codex only when action is needed, and restrict committed changes to
+  `docs/architecture/`, `AGENTS.md`, and `AGENTS.local.md`.
+- The epyc12 systemd timer is the primary automation surface; macmini is a
+  Tailscale SSH fallback for the same script and prompt.
+- Timer installation is a deployment step after the script is present in the
+  canonical checkout; PR branches should ship the service/timer files without
+  enabling them.
 
 ## Pilot Adoption Checklist
 

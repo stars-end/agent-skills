@@ -1,0 +1,323 @@
+#!/usr/bin/env bash
+#
+# OAuth-runner repo-memory refresh orchestrator.
+#
+# Runs on epyc12 by default. macmini is a one-shot fallback host for host/runtime
+# failures only; product/data failures fail closed.
+
+set -euo pipefail
+
+export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AGENTS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROMPT_FILE="$AGENTS_ROOT/.github/codex/prompts/repo-memory-refresh.md"
+REPO_NAME="agent-skills"
+REPO_PATH="$HOME/agent-skills"
+STATE_ROOT="${DX_REPO_MEMORY_STATE_ROOT:-$HOME/.dx-state/repo-memory}"
+AGE_DAYS="${DX_REPO_MEMORY_AGE_DAYS:-30}"
+BRANCH="automation/repo-memory-refresh"
+MODEL="${DX_REPO_MEMORY_MODEL:-gpt-5.4}"
+EFFORT="${DX_REPO_MEMORY_EFFORT:-high}"
+CODEX_SANDBOX="${DX_REPO_MEMORY_CODEX_SANDBOX:-danger-full-access}"
+FALLBACK_HOST=""
+RUN_MODE="primary"
+PUSH=0
+CREATE_PR=0
+DRY_RUN=0
+FORCE_AGENT=0
+SKIP_FALLBACK=0
+CURRENT_RUN_ID="${DX_REPO_MEMORY_RUN_ID:-}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  dx-repo-memory-refresh [options]
+
+Options:
+  --repo-name NAME       Logical repo name (default: agent-skills)
+  --repo-path PATH       Canonical repo path to read/fetch (default: ~/agent-skills)
+  --state-root PATH      State/log/worktree root (default: ~/.dx-state/repo-memory)
+  --age-days N           Age threshold for repo-memory audit (default: 30)
+  --branch NAME          Rolling branch name (default: automation/repo-memory-refresh)
+  --model MODEL          Codex model (default: gpt-5.4)
+  --effort EFFORT        Codex reasoning effort (default: high)
+  --codex-sandbox MODE   Codex sandbox mode (default: danger-full-access)
+  --fallback-host HOST   SSH host used only for primary host/runtime failure
+  --mode MODE            primary|fallback (default: primary)
+  --push                 Push branch after successful doc-only changes
+  --create-pr            Create/update draft PR after push
+  --dry-run              Do not push, commit, or create PR
+  --force-agent          Run Codex even if deterministic audit is clean
+  --skip-fallback        Do not invoke fallback host on host/runtime failure
+EOF
+}
+
+log() {
+  printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
+}
+
+die() {
+  log "ERROR: $*" >&2
+  exit 1
+}
+
+json_get_action_needed() {
+  python3 - "$1" <<'PY'
+import json, sys
+print("true" if json.load(open(sys.argv[1])).get("action_needed") else "false")
+PY
+}
+
+worktree_for_branch() {
+  local branch="$1"
+  git -C "$REPO_PATH" worktree list --porcelain | awk -v branch="refs/heads/$branch" '
+    /^worktree / { current=$2 }
+    /^branch / && $2 == branch { print current; exit }
+  '
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo-name) REPO_NAME="$2"; shift 2 ;;
+      --repo-path) REPO_PATH="$2"; shift 2 ;;
+      --state-root) STATE_ROOT="$2"; shift 2 ;;
+      --age-days) AGE_DAYS="$2"; shift 2 ;;
+      --branch) BRANCH="$2"; shift 2 ;;
+      --model) MODEL="$2"; shift 2 ;;
+      --effort) EFFORT="$2"; shift 2 ;;
+      --codex-sandbox) CODEX_SANDBOX="$2"; shift 2 ;;
+      --fallback-host) FALLBACK_HOST="$2"; shift 2 ;;
+      --mode) RUN_MODE="$2"; shift 2 ;;
+      --push) PUSH=1; shift ;;
+      --create-pr) CREATE_PR=1; shift ;;
+      --dry-run) DRY_RUN=1; shift ;;
+      --force-agent) FORCE_AGENT=1; shift ;;
+      --skip-fallback) SKIP_FALLBACK=1; shift ;;
+      --help|-h) usage; exit 0 ;;
+      *) die "unknown argument: $1" ;;
+    esac
+  done
+}
+
+preflight() {
+  command -v git >/dev/null 2>&1 || die "git missing"
+  command -v codex >/dev/null 2>&1 || die "codex missing"
+  command -v python3 >/dev/null 2>&1 || die "python3 missing"
+  [[ -f "$PROMPT_FILE" ]] || die "prompt file missing: $PROMPT_FILE"
+  [[ -d "$REPO_PATH/.git" || -f "$REPO_PATH/.git" ]] || die "repo path is not a git checkout: $REPO_PATH"
+
+  if ! codex login status >/dev/null 2>&1; then
+    die "codex login status failed"
+  fi
+  if ! codex login status 2>&1 | grep -q "Logged in using ChatGPT"; then
+    die "codex is not logged in using ChatGPT"
+  fi
+  if ! command -v bwrap >/dev/null 2>&1; then
+    log "WARN: system bubblewrap missing; Codex may use vendored bubblewrap"
+  fi
+  if [[ "$PUSH" -eq 1 || "$CREATE_PR" -eq 1 ]]; then
+    command -v gh >/dev/null 2>&1 || die "gh missing"
+    gh auth status >/dev/null 2>&1 || die "gh auth status failed"
+  fi
+}
+
+invoke_fallback() {
+  local rc="$1"
+  if [[ "$RUN_MODE" == "fallback" || "$SKIP_FALLBACK" -eq 1 || -z "$FALLBACK_HOST" ]]; then
+    exit "$rc"
+  fi
+
+  log "primary runner failed with rc=$rc; invoking fallback host=$FALLBACK_HOST"
+  local remote_repo_path="\$HOME/$REPO_NAME"
+  if [[ "$REPO_PATH" != "$HOME/$REPO_NAME" ]]; then
+    remote_repo_path="$REPO_PATH"
+  fi
+  local remote_state_root="\$HOME/.dx-state/repo-memory"
+  if [[ "$STATE_ROOT" != "$HOME/.dx-state/repo-memory" ]]; then
+    remote_state_root="$STATE_ROOT"
+  fi
+
+  local remote_flags=""
+  [[ "$PUSH" -eq 1 ]] && remote_flags="$remote_flags --push"
+  [[ "$CREATE_PR" -eq 1 ]] && remote_flags="$remote_flags --create-pr"
+  [[ "$DRY_RUN" -eq 1 ]] && remote_flags="$remote_flags --dry-run"
+  [[ "$FORCE_AGENT" -eq 1 ]] && remote_flags="$remote_flags --force-agent"
+
+  ssh -o BatchMode=yes -o ConnectTimeout=10 "$FALLBACK_HOST" \
+    "DX_REPO_MEMORY_RUN_ID='$CURRENT_RUN_ID' \"\$HOME/agent-skills/scripts/dx-repo-memory-refresh\" --repo-name '$REPO_NAME' --repo-path '$remote_repo_path' --state-root '$remote_state_root' --age-days '$AGE_DAYS' --branch '$BRANCH' --model '$MODEL' --effort '$EFFORT' --codex-sandbox '$CODEX_SANDBOX' --mode fallback $remote_flags --skip-fallback"
+}
+
+prepare_worktree() {
+  local worktree="$1"
+  local default_branch
+  default_branch="$(git -C "$REPO_PATH" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || true)"
+  [[ -n "$default_branch" ]] || default_branch="master"
+
+  git -C "$REPO_PATH" fetch origin "$default_branch" "$BRANCH" >/dev/null 2>&1 || git -C "$REPO_PATH" fetch origin "$default_branch" >/dev/null
+  git -C "$REPO_PATH" worktree prune >/dev/null 2>&1 || true
+
+  local existing_worktree
+  existing_worktree="$(worktree_for_branch "$BRANCH" || true)"
+  if [[ -n "$existing_worktree" && "$existing_worktree" != "$worktree" ]]; then
+    log "removing stale worktree for $BRANCH: $existing_worktree"
+    git -C "$REPO_PATH" worktree remove --force "$existing_worktree" >/dev/null 2>&1 || rm -rf "$existing_worktree"
+  fi
+
+  rm -rf "$worktree"
+  mkdir -p "$(dirname "$worktree")"
+  git -C "$REPO_PATH" worktree add -B "$BRANCH" "$worktree" "origin/$default_branch" >/dev/null || die "failed to create refresh worktree"
+  [[ -d "$worktree/.git" || -f "$worktree/.git" ]] || die "refresh worktree was not created: $worktree"
+  git -C "$worktree" config user.name "repo-memory-refresh"
+  git -C "$worktree" config user.email "repo-memory-refresh@users.noreply.github.com"
+}
+
+copy_report() {
+  local report="$1"
+  local worktree="$2"
+  cp "$report" "$worktree/repo-memory-report.json"
+}
+
+run_codex() {
+  local worktree="$1"
+  local report="$2"
+  local output="$3"
+  local prompt_copy
+  prompt_copy="$worktree/repo-memory-refresh.prompt.md"
+  {
+    cat "$PROMPT_FILE"
+    printf '\n\n## Audit Report Location\n\n'
+    printf 'Read `repo-memory-report.json` in the repository root.\n'
+  } > "$prompt_copy"
+
+  codex exec \
+    -C "$worktree" \
+    --ephemeral \
+    -s "$CODEX_SANDBOX" \
+    -m "$MODEL" \
+    -c "model_reasoning_effort=\"$EFFORT\"" \
+    --output-last-message "$output" \
+    - < "$prompt_copy"
+  rm -f "$prompt_copy"
+  rm -f "$worktree/repo-memory-report.json"
+}
+
+commit_push_pr() {
+  local worktree="$1"
+  local run_id="$2"
+  local action_needed="$3"
+  if git -C "$worktree" diff --quiet; then
+    log "no repo-memory changes after Codex"
+    if [[ "$action_needed" == "true" ]]; then
+      die "audit required action but Codex produced no diff"
+    fi
+    return 0
+  fi
+
+  local add_targets=("docs/architecture")
+  [[ -f "$worktree/AGENTS.md" ]] && add_targets+=("AGENTS.md")
+  [[ -f "$worktree/AGENTS.local.md" ]] && add_targets+=("AGENTS.local.md")
+  git -C "$worktree" add "${add_targets[@]}"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "dry-run diff follows"
+    git -C "$worktree" diff --cached --stat
+    return 0
+  fi
+
+  git -C "$worktree" commit \
+    -m "bd-s6yjk.9: refresh repo memory maps" \
+    -m "Automated repo-memory refresh run: $run_id" \
+    -m "Feature-Key: bd-s6yjk.9" \
+    -m "Agent: codex-oauth-runner" >/dev/null
+
+  if [[ "$PUSH" -eq 1 ]]; then
+    git -C "$worktree" push -u origin "$BRANCH" >/dev/null
+    log "pushed $BRANCH"
+  fi
+
+  if [[ "$CREATE_PR" -eq 1 ]]; then
+    if gh -R "stars-end/$REPO_NAME" pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty' | grep -q .; then
+      local pr
+      pr="$(gh -R "stars-end/$REPO_NAME" pr list --head "$BRANCH" --state open --json number --jq '.[0].number')"
+      gh -R "stars-end/$REPO_NAME" pr comment "$pr" --body "Repo-memory refresh updated by run $run_id." >/dev/null || true
+      log "updated existing PR #$pr"
+    else
+      gh -R "stars-end/$REPO_NAME" pr create \
+        --draft \
+        --title "bd-s6yjk.9: automated repo-memory refresh" \
+        --body "Agent: codex-oauth-runner
+
+Automated repo-memory refresh.
+
+Run ID: $run_id
+
+Feature-Key: bd-s6yjk.9" >/dev/null
+      log "created draft PR for $BRANCH"
+    fi
+  fi
+}
+
+acquire_lock() {
+  local lock_file="$1"
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$lock_file"
+    if ! flock -n 9; then
+      die "another repo-memory refresh is already running"
+    fi
+    return 0
+  fi
+
+  local lock_dir="${lock_file}.d"
+  if ! mkdir "$lock_dir" 2>/dev/null; then
+    die "another repo-memory refresh is already running"
+  fi
+  DX_REPO_MEMORY_LOCK_DIR="$lock_dir"
+  trap 'rm -rf "$DX_REPO_MEMORY_LOCK_DIR"' EXIT
+}
+
+main() {
+  parse_args "$@"
+  CURRENT_RUN_ID="${CURRENT_RUN_ID:-$(date -u +'%Y%m%dT%H%M%SZ')-$REPO_NAME-$RUN_MODE}"
+  local run_root="$STATE_ROOT/runs/$CURRENT_RUN_ID"
+  local worktree="$STATE_ROOT/worktrees/$REPO_NAME-$CURRENT_RUN_ID"
+  local lock_file="$STATE_ROOT/refresh.lock"
+  mkdir -p "$run_root" "$STATE_ROOT"
+
+  acquire_lock "$lock_file"
+
+  {
+    preflight
+    prepare_worktree "$worktree"
+
+    local report="$run_root/repo-memory-report.json"
+    local audit_rc=0
+    "$AGENTS_ROOT/scripts/dx-repo-memory-audit" --repo "$worktree" --age-days "$AGE_DAYS" --json > "$report" || audit_rc=$?
+    log "audit rc=$audit_rc report=$report"
+
+    local action_needed
+    if ! action_needed="$(json_get_action_needed "$report")"; then
+      die "audit did not produce valid JSON report: $report"
+    fi
+    if [[ "$FORCE_AGENT" -ne 1 && "$action_needed" != "true" ]]; then
+      log "audit clean; no Codex run needed"
+      exit 0
+    fi
+
+    copy_report "$report" "$worktree"
+    local codex_output="$run_root/codex-final.md"
+    run_codex "$worktree" "$report" "$codex_output"
+    log "codex output=$codex_output"
+
+    "$AGENTS_ROOT/scripts/dx-repo-memory-guard" --repo "$worktree" --base-ref "origin/master" --json > "$run_root/guard-report.json"
+    "$AGENTS_ROOT/scripts/dx-repo-memory-check" --repo "$worktree" --json > "$run_root/check-report.json"
+    commit_push_pr "$worktree" "$CURRENT_RUN_ID" "$action_needed"
+    log "complete run_id=$CURRENT_RUN_ID"
+  } || {
+    local rc=$?
+    invoke_fallback "$rc"
+    exit "$rc"
+  }
+}
+
+main "$@"

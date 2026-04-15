@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: 9fcc0647f121cf7f573e97267ba9ab3742f38e6d
-last_verified_at: 2026-04-15T16:21:14Z
+last_verified_commit: 64e6ae55d5f760b4bf80481aed80f61bb5f95020
+last_verified_at: 2026-04-15T18:52:14Z
 stale_if_paths:
   - docs/architecture/**
 ---
@@ -15,3 +15,6 @@ stale_if_paths:
   ownership boundaries
 - `WORKFLOWS_AND_PATTERNS.md`: recurring workflow contracts, orchestration
   surface hierarchy, and anti-drift rules
+
+Scheduled repo-memory refreshes must keep this index in sync whenever mapped
+architecture docs are added, removed, or materially reorganized.
