@@ -69,9 +69,11 @@ Use this skill when the user asks to:
   - host runtime health
   - rendered config correctness
   - client-visible MCP availability
-- For `llm-tldr`, contained semantic search auto-bootstraps a missing semantic
-  index on first use for the target project path. `tldr warm <project>` only
-  warms structural caches.
+- For `llm-tldr`, contained MCP/CLI semantic search may auto-bootstrap a
+  missing semantic index on first use for the target project path, but the
+  daemon fallback fails fast on a cold semantic index and tells agents to
+  prewarm explicitly or use targeted `rg` / direct reads. `tldr warm <project>`
+  only warms structural caches.
   Every MCP tool call accepts a `project` parameter for
   worktree-safe operation (daemon per resolved path).
 - **llm-tldr state containment (af-aqb.1):** The MCP server is launched via

@@ -48,12 +48,23 @@ Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
    - this is not configured inside `tldr-daemon-fallback.sh`
 2. CLI fallback timeout:
    - callers must wrap `tldr-daemon-fallback.sh` with GNU `timeout`
-   - on timeout, return a clear reason and fall back to targeted `rg` or direct source reads
+   - semantic fallback fails fast with `reason_code=semantic_index_missing`
+     when its FAISS index is cold, instead of auto-building inside the bounded
+     agent command
+   - on timeout or `semantic_index_missing`, return a clear reason and fall
+     back to targeted `rg` or direct source reads for the current turn
 
 Example bounded fallback:
 
 ```bash
 timeout 25 ~/agent-skills/scripts/tldr-daemon-fallback.sh semantic --repo /tmp/agents/<beads-id>/<repo> --query "where is auth bootstrapped?"
+```
+
+If that returns `semantic_index_missing`, prewarm explicitly when semantic
+search is still worth the cold-start cost:
+
+```bash
+~/agent-skills/scripts/tldr-contained.sh semantic index /tmp/agents/<beads-id>/<repo> --model all-MiniLM-L6-v2
 ```
 
 ## Beads Memory Synergy
@@ -191,7 +202,10 @@ a path-locality miss, not an MCP hydration failure.
 ### Warm / Index Lifecycle
 
 `tldr warm` pre-builds structural call graph caches.
-Contained semantic search auto-bootstraps a FAISS index on first use when missing.
+Contained MCP and contained CLI semantic search may auto-bootstrap a FAISS index
+on first use when missing. The daemon-backed fallback is different: it is an
+agent recovery path and must not spend a bounded fallback call doing a cold
+semantic model/index build.
 
 Use the contained wrapper for both:
 
@@ -202,9 +216,9 @@ Use the contained wrapper for both:
 ```
 
 The daemon auto-reindexes structural caches after file changes. The contained
-wrapper now auto-builds a missing semantic index on first semantic search for
-the target project path. Explicit `semantic index` remains useful when you want
-to prewarm for lower-latency first queries or pick a specific model.
+MCP/CLI wrapper may auto-build a missing semantic index on first semantic
+search for the target project path. Explicit `semantic index` is the preferred
+fresh-device/worktree prewarm path when an agent needs semantic search.
 The contained wrapper ensures no
 `.tldr/` or `.tldrignore` files are created inside the project tree, even when
 running `warm` from nested subdirectories.
@@ -247,6 +261,14 @@ daemon helper as the canonical fallback instead of plain `python -m tldr.cli`:
 This helper calls `tldr.mcp_server` tool functions directly after contained
 runtime patching, so queries stay on the daemon/socket path (`_send_command`)
 instead of the plain CLI direct API path.
+
+Semantic fallback has one extra guard: if the contained semantic index is
+missing, it exits quickly with `reason_code=semantic_index_missing` and prints a
+prewarm command. Do not retry the same fallback command in a loop. Either run
+the explicit prewarm command or use targeted `rg` / direct source reads for this
+turn. Operators can opt into the older cold-build behavior with
+`TLDR_FALLBACK_SEMANTIC_AUTOBUILD=1`; agents should not use that override
+inside ordinary tool routing.
 
 Current command surface mirrors the practical MCP tools:
 `tree`, `structure`, `search`, `extract`, `context`, `cfg`, `dfg`, `slice`,
@@ -335,7 +357,7 @@ a documented fallback condition applies.
 
 | Function | Purpose | Requires Warm? |
 |----------|---------|----------------|
-| `semantic` | Semantic code search by meaning (FAISS + bge-large) | No (contained auto-bootstrap) |
+| `semantic` | Semantic code search by meaning (FAISS; use `all-MiniLM-L6-v2` for agent prewarm) | Fallback requires prewarmed index; MCP/CLI may auto-bootstrap |
 | `context` | Token-efficient context from entry point (95% savings) | No |
 | `structure` | Code structure / codemaps | No |
 | `calls` | Cross-file call graph | No |
@@ -380,7 +402,7 @@ The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools w
 2. **Token efficient**: 95% token savings vs reading raw files
 3. **Worktree-safe**: `project` parameter per call, no single-root lock-in
 4. **Per-project daemons**: Daemon per resolved path, no central index requirement
-5. **Auto-bootstrap semantic**: contained semantic search builds missing semantic index on first use
+5. **Semantic prewarm clarity**: contained MCP/CLI may build a missing semantic index, while daemon fallback fails fast on a cold semantic index and tells agents how to prewarm
 6. **State-contained**: No `.tldr/` or `.tldrignore` in repo/worktree trees
 7. **Fallback path**: Keep fallback to normal repo-local context gathering
 

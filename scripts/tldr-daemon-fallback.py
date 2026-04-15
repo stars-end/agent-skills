@@ -10,10 +10,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from tldr_contained_runtime import apply_containment_patches
+
+
+SEMANTIC_AUTOBUILD_ENV = "TLDR_FALLBACK_SEMANTIC_AUTOBUILD"
+DEFAULT_FALLBACK_SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 
 
 def _json_or_text(value: Any) -> str:
@@ -31,6 +36,58 @@ def _resolve_project(project: str) -> str:
 
 def _resolve_path(path_value: str) -> str:
     return str(Path(path_value).expanduser().resolve())
+
+
+def _semantic_autobuild_enabled() -> bool:
+    return os.environ.get(SEMANTIC_AUTOBUILD_ENV, "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _semantic_index_missing_result(project: str) -> dict[str, Any]:
+    try:
+        from tldr_contained_runtime import _semantic_index_files
+
+        index_file, metadata_file = _semantic_index_files(project)
+        index_path = str(index_file)
+        metadata_path = str(metadata_file)
+    except Exception:
+        index_path = None
+        metadata_path = None
+
+    next_command = (
+        "~/agent-skills/scripts/tldr-contained.sh semantic index "
+        f"{project} --model {DEFAULT_FALLBACK_SEMANTIC_MODEL}"
+    )
+    return {
+        "ok": False,
+        "status": "error",
+        "reason_code": "semantic_index_missing",
+        "message": (
+            "llm-tldr semantic fallback index is missing. The daemon fallback "
+            "does not auto-build semantic indexes by default because first-build "
+            "can exceed agent timeouts. Run the prewarm command or fall back to "
+            "targeted rg/direct reads for this turn."
+        ),
+        "project": project,
+        "index_file": index_path,
+        "metadata_file": metadata_path,
+        "next_command": next_command,
+        "temporary_fallback": "Use targeted rg/direct source reads if the task is urgent.",
+        "autobuild_override": f"{SEMANTIC_AUTOBUILD_ENV}=1",
+    }
+
+
+def _semantic_index_ready(project: str) -> bool:
+    try:
+        from tldr_contained_runtime import _semantic_index_ready as contained_index_ready
+
+        return bool(contained_index_ready(project))
+    except Exception:
+        return False
 
 
 def _add_project_arg(command_parser: argparse.ArgumentParser) -> None:
@@ -201,11 +258,16 @@ def main(argv: list[str] | None = None) -> int:
         )
     elif command == "semantic":
         project = _resolve_project(args.project)
-        result = mcp_mod.semantic(
-            project=project,
-            query=args.query,
-            k=args.k,
-        )
+        if not _semantic_index_ready(project) and not _semantic_autobuild_enabled():
+            result = _semantic_index_missing_result(project)
+            print(_json_or_text(result))
+            return 3
+        if _semantic_autobuild_enabled():
+            os.environ.setdefault(
+                "TLDR_SEMANTIC_AUTOBUILD_MODEL",
+                DEFAULT_FALLBACK_SEMANTIC_MODEL,
+            )
+        result = mcp_mod.semantic(project=project, query=args.query, k=args.k)
     elif command == "search":
         project = _resolve_project(args.project)
         result = mcp_mod.search(
