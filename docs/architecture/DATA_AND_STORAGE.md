@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: f94ee66824c6754c6619aeced3ffc4ce92e34b9c
-last_verified_at: 2026-04-15T16:21:14Z
+last_verified_commit: dd2437b7dec5d86f92e42af52c90d761e68e0898
+last_verified_at: 2026-04-15T18:51:07Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -36,6 +36,12 @@ surfaces. This file records their ownership boundaries.
    - `dx-batch`/`dx-wave` artifacts are legacy compatibility or operator
      substrate state and should not be treated as the default agent workflow
      record
+5. Repo-memory refresh state (not committed)
+   - `dx-repo-memory-refresh` stores run reports and generated worktrees under
+     its configured state root, defaulting to `~/.dx-state/repo-memory`
+   - scheduled runs create Git branches and draft PRs for reviewable doc
+     changes; runtime logs and lock files are operational evidence, not
+     canonical memory
 
 ## Memory Surface Policy
 
@@ -43,6 +49,9 @@ surfaces. This file records their ownership boundaries.
 - Beads KV/structured memory are pointer and decision surfaces.
 - Skills are workflow guidance only.
 - `llm-tldr` verifies source; Serena edits symbols.
+- Scheduled Codex refreshes may update repo-owned map docs, but the accepted
+  memory surface remains git-reviewed Markdown rather than a separate agent
+  memory database.
 
 ## What This Repo Does Not Own
 
