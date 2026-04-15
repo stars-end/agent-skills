@@ -349,6 +349,13 @@ if [ -f "AGENTS.local.md" ]; then
     fi
 fi
 
+if [[ -d "docs/architecture" && -x "${SCRIPT_DIR}/dx-repo-memory-check" ]]; then
+    echo -e "${BLUE}🔎 Repo-memory freshness check...${RESET}"
+    if ! "${SCRIPT_DIR}/dx-repo-memory-check" --repo "$(pwd)"; then
+        needs_fix=1
+    fi
+fi
+
 if ! "${SCRIPT_DIR}/dx-status.sh"; then
     needs_fix=1
 fi

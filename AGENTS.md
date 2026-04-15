@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 5a935bcd4c36889caf91c7439fab28a4fac0a037 -->
-<!-- Last updated: 2026-04-14 21:05:53 UTC -->
+<!-- Source SHA: e90ac84583a457cc2b3580fee522fb2a047c10b7 -->
+<!-- Last updated: 2026-04-15 05:45:27 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -559,6 +559,19 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 
 ---
 
+## Repo Memory Maps
+
+For brownfield work in this repo, read the curated repo-owned maps before
+designing or editing:
+
+- `docs/architecture/BROWNFIELD_MAP.md`
+- `docs/architecture/DATA_AND_STORAGE.md`
+- `docs/architecture/WORKFLOWS_AND_PATTERNS.md`
+
+Use `dx-repo-memory-check --repo .` to validate map freshness.
+
+---
+
 ## Core Workflows
 
 | Skill | Description | Example | Tags |
@@ -586,6 +599,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **agent-browser-slack** | Interact with Slack workspaces using agent-browser. Use when a CLI agent needs to inspect unread channels, search Slack, navigate channels, or capture browser-based Slack evidence without relying on MCP or Slack API workflows. | — | browser, slack, automation, verification, cli |
 | **agent-browser** | Browser automation CLI for AI agents. Use when a CLI agent needs the standard manual browser interface for exploratory verification, navigation, form interaction, screenshots, auth-cookie setup, or app walkthroughs. This is the primary manual browser tool for CLI agents; keep Playwright focused on CI/E2E and assertion-heavy automation. | — | browser, automation, verification, cli, manual, qa |
 | **agent-skills-creator** | Create, update, or deprecate canonical skills in `~/agent-skills` using the current agent-skills method. MUST BE USED when the user wants a new skill, a skill refactor, a deprecation shim, skill metadata updates, or AGENTS baseline regeneration for skill changes. Use for canonical `agent-skills` work, not legacy `.claude/skills` or one-off local skill experiments. | `dx-worktree create <beads-id> agent-skills` | meta, skills, workflow, baseline, agent-skills |
+| **brownfield-map-first** | Route brownfield implementation work through repo-owned architecture maps before code changes. Use when tracing existing pipelines, data/storage boundaries, frontend read models, or when avoiding repeated rediscovery in large existing systems. | — | workflow, brownfield, repo-memory, architecture |
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban views, dependency graphs, and the robot-plan API for auto-selecting next tasks. Keywords: beads, viewer, kanban, dependency graph, robot-plan, task selection, bottleneck | — | workflow, beads, visualization, task-selection |
 | **cass-memory** | Pilot-only CLI episodic memory workflow for explicit cross-agent memory experiments. | — |  |
 | **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary implementation dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. For dx-review, cc-glm is the primary GLM review lane and OpenCode is fallback. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode |
