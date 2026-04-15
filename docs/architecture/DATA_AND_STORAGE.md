@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: e90ac84583a457cc2b3580fee522fb2a047c10b7
-last_verified_at: 2026-04-15T21:20:00Z
+last_verified_commit: f94ee66824c6754c6619aeced3ffc4ce92e34b9c
+last_verified_at: 2026-04-15T16:21:14Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -28,6 +28,14 @@ surfaces. This file records their ownership boundaries.
 3. External tool state (not committed)
    - e.g., `llm-tldr` contained state under external cache locations
    - runtime caches are operational state, not canonical repo memory
+4. Orchestration runtime state (not committed)
+   - `dx-loop` runtime artifacts live outside the repo and are operational
+     coordination state
+   - `dx-runner` reports/logs live outside the repo and are provider execution
+     evidence, not canonical product memory
+   - `dx-batch`/`dx-wave` artifacts are legacy compatibility or operator
+     substrate state and should not be treated as the default agent workflow
+     record
 
 ## Memory Surface Policy
 
@@ -49,4 +57,3 @@ For this pilot, "storage" is intentionally lightweight:
 - map where knowledge is stored
 - define stale-if ownership
 - avoid introducing new storage backends or memory wrappers
-
