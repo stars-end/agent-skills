@@ -25,7 +25,7 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 
 | Task Shape | Canonical First Tool | Reason |
 |------------|---------------------|--------|
-| Semantic discovery ("where does X live?") | `llm-tldr` | FAISS + bge-large semantic search |
+| Semantic discovery ("where does X live?") | `llm-tldr` | FAISS semantic search; prewarm with `all-MiniLM-L6-v2` for agent/fresh-device use |
 | Exact structural analysis (CFG/DFG/slice/impact) | `llm-tldr` | Precise static analysis |
 | Context from entry point | `llm-tldr` | 95% token savings |
 | Test targeting for changed files | `llm-tldr` | change_impact tool |
@@ -69,8 +69,11 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
 - Fleet Sync expands `~` launcher paths to absolute host-local paths before
   writing client configs so direct stdio clients do not depend on shell
   expansion.
-- `llm-tldr` contained semantic search auto-bootstraps a missing semantic index
-  on first use for the target project path.
+- `llm-tldr` contained MCP/CLI semantic search may auto-bootstrap a missing
+  semantic index on first use for the target project path. The daemon fallback
+  is bounded for agent recovery: when the semantic index is cold, it fails fast
+  with `reason_code=semantic_index_missing` and points to explicit prewarm
+  instead of doing a cold build inside the fallback call.
   `tldr warm <project>` only warms structural caches.
   Every MCP tool call accepts a `project` parameter for worktree-safe operation.
   **State containment (af-aqb.1):** llm-tldr runtime state (`.tldr/`, `.tldrignore`)
