@@ -1,0 +1,372 @@
+#!/usr/bin/env python3
+"""Deterministic checker for repo-owned memory freshness contract."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from fnmatch import fnmatchcase
+
+
+REPO_WAIVER_RE = re.compile(
+    r"Repo-Memory-Waiver:\s*([^\s][^:]*?)\s*::\s*(.+)", re.IGNORECASE
+)
+HTML_WAIVER_RE = re.compile(
+    r"<!--\s*repo-memory-waiver:\s*([^\s][^:]*?)\s*::\s*(.+?)\s*-->", re.IGNORECASE
+)
+GENERIC_REASONS = {
+    "n/a",
+    "na",
+    "not needed",
+    "no impact",
+    "none",
+    "unknown",
+    "skip",
+    "irrelevant",
+}
+GENERIC_REASON_PHRASES = (
+    "not needed",
+    "no impact",
+    "n/a",
+    "na",
+)
+
+
+def _run_git(repo: Path, args: list[str]) -> tuple[int, str]:
+    try:
+        out = subprocess.run(
+            ["git", *args],
+            cwd=str(repo),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        return out.returncode, out.stdout.strip()
+    except (FileNotFoundError, OSError):
+        return 1, ""
+
+
+def _parse_frontmatter(path: Path) -> tuple[dict[str, object] | None, str | None]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"cannot read file: {exc}"
+
+    lines = text.splitlines()
+    if len(lines) < 3 or lines[0].strip() != "---":
+        return None, "missing opening frontmatter delimiter"
+
+    end = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end = i
+            break
+    if end is None:
+        return None, "missing closing frontmatter delimiter"
+
+    raw = lines[1:end]
+    data: dict[str, object] = {}
+    i = 0
+    while i < len(raw):
+        line = raw[i]
+        if not line.strip() or line.strip().startswith("#"):
+            i += 1
+            continue
+        if ":" not in line:
+            return None, f"invalid frontmatter line: {line!r}"
+
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            return None, f"invalid key in frontmatter line: {line!r}"
+
+        if value:
+            data[key] = value
+            i += 1
+            continue
+
+        items: list[str] = []
+        i += 1
+        while i < len(raw):
+            candidate = raw[i]
+            if candidate.startswith("  - "):
+                item = candidate[4:].strip()
+                if item:
+                    items.append(item)
+                i += 1
+                continue
+            if candidate.startswith("    - "):
+                item = candidate[6:].strip()
+                if item:
+                    items.append(item)
+                i += 1
+                continue
+            if not candidate.strip():
+                i += 1
+                continue
+            if re.match(r"^[A-Za-z0-9_.-]+\s*:", candidate):
+                break
+            return None, f"invalid list item syntax near line: {candidate!r}"
+
+        data[key] = items
+
+    return data, None
+
+
+def _extract_waivers(text: str, source: str) -> list[dict[str, str]]:
+    waivers: list[dict[str, str]] = []
+    for m in REPO_WAIVER_RE.finditer(text):
+        waivers.append({"doc": m.group(1).strip(), "reason": m.group(2).strip(), "source": source})
+    for m in HTML_WAIVER_RE.finditer(text):
+        waivers.append({"doc": m.group(1).strip(), "reason": m.group(2).strip(), "source": source})
+    return waivers
+
+
+def _normalize(p: str) -> str:
+    normalized = p.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
+
+
+def _is_valid_reason(reason: str) -> tuple[bool, str]:
+    stripped = reason.strip()
+    if len(stripped) < 20:
+        return False, "reason must be at least 20 characters"
+    lowered = re.sub(r"\s+", " ", stripped.lower()).strip(" .")
+    if lowered in GENERIC_REASONS:
+        return False, "reason is too generic"
+    for phrase in GENERIC_REASON_PHRASES:
+        if phrase in lowered:
+            return False, f"reason includes generic phrase: {phrase}"
+    return True, ""
+
+
+def _load_waiver_texts(repo: Path, waiver_files: list[str]) -> list[tuple[str, str]]:
+    texts: list[tuple[str, str]] = []
+    for wf in waiver_files:
+        path = Path(wf)
+        if not path.is_absolute():
+            path = repo / path
+        try:
+            texts.append((str(path), path.read_text(encoding="utf-8")))
+        except OSError:
+            texts.append((str(path), ""))
+
+    rc, commit_body = _run_git(repo, ["log", "-1", "--pretty=%B"])
+    if rc == 0 and commit_body:
+        texts.append(("git:HEAD_BODY", commit_body))
+    return texts
+
+
+def _collect_changed_files(repo: Path, base_ref: str | None, cli_changed: list[str]) -> list[str]:
+    if cli_changed:
+        return sorted({_normalize(p) for p in cli_changed if p.strip()})
+    if base_ref:
+        rc, out = _run_git(repo, ["diff", "--name-only", f"{base_ref}...HEAD"])
+        if rc == 0 and out:
+            return sorted({_normalize(p) for p in out.splitlines() if p.strip()})
+    return []
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Check repo-memory freshness contract.")
+    parser.add_argument("--repo", required=True, help="Path to repository root")
+    parser.add_argument("--json", action="store_true", dest="json_output", help="Emit JSON output")
+    parser.add_argument("--base-ref", help="Git base ref for changed-files diff")
+    parser.add_argument("--changed-file", action="append", default=[], help="Explicit changed file (repeatable)")
+    parser.add_argument("--allow-missing", action="store_true", help="Allow missing AGENTS/docs")
+    parser.add_argument("--waiver-file", action="append", default=[], help="File containing waiver lines")
+    args = parser.parse_args()
+
+    repo = Path(args.repo).resolve()
+    if not repo.exists() or not repo.is_dir():
+        print(f"ERROR: repo path does not exist: {repo}", file=sys.stderr)
+        return 2
+
+    env_waiver = os.environ.get("DX_REPO_MEMORY_WAIVER_FILE", "").strip()
+    waiver_files = list(args.waiver_file)
+    if env_waiver:
+        waiver_files.append(env_waiver)
+
+    doc_dir = repo / "docs" / "architecture"
+    docs = sorted([p for p in doc_dir.glob("*.md") if p.is_file()])
+    checked_docs: list[str] = [_normalize(str(p.relative_to(repo))) for p in docs]
+
+    frontmatter_failures: list[dict[str, str]] = []
+    link_failures: list[dict[str, str]] = []
+    stale_failures: list[dict[str, object]] = []
+    waiver_failures: list[dict[str, str]] = []
+
+    agents_local = repo / "AGENTS.local.md"
+    agents_md = repo / "AGENTS.md"
+    agents_target = agents_local if agents_local.exists() else agents_md
+    agents_text = ""
+
+    if not agents_target.exists():
+        if not args.allow_missing:
+            link_failures.append({"file": "AGENTS.local.md|AGENTS.md", "reason": "missing AGENTS file"})
+    else:
+        try:
+            agents_text = agents_target.read_text(encoding="utf-8")
+        except OSError as exc:
+            link_failures.append({"file": _normalize(str(agents_target.relative_to(repo))), "reason": str(exc)})
+
+    parsed_docs: dict[str, dict[str, object]] = {}
+    for p in docs:
+        rel = _normalize(str(p.relative_to(repo)))
+        fm, err = _parse_frontmatter(p)
+        if err:
+            frontmatter_failures.append({"doc": rel, "reason": err})
+            continue
+        assert fm is not None
+        missing = []
+        for key in ("status", "owner", "last_verified_commit", "last_verified_at", "stale_if_paths"):
+            if key not in fm:
+                missing.append(key)
+        if missing:
+            frontmatter_failures.append({"doc": rel, "reason": f"missing required keys: {', '.join(missing)}"})
+            continue
+        stale_paths = fm.get("stale_if_paths")
+        if not isinstance(stale_paths, list) or not stale_paths:
+            frontmatter_failures.append({"doc": rel, "reason": "stale_if_paths must be a non-empty list"})
+            continue
+        parsed_docs[rel] = fm
+
+    if docs and agents_text:
+        if not any(doc in agents_text for doc in checked_docs):
+            link_failures.append(
+                {
+                    "file": _normalize(str(agents_target.relative_to(repo))),
+                    "reason": "AGENTS file does not link any docs/architecture/*.md repo-memory doc",
+                }
+            )
+
+    changed_files = _collect_changed_files(repo, args.base_ref, args.changed_file)
+
+    waiver_texts = _load_waiver_texts(repo, waiver_files)
+    waivers_by_doc: dict[str, list[dict[str, str]]] = {}
+    for source, text in waiver_texts:
+        if not text:
+            waiver_failures.append({"source": source, "reason": "cannot read waiver source or source is empty"})
+            continue
+        for w in _extract_waivers(text, source):
+            doc = _normalize(w["doc"])
+            w["doc"] = doc
+            waivers_by_doc.setdefault(doc, []).append(w)
+
+    for doc, fm in parsed_docs.items():
+        stale_patterns = [str(x).strip() for x in fm.get("stale_if_paths", []) if str(x).strip()]
+        matched_changes = []
+        for changed in changed_files:
+            if any(fnmatchcase(changed, pat) for pat in stale_patterns):
+                matched_changes.append(changed)
+
+        if not matched_changes:
+            continue
+        if doc in changed_files:
+            continue
+
+        waivers = waivers_by_doc.get(doc, [])
+        if not waivers:
+            stale_failures.append(
+                {
+                    "doc": doc,
+                    "reason": "doc is stale because matched paths changed and doc was not updated",
+                    "matched_changes": matched_changes,
+                }
+            )
+            continue
+
+        valid = False
+        for w in waivers:
+            ok, reason = _is_valid_reason(w["reason"])
+            if ok:
+                valid = True
+                break
+            waiver_failures.append(
+                {
+                    "doc": doc,
+                    "source": w["source"],
+                    "reason": f"invalid waiver reason: {reason}",
+                    "raw_reason": w["reason"],
+                }
+            )
+        if not valid:
+            stale_failures.append(
+                {
+                    "doc": doc,
+                    "reason": "doc is stale and waiver is missing or invalid",
+                    "matched_changes": matched_changes,
+                }
+            )
+
+    status = "pass"
+    if frontmatter_failures or link_failures or stale_failures or waiver_failures:
+        status = "fail"
+
+    if not docs and not args.allow_missing:
+        status = "fail"
+        frontmatter_failures.append(
+            {
+                "doc": "docs/architecture/*.md",
+                "reason": "no repo-memory docs discovered",
+            }
+        )
+
+    summary = {
+        "docs": len(checked_docs),
+        "frontmatter_failures": len(frontmatter_failures),
+        "link_failures": len(link_failures),
+        "stale_failures": len(stale_failures),
+        "waiver_failures": len(waiver_failures),
+    }
+
+    payload = {
+        "status": status,
+        "repo": str(repo),
+        "checked_docs": checked_docs,
+        "stale_failures": stale_failures,
+        "link_failures": link_failures,
+        "frontmatter_failures": frontmatter_failures,
+        "waiver_failures": waiver_failures,
+        "changed_files": changed_files,
+        "summary": summary,
+    }
+
+    if args.json_output:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        line = (
+            f"dx-repo-memory-check: {status.upper()} "
+            f"(docs={summary['docs']}, fm={summary['frontmatter_failures']}, "
+            f"links={summary['link_failures']}, stale={summary['stale_failures']}, "
+            f"waiver={summary['waiver_failures']})"
+        )
+        print(line)
+        if frontmatter_failures:
+            for item in frontmatter_failures:
+                print(f"  - frontmatter: {item.get('doc')}: {item.get('reason')}")
+        if link_failures:
+            for item in link_failures:
+                print(f"  - link: {item.get('file')}: {item.get('reason')}")
+        if stale_failures:
+            for item in stale_failures:
+                changes = ", ".join(item.get("matched_changes", []))
+                print(f"  - stale: {item.get('doc')}: {item.get('reason')} (changed: {changes})")
+        if waiver_failures:
+            for item in waiver_failures:
+                detail = item.get("raw_reason") or item.get("reason")
+                print(f"  - waiver: {item.get('doc', item.get('source'))}: {detail}")
+
+    return 0 if status == "pass" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

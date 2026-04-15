@@ -20,6 +20,15 @@ Review focus:
 3. Dependency direction: any new hidden coupling or cross-layer leakage.
 4. Operational ergonomics: observability, diagnosability, and failure recovery.
 5. Complexity budget: accidental complexity versus problem size.
+6. Repo-memory compliance for brownfield work:
+   - Did implementation consult repo map docs first when the task was
+     brownfield?
+   - Did it avoid creating duplicate memory truth surfaces
+     (skill-as-knowledge, ad hoc duplicated docs, stale context-area patterns)?
+   - If changed files intersect map `stale_if_paths`, were map docs updated or a
+     waiver documented?
+   - Did it preserve the boundary: skills = workflow, repo docs = architecture
+     truth, Beads = pointers/decisions, llm-tldr = source verification?
 
 Output expectations:
 - Highlight structural risks and concrete consequences.

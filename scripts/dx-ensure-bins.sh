@@ -34,6 +34,8 @@ link "$AGENTS_ROOT/scripts/dx-loop" "$BIN_DIR/dx-loop"
 link "$AGENTS_ROOT/scripts/dx-review" "$BIN_DIR/dx-review"
 # dx-research is the source-backed research artifact wrapper
 link "$AGENTS_ROOT/scripts/dx-research" "$BIN_DIR/dx-research"
+# dx-repo-memory-check enforces repo-owned brownfield map freshness.
+link "$AGENTS_ROOT/scripts/dx-repo-memory-check" "$BIN_DIR/dx-repo-memory-check"
 # dx-dispatch shell shim is canonical compatibility entrypoint.
 # Fall back to the legacy Python implementation only if shell shim is missing.
 if [[ -x "$AGENTS_ROOT/scripts/dx-dispatch" ]]; then

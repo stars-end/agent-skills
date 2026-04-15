@@ -11,10 +11,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep
       - name: Lint
         run: bash scripts/lint-repo-consistency.sh
+      - name: Repo memory check
+        run: |
+          BASE_REF="${GITHUB_BASE_REF:-master}"
+          git fetch origin "$BASE_REF" --depth=1
+          scripts/dx-repo-memory-check --repo . --base-ref "origin/$BASE_REF"
+      - name: Repo memory checker tests
+        run: bash tests/test-dx-repo-memory-check.sh
 
   derived-freshness:
     runs-on: ubuntu-latest
@@ -24,4 +33,3 @@ jobs:
           fetch-depth: 0
       - name: Check derived artifact freshness
         run: bash scripts/check-derived-freshness.sh
-
