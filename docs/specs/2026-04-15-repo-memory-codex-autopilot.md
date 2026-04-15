@@ -20,10 +20,17 @@ audit loop. After discussion, the desired operating model changed:
 - avoid a warning-only system that agents ignore;
 - avoid blocking ordinary PRs on broad documentation freshness.
 
-This spec adds a GitHub Actions-owned Codex autopilot for repo-memory maps.
-GitHub Actions runs a weekly or manually triggered GPT-5.4 high refresh against
-repo-owned architecture docs. epyc12 monitors fleet health only; it does not
-edit docs.
+This spec adds a Codex autopilot for repo-memory maps. There are two viable
+execution modes:
+
+1. GitHub Actions with an `OPENAI_API_KEY` secret.
+2. OAuth runner mode using `codex` CLI logged in with ChatGPT on a canonical
+   host.
+
+The no-key path is now viable: epyc12 and macmini both passed non-interactive
+Codex CLI OAuth smoke tests on 2026-04-15. Therefore the preferred pilot path is
+epyc12 as primary OAuth runner, macmini as fallback, and GitHub as the PR/CI
+validation surface.
 
 The active contract is narrow: the autopilot may refresh curated repo-memory
 docs and approved AGENTS map links, but it must fail closed if it attempts to
@@ -182,15 +189,78 @@ epyc12 owns:
 - optional Slack or Beads summary;
 - no direct documentation edits.
 
-This keeps repo-owned docs maintained by repo-owned automation and avoids hidden
-local cron state.
+This keeps repo-owned docs maintained by automation while avoiding API-key
+setup. The tradeoff is that OAuth runner mode must be made observable enough
+that it does not become hidden cron state.
+
+### Execution Mode Decision
+
+#### Mode A: GitHub Actions + API Key
+
+GitHub Actions can run `openai/codex-action@v1`, but current public docs require
+an OpenAI API key stored as a GitHub secret. ChatGPT Pro OAuth and the ChatGPT
+GitHub connector do not appear to provide a CI-side credential for the action.
+
+Use this mode only if an `OPENAI_API_KEY` exists with a bounded budget.
+
+#### Mode B: OAuth Runner, Preferred Pilot
+
+Use canonical hosts with durable ChatGPT login:
+
+- primary: epyc12
+- fallback: macmini
+
+The runner performs the refresh in a disposable worktree, pushes a rolling
+branch, and opens or updates the PR with `gh`/GitHub. GitHub Actions then runs
+the deterministic guard and normal CI on that PR.
+
+This mode avoids OpenAI API keys and uses the same Codex product auth already
+available to interactive agents.
+
+### OAuth Feasibility Evidence
+
+Checked on 2026-04-15:
+
+- epyc12 has `codex-cli 0.120.0`.
+- epyc12 `codex login status` reports `Logged in using ChatGPT`.
+- epyc12 `systemd-run --user --wait --collect --pipe codex login status`
+  succeeds, proving the login is visible from a non-interactive user service.
+- epyc12 `systemd-run --user ... codex exec --ephemeral -s read-only -m
+  gpt-5.4 -c model_reasoning_effort="low"` returned the exact expected output.
+- macmini has `codex-cli 0.120.0`.
+- macmini `codex login status` reports `Logged in using ChatGPT`.
+- macmini SSH-triggered non-interactive `codex exec --ephemeral -s read-only -m
+  gpt-5.4 -c model_reasoning_effort="low"` returned the exact expected output.
+
+This proves both hosts can run Codex from OAuth without a GitHub Actions API key
+for the basic model/auth path.
+
+### Runner Hygiene Findings
+
+The smoke tests also found non-blocking hygiene issues:
+
+- epyc12 lacks system `bubblewrap`; Codex falls back to vendored bubblewrap.
+  Install OS `bubblewrap` before relying on scheduled sandboxed runs.
+- epyc12 has a stale symlink:
+  `~/.agents/skills/jules-dispatch -> ~/agent-skills/extended/jules-dispatch`.
+- epyc12 and macmini both report invalid legacy core skills missing YAML
+  frontmatter:
+  - `core/issue-first/SKILL.md`
+  - `core/create-pull-request/SKILL.md`
+  - `core/beads-workflow/SKILL.md`
+  - `core/sync-feature-branch/SKILL.md`
+
+These did not block `codex exec`, but they add noise and should be fixed before
+using Codex as unattended infrastructure.
 
 ### Flow
 
 1. Checkout full history on default branch.
 2. Run deterministic repo-memory scheduled audit.
 3. If audit is clean and docs are not age-stale, exit with no diff.
-4. Run `openai/codex-action@v1` using a committed prompt.
+4. In GitHub Actions mode, run `openai/codex-action@v1` using a committed
+   prompt. In OAuth runner mode, run `codex exec` from epyc12 in a disposable
+   worktree with the same prompt.
 5. Codex inspects only the audit report, repo-memory docs, AGENTS routing, and
    source paths needed to verify stale claims.
 6. Codex updates only allowed files.
@@ -205,6 +275,8 @@ local cron state.
     pass and the guard proves the diff is allowed.
 11. If confidence is low or forbidden paths changed, fail closed and update the
     stable repo-memory debt issue instead of opening a normal refresh PR.
+12. In OAuth runner mode, if epyc12 fails due to auth/model/sandbox/runtime
+    health, retry once on macmini. Do not retry indefinitely.
 
 ## Active Contract
 
@@ -253,6 +325,28 @@ The committed Codex prompt must instruct the agent to:
 
 The prompt must not include untrusted PR text, issue comments, or user-supplied
 content from arbitrary events.
+
+### Fallback Contract
+
+epyc12 is the primary OAuth runner because it is the canonical automation host.
+macmini is a fallback only when epyc12 fails a preflight or execution step.
+
+Fallback triggers:
+
+- `codex login status` does not report ChatGPT login;
+- non-interactive `systemd-run --user` smoke test fails;
+- Codex model invocation fails before producing a patch;
+- sandbox prerequisite failure prevents execution;
+- host unavailable over SSH.
+
+Fallback non-triggers:
+
+- Codex produces a low-confidence report;
+- doc-only guard fails;
+- repository tests fail;
+- PR creation fails due to GitHub permissions.
+
+Those are product/workflow failures, not host-failover failures.
 
 ### Auto-Merge Exception
 
@@ -310,9 +404,13 @@ Dependencies:
   cases.
 - GitHub workflow syntax validates.
 - Prompt is committed under `.github/codex/prompts/`.
-- Workflow runs with `safety-strategy: drop-sudo` and `sandbox:
-  workspace-write`.
-- Workflow does not feed PR comments or arbitrary issue content to Codex.
+- In GitHub Actions mode, workflow runs with `safety-strategy: drop-sudo` and
+  `sandbox: workspace-write`.
+- In OAuth runner mode, epyc12 preflight checks `codex login status`,
+  non-interactive `systemd-run --user`, system `bubblewrap`, `gh auth status`,
+  and repo worktree hygiene before invoking Codex.
+- OAuth runner mode has a single macmini fallback attempt.
+- Neither mode feeds PR comments or arbitrary issue content to Codex.
 - Output artifacts include audit report and Codex final message.
 
 ### Pilot Validation
@@ -356,14 +454,16 @@ Mitigation: GitHub Actions is the actor; epyc12 only monitors.
 
 1. Harden checker and scheduled-audit report in `agent-skills`.
 2. Add doc-only guard and prompt/workflow template.
-3. Pilot `workflow_dispatch` in `agent-skills`.
-4. Enable weekly schedule in `agent-skills`.
-5. Decide whether doc-only auto-merge exception is enabled for
-   `agent-skills`.
-6. Roll to `affordabot` with subarea maps.
-7. Roll to `prime-radiant-ai` only after explicitly handling legacy
+3. Fix OAuth runner hygiene: system `bubblewrap`, stale skill symlink, and
+   legacy skill frontmatter noise.
+4. Pilot OAuth runner mode in `agent-skills` from epyc12, with macmini fallback
+   disabled first and then enabled.
+5. Enable weekly schedule through epyc12 once the PR path is proven.
+6. Decide whether doc-only auto-merge exception is enabled for `agent-skills`.
+7. Roll to `affordabot` with subarea maps.
+8. Roll to `prime-radiant-ai` only after explicitly handling legacy
    context-area workflows and stale architecture docs.
-8. Roll to `llm-common` using a small-repo profile or explicit exception.
+9. Roll to `llm-common` using a small-repo profile or explicit exception.
 
 ## Recommended First Task
 
