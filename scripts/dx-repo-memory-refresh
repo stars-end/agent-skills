@@ -232,8 +232,8 @@ commit_push_pr() {
     -m "Agent: codex-oauth-runner" >/dev/null
 
   if [[ "$PUSH" -eq 1 ]]; then
-    git -C "$worktree" push -u origin "$BRANCH" >/dev/null
-    log "pushed $BRANCH"
+    git -C "$worktree" push --force-with-lease -u origin "$BRANCH" >/dev/null
+    log "pushed $BRANCH with --force-with-lease"
   fi
 
   if [[ "$CREATE_PR" -eq 1 ]]; then
