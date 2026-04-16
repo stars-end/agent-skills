@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#
+# Run the repo-memory refresh across canonical repos from one scheduled job.
+
+set -euo pipefail
+
+export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+REPOS="${DX_REPO_MEMORY_REPOS:-agent-skills affordabot prime-radiant-ai llm-common}"
+FALLBACK_HOST="${DX_REPO_MEMORY_FALLBACK_HOST:-macmini}"
+AGE_DAYS="${DX_REPO_MEMORY_AGE_DAYS:-30}"
+STATE_ROOT="${DX_REPO_MEMORY_STATE_ROOT:-$HOME/.dx-state/repo-memory}"
+EXTRA_FLAGS=()
+
+if [[ "${DX_REPO_MEMORY_PUSH:-1}" == "1" ]]; then
+  EXTRA_FLAGS+=(--push)
+fi
+if [[ "${DX_REPO_MEMORY_CREATE_PR:-1}" == "1" ]]; then
+  EXTRA_FLAGS+=(--create-pr)
+fi
+if [[ "${DX_REPO_MEMORY_FORCE_AGENT:-0}" == "1" ]]; then
+  EXTRA_FLAGS+=(--force-agent)
+fi
+if [[ "${DX_REPO_MEMORY_DRY_RUN:-0}" == "1" ]]; then
+  EXTRA_FLAGS+=(--dry-run)
+fi
+
+rc=0
+for repo in $REPOS; do
+  repo_path="$HOME/$repo"
+  if [[ ! -d "$repo_path" ]]; then
+    printf '[%s] WARN: repo missing; skipping %s at %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$repo" "$repo_path" >&2
+    continue
+  fi
+
+  if ! "$SCRIPT_DIR/dx-repo-memory-refresh" \
+    --repo-name "$repo" \
+    --repo-path "$repo_path" \
+    --state-root "$STATE_ROOT" \
+    --age-days "$AGE_DAYS" \
+    --fallback-host "$FALLBACK_HOST" \
+    "${EXTRA_FLAGS[@]}"; then
+    rc=1
+  fi
+done
+
+exit "$rc"

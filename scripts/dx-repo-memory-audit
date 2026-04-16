@@ -13,6 +13,15 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 
 
+REQUIRED_FRONTMATTER = ("status", "owner", "last_verified_commit", "last_verified_at", "stale_if_paths")
+CONVENTIONAL_REPO_MEMORY_DOCS = {
+    "README.md",
+    "BROWNFIELD_MAP.md",
+    "DATA_AND_STORAGE.md",
+    "WORKFLOWS_AND_PATTERNS.md",
+}
+
+
 def _run_git(repo: Path, args: list[str]) -> tuple[int, str, str]:
     try:
         out = subprocess.run(
@@ -117,6 +126,29 @@ def _parse_datetime(value: str) -> datetime | None:
     return dt.astimezone(timezone.utc)
 
 
+def _frontmatter_bool(value: object) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_repo_memory_doc(path: Path, fm: dict[str, object] | None, err: str | None) -> bool:
+    if path.name in CONVENTIONAL_REPO_MEMORY_DOCS:
+        return True
+    if fm is None or err:
+        return False
+    if _frontmatter_bool(fm.get("repo_memory", False)):
+        return True
+    return all(key in fm for key in REQUIRED_FRONTMATTER)
+
+
+def _discover_repo_memory_docs(doc_dir: Path) -> list[Path]:
+    docs: list[Path] = []
+    for path in sorted(p for p in doc_dir.glob("*.md") if p.is_file()):
+        fm, err = _parse_frontmatter(path)
+        if _is_repo_memory_doc(path, fm, err):
+            docs.append(path)
+    return docs
+
+
 def _changed_since(repo: Path, start_commit: str) -> tuple[list[str], str | None]:
     rc, _, err = _run_git(repo, ["cat-file", "-e", f"{start_commit}^{{commit}}"])
     if rc != 0:
@@ -126,6 +158,33 @@ def _changed_since(repo: Path, start_commit: str) -> tuple[list[str], str | None
     if rc != 0:
         return [], err or "git diff failed"
     return sorted({_normalize(line) for line in out.splitlines() if line.strip()}), None
+
+
+def _latest_change_commit(repo: Path, start_commit: str, path: str) -> str | None:
+    rc, out, _ = _run_git(repo, ["log", "-1", "--format=%H", f"{start_commit}..HEAD", "--", path])
+    if rc != 0 or not out:
+        return None
+    return out.splitlines()[0].strip() or None
+
+
+def _is_ancestor_or_equal(repo: Path, older: str, newer: str) -> bool:
+    if older == newer:
+        return True
+    rc, _, _ = _run_git(repo, ["merge-base", "--is-ancestor", older, newer])
+    return rc == 0
+
+
+def _doc_covers_changes(repo: Path, start_commit: str, doc: str, changed_paths: list[str]) -> bool:
+    doc_commit = _latest_change_commit(repo, start_commit, doc)
+    if not doc_commit:
+        return False
+    for changed_path in changed_paths:
+        source_commit = _latest_change_commit(repo, start_commit, changed_path)
+        if not source_commit:
+            return False
+        if not _is_ancestor_or_equal(repo, source_commit, doc_commit):
+            return False
+    return True
 
 
 def _agents_link_status(repo: Path, docs: list[str]) -> list[dict[str, str]]:
@@ -171,7 +230,7 @@ def main() -> int:
         return 2
 
     doc_dir = repo / "docs" / "architecture"
-    docs = sorted(path for path in doc_dir.glob("*.md") if path.is_file())
+    docs = _discover_repo_memory_docs(doc_dir)
     checked_docs = [_normalize(str(path.relative_to(repo))) for path in docs]
     now = datetime.now(timezone.utc)
 
@@ -181,7 +240,6 @@ def main() -> int:
     age_warnings: list[dict[str, object]] = []
 
     checked_doc_set = set(checked_docs)
-    required = ("status", "owner", "last_verified_commit", "last_verified_at", "stale_if_paths")
     for path in docs:
         rel = _normalize(str(path.relative_to(repo)))
         fm, fm_error = _parse_frontmatter(path)
@@ -191,7 +249,7 @@ def main() -> int:
             doc_reports.append({"doc": rel, "status": "invalid", "frontmatter_failure": failure})
             continue
 
-        missing = [key for key in required if key not in fm]
+        missing = [key for key in REQUIRED_FRONTMATTER if key not in fm]
         stale_if_paths = fm.get("stale_if_paths")
         if missing:
             failure = {"doc": rel, "reason": f"missing required keys: {', '.join(missing)}"}
@@ -212,6 +270,8 @@ def main() -> int:
             if changed_path not in checked_doc_set
             and any(fnmatchcase(changed_path, str(pattern).strip()) for pattern in stale_if_paths)
         ]
+        if matched_changes and _doc_covers_changes(repo, last_commit, rel, matched_changes):
+            matched_changes = []
 
         stale = bool(matched_changes) or bool(diff_error)
         age_days = None

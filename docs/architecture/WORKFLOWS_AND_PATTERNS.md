@@ -1,4 +1,5 @@
 ---
+repo_memory: true
 status: active
 owner: dx-architecture
 last_verified_commit: 375be0f0e61887af9895a2347f03865278058080
@@ -69,8 +70,10 @@ Architecture review should evaluate:
 - `dx-repo-memory-refresh` is the scheduled agent runner: audit first, invoke
   Codex only when action is needed, and restrict committed changes to
   `docs/architecture/`, `AGENTS.md`, and `AGENTS.local.md`.
+- `dx-repo-memory-refresh-all` is the fleet wrapper for canonical repos:
+  `agent-skills`, `affordabot`, `prime-radiant-ai`, and `llm-common`.
 - The epyc12 systemd timer is the primary automation surface; macmini is a
-  Tailscale SSH fallback for the same script and prompt.
+  Tailscale SSH fallback for the same scripts and prompt.
 - Timer installation is a deployment step after the script is present in the
   canonical checkout; PR branches should ship the service/timer files without
   enabling them.

@@ -1,4 +1,5 @@
 ---
+repo_memory: true
 status: active
 owner: dx-architecture
 last_verified_commit: 375be0f0e61887af9895a2347f03865278058080
@@ -37,8 +38,9 @@ surfaces. This file records their ownership boundaries.
      substrate state and should not be treated as the default agent workflow
      record
 5. Repo-memory refresh state (not committed)
-   - `dx-repo-memory-refresh` stores run reports and generated worktrees under
-     its configured state root, defaulting to `~/.dx-state/repo-memory`
+   - `dx-repo-memory-refresh` and `dx-repo-memory-refresh-all` store run
+     reports and generated worktrees under the configured state root,
+     defaulting to `~/.dx-state/repo-memory`
    - scheduled runs create Git branches and draft PRs for reviewable doc
      changes; runtime logs and lock files are operational evidence, not
      canonical memory

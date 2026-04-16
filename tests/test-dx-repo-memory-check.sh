@@ -46,6 +46,7 @@ make_repo() {
   mkdir -p "$dir/docs/architecture" "$dir/src"
   cat > "$dir/docs/architecture/BROWNFIELD_MAP.md" <<'EOF'
 ---
+repo_memory: true
 status: active
 owner: dx
 last_verified_commit: deadbeef
@@ -135,6 +136,53 @@ test_missing_agents_link_fails() {
   rm -rf "$t"
 }
 
+test_missing_one_agents_link_fails() {
+  local t
+  t="$(mktemp -d)"
+  make_repo "$t"
+  cat > "$t/docs/architecture/DATA_AND_STORAGE.md" <<'EOF'
+---
+repo_memory: true
+status: active
+owner: dx
+last_verified_commit: deadbeef
+last_verified_at: 2026-04-15
+stale_if_paths:
+  - src/**
+---
+data
+EOF
+  git -C "$t" add docs/architecture/DATA_AND_STORAGE.md
+  git -C "$t" commit -m "add second map without agents link" >/dev/null
+
+  if run_checker_expect 1 --repo "$t" >/dev/null; then
+    pass "missing one AGENTS repo-memory link fails"
+  else
+    fail "missing one AGENTS repo-memory link fails"
+  fi
+  rm -rf "$t"
+}
+
+test_legacy_architecture_docs_are_ignored() {
+  local t
+  t="$(mktemp -d)"
+  make_repo "$t"
+  cat > "$t/docs/architecture/2026-01-01-old-decision.md" <<'EOF'
+# Old Decision
+
+This predates the repo-memory frontmatter contract.
+EOF
+  git -C "$t" add docs/architecture/2026-01-01-old-decision.md
+  git -C "$t" commit -m "add legacy architecture doc" >/dev/null
+
+  if run_checker_expect 0 --repo "$t" --json >/dev/null; then
+    pass "legacy architecture docs are ignored"
+  else
+    fail "legacy architecture docs are ignored"
+  fi
+  rm -rf "$t"
+}
+
 test_stale_path_fails() {
   local t
   t="$(mktemp -d)"
@@ -189,6 +237,45 @@ Repo-Memory-Waiver: docs/architecture/BROWNFIELD_MAP.md :: source change is isol
   rm -rf "$t"
 }
 
+test_valid_waiver_with_analysis_word_passes() {
+  local t
+  t="$(mktemp -d)"
+  make_repo "$t"
+  echo "print('changed')" > "$t/src/app.py"
+  git -C "$t" add src/app.py
+  git -C "$t" commit -m "change src with analysis waiver
+
+Repo-Memory-Waiver: docs/architecture/BROWNFIELD_MAP.md :: analysis-only source fixture change leaves the documented system ownership boundaries unchanged" >/dev/null
+
+  if run_checker_expect 0 --repo "$t" --base-ref HEAD~1 >/dev/null; then
+    pass "valid waiver containing analysis passes"
+  else
+    fail "valid waiver containing analysis passes"
+  fi
+  rm -rf "$t"
+}
+
+test_non_head_commit_waiver_passes() {
+  local t
+  t="$(mktemp -d)"
+  make_repo "$t"
+  echo "print('changed')" > "$t/src/app.py"
+  git -C "$t" add src/app.py
+  git -C "$t" commit -m "change src with waiver
+
+Repo-Memory-Waiver: docs/architecture/BROWNFIELD_MAP.md :: source change is isolated to a local test fixture and does not alter architecture map semantics" >/dev/null
+  echo "# note" > "$t/README.md"
+  git -C "$t" add README.md
+  git -C "$t" commit -m "follow-up unrelated docs note" >/dev/null
+
+  if run_checker_expect 0 --repo "$t" --base-ref HEAD~2 >/dev/null; then
+    pass "non-HEAD commit waiver passes"
+  else
+    fail "non-HEAD commit waiver passes"
+  fi
+  rm -rf "$t"
+}
+
 test_generic_waiver_reason_fails() {
   local t
   local w
@@ -217,6 +304,7 @@ test_hidden_path_glob_matches() {
   mkdir -p "$t/.github/workflows"
   cat > "$t/docs/architecture/BROWNFIELD_MAP.md" <<'EOF'
 ---
+repo_memory: true
 status: active
 owner: dx
 last_verified_commit: deadbeef
@@ -245,9 +333,13 @@ test_pass_case
 test_missing_docs_allow_missing
 test_malformed_frontmatter_fails
 test_missing_agents_link_fails
+test_missing_one_agents_link_fails
+test_legacy_architecture_docs_are_ignored
 test_stale_path_fails
 test_stale_path_pass_when_doc_changed
 test_valid_waiver_passes
+test_valid_waiver_with_analysis_word_passes
+test_non_head_commit_waiver_passes
 test_generic_waiver_reason_fails
 test_hidden_path_glob_matches
 
