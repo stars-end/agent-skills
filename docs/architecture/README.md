@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: aac332b401983bece93646c613f8b3968639d6f2
-last_verified_at: 2026-04-16T00:05:03Z
+last_verified_commit: 8c18a48d3b15029eafcf86e4931ac621199778d4
+last_verified_at: 2026-04-16T00:08:46Z
 stale_if_paths:
   - docs/architecture/**
 ---
