@@ -1,8 +1,8 @@
 ---
 status: active
 owner: dx-architecture
-last_verified_commit: dd2437b7dec5d86f92e42af52c90d761e68e0898
-last_verified_at: 2026-04-15T18:51:07Z
+last_verified_commit: 6becf188ff3654d403aa9ee684d36d7fec05e611
+last_verified_at: 2026-04-15T23:52:52Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -27,6 +27,8 @@ not rediscover them from scratch.
 ## Core Pattern: Skill As Workflow, Not Memory Store
 
 - skills define activation and execution behavior
+- `SKILL.md` files must keep YAML frontmatter at the top of file for loader
+  compatibility
 - repo architecture truth belongs in repo docs
 - Beads stores pointers/decisions, not full architecture maps
 
