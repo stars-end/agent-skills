@@ -160,12 +160,21 @@ test_refresh_pr_creation_verified() {
   fi
 }
 
+test_refresh_rolling_branch_push_mode() {
+  if grep -Fq -- 'push --force-with-lease -u origin "$BRANCH"' "$REFRESH"; then
+    pass "refresh rolling branch push uses --force-with-lease"
+  else
+    fail "refresh rolling branch push uses --force-with-lease"
+  fi
+}
+
 test_audit_clean
 test_audit_stale_after_source_change
 test_guard_allows_docs
 test_guard_blocks_source
 test_refresh_gh_pr_flags
 test_refresh_pr_creation_verified
+test_refresh_rolling_branch_push_mode
 
 echo
 echo "Passed: $PASS"
