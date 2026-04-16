@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 AUDIT="$ROOT/scripts/dx-repo-memory-audit"
 GUARD="$ROOT/scripts/dx-repo-memory-guard"
+REFRESH="$ROOT/scripts/dx-repo-memory-refresh"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -142,10 +143,29 @@ test_guard_blocks_source() {
   rm -rf "$t"
 }
 
+test_refresh_gh_pr_flags() {
+  if grep -Fq -- '--head "$BRANCH"' "$REFRESH" &&
+    grep -Fq -- '--base "$DEFAULT_BRANCH"' "$REFRESH"; then
+    pass "refresh PR create uses explicit --head and --base"
+  else
+    fail "refresh PR create uses explicit --head and --base"
+  fi
+}
+
+test_refresh_pr_creation_verified() {
+  if rg -q -- 'gh pr create returned success but no open PR found' "$REFRESH"; then
+    pass "refresh verifies PR exists before success log"
+  else
+    fail "refresh verifies PR exists before success log"
+  fi
+}
+
 test_audit_clean
 test_audit_stale_after_source_change
 test_guard_allows_docs
 test_guard_blocks_source
+test_refresh_gh_pr_flags
+test_refresh_pr_creation_verified
 
 echo
 echo "Passed: $PASS"
