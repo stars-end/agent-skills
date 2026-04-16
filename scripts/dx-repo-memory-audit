@@ -180,6 +180,7 @@ def main() -> int:
     stale_docs: list[dict[str, object]] = []
     age_warnings: list[dict[str, object]] = []
 
+    checked_doc_set = set(checked_docs)
     required = ("status", "owner", "last_verified_commit", "last_verified_at", "stale_if_paths")
     for path in docs:
         rel = _normalize(str(path.relative_to(repo)))
@@ -208,7 +209,8 @@ def main() -> int:
         matched_changes = [
             changed_path
             for changed_path in changed
-            if any(fnmatchcase(changed_path, str(pattern).strip()) for pattern in stale_if_paths)
+            if changed_path not in checked_doc_set
+            and any(fnmatchcase(changed_path, str(pattern).strip()) for pattern in stale_if_paths)
         ]
 
         stale = bool(matched_changes) or bool(diff_error)
