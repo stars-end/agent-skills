@@ -1311,6 +1311,42 @@ EOF
     fi
 
     rm -f "$dir/${beads}".*
+
+    beads="test-cc-glm-rate-limit-$$"
+    provider="cc-glm"
+    dir="/tmp/dx-runner/$provider"
+    mkdir -p "$dir"
+    cat > "$dir/${beads}.log" <<EOF
+[cc-glm-headless] LAUNCH_OK ts=2026-04-15T06:55:24Z model=glm-5 auth_source=default op:// pid=28266
+API Error: Request rejected (429) - Rate limit reached for requests
+EOF
+    cat > "$dir/${beads}.meta" <<EOF
+beads=$beads
+provider=$provider
+started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+retries=0
+selected_model=glm-5
+EOF
+    cat > "$dir/${beads}.outcome" <<EOF
+beads=$beads
+provider=$provider
+exit_code=1
+state=failed
+reason_code=process_exit_with_rc
+duration_sec=207
+mutations=1
+log_bytes=313
+selected_model=glm-5
+EOF
+
+    report_json="$("$DX_RUNNER" report --beads "$beads" --format json 2>/dev/null)"
+    if echo "$report_json" | jq -e '.reason_code=="provider_rate_limited" and .outcome_reason_code=="provider_rate_limited" and .failure_class=="provider_rate_limited" and .retryable==true and .provider_exit_code==1 and (.log_excerpt | contains("429")) and .next_action=="retry_after_backoff_or_switch_fallback_reviewer"' >/dev/null 2>&1; then
+        pass "cc-glm runtime 429 is reclassified with retryable failure metadata"
+    else
+        fail "cc-glm rate-limit metadata missing or incorrect: $report_json"
+    fi
+
+    rm -f "$dir/${beads}".*
 }
 
 # ============================================================================

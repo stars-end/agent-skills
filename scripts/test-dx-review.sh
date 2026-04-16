@@ -23,143 +23,13 @@ fail() {
 
 make_fake_runner() {
     local path="$1"
-    cat > "$path" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-cmd="${1:-}"
-shift || true
-state_dir="${DX_REVIEW_FAKE_STATE_DIR:-/tmp}"
-
-arg_value() {
-  local key="$1"
-  shift
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      "$key") echo "${2:-}"; return 0 ;;
-    esac
-    shift || true
-  done
-}
-
-case "$cmd" in
-  start)
-    profile="$(arg_value --profile "$@")"
-    beads="$(arg_value --beads "$@")"
-    prompt_file="$(arg_value --prompt-file "$@")"
-    echo "start:$beads:$profile:$(date +%s)" >> "$DX_REVIEW_FAKE_LOG"
-    echo "prompt_file:$beads:$prompt_file" >> "$DX_REVIEW_FAKE_LOG"
-    case "$profile" in
-      claude-code-review)
-        sleep "${DX_REVIEW_FAKE_CLAUDE_START_SEC:-3}"
-        echo "started beads=$beads provider=claude-code"
-        ;;
-      cc-glm-review)
-        if [[ "${DX_REVIEW_FAKE_CC_GLM_START_FAIL:-0}" == "1" ]]; then
-          mkdir -p "$state_dir"
-          printf '1\n' > "$state_dir/${beads}.start_failed"
-          echo "reason_code=secret_auth_resolution_failed_after_preflight"
-          echo "secret_ref_category=op-ref:default-Agent-Secrets-Production-ZAI_API_KEY"
-          echo "preflight gate failed for provider cc-glm" >&2
-          exit 22
-        fi
-        echo "started beads=$beads provider=cc-glm"
-        ;;
-      opencode-review)
-        if [[ "${DX_REVIEW_FAKE_OPENCODE_START_FAIL:-0}" == "1" ]]; then
-          mkdir -p "$state_dir"
-          printf '1\n' > "$state_dir/${beads}.start_failed"
-          echo "reason_code=opencode_mise_untrusted"
-          echo "preflight gate failed for provider opencode" >&2
-          exit 21
-        fi
-        echo "started beads=$beads provider=opencode"
-        ;;
-      *)
-        echo "started beads=$beads provider=$profile"
-        ;;
-    esac
-    ;;
-  check)
-    beads="$(arg_value --beads "$@")"
-    echo "check:$beads:$(date +%s)" >> "$DX_REVIEW_FAKE_LOG"
-    if [[ "${DX_REVIEW_FAKE_REPORT_MISSING:-0}" == "1" && "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","state":"missing","reason_code":"no_meta"}'
-      exit 1
-    elif [[ -f "$state_dir/${beads}.start_failed" ]]; then
-      if [[ "$beads" == *.glm ]]; then provider="cc-glm"; elif [[ "$beads" == *.opencode ]]; then provider="opencode"; else provider="unknown"; fi
-      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"start_failed","reason_code":"dx_runner_start_failed"}'
-    elif [[ "${DX_REVIEW_FAKE_FORCE_START_FAILED:-0}" == "1" && "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"start_failed","reason_code":"dx_runner_start_failed"}'
-    elif [[ "${DX_REVIEW_FAKE_GEMINI_STOPPED:-0}" == "1" && "$beads" == *.gemini ]]; then
-      echo '{"beads":"'"$beads"'","provider":"gemini","state":"stopped","reason_code":"manual_stop","mutation_count":1}'
-    elif [[ "$beads" == *.claude ]]; then
-      echo '{"beads":"'"$beads"'","provider":"claude-code","state":"no_op_success","reason_code":"exit_zero_no_mutations"}'
-    elif [[ "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc"}'
-    else
-      echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc"}'
-    fi
-    ;;
-  report)
-    beads="$(arg_value --beads "$@")"
-    if [[ "${DX_REVIEW_FAKE_REPORT_MISSING:-0}" == "1" && "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","state":"missing","reason_code":"no_meta"}'
-      exit 1
-    elif [[ "${DX_REVIEW_FAKE_GEMINI_STOPPED:-0}" == "1" && "$beads" == *.gemini ]]; then
-      echo '{"beads":"'"$beads"'","provider":"gemini","state":"stopped","reason_code":"manual_stop","mutations":1}'
-    elif [[ "${DX_REVIEW_FAKE_EMPTY_SUCCESS:-0}" == "1" && "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc"}'
-    elif [[ "${DX_REVIEW_FAKE_REPORT_USAGE:-0}" == "1" ]]; then
-      if [[ "$beads" == *.glm ]]; then provider="cc-glm"; elif [[ "$beads" == *.opencode ]]; then provider="opencode"; else provider="claude-code"; fi
-      echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":2,"read_only_enforcement":"contract_only","input_tokens":101,"output_tokens":29,"total_tokens":130,"estimated_cost_usd":0.42}'
-    elif [[ "$beads" == *.opencode ]]; then
-      echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass","findings_count":0,"read_only_enforcement":"contract_only"}'
-    elif [[ "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":1,"read_only_enforcement":"contract_only"}'
-    else
-      echo '{"beads":"'"$beads"'","provider":"claude-code","state":"no_op_success","reason_code":"exit_zero_no_mutations","verdict":"approve_with_changes","findings_count":2,"read_only_enforcement":"contract_only"}'
-    fi
-    ;;
-  preflight)
-    echo "=== Preflight PASSED ==="
-    ;;
-  *)
-    echo "unsupported fake dx-runner command: $cmd" >&2
-    exit 2
-    ;;
-esac
-EOF
+    cp "$SCRIPT_DIR/fixtures/dx-review-fake-runner.sh" "$path"
     chmod +x "$path"
 }
 
 make_fake_gh() {
     local path="$1"
-    cat > "$path" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-if [[ "${1:-}" != "pr" ]]; then
-  echo "unsupported fake gh command" >&2
-  exit 2
-fi
-shift
-case "${1:-}" in
-  view)
-    cat <<'JSON'
-{"number":554,"url":"https://github.com/stars-end/agent-skills/pull/554","title":"bd-icwpm: Fix dx-review authoritative worktree preflight","state":"MERGED","baseRefName":"master","headRefName":"feature-bd-icwpm","baseRefOid":"79f2d464bbc052a4bb50fb2f4c77bb950e4a8554","headRefOid":"6771fc8c14cb93d03956a8c373cb328d9140c0ec","files":[{"path":"scripts/dx-review"},{"path":"scripts/test-dx-review.sh"}],"statusCheckRollup":[{"name":"lint","status":"COMPLETED","conclusion":"SUCCESS"}]}
-JSON
-    ;;
-  diff)
-    echo " scripts/dx-review | 12 ++++++++++--"
-    echo " 1 file changed, 10 insertions(+), 2 deletions(-)"
-    ;;
-  *)
-    echo "unsupported fake gh pr command" >&2
-    exit 2
-    ;;
-esac
-EOF
+    cp "$SCRIPT_DIR/fixtures/dx-review-fake-gh.sh" "$path"
     chmod +x "$path"
 }
 
@@ -556,6 +426,45 @@ test_summarize_gemini_stopped_is_incomplete() {
     rm -rf "$tmp"
 }
 
+test_summarize_rate_limit_failure_metadata() {
+    echo "=== Testing dx-review summarize carries runtime rate-limit metadata ==="
+
+    local tmp fake out rc summary_json summary_md
+    tmp="$(mktemp -d)"
+    fake="$tmp/dx-runner"
+    make_fake_runner "$fake"
+    export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
+    export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
+    export DX_REVIEW_FAKE_RATE_LIMIT=1
+    unset DX_REVIEW_FAKE_FORCE_START_FAILED
+    unset DX_REVIEW_FAKE_REPORT_USAGE
+
+    rm -rf /tmp/dx-review/bd-rate
+    set +e
+    out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" summarize --beads bd-rate 2>&1)"
+    rc=$?
+    set -e
+    summary_json="/tmp/dx-review/bd-rate/summary.json"
+    summary_md="/tmp/dx-review/bd-rate/summary.md"
+
+    if [[ "$rc" -eq 1 ]] \
+        && grep -q '"reviewer":"bd-rate.glm"' "$summary_json" \
+        && grep -q '"reason_code":"provider_rate_limited"' "$summary_json" \
+        && grep -q '"failure_class":"provider_rate_limited"' "$summary_json" \
+        && grep -q '"retryable":true' "$summary_json" \
+        && grep -q '"provider_exit_code":1' "$summary_json" \
+        && grep -q '"model":"glm-5"' "$summary_json" \
+        && grep -q 'retry_after_backoff_or_switch_fallback_reviewer' "$summary_md" \
+        && grep -q 'Rate limit reached' "$summary_md"; then
+        pass "runtime rate limits are summarized with retryable root-cause metadata"
+    else
+        fail "runtime rate limit metadata missing: rc=$rc output=$out"
+    fi
+
+    unset DX_REVIEW_FAKE_RATE_LIMIT
+    rm -rf "$tmp"
+}
+
 test_summarize_start_log_reason_when_metadata_missing() {
     echo "=== Testing dx-review summarize uses start log root cause when metadata is missing ==="
 
@@ -605,6 +514,7 @@ main() {
     test_summarize_empty_success_is_unusable
     test_summarize_ignores_prose_without_schema
     test_summarize_gemini_stopped_is_incomplete
+    test_summarize_rate_limit_failure_metadata
     test_summarize_start_log_reason_when_metadata_missing
     echo ""
     echo "=== Summary ==="

@@ -1015,6 +1015,10 @@ classify_exit_reason() {
     fi
 
     if [[ "$provider" == "cc-glm" ]]; then
+        if [[ "$lowered" == *"429"* || "$lowered" == *"rate limit"* || "$lowered" == *"rate-limit"* || "$lowered" == *"rate_limit"* || "$lowered" == *"quota"* ]]; then
+            echo "provider_rate_limited"
+            return 0
+        fi
         if [[ "$lowered" == *"auth token resolution failed"* \
             || "$lowered" == *"auth_check_failed"* \
             || "$lowered" == *"failed to resolve op:// reference"* \
@@ -1027,9 +1031,83 @@ classify_exit_reason() {
     echo "$fallback_reason"
 }
 
+failure_class_for_reason() {
+    local reason="$1"
+    case "$reason" in
+        provider_rate_limited|opencode_rate_limited|gemini_capacity_exhausted)
+            echo "provider_rate_limited"
+            ;;
+        opencode_model_unavailable|model_unavailable)
+            echo "model_unavailable"
+            ;;
+        secret_auth_resolution_failed_after_preflight)
+            echo "secret_auth_resolution_failed"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+retryable_for_reason() {
+    local reason="$1"
+    case "$reason" in
+        provider_rate_limited|opencode_rate_limited|gemini_capacity_exhausted|provider_concurrency_cap_exceeded)
+            echo "true"
+            ;;
+        *)
+            echo "false"
+            ;;
+    esac
+}
+
+log_excerpt_for_reason() {
+    local log_file="$1"
+    [[ -f "$log_file" ]] || return 0
+
+    local line lowered
+    while IFS= read -r line; do
+        lowered="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
+        case "$lowered" in
+            *429*|*"rate limit"*|*rate-limit*|*rate_limit*|*quota*|*resource_exhausted*|*model_capacity_exhausted*|*"auth token"*|*"failed to resolve op://"*)
+                line="$(printf '%s' "$line" | tr '\r\t' '  ' | sed -E 's/[[:space:]]+/ /g; s/^[[:space:]]+|[[:space:]]+$//g')"
+                printf '%.240s' "$line"
+                return 0
+                ;;
+        esac
+    done < <(tail -n 120 "$log_file" 2>/dev/null || true)
+}
+
+failure_detail_for_reason() {
+    local provider="$1"
+    local reason="$2"
+    local model="$3"
+    local log_excerpt="$4"
+
+    if [[ -n "$log_excerpt" ]]; then
+        printf '%s' "$log_excerpt"
+        return 0
+    fi
+
+    case "$reason" in
+        provider_rate_limited|opencode_rate_limited|gemini_capacity_exhausted)
+            printf '%s %s rate limited' "$provider" "$model"
+            ;;
+        secret_auth_resolution_failed_after_preflight)
+            printf '%s secret resolution failed after preflight' "$provider"
+            ;;
+        *)
+            printf '%s' "$reason"
+            ;;
+    esac
+}
+
 next_action_for_reason() {
     local reason="$1"
     case "$reason" in
+        provider_rate_limited)
+            echo "retry_after_backoff_or_switch_fallback_reviewer"
+            ;;
         gemini_capacity_exhausted)
             echo "retry_backoff_or_switch_to_opencode_or_cc_glm"
             ;;
@@ -3315,42 +3393,93 @@ report_cmd() {
         run_instance="$(meta_get "$OUTCOME_FILE" "run_instance")"
         reported_commit="$(meta_get "$OUTCOME_FILE" "reported_commit" 2>/dev/null || echo "$reported_commit")"
     fi
+    if [[ "$exit_code" =~ ^-?[0-9]+$ && "$exit_code" -ne 0 ]]; then
+        case "${outcome_reason:-}" in
+            process_exit_with_rc|process_exit|monitor_no_rc_file|outcome_exit_nonzero|unknown|"")
+                outcome_reason="$(classify_exit_reason "${provider:-unknown}" "$exit_code" "$LOG_FILE" "${outcome_reason:-process_exit_with_rc}")"
+                reason="$outcome_reason"
+                ;;
+        esac
+    fi
     [[ "$retries" =~ ^[0-9]+$ ]] || retries="0"
     [[ -n "$duration" ]] || duration="-"
     [[ -n "$host" ]] || host="-"
     [[ -n "$cwd" ]] || cwd="-"
     [[ -n "$worktree" ]] || worktree="-"
     [[ -n "$run_instance" ]] || run_instance="-"
-    next_action="$(next_action_for_reason "${outcome_reason:-$reason}")"
+    local effective_reason failure_class retryable log_excerpt failure_detail provider_exit_code_json
+    effective_reason="${outcome_reason:-$reason}"
+    next_action="$(next_action_for_reason "$effective_reason")"
+    failure_class="$(failure_class_for_reason "$effective_reason")"
+    retryable="$(retryable_for_reason "$effective_reason")"
+    if [[ -n "$failure_class" ]]; then
+        log_excerpt="$(log_excerpt_for_reason "$LOG_FILE")"
+        failure_detail="$(failure_detail_for_reason "${provider:-unknown}" "$effective_reason" "${selected_model:--}" "$log_excerpt")"
+    else
+        log_excerpt=""
+        failure_detail=""
+    fi
+    if [[ "$exit_code" =~ ^-?[0-9]+$ ]]; then
+        provider_exit_code_json="$exit_code"
+    else
+        provider_exit_code_json="null"
+    fi
+    local beads_j provider_j state_j reason_j started_at_j duration_j exit_code_j
+    local outcome_state_j outcome_reason_j selected_model_j fallback_reason_j reported_commit_j
+    local next_action_j host_j cwd_j run_instance_j worktree_j
+    local failure_class_j failure_detail_j log_excerpt_j
+    beads_j="$(json_escape "$BEADS")"
+    provider_j="$(json_escape "${provider:-unknown}")"
+    state_j="$(json_escape "$state")"
+    reason_j="$(json_escape "$reason")"
+    started_at_j="$(json_escape "$started_at")"
+    duration_j="$(json_escape "$duration")"
+    exit_code_j="$(json_escape "${exit_code:--}")"
+    outcome_state_j="$(json_escape "${outcome_state:--}")"
+    outcome_reason_j="$(json_escape "${outcome_reason:--}")"
+    failure_class_j="$(json_escape "$failure_class")"
+    failure_detail_j="$(json_escape "$failure_detail")"
+    log_excerpt_j="$(json_escape "$log_excerpt")"
+    selected_model_j="$(json_escape "${selected_model:--}")"
+    fallback_reason_j="$(json_escape "${fallback_reason:--}")"
+    reported_commit_j="$(json_escape "${reported_commit:--}")"
+    next_action_j="$(json_escape "${next_action:--}")"
+    host_j="$(json_escape "${host:--}")"
+    cwd_j="$(json_escape "${cwd:--}")"
+    run_instance_j="$(json_escape "${run_instance:--}")"
+    worktree_j="$(json_escape "${worktree:--}")"
     
     if [[ "$REPORT_FORMAT" == "json" || "$OUTPUT_JSON" == "true" ]]; then
-        cat <<EOF
-{
-  "beads": "$BEADS",
-  "provider": "${provider:-unknown}",
-  "state": "$state",
-  "reason_code": "$reason",
-  "started_at": "$started_at",
-  "duration_sec": "$duration",
-  "retries": $retries,
-  "exit_code": "${exit_code:--}",
-  "outcome_state": "${outcome_state:--}",
-  "outcome_reason_code": "${outcome_reason:--}",
-  "selected_model": "${selected_model:--}",
-  "fallback_reason": "${fallback_reason:--}",
-  "reported_commit": "${reported_commit:--}",
-  "require_commit_artifact": ${require_commit_artifact:-0},
-  "next_action": "${next_action:--}",
-  "host": "${host:--}",
-  "cwd": "${cwd:--}",
-  "run_instance": "${run_instance:--}",
-  "worktree": "${worktree:--}",
-  "mutations": $mutations,
-  "log_bytes": $log_bytes,
-  "cpu_time_sec": $cpu_time,
-  "pid_age_sec": $pid_age
-}
-EOF
+        printf '{\n'
+        printf '  "beads": "%s",\n' "$beads_j"
+        printf '  "provider": "%s",\n' "$provider_j"
+        printf '  "state": "%s",\n' "$state_j"
+        printf '  "reason_code": "%s",\n' "$reason_j"
+        printf '  "started_at": "%s",\n' "$started_at_j"
+        printf '  "duration_sec": "%s",\n' "$duration_j"
+        printf '  "retries": %s,\n' "$retries"
+        printf '  "exit_code": "%s",\n' "$exit_code_j"
+        printf '  "outcome_state": "%s",\n' "$outcome_state_j"
+        printf '  "outcome_reason_code": "%s",\n' "$outcome_reason_j"
+        printf '  "failure_class": "%s",\n' "$failure_class_j"
+        printf '  "failure_detail": "%s",\n' "$failure_detail_j"
+        printf '  "retryable": %s,\n' "$retryable"
+        printf '  "provider_exit_code": %s,\n' "$provider_exit_code_json"
+        printf '  "log_excerpt": "%s",\n' "$log_excerpt_j"
+        printf '  "selected_model": "%s",\n' "$selected_model_j"
+        printf '  "fallback_reason": "%s",\n' "$fallback_reason_j"
+        printf '  "reported_commit": "%s",\n' "$reported_commit_j"
+        printf '  "require_commit_artifact": %s,\n' "${require_commit_artifact:-0}"
+        printf '  "next_action": "%s",\n' "$next_action_j"
+        printf '  "host": "%s",\n' "$host_j"
+        printf '  "cwd": "%s",\n' "$cwd_j"
+        printf '  "run_instance": "%s",\n' "$run_instance_j"
+        printf '  "worktree": "%s",\n' "$worktree_j"
+        printf '  "mutations": %s,\n' "$mutations"
+        printf '  "log_bytes": %s,\n' "$log_bytes"
+        printf '  "cpu_time_sec": %s,\n' "$cpu_time"
+        printf '  "pid_age_sec": %s\n' "$pid_age"
+        printf '}\n'
     else
         cat <<EOF
 # Report: $BEADS

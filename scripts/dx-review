@@ -106,6 +106,20 @@ reason_from_json() {
     sed -n 's/.*"reason_code"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
 }
 
+json_string_field_from_text() {
+    local key="$1"
+    local text="${2:-}"
+    printf '%s\n' "$text" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n 1
+}
+
+json_bool_field_from_text() {
+    local key="$1"
+    local text="${2:-}"
+    local value
+    value="$(printf '%s\n' "$text" | sed -E -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*(true|false).*/\\1/p" | head -n 1)"
+    printf '%s' "${value:-false}"
+}
+
 reason_from_start_log() {
     local text="${1:-}"
     local value=""
@@ -461,9 +475,10 @@ summarize_reviews() {
 
     for reviewer in "${reviewers[@]}"; do
         raw_total=$((raw_total + 1))
-        local reviewer_profile state reason provider display_state verdict
+        local reviewer_profile state reason provider display_state verdict report_reason
         local check_json check_rc report_json report_rc report_path log_path start_log
         local start_log_text start_reason
+        local failure_class failure_detail retryable provider_exit_code log_excerpt next_action selected_model
         local input_tokens output_tokens total_tokens estimated_cost usage_available usage_source
         local findings_count read_only_enforcement log_text normalized_log_text parse_text
         local usage_json verdict_json
@@ -501,6 +516,14 @@ summarize_reviews() {
         if [[ -z "$reason" ]]; then
             reason="$(printf '%s\n' "$report_json" | reason_from_json)"
         fi
+        report_reason="$(printf '%s\n' "$report_json" | reason_from_json)"
+        if [[ -n "$report_reason" ]]; then
+            case "$reason" in
+                ""|unknown|process_exit_with_rc|process_exit|outcome_exit_nonzero)
+                    reason="$report_reason"
+                    ;;
+            esac
+        fi
         start_reason="$(reason_from_start_log "$start_log_text")"
         if [[ (-z "$state" || "$state" == "missing" || "$state" == "unknown") && -n "$start_log_text" && "$check_rc" -ne 0 && "$report_rc" -ne 0 ]]; then
             state="start_failed"
@@ -529,6 +552,14 @@ summarize_reviews() {
         normalized_log_text="$(printf '%s' "$log_text" | sed 's/\\n/\
 /g')"
         parse_text="${report_json}"$'\n'"${check_json}"$'\n'"${normalized_log_text}"
+        failure_class="$(json_string_field_from_text "failure_class" "$report_json")"
+        failure_detail="$(json_string_field_from_text "failure_detail" "$report_json")"
+        retryable="$(json_bool_field_from_text "retryable" "$report_json")"
+        provider_exit_code="$(json_number_from_text "provider_exit_code" "$report_json")"
+        log_excerpt="$(json_string_field_from_text "log_excerpt" "$report_json")"
+        next_action="$(json_string_field_from_text "next_action" "$report_json")"
+        selected_model="$(json_string_field_from_text "selected_model" "$report_json")"
+        [[ -n "$provider_exit_code" ]] || provider_exit_code="null"
         verdict="$(verdict_from_text "$parse_text")"
         findings_count="$(findings_count_from_text "$parse_text")"
         read_only_enforcement="$(read_only_enforcement_from_text "$parse_text")"
@@ -642,11 +673,34 @@ EOF
                 ;;
         esac
 
-        entries+=("$(cat <<EOF
-{"reviewer":"$(json_escape "$reviewer")","profile":"$(json_escape "$reviewer_profile")","state":"$(json_escape "$display_state")","process_success":${process_success},"review_success":${review_success},"usable_review":${usable_review},"review_status_reason":"$(json_escape "$review_status_reason")","reason_code":"$(json_escape "$reason")","verdict":${verdict_json},"findings_count":${findings_count},"read_only_enforcement":"$(json_escape "$read_only_enforcement")","mutation_count":${mutation_count},"mutation_source":"$(json_escape "$mutation_source")","mutation_warning":"$(json_escape "$mutation_warning")","report_path":"$(json_escape "$report_path")","log_path":"$(json_escape "$log_path")","review_body_path":"$(json_escape "$review_body_path")","start_log":"$(json_escape "$start_log")","usage":${usage_json}}
-EOF
-)")
-        md_rows+=("| ${reviewer} | ${reviewer_profile} | ${display_state} | process=${process_success} review=${review_success} usable=${usable_review} | ${reason} | ${verdict:-n/a} | ${findings_count} | ${read_only_enforcement} | ${mutation_count} ${mutation_warning} | available=${usage_available} | ${review_body_path:-n/a} |")
+        local reviewer_j profile_j state_j status_reason_j reason_j failure_class_j
+        local failure_detail_j provider_j selected_model_j log_excerpt_j next_action_j
+        local read_only_j mutation_source_j mutation_warning_j report_path_j log_path_j
+        local review_body_path_j start_log_j
+        reviewer_j="$(json_escape "$reviewer")"
+        profile_j="$(json_escape "$reviewer_profile")"
+        state_j="$(json_escape "$display_state")"
+        status_reason_j="$(json_escape "$review_status_reason")"
+        reason_j="$(json_escape "$reason")"
+        failure_class_j="$(json_escape "$failure_class")"
+        failure_detail_j="$(json_escape "$failure_detail")"
+        provider_j="$(json_escape "$provider")"
+        selected_model_j="$(json_escape "$selected_model")"
+        log_excerpt_j="$(json_escape "$log_excerpt")"
+        next_action_j="$(json_escape "$next_action")"
+        read_only_j="$(json_escape "$read_only_enforcement")"
+        mutation_source_j="$(json_escape "$mutation_source")"
+        mutation_warning_j="$(json_escape "$mutation_warning")"
+        report_path_j="$(json_escape "$report_path")"
+        log_path_j="$(json_escape "$log_path")"
+        review_body_path_j="$(json_escape "$review_body_path")"
+        start_log_j="$(json_escape "$start_log")"
+        entries+=("{\"reviewer\":\"${reviewer_j}\",\"profile\":\"${profile_j}\",\"state\":\"${state_j}\",\"process_success\":${process_success},\"review_success\":${review_success},\"usable_review\":${usable_review},\"review_status_reason\":\"${status_reason_j}\",\"reason_code\":\"${reason_j}\",\"failure_class\":\"${failure_class_j}\",\"failure_detail\":\"${failure_detail_j}\",\"retryable\":${retryable},\"provider\":\"${provider_j}\",\"model\":\"${selected_model_j}\",\"provider_exit_code\":${provider_exit_code},\"log_excerpt\":\"${log_excerpt_j}\",\"next_action\":\"${next_action_j}\",\"verdict\":${verdict_json},\"findings_count\":${findings_count},\"read_only_enforcement\":\"${read_only_j}\",\"mutation_count\":${mutation_count},\"mutation_source\":\"${mutation_source_j}\",\"mutation_warning\":\"${mutation_warning_j}\",\"report_path\":\"${report_path_j}\",\"log_path\":\"${log_path_j}\",\"review_body_path\":\"${review_body_path_j}\",\"start_log\":\"${start_log_j}\",\"usage\":${usage_json}}")
+        local failure_cell="n/a"
+        if [[ -n "$failure_class" ]]; then
+            failure_cell="${failure_class}; retryable=${retryable}; next=${next_action:-n/a}; detail=${failure_detail:-n/a}"
+        fi
+        md_rows+=("| ${reviewer} | ${reviewer_profile} | ${display_state} | process=${process_success} review=${review_success} usable=${usable_review} | ${reason} | ${failure_cell} | ${verdict:-n/a} | ${findings_count} | ${read_only_enforcement} | ${mutation_count} ${mutation_warning} | available=${usage_available} | ${review_body_path:-n/a} |")
     done
 
     local i exit_code
@@ -675,16 +729,23 @@ EOF
         exit_code=0
     fi
 
-    cat > "$summary_json" <<EOF
-{"beads":"$(json_escape "$beads")","run_dir":"$(json_escape "$run_dir")","summary_md":"$(json_escape "$summary_md")","summary_json":"$(json_escape "$summary_json")","quorum":{"total":${total},"completed":${completed},"failed":${failed},"not_reached":${quorum_not_reached},"exit_code":${exit_code}},"provider_outcomes":{"total":${raw_total},"completed":${raw_completed},"failed":${raw_failed},"not_reached":${raw_not_reached}},"reviewers":[${reviewers_json}]}
-EOF
+    local beads_j run_dir_j summary_md_j summary_json_j
+    beads_j="$(json_escape "$beads")"
+    run_dir_j="$(json_escape "$run_dir")"
+    summary_md_j="$(json_escape "$summary_md")"
+    summary_json_j="$(json_escape "$summary_json")"
+    printf '{"beads":"%s","run_dir":"%s","summary_md":"%s","summary_json":"%s","quorum":{"total":%s,"completed":%s,"failed":%s,"not_reached":%s,"exit_code":%s},"provider_outcomes":{"total":%s,"completed":%s,"failed":%s,"not_reached":%s},"reviewers":[%s]}\n' \
+        "$beads_j" "$run_dir_j" "$summary_md_j" "$summary_json_j" \
+        "$total" "$completed" "$failed" "$quorum_not_reached" "$exit_code" \
+        "$raw_total" "$raw_completed" "$raw_failed" "$raw_not_reached" \
+        "$reviewers_json" > "$summary_json"
 
     {
         printf '# dx-review summary: %s\n\n' "$beads"
         printf 'effective quorum: %s/%s completed, %s failed\n' "$completed" "$total" "$failed"
         printf 'provider outcomes: %s completed, %s failed, %s not reached\n\n' "$raw_completed" "$raw_failed" "$raw_not_reached"
-        printf '| reviewer | profile | state | success | reason | verdict | findings | read-only | mutations | usage | review body |\n'
-        printf '|---|---|---|---|---|---|---|---|---|---|---|\n'
+        printf '| reviewer | profile | state | success | reason | failure | verdict | findings | read-only | mutations | usage | review body |\n'
+        printf '|---|---|---|---|---|---|---|---|---|---|---|---|\n'
         local row
         for row in "${md_rows[@]}"; do
             printf '%s\n' "$row"
