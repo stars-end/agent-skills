@@ -5,13 +5,13 @@ After=network-online.target
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/share/mise/shims:%h/.local/share/mise/bin:%h/.local/bin:%h/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
-ExecStart=%h/agent-skills/scripts/dx-repo-memory-refresh --repo-name agent-skills --repo-path %h/agent-skills --fallback-host macmini --push --create-pr
+ExecStart=%h/agent-skills/scripts/dx-repo-memory-refresh-all
 WorkingDirectory=%h
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%h/.dx-state %h/.codex %h/.cache %h/.local %h/agent-skills %h/.config/gh %h/.ssh /tmp /private/tmp
+ReadWritePaths=%h/.dx-state %h/.codex %h/.cache %h/.local %h/agent-skills %h/affordabot %h/prime-radiant-ai %h/llm-common %h/.config/gh %h/.ssh /tmp /private/tmp
 
 [Install]
 WantedBy=default.target

@@ -33,8 +33,14 @@ GENERIC_REASON_PHRASES = (
     "not needed",
     "no impact",
     "n/a",
-    "na",
 )
+REQUIRED_FRONTMATTER = ("status", "owner", "last_verified_commit", "last_verified_at", "stale_if_paths")
+CONVENTIONAL_REPO_MEMORY_DOCS = {
+    "README.md",
+    "BROWNFIELD_MAP.md",
+    "DATA_AND_STORAGE.md",
+    "WORKFLOWS_AND_PATTERNS.md",
+}
 
 
 def _run_git(repo: Path, args: list[str]) -> tuple[int, str]:
@@ -148,7 +154,30 @@ def _is_valid_reason(reason: str) -> tuple[bool, str]:
     return True, ""
 
 
-def _load_waiver_texts(repo: Path, waiver_files: list[str]) -> list[tuple[str, str]]:
+def _frontmatter_bool(value: object) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_repo_memory_doc(path: Path, fm: dict[str, object] | None, err: str | None) -> bool:
+    if path.name in CONVENTIONAL_REPO_MEMORY_DOCS:
+        return True
+    if fm is None or err:
+        return False
+    if _frontmatter_bool(fm.get("repo_memory", False)):
+        return True
+    return all(key in fm for key in REQUIRED_FRONTMATTER)
+
+
+def _discover_repo_memory_docs(doc_dir: Path) -> list[Path]:
+    docs: list[Path] = []
+    for path in sorted(p for p in doc_dir.glob("*.md") if p.is_file()):
+        fm, err = _parse_frontmatter(path)
+        if _is_repo_memory_doc(path, fm, err):
+            docs.append(path)
+    return docs
+
+
+def _load_waiver_texts(repo: Path, waiver_files: list[str], base_ref: str | None) -> list[tuple[str, str]]:
     texts: list[tuple[str, str]] = []
     for wf in waiver_files:
         path = Path(wf)
@@ -159,9 +188,10 @@ def _load_waiver_texts(repo: Path, waiver_files: list[str]) -> list[tuple[str, s
         except OSError:
             texts.append((str(path), ""))
 
-    rc, commit_body = _run_git(repo, ["log", "-1", "--pretty=%B"])
+    log_range = f"{base_ref}..HEAD" if base_ref else "-1"
+    rc, commit_body = _run_git(repo, ["log", log_range, "--pretty=%B"])
     if rc == 0 and commit_body:
-        texts.append(("git:HEAD_BODY", commit_body))
+        texts.append((f"git:{log_range}", commit_body))
     return texts
 
 
@@ -196,7 +226,7 @@ def main() -> int:
         waiver_files.append(env_waiver)
 
     doc_dir = repo / "docs" / "architecture"
-    docs = sorted([p for p in doc_dir.glob("*.md") if p.is_file()])
+    docs = _discover_repo_memory_docs(doc_dir)
     checked_docs: list[str] = [_normalize(str(p.relative_to(repo))) for p in docs]
 
     frontmatter_failures: list[dict[str, str]] = []
@@ -227,7 +257,7 @@ def main() -> int:
             continue
         assert fm is not None
         missing = []
-        for key in ("status", "owner", "last_verified_commit", "last_verified_at", "stale_if_paths"):
+        for key in REQUIRED_FRONTMATTER:
             if key not in fm:
                 missing.append(key)
         if missing:
@@ -240,17 +270,19 @@ def main() -> int:
         parsed_docs[rel] = fm
 
     if docs and agents_text:
-        if not any(doc in agents_text for doc in checked_docs):
+        missing_links = [doc for doc in checked_docs if doc not in agents_text]
+        if missing_links:
             link_failures.append(
                 {
                     "file": _normalize(str(agents_target.relative_to(repo))),
-                    "reason": "AGENTS file does not link any docs/architecture/*.md repo-memory doc",
+                    "reason": "AGENTS file does not link every repo-memory doc",
+                    "missing_docs": ", ".join(missing_links),
                 }
             )
 
     changed_files = _collect_changed_files(repo, args.base_ref, args.changed_file)
 
-    waiver_texts = _load_waiver_texts(repo, waiver_files)
+    waiver_texts = _load_waiver_texts(repo, waiver_files, args.base_ref)
     waivers_by_doc: dict[str, list[dict[str, str]]] = {}
     for source, text in waiver_texts:
         if not text:

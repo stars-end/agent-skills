@@ -1,4 +1,5 @@
 ---
+repo_memory: true
 status: active
 owner: dx-architecture
 last_verified_commit: 6becf188ff3654d403aa9ee684d36d7fec05e611
