@@ -102,6 +102,80 @@ test_audit_stale_after_source_change() {
   rm -rf "$t"
 }
 
+test_audit_ignores_map_only_changes() {
+  local t out rc baseline
+  t="$(mktemp -d)"
+  make_repo "$t"
+  baseline="$(git -C "$t" rev-parse HEAD)"
+  cat > "$t/docs/architecture/BROWNFIELD_MAP.md" <<EOF
+---
+status: active
+owner: dx
+last_verified_commit: $baseline
+last_verified_at: 2026-04-15T00:00:00Z
+stale_if_paths:
+  - docs/**
+---
+# Map
+EOF
+  git -C "$t" add docs/architecture/BROWNFIELD_MAP.md
+  git -C "$t" commit -m "set docs stale scope" >/dev/null
+  echo "" >> "$t/docs/architecture/BROWNFIELD_MAP.md"
+  echo "Metadata-only touch" >> "$t/docs/architecture/BROWNFIELD_MAP.md"
+  git -C "$t" add docs/architecture/BROWNFIELD_MAP.md
+  git -C "$t" commit -m "map-only update" >/dev/null
+  out="$t/audit.json"
+  set +e
+  "$AUDIT" --repo "$t" --age-days 9999 --json > "$out"
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 && "$(json_field "$out" status)" == "pass" ]]; then
+    pass "audit ignores repo-memory map-only changes"
+  else
+    cat "$out" || true
+    fail "audit ignores repo-memory map-only changes"
+  fi
+  rm -rf "$t"
+}
+
+test_audit_stale_for_non_map_docs_changes() {
+  local t out rc baseline
+  t="$(mktemp -d)"
+  make_repo "$t"
+  baseline="$(git -C "$t" rev-parse HEAD)"
+  cat > "$t/docs/architecture/BROWNFIELD_MAP.md" <<EOF
+---
+status: active
+owner: dx
+last_verified_commit: $baseline
+last_verified_at: 2026-04-15T00:00:00Z
+stale_if_paths:
+  - docs/**
+---
+# Map
+EOF
+  git -C "$t" add docs/architecture/BROWNFIELD_MAP.md
+  git -C "$t" commit -m "set docs stale scope" >/dev/null
+  mkdir -p "$t/docs/policy"
+  cat > "$t/docs/policy/brief.md" <<'EOF'
+Policy note.
+EOF
+  git -C "$t" add docs/policy/brief.md
+  git -C "$t" commit -m "non-map docs update" >/dev/null
+  out="$t/audit.json"
+  set +e
+  "$AUDIT" --repo "$t" --age-days 9999 --json > "$out"
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 1 && "$(json_field "$out" status)" == "stale" && "$(json_field "$out" summary.stale_docs)" == "1" ]]; then
+    pass "audit still flags non-map docs changes"
+  else
+    cat "$out" || true
+    fail "audit still flags non-map docs changes"
+  fi
+  rm -rf "$t"
+}
+
 test_guard_allows_docs() {
   local t out
   t="$(mktemp -d)"
@@ -170,6 +244,8 @@ test_refresh_rolling_branch_push_mode() {
 
 test_audit_clean
 test_audit_stale_after_source_change
+test_audit_ignores_map_only_changes
+test_audit_stale_for_non_map_docs_changes
 test_guard_allows_docs
 test_guard_blocks_source
 test_refresh_gh_pr_flags
