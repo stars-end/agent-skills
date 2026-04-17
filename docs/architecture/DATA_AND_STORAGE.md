@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 375be0f0e61887af9895a2347f03865278058080
-last_verified_at: 2026-04-16T00:24:47Z
+last_verified_commit: 7dd26996c0336790a68338bddddf73d090437341
+last_verified_at: 2026-04-17T05:48:13Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -34,6 +34,9 @@ surfaces. This file records their ownership boundaries.
      coordination state
    - `dx-runner` reports/logs live outside the repo and are provider execution
      evidence, not canonical product memory
+   - `dx-review` summary and reviewer artifacts live under `/tmp/dx-review`
+     and `/tmp/dx-runner`; they are disposable review evidence, while the
+     durable contract is the repo-reviewed wrapper, skill, and template files
    - `dx-batch`/`dx-wave` artifacts are legacy compatibility or operator
      substrate state and should not be treated as the default agent workflow
      record

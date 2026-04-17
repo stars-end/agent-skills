@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 6becf188ff3654d403aa9ee684d36d7fec05e611
-last_verified_at: 2026-04-15T23:52:52Z
+last_verified_commit: 7dd26996c0336790a68338bddddf73d090437341
+last_verified_at: 2026-04-17T05:48:13Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -70,6 +70,10 @@ For changes that touch architecture or workflow behavior, read in this order:
 
 - baseline generation and AGENTS compilation scripts
 - review/orchestration templates under `templates/dx-review`
+- `dx-review` skill and wrapper policy: current review quorum is GLM-first
+  (`cc-glm-review` with `opencode-review` fallback) plus Gemini; Claude is not
+  part of the dx-review surface even though `dx-runner` may still expose a
+  generic `claude-code` provider for other workflows
 - routing contracts for `llm-tldr`, Serena, and Beads runtime assumptions
 - scripts that enforce cross-repo policy (`dx-*` checks, dispatch helpers)
 - stale "canonical dx-batch" wording in generated baselines, skill metadata,
