@@ -1,7 +1,7 @@
 ---
 name: dx-review
-description: Dispatch a low-friction review quorum through dx-review: native Claude Code Opus plus cc-glm GLM-5, with OpenCode GLM-5.1 as fallback and optional Gemini as a third reviewer. Use when the user asks for multi-model review, review quorum, Claude Code + GLM review, or a quick POC of reviewer lanes.
-tags: [workflow, review, dispatch, claude-code, cc-glm, opencode, dx-runner]
+description: Dispatch a low-friction review quorum through dx-review: cc-glm GLM-5.1 primary, OpenCode GLM-5.1 fallback, plus Gemini as the second default lane. Use when the user asks for multi-model review, GLM-focused review quorum, or a quick POC of reviewer lanes.
+tags: [workflow, review, dispatch, cc-glm, opencode, gemini, dx-runner]
 allowed-tools:
   - Bash
 ---
@@ -10,15 +10,14 @@ allowed-tools:
 
 `dx-review` is the minimal review quorum wrapper over `dx-runner`. It launches:
 
-- `claude-code-review`: native Claude Code CLI with Opus
-- `cc-glm-review`: GLM-5 through the cc-glm wrapper
-- `opencode-review`: fallback GLM transport with `zhipuai/glm-5.1`, launched only if `cc-glm-review` fails at start/preflight
-- optional `gemini-burst`: Gemini CLI, opt-in only with `--gemini`
+- `cc-glm-review`: primary GLM lane through the cc-glm wrapper
+- `opencode-review`: fallback GLM lane with `zhipuai/glm-5.1`, launched only if `cc-glm-review` fails at start/preflight
+- `gemini-burst`: Gemini CLI second default lane
 
 Use it when the desired outcome is independent review feedback, not implementation. It should stay thin: provider health, model pinning, logs, reports, and failure taxonomy belong in `dx-runner`.
 
-The default reviewers start in parallel. A slow or failed provider must not block
-the other reviewer from launching.
+The GLM and Gemini lanes start in parallel. A slow or failed provider must not
+block the other reviewer from launching.
 
 ## Required Shape
 
@@ -59,7 +58,7 @@ dx-review summarize --beads bd-xxx
 ```
 
 Expected summarize output includes:
-- effective usable-review quorum status (`2/2 completed, 0 failed`)
+- effective usable-review quorum status (`2/2 completed, 0 failed` by default)
 - raw/process provider outcomes, including any failed fallback attempts
 - `process_success`, `review_success`, and `usable_review` so process exit 0
   is not confused with a usable review body
@@ -88,12 +87,10 @@ Review templates must not request PR creation, commits, pushes, or code fixes.
 
 ## Provider Contract
 
-- Claude Code is the `claude-code` provider, not `cc-glm`.
 - `cc-glm-review` is the primary GLM lane for `dx-review`.
 - `opencode-review` is the GLM fallback lane, not a default second GLM reviewer.
 - OpenCode fallback model is `zhipuai/glm-5.1`.
-- Claude Code review model is `opus`.
-- Gemini is optional and should not block the default two-reviewer path.
+- Gemini is the second default lane.
 - Start-time provider failures are terminal for that provider attempt and should
   be reported as `start_failed`, not polled until timeout. If the failed provider
   is `cc-glm-review`, `dx-review` launches `opencode-review` as the GLM fallback.
@@ -113,7 +110,6 @@ Review templates must not request PR creation, commits, pushes, or code fixes.
 
 ## Failure Handling
 
-- If `claude-code-review` fails preflight, check Claude Code auth/model availability with `dx-runner preflight --profile claude-code-review --worktree <path>`.
 - If `cc-glm-review` fails preflight, `dx-review run` tries `opencode-review` once as GLM fallback. Check `dx-runner preflight --profile cc-glm-review --worktree <path>` before debugging OpenCode.
 - `cc-glm-review` preflight must exercise the same `cc-glm-headless`
   token-resolution path as live runs. A Z.ai secret failure should surface as

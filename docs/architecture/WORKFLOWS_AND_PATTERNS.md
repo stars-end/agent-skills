@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 375be0f0e61887af9895a2347f03865278058080
-last_verified_at: 2026-04-16T00:24:47Z
+last_verified_commit: 7dd26996c0336790a68338bddddf73d090437341
+last_verified_at: 2026-04-17T05:48:13Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -55,6 +55,12 @@ not rediscover them from scratch.
 ## Core Pattern: Review Contracts
 
 Templates under `templates/dx-review/` define expected reviewer behavior.
+`dx-review` itself is a thin dispatcher: it runs the GLM lane through
+`cc-glm-review`, falls back to `opencode-review` for that GLM lane when needed,
+and runs Gemini as the second default review lane. Claude is intentionally not
+part of the dx-review quorum; do not reintroduce Claude by editing tests or
+generated baseline text without a new explicit policy change.
+
 Architecture review should evaluate:
 
 - ownership boundary clarity

@@ -4,8 +4,8 @@ set -euo pipefail
 # dx-review
 # Minimal review quorum wrapper over dx-runner profiles.
 # Default reviewers:
-#   - claude-code-review -> Claude Code Opus
-#   - cc-glm-review      -> GLM-5 via cc-glm transport
+#   - cc-glm-review      -> GLM-5.1 via cc-glm transport
+#   - gemini-burst       -> Gemini review lane
 # Fallback:
 #   - opencode-review    -> OpenCode GLM-5.1 if cc-glm fails at start/preflight
 
@@ -27,7 +27,7 @@ Usage:
   dx-review summarize --beads <bd-id> [--gemini]
 
 Options:
-  --gemini              Include the optional gemini-burst reviewer.
+  --gemini              Compatibility no-op; gemini-burst is included by default.
   --pr <url|repo#num>   Include GitHub PR metadata from gh.
   --github-pr <ref>     Alias for --pr.
   --template <name>     Review template: smoke, code-review, architecture-review, arch-review, security-review.
@@ -70,7 +70,6 @@ reviewer_id_for_profile() {
     local beads="$1"
     local profile="$2"
     case "$profile" in
-        claude-code-review) printf '%s.claude' "$beads" ;;
         cc-glm-review) printf '%s.glm' "$beads" ;;
         opencode-review) printf '%s.opencode' "$beads" ;;
         gemini-burst) printf '%s.gemini' "$beads" ;;
@@ -366,7 +365,6 @@ build_review_prompt() {
 
 profile_for_reviewer() {
     case "$1" in
-        *.claude) printf 'claude-code-review' ;;
         *.glm) printf 'cc-glm-review' ;;
         *.opencode) printf 'opencode-review' ;;
         *.gemini) printf 'gemini-burst' ;;
@@ -376,7 +374,6 @@ profile_for_reviewer() {
 
 provider_hint_for_reviewer() {
     case "$1" in
-        *.claude) printf 'claude-code' ;;
         *.glm) printf 'cc-glm' ;;
         *.opencode) printf 'opencode' ;;
         *.gemini) printf 'gemini' ;;
@@ -386,7 +383,6 @@ provider_hint_for_reviewer() {
 
 logical_lane_for_reviewer() {
     case "$1" in
-        *.claude) printf 'claude' ;;
         *.glm|*.opencode) printf 'glm' ;;
         *.gemini) printf 'gemini' ;;
         *) printf '%s' "$1" ;;
@@ -437,21 +433,18 @@ summarize_reviews() {
     local run_dir="/tmp/dx-review/${beads}"
     local summary_json="$run_dir/summary.json"
     local summary_md="$run_dir/summary.md"
-    local -a profiles=("claude-code-review" "cc-glm-review")
+    local -a profiles=("cc-glm-review")
     local -a reviewers=()
     local -a entries=()
     local -a md_rows=()
     local raw_total=0 raw_completed=0 raw_failed=0 raw_not_reached=0
     local total=0 completed=0 failed=0 quorum_not_reached=0
-    local claude_completed=false claude_failed=false claude_not_reached=false
     local glm_completed=false glm_failed=false glm_not_reached=false
     local gemini_completed=false gemini_failed=false gemini_not_reached=false
     local profile reviewer
 
     mkdir -p "$run_dir"
-    if [[ "$include_gemini" == "true" ]]; then
-        profiles+=("gemini-burst")
-    fi
+    profiles+=("gemini-burst")
     for profile in "${profiles[@]}"; do
         reviewers+=("$(reviewer_id_for_profile "$beads" "$profile")")
     done
@@ -625,11 +618,6 @@ EOF
 
         lane="$(logical_lane_for_reviewer "$reviewer")"
         case "$lane" in
-            claude)
-                [[ "$reviewer_completed" == "true" ]] && claude_completed=true
-                [[ "$reviewer_failed" == "true" ]] && claude_failed=true
-                [[ "$reviewer_not_reached" == "true" ]] && claude_not_reached=true
-                ;;
             glm)
                 [[ "$reviewer_completed" == "true" ]] && glm_completed=true
                 [[ "$reviewer_failed" == "true" ]] && glm_failed=true
@@ -659,13 +647,9 @@ EOF
     done
 
     total=2
-    [[ "$include_gemini" == "true" ]] && total=3
 
-    if [[ "$claude_completed" == "true" ]]; then completed=$((completed + 1)); elif [[ "$claude_not_reached" == "true" ]]; then quorum_not_reached=$((quorum_not_reached + 1)); else failed=$((failed + 1)); fi
     if [[ "$glm_completed" == "true" ]]; then completed=$((completed + 1)); elif [[ "$glm_not_reached" == "true" ]]; then quorum_not_reached=$((quorum_not_reached + 1)); else failed=$((failed + 1)); fi
-    if [[ "$include_gemini" == "true" ]]; then
-        if [[ "$gemini_completed" == "true" ]]; then completed=$((completed + 1)); elif [[ "$gemini_not_reached" == "true" ]]; then quorum_not_reached=$((quorum_not_reached + 1)); else failed=$((failed + 1)); fi
-    fi
+    if [[ "$gemini_completed" == "true" ]]; then completed=$((completed + 1)); elif [[ "$gemini_not_reached" == "true" ]]; then quorum_not_reached=$((quorum_not_reached + 1)); else failed=$((failed + 1)); fi
 
     if [[ "$quorum_not_reached" -gt 0 ]]; then
         exit_code=2
@@ -707,12 +691,10 @@ run_doctor_for_profiles() {
     local worktree="$1"
     local include_gemini="$2"
     local failures=0 profile rc
-    local -a profiles=("claude-code-review" "cc-glm-review")
+    local -a profiles=("cc-glm-review")
 
     [[ -n "$worktree" && -d "$worktree" ]] || { echo "doctor requires existing --worktree" >&2; return 2; }
-    if [[ "$include_gemini" == "true" ]]; then
-        profiles+=("gemini-burst")
-    fi
+    profiles+=("gemini-burst")
 
     for profile in "${profiles[@]}"; do
         [[ -n "$profile" ]] || continue
@@ -730,7 +712,7 @@ run_doctor_for_profiles() {
 }
 
 doctor_cmd() {
-    local worktree="" include_gemini=false
+    local worktree="" include_gemini=true
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --worktree)
@@ -756,7 +738,7 @@ doctor_cmd() {
 }
 
 summarize_cmd() {
-    local beads="" include_gemini=false
+    local beads="" include_gemini=true
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --beads)
@@ -785,7 +767,7 @@ summarize_cmd() {
 }
 
 run_cmd() {
-    local beads="" worktree="" prompt="" prompt_file="" include_gemini=false wait=false timeout_sec=300 poll_sec=5
+    local beads="" worktree="" prompt="" prompt_file="" include_gemini=true wait=false timeout_sec=300 poll_sec=5
     local pr_ref="" template_name="" read_only_shell=false
 
     while [[ $# -gt 0 ]]; do
@@ -871,10 +853,8 @@ run_cmd() {
     fi
     [[ -f "$prompt_file" ]] || { echo "prompt file not found: $prompt_file" >&2; exit 2; }
 
-    local -a profiles=("cc-glm-review" "claude-code-review")
-    if [[ "$include_gemini" == "true" ]]; then
-        profiles+=("gemini-burst")
-    fi
+    local -a profiles=("cc-glm-review")
+    profiles+=("gemini-burst")
 
     local -a reviewers=()
     local -a start_pids=()
