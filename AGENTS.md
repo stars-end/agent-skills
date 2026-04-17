@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 6eae24227c7353cee5e9d828648054b33dfc8bac -->
-<!-- Last updated: 2026-04-16 06:33:58 UTC -->
+<!-- Source SHA: 83a21ee990047019c7ce7acd0aa0282701ed834b -->
+<!-- Last updated: 2026-04-16 19:36:32 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -627,7 +627,7 @@ Use `dx-repo-memory-check --repo .` to validate map freshness.
 | **dx-loop-review-contract** | Deterministic review contract for dx-loop reviewer runs. Enforces findings-first review style, concrete verdicts, and machine-actionable end states for baton automation. | — | workflow, review, dx-loop, baton |
 | **dx-loop** | `dx-loop` is the default execution surface for chained Beads work, multi-step outcomes, and implement/review baton flows. It is a PR-aware orchestration surface that reuses Ralph's proven patterns (baton, topological dependencies, checkpoint/resume) while replacing the control plane with governed `dx-runner` dispatch and enforcing PR artifact contracts. | `dx-ensure-bins.sh` |  |
 | **dx-research** | Source-backed deep research wrapper over dx-runner for agent use. Use when the goal is evidence-based research and decision memo output, not implementation dispatch or code-review quorum. | `dx-research run \` | workflow, research, evidence, decision-memo, dx-runner, gemini, cc-glm |
-| **dx-review** | Dispatch a low-friction review quorum through dx-review: native Claude Code Opus plus cc-glm GLM-5, with OpenCode GLM-5.1 as fallback and optional Gemini as a third reviewer. Use when the user asks for multi-model review, review quorum, Claude Code + GLM review, or a quick POC of reviewer lanes. | `dx-review run \` | workflow, review, dispatch, claude-code, cc-glm, opencode, dx-runner |
+| **dx-review** | Dispatch a low-friction review quorum through dx-review: cc-glm GLM-5.1 primary, OpenCode GLM-5.1 fallback, plus Gemini as the second default lane. Use when the user asks for multi-model review, GLM-focused review quorum, or a quick POC of reviewer lanes. | `dx-review run \` | workflow, review, dispatch, cc-glm, opencode, gemini, dx-runner |
 | **dx-runner** | Lower-level unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, claude-code, or gemini providers with unified preflight, gates, and failure taxonomy. Use directly for provider debugging, custom orchestration, headless jobs, or when a task-specific shim such as dx-loop, dx-review, or dx-research delegates to it. | `dx-runner start --beads bd-xxx --provider cc-glm --worktree ` | workflow, dispatch, governance, multi-provider, automation |
 | **fleet-sync** | Fleet Sync orchestrator for MCP tool convergence, health checks, and IDE config management across canonical VMs. | — |  |
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |

@@ -50,10 +50,6 @@ case "$cmd" in
     echo "start:$beads:$profile:$(date +%s)" >> "$DX_REVIEW_FAKE_LOG"
     echo "prompt_file:$beads:$prompt_file" >> "$DX_REVIEW_FAKE_LOG"
     case "$profile" in
-      claude-code-review)
-        sleep "${DX_REVIEW_FAKE_CLAUDE_START_SEC:-3}"
-        echo "started beads=$beads provider=claude-code"
-        ;;
       cc-glm-review)
         if [[ "${DX_REVIEW_FAKE_CC_GLM_START_FAIL:-0}" == "1" ]]; then
           mkdir -p "$state_dir"
@@ -93,10 +89,10 @@ case "$cmd" in
       echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"start_failed","reason_code":"dx_runner_start_failed"}'
     elif [[ "${DX_REVIEW_FAKE_GEMINI_STOPPED:-0}" == "1" && "$beads" == *.gemini ]]; then
       echo '{"beads":"'"$beads"'","provider":"gemini","state":"stopped","reason_code":"manual_stop","mutation_count":1}'
-    elif [[ "$beads" == *.claude ]]; then
-      echo '{"beads":"'"$beads"'","provider":"claude-code","state":"no_op_success","reason_code":"exit_zero_no_mutations"}'
     elif [[ "$beads" == *.glm ]]; then
       echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc"}'
+    elif [[ "$beads" == *.gemini ]]; then
+      echo '{"beads":"'"$beads"'","provider":"gemini","state":"exited_ok","reason_code":"process_exit_with_rc"}'
     else
       echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc"}'
     fi
@@ -111,14 +107,14 @@ case "$cmd" in
     elif [[ "${DX_REVIEW_FAKE_EMPTY_SUCCESS:-0}" == "1" && "$beads" == *.glm ]]; then
       echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc"}'
     elif [[ "${DX_REVIEW_FAKE_REPORT_USAGE:-0}" == "1" ]]; then
-      if [[ "$beads" == *.glm ]]; then provider="cc-glm"; elif [[ "$beads" == *.opencode ]]; then provider="opencode"; else provider="claude-code"; fi
+      if [[ "$beads" == *.glm ]]; then provider="cc-glm"; elif [[ "$beads" == *.opencode ]]; then provider="opencode"; else provider="gemini"; fi
       echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":2,"read_only_enforcement":"contract_only","input_tokens":101,"output_tokens":29,"total_tokens":130,"estimated_cost_usd":0.42}'
     elif [[ "$beads" == *.opencode ]]; then
       echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass","findings_count":0,"read_only_enforcement":"contract_only"}'
     elif [[ "$beads" == *.glm ]]; then
       echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":1,"read_only_enforcement":"contract_only"}'
     else
-      echo '{"beads":"'"$beads"'","provider":"claude-code","state":"no_op_success","reason_code":"exit_zero_no_mutations","verdict":"approve_with_changes","findings_count":2,"read_only_enforcement":"contract_only"}'
+      echo '{"beads":"'"$beads"'","provider":"gemini","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":2,"read_only_enforcement":"contract_only"}'
     fi
     ;;
   preflight)
@@ -163,10 +159,10 @@ EOF
     chmod +x "$path"
 }
 
-test_parallel_start_and_glm_fallback() {
-    echo "=== Testing dx-review parallel start + GLM fallback handling ==="
+test_default_glm_and_fallback() {
+    echo "=== Testing dx-review GLM default lane + fallback handling ==="
 
-    local tmp fake worktree out rc claude_ts glm_ts opencode_ts diff_sec
+    local tmp fake worktree out rc glm_ts opencode_ts gemini_ts
     local summary_json summary_md
     tmp="$(mktemp -d)"
     fake="$tmp/dx-runner"
@@ -175,7 +171,6 @@ test_parallel_start_and_glm_fallback() {
     make_fake_runner "$fake"
     export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
     export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
-    export DX_REVIEW_FAKE_CLAUDE_START_SEC=3
     export DX_REVIEW_FAKE_CC_GLM_START_FAIL=1
     unset DX_REVIEW_FAKE_OPENCODE_START_FAIL
 
@@ -184,15 +179,13 @@ test_parallel_start_and_glm_fallback() {
     rc=$?
     set -e
 
-    claude_ts="$(awk -F: '$3=="claude-code-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
     glm_ts="$(awk -F: '$3=="cc-glm-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
     opencode_ts="$(awk -F: '$3=="opencode-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
-    diff_sec=$((claude_ts - glm_ts))
-    if [[ "$diff_sec" -lt 0 ]]; then diff_sec=$((0 - diff_sec)); fi
-    if [[ "$diff_sec" -lt 2 ]]; then
-        pass "primary reviewers are started in parallel"
+    gemini_ts="$(awk -F: '$3=="gemini-burst"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
+    if [[ -n "$glm_ts" && -n "$gemini_ts" ]] && [[ -z "$(awk -F: '$3=="claude-code-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")" ]]; then
+        pass "default run launches GLM and Gemini lanes without Claude reviewer"
     else
-        fail "primary reviewers appear serial (claude/glm start delta ${diff_sec}s)"
+        fail "default reviewer set incorrect: $out"
     fi
 
     if [[ "$rc" -eq 0 ]] && echo "$out" | grep -q "glm_primary_start_failed" && [[ -n "$opencode_ts" ]]; then
@@ -215,10 +208,10 @@ test_parallel_start_and_glm_fallback() {
         fail "start-failed cc-glm primary was polled repeatedly: count=$glm_checks"
     fi
 
-    if echo "$out" | grep -q "state=review_completed raw_state=no_op_success"; then
-        pass "review no-op success is summarized as review_completed"
+    if echo "$out" | grep -q "state=exited_ok raw_state=exited_ok"; then
+        pass "fallback reviewer terminal state is surfaced during wait loop"
     else
-        fail "review no-op success was not summarized clearly: $out"
+        fail "fallback reviewer terminal state was not summarized clearly: $out"
     fi
 
     summary_json="/tmp/dx-review/bd-test/summary.json"
@@ -329,7 +322,7 @@ test_doctor_runs_both_profiles() {
     export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
 
     out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" doctor --worktree "$worktree" 2>&1)"
-    if echo "$out" | grep -q "doctor profile=claude-code-review" && echo "$out" | grep -q "doctor profile=cc-glm-review" && ! echo "$out" | grep -q "doctor profile=opencode-review"; then
+    if ! echo "$out" | grep -q "doctor profile=claude-code-review" && echo "$out" | grep -q "doctor profile=cc-glm-review" && echo "$out" | grep -q "doctor profile=gemini-burst" && ! echo "$out" | grep -q "doctor profile=opencode-review"; then
         pass "doctor checks primary review profiles without requiring fallback"
     else
         fail "doctor profile coverage incorrect: $out"
@@ -421,7 +414,7 @@ EOF
 
     if [[ "$rc" -eq 0 ]] \
         && grep -q '"verdict":"pass_with_findings"' "$summary_json" \
-        && grep -q '"findings_count":2' "$summary_json" \
+        && grep -q '"findings_count":1' "$summary_json" \
         && grep -q '"read_only_enforcement":"contract_only"' "$summary_json" \
         && grep -q '"total_tokens":130' "$summary_json" \
         && grep -q '"estimated_cost_usd":0.42' "$summary_json"; then
@@ -546,8 +539,8 @@ test_summarize_gemini_stopped_is_incomplete() {
         && grep -q '"usable_review":false' "$summary_json" \
         && grep -q '"mutation_count":1' "$summary_json" \
         && grep -q '"mutation_warning":"read_only_mutation_detected"' "$summary_json" \
-        && echo "$out" | grep -q "effective quorum: 2/3 completed, 0 failed"; then
-        pass "stopped optional Gemini lane is incomplete and mutation-warning aware"
+        && echo "$out" | grep -q "effective quorum: 1/2 completed, 0 failed"; then
+        pass "stopped Gemini lane is incomplete and mutation-warning aware"
     else
         fail "stopped Gemini lane was not classified correctly: rc=$rc output=$out"
     fi
@@ -596,7 +589,7 @@ EOF
 }
 
 main() {
-    test_parallel_start_and_glm_fallback
+    test_default_glm_and_fallback
     test_summarize_default_reviewers_and_usage_unavailable
     test_summarize_start_failed_exit_semantics
     test_doctor_runs_both_profiles
