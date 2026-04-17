@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 375be0f0e61887af9895a2347f03865278058080
-last_verified_at: 2026-04-16T00:24:47Z
+last_verified_commit: 7d7f77a4fa2159283817414601d330acb9a81ace
+last_verified_at: 2026-04-17T05:48:13Z
 stale_if_paths:
   - docs/architecture/**
 ---
@@ -16,6 +16,10 @@ stale_if_paths:
   ownership boundaries
 - `WORKFLOWS_AND_PATTERNS.md`: recurring workflow contracts, orchestration
   surface hierarchy, and anti-drift rules
+
+Current review-dispatch policy lives in the map docs: `dx-review` uses the GLM
+lane plus Gemini by default, with OpenCode as GLM fallback and no Claude review
+lane.
 
 Scheduled repo-memory refreshes must keep this index in sync whenever mapped
 architecture docs are added, removed, or materially reorganized.
