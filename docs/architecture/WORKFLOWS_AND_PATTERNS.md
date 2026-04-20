@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 7dd26996c0336790a68338bddddf73d090437341
-last_verified_at: 2026-04-17T05:48:13Z
+last_verified_commit: d6f088e9972a6103250dd45cca3a78a75d6e66d9
+last_verified_at: 2026-04-20T08:03:20Z
 stale_if_paths:
   - core/**
   - extended/**
