@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 7d7f77a4fa2159283817414601d330acb9a81ace
-last_verified_at: 2026-04-17T05:48:13Z
+last_verified_commit: 6b25e67bc3ad38b659d4d378a6464386779f5046
+last_verified_at: 2026-04-22T23:18:56Z
 stale_if_paths:
   - docs/architecture/**
 ---
@@ -12,8 +12,8 @@ stale_if_paths:
 
 - `BROWNFIELD_MAP.md`: first-stop orientation for existing-system changes,
   including the `dx-loop`/`dx-runner`/`dx-batch` runtime boundary
-- `DATA_AND_STORAGE.md`: memory, storage, and orchestration runtime artifact
-  ownership boundaries
+- `DATA_AND_STORAGE.md`: memory, storage, portable handoff context, delegated
+  prompt, and orchestration runtime artifact ownership boundaries
 - `WORKFLOWS_AND_PATTERNS.md`: recurring workflow contracts, orchestration
   surface hierarchy, and anti-drift rules
 
