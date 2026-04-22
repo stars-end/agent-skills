@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 7dd26996c0336790a68338bddddf73d090437341
-last_verified_at: 2026-04-17T05:48:13Z
+last_verified_commit: 1ffddab676d19e8ab2a6bea7854afaafad0352ec
+last_verified_at: 2026-04-22T23:18:56Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -23,6 +23,8 @@ surfaces. This file records their ownership boundaries.
 1. Repository files
    - source of truth for skills, scripts, templates, and docs
    - versioned by git; reviewable in PRs
+   - handoff runbooks and delegated prompts under `docs/runbook/` and
+     `docs/prompts/` are portable context surfaces, not runtime state
 2. Beads runtime state
    - active runtime path: `~/.beads-runtime/.beads`
    - durable records live in shared Dolt server backend configured by runtime
