@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 1ffddab676d19e8ab2a6bea7854afaafad0352ec
-last_verified_at: 2026-04-22T23:18:56Z
+last_verified_commit: d012e5305911ad2a61335b6b3db729b46cb17b78
+last_verified_at: 2026-04-25T14:30:00Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -31,6 +31,9 @@ surfaces. This file records their ownership boundaries.
 3. External tool state (not committed)
    - e.g., `llm-tldr` contained state under external cache locations
    - runtime caches are operational state, not canonical repo memory
+   - semantic FAISS indexes are prewarmed or explicitly built; contained
+     MCP/CLI/fallback paths should fail fast with `semantic_index_missing` when
+     a semantic index is cold instead of building one inside an agent tool call
 4. Orchestration runtime state (not committed)
    - `dx-loop` runtime artifacts live outside the repo and are operational
      coordination state

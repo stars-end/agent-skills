@@ -223,6 +223,13 @@ Codex desktop hydration check:
 3. retry one real in-thread MCP call
 4. only then escalate to fallback scripts, daemon debugging, or \`Tool routing exception\`
 
+Semantic mixed-health rule:
+- if \`llm-tldr\` MCP is visible and non-semantic tools work but \`semantic\` stalls, times out, or returns \`semantic_index_missing\`, treat it as semantic-path degradation, not hydration failure
+- do not restart Codex desktop for a semantic-only stall
+- probe semantic once through bounded local fallback: \`timeout 25 ~/agent-skills/scripts/tldr-daemon-fallback.sh semantic --repo <repo> --query "<query>" --k 10\`
+- if the fallback returns \`semantic_index_missing\`, prewarm only when semantic search is worth the cold-start cost: \`~/agent-skills/scripts/tldr-contained.sh semantic index <repo> --model all-MiniLM-L6-v2\`
+- only after one bounded fallback/prewarm attempt should agents use targeted \`rg\` or direct source reads and report \`Tool routing exception: llm-tldr semantic degraded\`
+
 Fallback to shell/file reads or ordinary patch editing is allowed only when:
 - the MCP tool is unavailable in the current runtime and no canonical fallback exists
 - the MCP tool cannot answer the question after one reasonable attempt

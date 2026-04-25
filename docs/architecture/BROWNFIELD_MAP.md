@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 7dd26996c0336790a68338bddddf73d090437341
-last_verified_at: 2026-04-17T05:48:13Z
+last_verified_commit: d012e5305911ad2a61335b6b3db729b46cb17b78
+last_verified_at: 2026-04-25T14:30:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -75,6 +75,9 @@ For changes that touch architecture or workflow behavior, read in this order:
   part of the dx-review surface even though `dx-runner` may still expose a
   generic `claude-code` provider for other workflows
 - routing contracts for `llm-tldr`, Serena, and Beads runtime assumptions
+- `llm-tldr` contained runtime behavior: semantic search is intentionally
+  fail-fast on cold indexes so MCP tool calls do not spend their whole client
+  timeout building embeddings
 - scripts that enforce cross-repo policy (`dx-*` checks, dispatch helpers)
 - stale "canonical dx-batch" wording in generated baselines, skill metadata,
   or wrapper help text; treat this as policy drift and route through the

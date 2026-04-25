@@ -232,6 +232,17 @@ verify_nakomi_generation "$OUTFILE"
 verify_nakomi_generation "$BASELINE_FILE"
 echo "✅ Verified Nakomi policy presence in generated outputs"
 
+grep -q "Semantic mixed-health rule" "$OUTFILE"
+grep -q "semantic_index_missing" "$OUTFILE"
+grep -q "llm-tldr semantic degraded" "$OUTFILE"
+grep -q "Semantic mixed-health rule" "$BASELINE_FILE"
+grep -q "semantic_index_missing" "$BASELINE_FILE"
+grep -q "llm-tldr semantic degraded" "$BASELINE_FILE"
+grep -q "Semantic mixed-health rule" "$CONSTRAINTS_FILE"
+grep -q "semantic_index_missing" "$CONSTRAINTS_FILE"
+grep -q "llm-tldr semantic degraded" "$CONSTRAINTS_FILE"
+echo "✅ Verified llm-tldr semantic mixed-health policy in generated outputs"
+
 if [[ $LINES -gt 800 ]]; then
     echo "⚠️  WARNING: AGENTS.md exceeds 800 lines ($LINES)"
 fi
