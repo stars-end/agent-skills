@@ -22,6 +22,8 @@ from typing import Any, Iterator
 STATE_HOME = Path(
     os.environ.get("TLDR_STATE_HOME", Path.home() / ".cache" / "tldr-state")
 ).expanduser()
+MCP_SEMANTIC_AUTOBUILD_ENV = "TLDR_MCP_SEMANTIC_AUTOBUILD"
+DEFAULT_SEMANTIC_AUTOBUILD_MODEL = "all-MiniLM-L6-v2"
 
 _PATCHED_BASE = False
 _PATCHED_MCP = False
@@ -228,6 +230,38 @@ def _semantic_index_missing_error(exc: FileNotFoundError) -> bool:
     )
 
 
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes", "on"}
+
+
+def _semantic_index_missing_response(project_path: str | Path) -> dict[str, Any]:
+    project = str(Path(project_path).expanduser().resolve())
+    index_file, metadata_file = _semantic_index_files(project)
+    return {
+        "ok": False,
+        "status": "error",
+        "reason_code": "semantic_index_missing",
+        "message": (
+            "llm-tldr semantic index is missing. The contained runtime does "
+            "not auto-build semantic indexes by default because first-build can "
+            "exceed agent tool-call timeouts. Run the prewarm command or use the "
+            "bounded local fallback for this turn."
+        ),
+        "project": project,
+        "index_file": str(index_file),
+        "metadata_file": str(metadata_file),
+        "next_command": (
+            "~/agent-skills/scripts/tldr-contained.sh semantic index "
+            f"{project} --model {DEFAULT_SEMANTIC_AUTOBUILD_MODEL}"
+        ),
+        "temporary_fallback": (
+            "timeout 25 ~/agent-skills/scripts/tldr-daemon-fallback.sh semantic "
+            f"--repo {project} --query '<query>' --k 10"
+        ),
+        "autobuild_override": f"{MCP_SEMANTIC_AUTOBUILD_ENV}=1",
+    }
+
+
 def _safe_preview(raw: bytes, limit: int = 240) -> str:
     text = raw.decode("utf-8", errors="replace")
     text = text.replace("\n", "\\n").replace("\r", "\\r")
@@ -409,6 +443,9 @@ def _ensure_semantic_bootstrap(
         if not _semantic_index_missing_error(exc):
             raise
 
+    if not _env_truthy(MCP_SEMANTIC_AUTOBUILD_ENV):
+        return _semantic_index_missing_response(project_path)
+
     with _semantic_bootstrap_lock(project_path):
         try:
             return semantic_search(
@@ -471,10 +508,13 @@ def _patch_semantic_autobootstrap() -> None:
         if command.get("cmd") == "semantic" and command.get("action", "search") == "search":
             with _semantic_bootstrap_lock(project):
                 if not _semantic_index_ready(project):
+                    if not _env_truthy(MCP_SEMANTIC_AUTOBUILD_ENV):
+                        return _semantic_index_missing_response(project)
                     _bootstrap_semantic_index(
                         build_semantic_index=original_build,
                         project_path=project,
-                        model=os.environ.get("TLDR_SEMANTIC_AUTOBUILD_MODEL"),
+                        model=os.environ.get("TLDR_SEMANTIC_AUTOBUILD_MODEL")
+                        or DEFAULT_SEMANTIC_AUTOBUILD_MODEL,
                     )
         last_error: Exception | None = None
         for attempt in range(3):

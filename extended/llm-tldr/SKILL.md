@@ -39,6 +39,31 @@ Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
 - Do not manually choose between MCP, daemon, or plain CLI paths
 - Do not substitute a different analysis stack unless `llm-tldr` is unavailable or fails after one reasonable attempt
 
+### Semantic Mixed-Health Recovery
+
+If MCP `status`, `extract`, `imports`, or other non-semantic tools work but
+MCP `semantic` stalls, times out, or returns `semantic_index_missing`, treat it
+as semantic-path degradation, not a full MCP hydration failure.
+
+Use this order:
+
+1. Do not restart Codex desktop for a semantic-only stall.
+2. Probe semantic once through the bounded local fallback:
+
+```bash
+timeout 25 ~/agent-skills/scripts/tldr-daemon-fallback.sh semantic --repo /tmp/agents/<beads-id>/<repo> --query "where is auth bootstrapped?" --k 10
+```
+
+3. If the response is `semantic_index_missing`, prewarm only when semantic
+   search is worth the cold-start cost:
+
+```bash
+~/agent-skills/scripts/tldr-contained.sh semantic index /tmp/agents/<beads-id>/<repo> --model all-MiniLM-L6-v2
+```
+
+4. Retry semantic once after prewarm. If it still fails, use targeted `rg` or
+   direct source reads and report `Tool routing exception: llm-tldr semantic degraded`.
+
 ### Timeout Contract (Both Layers)
 
 `llm-tldr` routing has two timeout layers and both must be bounded:
@@ -48,9 +73,9 @@ Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
    - this is not configured inside `tldr-daemon-fallback.sh`
 2. CLI fallback timeout:
    - callers must wrap `tldr-daemon-fallback.sh` with GNU `timeout`
-   - semantic fallback fails fast with `reason_code=semantic_index_missing`
-     when its FAISS index is cold, instead of auto-building inside the bounded
-     agent command
+   - semantic MCP, contained CLI, and fallback fail fast with
+     `reason_code=semantic_index_missing` when their FAISS index is cold,
+     instead of auto-building inside a bounded agent tool call
    - on timeout or `semantic_index_missing`, return a clear reason and fall
      back to targeted `rg` or direct source reads for the current turn
 
@@ -262,12 +287,13 @@ This helper calls `tldr.mcp_server` tool functions directly after contained
 runtime patching, so queries stay on the daemon/socket path (`_send_command`)
 instead of the plain CLI direct API path.
 
-Semantic fallback has one extra guard: if the contained semantic index is
-missing, it exits quickly with `reason_code=semantic_index_missing` and prints a
-prewarm command. Do not retry the same fallback command in a loop. Either run
-the explicit prewarm command or use targeted `rg` / direct source reads for this
-turn. Operators can opt into the older cold-build behavior with
-`TLDR_FALLBACK_SEMANTIC_AUTOBUILD=1`; agents should not use that override
+Semantic MCP, contained CLI, and fallback have one extra guard: if the
+contained semantic index is missing, they exit quickly with
+`reason_code=semantic_index_missing` and print a prewarm command. Do not retry
+the same command in a loop. Either run the explicit prewarm command or use
+targeted `rg` / direct source reads for this turn. Operators can opt into the
+older cold-build behavior with `TLDR_MCP_SEMANTIC_AUTOBUILD=1` or
+`TLDR_FALLBACK_SEMANTIC_AUTOBUILD=1`; agents should not use those overrides
 inside ordinary tool routing.
 
 ### Semantic Prewarm Maintenance
