@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 7dd26996c0336790a68338bddddf73d090437341
-last_verified_at: 2026-04-17T05:48:13Z
+last_verified_commit: d012e5305911ad2a61335b6b3db729b46cb17b78
+last_verified_at: 2026-04-25T14:30:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -38,6 +38,16 @@ not rediscover them from scratch.
 - use `llm-tldr` for semantic and static verification on current source
 - use Serena for symbol-aware edits where symbol safety matters
 - use patch/diff edits for non-symbolic changes
+
+## Core Pattern: Semantic Mixed-Health Recovery
+
+- if `llm-tldr` MCP is visible and non-semantic tools work, treat a semantic
+  timeout or `semantic_index_missing` response as semantic-path degradation
+  rather than full MCP hydration failure
+- use one bounded local semantic fallback before dropping to targeted `rg` or
+  direct source reads
+- prewarm with `tldr-contained.sh semantic index ... --model all-MiniLM-L6-v2`
+  only when semantic search is worth the cold-start cost
 
 ## Core Pattern: Orchestration Surface Hierarchy
 
