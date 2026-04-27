@@ -243,4 +243,4 @@ Recommended lane classification:
 ## PR Metadata
 
 PR_URL: https://github.com/stars-end/agent-skills/pull/596  
-PR_HEAD_SHA: c12da9a2a273361acfbd99564f2eb545494053ca
+PR_HEAD_SHA: 22770655b9662860784626eb80f9a4b93b76728c
