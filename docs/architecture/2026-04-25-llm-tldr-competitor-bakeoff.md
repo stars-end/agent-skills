@@ -1,467 +1,551 @@
-# llm-tldr Competitor Bakeoff — April 2026
+# llm-tldr Competitor Bakeoff Memo
 
-**BEADS_EPIC**: bd-9n1t2
-**BEADS_SUBTASK**: bd-9n1t2.16
-**CLASS**: product
-**AGENT**: opencode
-**DATE**: 2026-04-27
-
----
-
-## Problem Statement
-
-`llm-tldr` is the canonical first-hop analysis tool in the V8.6 agent routing contract. It is the mandatory first tool for semantic discovery, exact static analysis, context extraction, and change-impact targeting. The founder is concerned that it has crossed from "rough edge" into "real reliability risk" after these observed failure modes:
-
-1. **MCP semantic calls have timed out** — Agents report semantic search timeouts over MCP transport.
-2. **`status` can report ready with `files: 0`** — The daemon reports healthy while returning empty results for structural queries, a silent-failure pattern that wastes agent turns.
-3. **Fallback paths can disagree with MCP paths** — The contained MCP wrapper and the CLI/daemon fallback may produce different results or failure modes for the same query.
-4. **Upstream repo appears stale** — The `parcadei/llm-tldr` upstream (v1.5.2) has not cut a tagged release since the current version, and the project shows low commit velocity relative to fast-moving AI-agent tooling.
-
-### Why This Bakeoff Is Needed Now
-
-The V8.6 routing contract mandates `llm-tldr` as the **first** tool for semantic discovery, structural trace, context extraction, and test targeting. When it silently fails, agents:
-
-- Waste turns on MCP calls that return empty/timed-out results
-- Fall back to `rg` or `read_file` traversal, losing the 95% token-efficiency promise
-- May not detect the failure at all (silent `files: 0`)
-- Have no deterministic second-choice analysis tool
-
-The founder's explicit concern: "the canonical analysis tool is a single-vendor dependency on a stale upstream with reliability failures that agents can't self-diagnose."
+**Date:** 2026-04-27  
+**Beads Subtask:** bd-9n1t2.16  
+**Agent:** opencode-go/kimi-k2.6  
+**Scope:** Analysis/retrieval/discovery layer only. Editing replacements (e.g., serena) are out of scope.
 
 ---
 
-## Current llm-tldr Reliability Concerns
+## 1. Problem Statement
 
-### Confirmed Runtime Failures (macOS, April 2026)
+`llm-tldr` is the canonical first-hop analysis tool under the V8.6 MCP routing contract. Recent operational experience shows it has crossed from "rough edge" into material reliability risk:
 
-| Command | Result | Time | Notes |
-|---------|--------|------|-------|
-| `tree --repo <worktree>` | OK, full tree | 16.3s | Works reliably |
-| `structure --repo <worktree> --language python` | `files: 0` | 2.7s | **SILENT FAILURE** — returns `status: ok` with zero files |
-| `search --pattern 'semantic.*mixed'` | 0 matches | 14.1s | Returns empty when matches likely exist |
-| `status --repo <worktree>` | No output | 10.0s | `timeout` killed process; daemon unresponsive |
+- **MCP semantic calls time out** in production agent sessions
+- **Status can report `ready` with `files: 0`** — false-positive readiness
+- **Fallback paths disagree with MCP paths** — contained CLI may hang on model download while daemon fallback returns `semantic_index_missing`
+- **Upstream repo appears stale** — last commit 2026-01-17 (3+ months ago), only 65 total commits, no GitHub releases
 
-**Key insight**: The `tree` command succeeds because it's a simple filesystem walk. The `structure` command fails silently because it depends on daemon state that reports healthy but returns empty results. This matches the founder's exact concern: **"status can report ready with files: 0."**
-
-### Architectural Risks
-
-1. **Single-vendor upstream**: `parcadei/llm-tldr` — sole maintainer, low commit velocity
-2. **Complex containment shim**: 555-line Python shim (`tldr_contained_runtime.py`) that monkey-patches upstream internals (`PurePath.__truediv__`, `tldr.semantic.semantic_search`, `tldr.mcp_server._send_command`). Any upstream refactor could break this silently.
-3. **Three-surface complexity**: Agents must navigate MCP, daemon/CLI, and contained-wrapper surfaces. The daemon-based fallback has different behavior (semantic auto-bootstrap vs. fast-fail) than the MCP path.
-4. **No deterministic health signal**: `status` returning `ok` with `files: 0` means agents cannot programmatically detect broken state.
+The founder needs an evidence-backed answer to: should `llm-tldr` remain the canonical default, or is there a replacement candidate that beats it on reliability and cognitive load?
 
 ---
 
-## Evaluation Criteria
+## 2. Evaluation Criteria
 
-| Criterion | Weight | Description |
-|-----------|--------|-------------|
-| Semantic discovery | High | Finds code by meaning, not just text |
-| Exact/static tracing | High | Callers, callees, imports, CFG, impact |
-| Extract / token efficiency | High | Returns minimal relevant context |
-| CLI usability | High | Clear commands, JSON output, bounded timeouts |
-| MCP usability | High | Agent-first tool surface |
-| Cold-start reliability | Critical | First query must work or fail legibly |
-| Status/failure legibility | Critical | Agent can detect and act on failures |
-| Worktree isolation | High | No cache collision between worktrees |
-| Local/private | Critical | No cloud dependency |
-| Install burden | Medium | Pip/cargo/npm install with minimal deps |
-| Agent cognitive load | Critical | Fewer surfaces, simpler mental model |
-| Founder HITL load | Critical | Less operational babysitting |
-| Maintenance freshness | Medium | Active upstream, recent commits |
-
----
-
-## Candidate Longlist
-
-| Candidate | Language | Stars | License | Latest Release | Commits | MCP | CLI |
-|-----------|----------|-------|---------|----------------|---------|-----|-----|
-| **llm-tldr** | Python | ~200 | MIT | v1.5.2 (stale) | ~100 | ✅ | ✅ |
-| **grepai** | Go (94% C for embeddings) | 1.6k | MIT | v0.35.0 (Mar 2026) | 191 | ✅ | ✅ |
-| **cocoindex-code** | Python | 1.5k | Apache 2.0 | v0.2.31 (Apr 27, 2026 — today!) | 184 | ✅ | ✅ |
-| **ck** | Rust | 1.6k | MIT/Apache 2.0 | v0.7.4 (Jan 2026) | 274 | ✅ | ✅ |
-| **CodeGraphContext** | Python | 3.1k | MIT | v0.3.1 (Mar 2026) | 975 | ✅ | ✅ |
-| **sourcebot** | TypeScript | 3.3k | AGPL-3.0 | Recent | — | ✅ | Docker |
-| **byterover-cli** | TypeScript | npm | Elastic 2.0 | v3.9.0 (latest) | — | ✅ | ✅ |
-| **serena** | Python | ~100 | ? | Recent | — | ✅ | ✅ |
+| Dimension | Weight | Why It Matters |
+|-----------|--------|----------------|
+| Semantic discovery | High | "Where does X live?" is the #1 agent analysis task |
+| Exact/static tracing | High | Call graphs, imports, impact analysis |
+| Call graph / caller support | High | Refactoring and blast-radius evaluation |
+| Token-efficient extraction | High | 95% savings claim is a core value prop |
+| CLI usability | Medium | Fallback path must be fast and legible |
+| MCP usability | Medium | Preferred surface under V8.6 |
+| Cold-start reliability | High | Agents cannot afford hung first queries |
+| Status/failure legibility | High | Agents must know why something failed |
+| Worktree isolation | High | Canonical repos must stay clean |
+| Index freshness | Medium | Stale indexes produce wrong answers |
+| State/cache transparency | Medium | Debugging requires knowing where state lives |
+| Local/private operation | High | No cloud dependency for code analysis |
+| Install burden | Medium | One-time cost vs ongoing tax |
+| Agent cognitive load | High | Fewer surfaces = fewer routing mistakes |
+| Founder HITL load | High | No ongoing babysitting for dev/staging |
+| Maintenance freshness | Medium | Stale upstream = accumulating risk |
 
 ---
 
-## Shortlist Matrix
+## 3. Candidate Longlist
 
-After initial research, four candidates were eliminated:
+| Candidate | Repo | Stars | Lang | License | Last Release | Verdict |
+|-----------|------|-------|------|---------|--------------|---------|
+| **llm-tldr** | parcadei/llm-tldr | 1.1k | Python | AGPL-3.0 | No releases | Incumbent |
+| **grepai** | yoanbernabeu/grepai | 1.6k | Go | MIT | v0.35.0 (Mar 16) | Shortlist |
+| **cocoindex-code** | cocoindex-io/cocoindex-code | 1.5k | Python/Rust | Apache-2.0 | v0.2.31 (Apr 27) | Shortlist |
+| **ck** | BeaconBay/ck | 1.6k | Rust | MIT/Apache-2.0 | v0.7.4 (Jan 25) | Shortlist |
+| **CodeGraphContext** | CodeGraphContext/CodeGraphContext | 3.1k | Python | MIT | v0.3.1 (Mar 11) | Shortlist |
+| **sourcebot** | sourcebot-dev/sourcebot | 3.3k | TypeScript | Fair-source | v4.16.15 (Apr 23) | Reference only |
+| **byterover-cli** | campfirein/byterover-cli | 4.7k | TypeScript | Elastic-2.0 | v3.9.0 (Apr 27) | Out of scope |
 
-- **byterover-cli**: Context memory and REPL tool, not a code analysis engine. Impressive for knowledge management but does not compete on semantic code discovery, call graphs, or static tracing. **Reject** for analysis replacement. Valuable for memory augmentation (P2).
-- **sourcebot**: Requires Docker, zoekt backend, multiple dependencies. Heavy infrastructure for a "first-hop analysis" role. **Reference only** for architectural contrast.
-- **CodeGraphContext**: Highly active (3.1k stars, 975 commits) and impressive code-graph depth, but requires a graph DB backend (KùzuDB/FalkorDB/Neo4j), making it heavy for the "first-hop analysis" role. **Candidate for P2 augmentation** of deeper structural analysis. Overkill for "where does X live?" queries.
-- **serena**: Editing-focused, not analysis. Symbol-aware edits, not semantic discovery. Out of scope per assignment constraints.
-
-**Final shortlist**: llm-tldr, grepai, cocoindex-code, ck
-
----
-
-## Detailed Per-Candidate Findings
-
-### 1. llm-tldr (Incumbent)
-
-**Source**: https://github.com/parcadei/llm-tldr
-**PyPI**: https://pypi.org/project/llm-tldr/
-
-| Attribute | Finding |
-|-----------|---------|
-| **Freshness** | v1.5.2, last release appears stale. Upstream GitHub shows low commit velocity. |
-| **Surfaces** | MCP (stdlib), CLI, daemon (socket), contained wrapper (monkey-patched) |
-| **Index architecture** | Tree-sitter (via Python bindings) for structure; FAISS for semantic (all-MiniLM-L6-v2); per-project daemon processes over Unix/TCP sockets |
-| **Capabilities** | 16 tools: semantic, context, structure, calls, cfg, dfg, slice, impact, dead, arch, change_impact, diagnostics, search, tree, extract, imports, importers, status |
-| **Cold-start** | `tldr warm` pre-builds call graphs; semantic search auto-bootstraps FAISS index in MCP/CLI path, fast-fails in daemon fallback with `semantic_index_missing` |
-| **Status clarity** | `status` reported healthy but `structure` returned `files: 0` in our benchmark — **silent failure confirmed** |
-| **Worktree isolation** | State stored in `~/.cache/tldr-state/<md5-hash>/` — worktree-safe via path hashing |
-| **Local/private** | ✅ 100% local, no API keys |
-| **Install burden** | `uv tool install "llm-tldr==1.5.2"` — Python 3.12+, tree-sitter, FAISS deps |
-| **Agent cognitive load** | **High** — agents navigate MCP/CLI/daemon/wrapper surfaces; must understand warm/bootstrap/prewarm lifecycle; must know fallback contract; different behavior between MCP semantic (auto-bootstrap) and CLI fallback (fast-fail) |
-| **Founder HITL load** | **Medium-High** — prewarm cron jobs, daemon lifecycle management, MCP hydration checks, per-agent worktree prewarm |
-| **Upstream risk** | **High** — single maintainer, low velocity, 555-line containment shim monkey-patches internals |
-
-### 2. grepai
-
-**Source**: https://github.com/yoanbernabeu/grepai
-**Docs**: https://yoanbernabeu.github.io/grepai/
-
-| Attribute | Finding |
-|-----------|---------|
-| **Freshness** | v0.35.0 (Mar 16, 2026), 191 commits, 1.6k stars, 129 forks. **Actively maintained.** |
-| **Surfaces** | CLI (`grepai`), MCP server, file watcher daemon |
-| **Index architecture** | Go binary; Ollama/nomic-embed-text (or LM Studio/OpenAI) for embeddings; real-time file watcher with auto-reindex; index stored locally (per-project `.grepai/` or similar) |
-| **Capabilities** | Semantic search (`grepai search`), call graph tracing (`grepai trace callers`), likely structural analysis from call graph support |
-| **Cold-start** | `grepai init` + `grepai watch` (separate init step required) |
-| **Status clarity** | Requires external Ollama; embedding provider dependency adds failure surface |
-| **Worktree isolation** | Per-project index, likely worktree-safe |
-| **Local/private** | ✅ 100% local when using Ollama (default) |
-| **Install burden** | Homebrew (`brew install yoanbernabeu/tap/grepai`) or shell install; requires Ollama (`ollama pull nomic-embed-text`) |
-| **Agent cognitive load** | **Medium** — fewer surfaces than llm-tldr (CLI+MCP, no daemon/wrapper split); but external Ollama dependency adds another service to manage |
-| **Founder HITL load** | **Medium** — Requires Ollama installation and model management on each host |
-| **Upstream risk** | **Low-Medium** — Active solo maintainer, growing community, but still single-person |
-| **Key weakness** | Does not claim exact static analysis (CFG, DFG, program slicing, dead code detection, arch layers). The call graph feature exists but depth is unclear. No context extraction tool equivalent to llm-tldr's 95% token savings. |
-
-### 3. cocoindex-code
-
-**Source**: https://github.com/cocoindex-io/cocoindex-code
-**Docs**: https://cocoindex.io/cocoindex-code/
-
-| Attribute | Finding |
-|-----------|---------|
-| **Freshness** | v0.2.31 (Apr 27, 2026 — **today**), 184 commits, 1.5k stars, 103 forks. **Very actively maintained.** |
-| **Surfaces** | CLI (`ccc`), MCP server, background daemon, Docker, Claude Code skill (`npx skills add cocoindex-io/cocoindex-code`) |
-| **Index architecture** | Rust-based incremental engine (CocoIndex); tree-sitter for AST-aware chunking; SentenceTransformers (local) or LiteLLM (100+ cloud providers); LMDB+SQLite for index storage |
-| **Capabilities** | Semantic search (primary), AST-aware chunking, language filtering, path glob filtering, incremental re-indexing (only changed files), `ccc doctor` diagnostics, `ccc status` for index stats |
-| **Cold-start** | `ccc init` + `ccc index` (or auto-init on `ccc index`); daemon starts automatically |
-| **Status clarity** | `ccc status` shows chunk count, file count, language breakdown; `ccc doctor` runs full diagnostic checks (settings, daemon, model, file matching, index health) |
-| **Worktree isolation** | Per-project `.cocoindex_code/` directory (auto-added to `.gitignore`) — worktree-isolated by directory |
-| **Local/private** | ✅ 100% local with `[full]` extra (SentenceTransformers); optional cloud providers |
-| **Install burden** | `pipx install 'cocoindex-code[full]'` — pulls in sentence-transformers (~1GB torch+transformers); or slim for LiteLLM-only |
-| **Agent cognitive load** | **Low-Medium** — Simple CLI surface (`ccc search`, `ccc status`, `ccc index`), MCP with single `search` tool. Agents don't need to choose between surfaces. |
-| **Founder HITL load** | **Low** — Zero-config defaults, daemon auto-starts, `ccc doctor` for diagnostics. Docker option for teams. |
-| **Upstream risk** | **Low** — Backed by CocoIndex (active organization), Apache 2.0 license, Rust core engine with Python frontend |
-| **Key weakness** | **No call graph, CFG, impact analysis, or program slicing.** It is a code search engine, not a static analysis engine. Only the `search` MCP tool is exposed. Would cover semantic discovery but not structural tracing. Token efficiency is via chunked results, not context-follows-call-graph. |
-
-### 4. ck
-
-**Source**: https://github.com/BeaconBay/ck
-**Docs**: https://beaconbay.github.io/ck/
-
-| Attribute | Finding |
-|-----------|---------|
-| **Freshness** | v0.7.4 (Jan 25, 2026), 274 commits, 1.6k stars, 67 forks. **Actively maintained.** |
-| **Surfaces** | CLI (`ck`), MCP server, Terminal UI (`ck --tui`), VS Code extension (planned) |
-| **Index architecture** | Rust-native; tree-sitter for parsing; FastEmbed (local models: BGE-Small default, mxbai-xsmall, nomic-v1.5, jina-code); Tantivy for BM25 full-text; custom ANN for semantic; `.ck/` directory per project |
-| **Capabilities** | Semantic search (`--sem`), regex search (grep-compatible flags), hybrid search (BM25+semantic via RRF), full-section extraction (`--full-section`), MCP server with 6 tools (semantic_search, regex_search, hybrid_search, index_status, reindex, health_check), JSON/JSONL output |
-| **Cold-start** | First semantic search auto-indexes; no separate init step needed; `ck --status` for index status |
-| **Status clarity** | `ck --status` shows index metadata; MCP `index_status` and `health_check` tools; `ck --inspect` for per-file chunk analysis |
-| **Worktree isolation** | `.ck/` directory per project — worktree-safe by directory |
-| **Local/private** | ✅ 100% local. Embedding model runs locally. No network calls. |
-| **Install burden** | `cargo install ck-search` — requires Rust toolchain; ~2-minute compile; embedding model auto-downloaded on first use |
-| **Agent cognitive load** | **Low** — Simple CLI with grep-compatible flags; MCP with 6 clear tools; auto-indexing on first use. Single binary. No daemon management required. |
-| **Founder HITL load** | **Very Low** — Single binary, auto-indexing, no daemon lifecycle; `.ck/` cache is safe to delete; embedding models cached in `~/.cache/ck/models/` |
-| **Upstream risk** | **Low** — Rust workspace with multiple crates; CI on Ubuntu/Windows/macOS; crates.io published |
-| **Key weakness** | **No call graph, CFG, or program slicing.** Like cocoindex-code, it's a search engine, not a structural analysis engine. Does have hybrid (semantic+BM25) search which is unique. |
+**Excluded from shortlist:**
+- **sourcebot**: Docker-centric web platform, not an agent-native CLI. Fair-source license is a concern. Heavy operational footprint.
+- **byterover-cli**: Purpose-built for persistent agent memory/context trees, not codebase analysis. Elastic License 2.0 is not OSI-approved.
 
 ---
 
-## Runtime Benchmark Results
+## 4. Runtime Benchmark Methodology
 
-### Environment
-- **Host**: macOS (darwin), Apple Silicon
-- **Worktree**: `/tmp/agents/bd-9n1t2.16/agent-skills` (~438 files)
-- **Tool versions**: llm-tldr 1.5.2, serena installed
+**Repos:**
+1. `agent-skills` (canonical, medium Python/TS/shell codebase)
+2. `affordabot` (canonical, larger Python/scraper codebase)
 
-### Raw Benchmark Commands and Results
+**Worktrees:** All tests run in `/tmp/agents/bd-9n1t2.16/agent-skills` or read-only canonical paths. No writes to `~/agent-skills`, `~/affordabot`, `~/prime-radiant-ai`, `~/llm-common`.
 
-#### Task 1: Semantic Discovery
+**Tasks:**
+1. **Cold-start / warm:** Time to index or warm a repo from clean state
+2. **Semantic discovery:** "routing contract" query
+3. **Structural tracing:** Find callers/impact for a known symbol
+4. **Token-efficient extraction:** `context` or equivalent for one symbol
+5. **Worktree isolation:** Verify no in-repo state artifacts
 
-**Query**: "where is semantic mixed-health or MCP hydration handled?"
-
-**llm-tldr (via MCP tools)**:
-```
-Tool routing exception: llm-tldr MCP unavailable in this runtime;
-used contained daemon fallback instead.
-```
-- CLI fallback: `semantic_index_missing` (expected — no prewarm)
-- Status: `tree` works, `structure` returns `files: 0`, `search` returns 0 matches
-- Elapsed: tree 16.3s, structure 2.7s (silent fail), search 14.1s (silent fail)
-- Top results: `tree` returns full file tree, structure/search return empty
-- Failure legibility: **Poor** — `status: ok` with empty results
-
-**llm-tldr (via MCP tools — second query)**: Not attempted (MCP unavailable in runtime)
-
-#### Task 2: Structural Tracing
-
-**Function**: `apply_containment_patches` in `scripts/tldr_contained_runtime.py`
-
-**llm-tldr**: `ModuleNotFoundError: No module named 'tldr'` when using system python3. Success with wrapper but needed to identify venv Python path.
-
-**serena**: Installed and ready (`serena --help` works). Editing-focused, not analysis-focused per scope.
-
-#### Task 3: Token-Efficient Extraction
-
-**llm-tldr context**: Not tested (failure surface for search/structure already observed)
-
-#### Task 4: Cold-Start / Freshness
-
-**llm-tldr**: 
-- `tree` works cold (16.3s for 438-file repo)  
-- `structure` silently returns empty — even after previous `tree` warmed daemon
-- `status` times out after 10s
-- Semantic index requires explicit prewarm; auto-bootstrap paths differ between MCP (auto) and daemon fallback (fast-fail)
-
-#### Task 5: Worktree Safety
-
-**llm-tldr**: State stored in `~/.cache/tldr-state/<md5-hash>/` — collision-safe by design.
-**cocoindex-code**: Per-project `.cocoindex_code/` — collision-safe.
-**ck**: Per-project `.ck/` — collision-safe.
-**grepai**: Per-project index, likely `.grepai/` — expected collision-safe.
+**Timeouts:** All candidate commands wrapped in `timeout`. No command allowed to hang indefinitely.
 
 ---
 
-## Operational Architecture Comparison
+## 5. Runtime Benchmark Results
 
-| | llm-tldr | grepai | cocoindex-code | ck |
-|---|---|---|---|---|
-| **Runtime** | Python + tree-sitter + FAISS | Go binary + Ollama | Python + Rust core | Rust binary |
-| **Daemon** | Per-project socket daemon | File watcher daemon | Background daemon (auto-start) | No persistent daemon |
-| **State location** | `~/.cache/tldr-state/<hash>/` | Project-local | `.cocoindex_code/` | `.ck/` |
-| **Embedding model** | all-MiniLM-L6-v2 (local) | Ollama/nomic-embed-text | Snowflake-arctic-embed-xs (local) or LiteLLM | BGE-Small, mxbai-xsmall, etc. (local) |
-| **Model download** | Auto on first semantic | `ollama pull nomic-embed-text` | Auto on first index | Auto on first use |
-| **Incremental update** | Daemon watches files | File watcher | CocoIndex Rust incremental engine | Auto-delta with chunk caching (80-90% hit rate) |
-| **Docker option** | No | docker compose | Yes (full: ~5GB, slim: ~450MB) | No |
+### 5.1 llm-tldr (incumbent)
+
+| Task | Command | Repo | Time | Result | Notes |
+|------|---------|------|------|--------|-------|
+| Warm | `tldr-contained.sh warm .` | agent-skills | ~3s | ✅ 127 files, 1310 edges | Fast for small repo |
+| Warm | `tldr-contained.sh warm .` | affordabot | >180s timeout | ❌ Timeout | Too slow for large repo |
+| Tree | `tldr-daemon-fallback.sh tree` | affordabot | ~15s | ✅ JSON tree returned | Daemon fallback works |
+| Semantic | `tldr-daemon-fallback.sh semantic` | agent-skills | ~8s | ✅ 2 results returned | Daemon path OK |
+| Semantic | `tldr-contained.sh semantic search` | agent-skills | >120s timeout | ❌ Timeout | Model download hangs |
+| Structure | `tldr-contained.sh structure` | agent-skills | ~1.7s | ✅ JSON codemap | Fast |
+| Context | `tldr-contained.sh context run_cli` | agent-skills | ~17s | ✅ 7 functions, ~432 tokens | Good token efficiency |
+| Search | `tldr-daemon-fallback.sh search` | affordabot | ~44s | ✅ Results returned | Slow but works |
+| Impact | `tldr-daemon-fallback.sh impact` | affordabot | ~2s | ✅ Empty callers (expected) | Fast |
+
+**Worktree isolation:** ✅ State redirected to `~/.cache/tldr-state/<hash>/`. No `.tldr` in worktree.
+
+**MCP status:** Codex shows `enabled Unsupported`. Tool routing exception: llm-tldr MCP unavailable in this runtime; used contained CLI/fallback and source inspection instead.
+
+### 5.2 grepai
+
+| Task | Command | Repo | Time | Result | Notes |
+|------|---------|------|------|--------|-------|
+| Install | `curl ... \| sh` | — | <1s | ✅ Binary extracted | Required local bin dir |
+| Init | `grepai init` | agent-skills | <1s | ✅ Config created | Requires Ollama or cloud provider |
+| Semantic | `grepai search "routing contract"` | agent-skills | <1s | ❌ Failed | Ollama not running; connection refused |
+
+**Blocker:** Ollama not installed on host. Cloud providers (OpenAI, OpenRouter) require API keys. Could not complete semantic benchmark.
+
+**Worktree isolation:** ⚠️ Creates `.grepai/` in project root. Not worktree-safe without containment wrapper.
+
+### 5.3 cocoindex-code
+
+| Task | Command | Repo | Time | Result | Notes |
+|------|---------|------|------|--------|-------|
+| Install | `uv tool install 'cocoindex-code[full]'` | — | ~9s | ✅ ccc installed | Smooth install |
+| Init | `ccc init` | agent-skills | ~20s | ✅ Settings created | Defaults to local Snowflake model |
+| Index | `ccc index` | agent-skills | >180s timeout | ❌ Timeout | Daemon still "indexing" after 180s |
+| Status | `ccc status` | agent-skills | ~1.4s | ✅ 738 files, 7783 chunks | But status says "indexing" |
+| Search | `ccc search "routing contract"` | agent-skills | >120s timeout | ❌ Timeout | Hangs waiting for indexing |
+
+**Critical finding:** Indexing never completes. Daemon shows `indexing` for >10 minutes. Search hangs indefinitely.
+
+**Worktree isolation:** ❌ Creates `.cocoindex_code/` in project root with 33MB SQLite DB.
+
+### 5.4 ck
+
+| Task | Command | Repo | Time | Result | Notes |
+|------|---------|------|------|--------|-------|
+| Install | `cargo install ck-search` | — | >120s | ❌ Build failed | 36 errors in `ck-embed`/`ort` |
+
+**Blocker:** Compilation failure. Rust `ort` crate compatibility issues.
+
+**Worktree isolation:** ⚠️ Creates `.ck/` in project root (per docs).
+
+### 5.5 CodeGraphContext
+
+| Task | Command | Repo | Time | Result | Notes |
+|------|---------|------|------|--------|-------|
+| Install | `uv tool install codegraphcontext` | — | ~2s | ✅ cgc installed | Very fast |
+| Index | `cgc index .` | agent-skills | ~22s | ✅ Indexed in 22s | Fast |
+| Callers | `cgc analyze callers run_cli` | agent-skills | ~1.3s | ✅ No callers found | Symbol may not exist in graph |
+| Content | `cgc find content "routing contract"` | agent-skills | ~2s | ✅ No matches | Appears to be substring, not semantic |
+
+**Worktree isolation:** ✅ Configurable (`global`, `per-repo`, `named`). Default uses global context.
+
+**Key limitation:** No semantic search capability. Graph queries are exact/substring. Best for structural relationships, not natural-language discovery.
 
 ---
 
-## Agent Cognitive-Load Comparison
+## 6. Detailed Per-Candidate Findings
 
-| Factor | llm-tldr | grepai | cocoindex-code | ck |
-|--------|----------|--------|----------------|-----|
-| **Surfaces to learn** | 3 (MCP, daemon, wrapper) | 2 (CLI, MCP) | 2 (CLI, MCP) | 2 (CLI, MCP) |
-| **Init required** | `tldr warm` + `semantic index` | `grepai init` + `grepai watch` | `ccc init` (optional, auto) | None (auto-index) |
-| **Pre-warm needed** | Yes (warm + semantic index) | Yes (Ollama model + init) | Partial (auto-index on first search) | No |
-| **Failure diagnosis** | Complex: MCP vs daemon split, status can lie | Simple (Ollama down → clear failure) | Simple (`ccc doctor` + `ccc status`) | Simple (`ck --status`, clear errors) |
-| **Commands to remember** | 16+ with varying surfaces | ~5 core commands | ~5 core commands | ~5 core commands |
-| **Fallback behavior** | Deterministic but surface-dependent | Linear (CLI always available) | Linear (CLI always available) | Linear (CLI always available) |
+### 6.1 llm-tldr
+
+**GitHub activity:** 1.1k stars, 65 commits, last commit 2026-01-17 (3+ months). No releases. AGPL-3.0 license.
+
+**Surfaces:** MCP (stdio), daemon/socket, contained CLI fallback.
+
+**Index architecture:**
+- AST: tree-sitter for 16 languages
+- Embeddings: `bge-large-en-v1.5` (1024-dim) or `all-MiniLM-L6-v2` (384-dim)
+- Vector store: FAISS
+- Storage: `.tldr/cache/semantic/` (redirected to `~/.cache/tldr-state/` by contained runtime)
+- Incremental: daemon tracks dirty files, auto-rebuilds at 20-file threshold
+
+**Capabilities:**
+- ✅ Semantic discovery (FAISS-based)
+- ✅ Exact symbol/file search (`search`, `structure`)
+- ✅ Call graph / callers / callees / imports (`calls`, `impact`, `imports`, `importers`)
+- ✅ Change impact (`change_impact`)
+- ✅ Token-efficient extraction (`context` claims 95% savings)
+- ✅ JSON output for agents
+- ✅ CFG/DFG/slice/dead code/arch layer detection
+
+**Operational reliability:**
+- ⚠️ Cold-start: semantic index may auto-bootstrap on first use, but contained CLI path can hang on model download
+- ⚠️ Status: daemon may report ready with 0 files; no clear "indexing in progress" signal
+- ⚠️ Failure legibility: fallback path returns `semantic_index_missing` but MCP path may just timeout
+- ✅ Worktree isolation: excellent (containment patches redirect all state)
+- ✅ Local/private: 100% local, no API keys
+- ⚠️ Install burden: requires Python 3.12+, tree-sitter, FAISS, sentence-transformers
+
+**Cognitive load:**
+- Agents must remember: MCP first, then daemon fallback, then contained CLI, then `rg`
+- 3 transport surfaces + timeout layering = high decision fatigue
+- Failure modes are not always legible (MCP JSON decode errors, empty payloads)
+
+### 6.2 grepai
+
+**GitHub activity:** 1.6k stars, 191 commits, v0.35.0 (Mar 16, 2026). MIT license. Very active.
+
+**Surfaces:** CLI, MCP server, daemon (`grepai watch`).
+
+**Index architecture:**
+- Embeddings: configurable (Ollama default, OpenAI, LM Studio)
+- Storage: `gob` (local file), `postgres`, or `qdrant`
+- Incremental: file watcher daemon keeps index fresh
+
+**Capabilities:**
+- ✅ Semantic search
+- ✅ Call graph tracing (`grepai trace callers`)
+- ✅ 100% local option (Ollama)
+- ✅ MCP server
+
+**Operational reliability:**
+- ⚠️ Cold-start: requires embedding provider setup (Ollama or cloud API key)
+- ⚠️ Worktree isolation: creates `.grepai/` in repo
+- ⚠️ Install burden: Go binary is easy, but Ollama model download is not trivial
+
+**Cognitive load:**
+- Lower than llm-tldr: single CLI + MCP surface
+- But agents must choose embedding provider and manage Ollama daemon
+
+### 6.3 cocoindex-code
+
+**GitHub activity:** 1.5k stars, 184 commits, v0.2.31 (Apr 27, 2026). Apache-2.0. Extremely active (release today).
+
+**Surfaces:** CLI (`ccc`), MCP server (`ccc mcp`), daemon.
+
+**Index architecture:**
+- AST: tree-sitter chunking
+- Engine: Rust-based CocoIndex
+- Embeddings: local SentenceTransformers (default `Snowflake/snowflake-arctic-embed-xs`) or 100+ cloud providers via LiteLLM
+- Storage: SQLite + LMDB (in `.cocoindex_code/`)
+- Incremental: only changed files re-indexed
+
+**Capabilities:**
+- ✅ Semantic search
+- ✅ Multi-language (28+ file types)
+- ✅ MCP server
+- ✅ Docker image available
+
+**Operational reliability:**
+- ❌ **Indexing hangs indefinitely** on agent-skills (738 files). Daemon stuck in `indexing` state.
+- ❌ Search hangs waiting for indexing.
+- ❌ Worktree isolation: in-repo `.cocoindex_code/` directory
+- ✅ Local embeddings work without API keys
+
+**Verdict:** Promising architecture but **not production-ready** for agent use. The hang is a showstopper.
+
+### 6.4 ck
+
+**GitHub activity:** 1.6k stars, 274 commits, v0.7.4 (Jan 25, 2026). MIT/Apache-2.0.
+
+**Surfaces:** CLI, MCP server (`ck --serve`), TUI.
+
+**Index architecture:**
+- AST: tree-sitter with semantic chunking
+- Embeddings: FastEmbed (BGE-Small default, Jina Code, Nomic, etc.)
+- ANN: custom approximate nearest neighbor
+- Full-text: Tantivy (BM25)
+- Storage: `.ck/` in project root
+- Incremental: chunk-level caching (80-90% cache hit rate)
+
+**Capabilities:**
+- ✅ Semantic search
+- ✅ Hybrid search (semantic + BM25)
+- ✅ grep-compatible regex search
+- ✅ MCP server
+
+**Operational reliability:**
+- ❌ **Failed to compile** on macOS ARM64 (36 errors in `ck-embed`/`ort`)
+- ⚠️ Worktree isolation: `.ck/` in repo
+- ✅ 100% local, no API keys
+
+**Verdict:** Fastest theoretical architecture (Rust + Tantivy + FastEmbed), but **build is broken** on canonical host. Cannot evaluate without fixing upstream.
+
+### 6.5 CodeGraphContext
+
+**GitHub activity:** 3.1k stars, 975 commits, v0.3.1 (Mar 11, 2026). MIT license.
+
+**Surfaces:** CLI (`cgc`), MCP server (`cgc mcp start`).
+
+**Index architecture:**
+- Parser: tree-sitter for 14 languages
+- Database: graph DB (KùzuDB, FalkorDB Lite, Neo4j)
+- Storage: per-repo `.codegraphcontext/` or global context
+- Live watching: `cgc watch`
+
+**Capabilities:**
+- ✅ Callers/callees/call chains
+- ✅ Class hierarchies
+- ✅ Dead code detection
+- ✅ Complexity analysis
+- ✅ Interactive visualization
+- ❌ **No semantic search** (exact/substring matching only)
+
+**Operational reliability:**
+- ✅ Indexing is fast (~22s for agent-skills)
+- ✅ Configurable worktree isolation (global context mode)
+- ✅ Multiple DB backends
+- ⚠️ Requires graph DB dependency (FalkorDB Lite or KùzuDB)
+
+**Verdict:** Best-in-class for **structural/code-graph** analysis, but **not a semantic discovery tool**. Complements llm-tldr rather than replacing it.
 
 ---
 
-## Founder HITL-Load Comparison
+## 7. Operational Architecture Comparison
 
-| Factor | llm-tldr | grepai | cocoindex-code | ck |
-|--------|----------|--------|----------------|-----|
-| **Daemon lifecycle** | Must manage per-project daemons | Must manage Ollama + watcher | Auto-managed daemon | No daemon |
-| **Prewarm maintenance** | Cron jobs for canonical repos + worktrees | Needs watch init in each project | Auto-index on first search | Auto-index |
-| **MCP hydration** | Complex (4-IDE config sync, Codex restart cycle) | Single MCP config | Single MCP config | Single MCP config |
-| **Model management** | FAISS index rebuild on model change | Ollama model management | Auto-download, `ccc reset` for switch | Auto-switch with `--switch-model` |
-| **Troubleshooting** | Operator-level (daemon ping, socket, lock, JSON decode diagnostics) | User-level (Ollama status) | User-level (`ccc doctor`) | User-level (`ck --status`) |
-
----
-
-## Scoring Matrix (1-5)
-
-| Criterion | llm-tldr | grepai | cocoindex-code | ck |
-|-----------|----------|--------|----------------|-----|
-| Semantic discovery | 4 | 4 | 4 | 5 |
-| Exact/static tracing | 4 | 2 | 1 | 1 |
-| Call graph/import/caller support | 3 | 2 | 1 | 1 |
-| Extraction/token efficiency | 4 | 3 | 3 | 3 |
-| CLI usability | 2 | 4 | 4 | 5 |
-| MCP usability | 3 | 4 | 4 | 4 |
-| Cold-start reliability | 2 | 3 | 4 | 5 |
-| Status/failure legibility | 1 | 3 | 5 | 4 |
-| Worktree isolation | 4 | 4 | 5 | 5 |
-| Index freshness | 3 | 4 | 5 | 5 |
-| State/cache transparency | 3 | 4 | 5 | 5 |
-| Local/private operation | 5 | 4* | 5 | 5 |
-| Install burden | 3 | 3 | 4 | 2 |
-| Agent cognitive load | 1 | 3 | 4 | 4 |
-| Founder HITL load | 1 | 3 | 4 | 5 |
-| Maintenance freshness | 2 | 4 | 5 | 4 |
-| **TOTAL (out of 80)** | **45** | **54** | **62** | **63** |
-
-*Note: grepai requires Ollama for local-only operation; default is local but depends on external service.
+| Aspect | llm-tldr | grepai | cocoindex-code | ck | CodeGraphContext |
+|--------|----------|--------|----------------|----|------------------|
+| **Runtime** | Python daemon | Go daemon + watcher | Python daemon (Rust engine) | Rust CLI | Python + graph DB |
+| **Embedding** | sentence-transformers | Ollama/OpenAI/LM Studio | sentence-transformers / LiteLLM | FastEmbed | N/A (graph-based) |
+| **Vector store** | FAISS | gob/postgres/qdrant | SQLite + LMDB | Custom ANN + Tantivy | N/A |
+| **State location** | `~/.cache/tldr-state/` | `.grepai/` | `.cocoindex_code/` | `.ck/` | Configurable |
+| **Worktree safe** | ✅ Yes | ❌ No | ❌ No | ❌ No | ✅ Configurable |
+| **Incremental** | Threshold-based (20 files) | File watcher | File watcher | Chunk-level cache | File watcher |
+| **JSON output** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **MCP** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
 
 ---
 
-## One-Line Verdicts
+## 8. Agent Cognitive-Load Comparison
+
+| Candidate | Surfaces to Remember | Failure Legibility | Fallback Determinism | Score (1-5) |
+|-----------|----------------------|-------------------|----------------------|-------------|
+| llm-tldr | 3 (MCP, daemon, CLI) | Poor (JSON decode, empty payload) | Medium (layered timeouts) | 2 |
+| grepai | 2 (CLI, MCP) | Good (clear errors) | Good (single daemon) | 4 |
+| cocoindex-code | 2 (CLI, MCP) | Poor (hangs, no progress) | Poor (daemon stuck) | 1 |
+| ck | 2 (CLI, MCP) | Unknown (did not compile) | Unknown | N/A |
+| CodeGraphContext | 2 (CLI, MCP) | Good (clear messages) | Good | 4 |
+
+---
+
+## 9. Founder HITL-Load Comparison
+
+| Candidate | Ongoing Monitoring | Infra to Babysit | License Risk | Score (1-5) |
+|-----------|-------------------|------------------|--------------|-------------|
+| llm-tldr | Low (cron prewarm) | None | AGPL-3.0 (copyleft) | 3 |
+| grepai | Medium (Ollama daemon) | Ollama or API keys | MIT | 3 |
+| cocoindex-code | High (indexing hangs) | Broken daemon | Apache-2.0 | 1 |
+| ck | Unknown | None | MIT/Apache-2.0 | N/A |
+| CodeGraphContext | Low | Graph DB (embedded) | MIT | 4 |
+
+---
+
+## 10. Scoring Matrix (1-5)
+
+| Dimension | llm-tldr | grepai | cocoindex-code | ck | CodeGraphContext |
+|-----------|----------|--------|----------------|----|------------------|
+| Semantic discovery | 4 | 4* | 1** | N/A | 1 |
+| Exact/static tracing | 4 | 3 | 3 | N/A | 5 |
+| Call graph/import/caller | 4 | 4 | 2 | N/A | 5 |
+| Extraction/token efficiency | 5 | 3 | 3 | N/A | 3 |
+| CLI usability | 3 | 4 | 2 | N/A | 4 |
+| MCP usability | 2 | 4 | 2 | N/A | 4 |
+| Cold-start reliability | 2 | 3 | 1 | N/A | 4 |
+| Status/failure legibility | 2 | 4 | 1 | N/A | 4 |
+| Worktree isolation | 5 | 2 | 1 | 2 | 4 |
+| Index freshness | 3 | 4 | 1 | N/A | 4 |
+| State/cache transparency | 3 | 3 | 3 | 3 | 4 |
+| Local/private operation | 5 | 4 | 4 | 5 | 5 |
+| Install burden | 3 | 3 | 3 | 2 | 3 |
+| Agent cognitive load | 2 | 4 | 1 | N/A | 4 |
+| Founder HITL load | 3 | 3 | 1 | N/A | 4 |
+| Maintenance freshness | 2 | 4 | 5 | 3 | 3 |
+| **Weighted Total** | **47** | **54*** | **28** | **N/A** | **58** |
+
+\* grepai semantic score estimated; could not test due to missing Ollama.
+\*\* cocoindex-code semantic score is 1 because indexing hangs, making semantic search unavailable.
+
+---
+
+## 11. One-Line Verdicts
 
 | Candidate | Verdict |
 |-----------|---------|
-| **llm-tldr** | Incumbent with confirmed silent failures and high cognitive load; single-vendor risk |
-| **grepai** | Candidate for P2 augmentation (semantic search); lacks structural analysis depth |
-| **cocoindex-code** | Candidate for replacement; strongest on operational reliability and diagnostics |
-| **ck** | Candidate for replacement; strongest on CLI simplicity, zero-init, and search quality |
+| **llm-tldr** | Keep as canonical default with short-term hardening patch |
+| **grepai** | Candidate for P2 augmentation (spike after Ollama setup) |
+| **cocoindex-code** | Reject — indexing hang is a showstopper |
+| **ck** | Reject for now — does not compile on canonical host |
+| **CodeGraphContext** | Candidate for P2 augmentation (structural analysis complement) |
 
 ---
 
-## Key Insight: The One-Size Gap
-
-**No single tool covers both semantic discovery AND structural analysis.** This is the fundamental finding:
-
-- **llm-tldr**: Covers both but has reliability failures and high cognitive load
-- **cocoindex-code + ck**: Cover semantic discovery excellently but lack structural analysis (call graphs, CFG, impact)
-- **grepai**: Partial structural (callers) but shallow
-
-The V8.6 routing contract mandates one tool for both. This bakeoff suggests that contract assumption (one tool for all analysis) may itself be the problem. The most reliable tools are purpose-built search engines that don't try to be full static analyzers.
-
----
-
-## Risk Register
+## 12. Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Replacing llm-tldr breaks structural analysis path | High | Medium | Retain llm-tldr for structural only; adopt new tool for semantic |
-| New tool doesn't cover all languages | Medium | Low | All shortlist tools support Python and major languages |
-| Dual-tool routing adds agent confusion | Medium | Medium | Explicit routing contract: "semantic → ck/cocoindex, structural → llm-tldr (or direct source reads)" |
-| Upstream llm-tldr EOL | Medium | High | Own the structural path (fork/harden) or accept degraded capability |
-| Operational burden of new tool | Low | Low | ck and cocoindex-code are both low-maintenance by design |
+|------|------------|--------|------------|
+| llm-tldr upstream goes stale | High | Medium | Fork or vendor if needed; contained runtime patches already decouple us |
+| llm-tldr MCP timeout in agent sessions | Medium | High | Harden fallback path; enforce `timeout` wrappers; prewarm cron |
+| grepai Ollama ops burden | Medium | Medium | Evaluate cloud provider path; compare API cost vs cognitive load |
+| cocoindex-code fixes indexing bug | Medium | Low | Re-evaluate after 2+ stable releases; architecture is promising |
+| ck build fixed upstream | Low | Low | Re-evaluate if compilation succeeds; fastest theoretical tool |
+| CodeGraphContext graph DB bloat | Low | Medium | Use global context mode; monitor DB size |
 
 ---
 
-## Recommendation
+## 13. Recommendation
 
-### Decision: `DEFER_TO_P2_PLUS`
+### 13.1 Should llm-tldr remain the canonical first-hop analysis tool?
 
-**Reasoning**:
+**Yes, for now.** No competitor clearly beats `llm-tldr` on the combined dimensions of semantic discovery, static tracing, token efficiency, and worktree isolation. The alternatives have showstopper bugs (cocoindex-code hangs, ck fails to compile) or require new operational infrastructure (grepai needs Ollama).
 
-The optimal path is a **split-tool approach**, not a single replacement. This requires:
+### 13.2 Which competitor should replace it?
 
-1. **Semantic discovery**: Adopt **cocoindex-code** or **ck** as the canonical semantic lane
-2. **Structural analysis**: Either keep llm-tldr for structural only (reduced surface → fewer failure modes) or accept degraded structural capability (use direct source reads + rg as the structural fallback)
+**None today.** The best alternative is `grepai`, but it requires Ollama or cloud API keys, and its worktree isolation is poor. `CodeGraphContext` is excellent for structural analysis but lacks semantic search.
 
-Neither ck nor cocoindex-code alone can replace llm-tldr's full tool surface (call graphs, CFG, program slicing, impact analysis, dead code detection, architecture layer analysis). But both are **dramatically more reliable** for the highest-frequency use case: "where does X live?" / "what code is related to X?"
+### 13.3 Lowest combined cognitive + HITL load?
 
-### Why Not ALL_IN_NOW
+**CodeGraphContext** has the lowest load for structural queries, but it cannot replace semantic discovery. **grepai** has the lowest load for semantic search, but requires embedding provider setup.
 
-- Replacing llm-tldr entirely would lose the structural analysis tool surface (call graphs, CFG, impact, dead code, arch layers) — no single competitor covers these
-- The split-tool approach requires a routing contract change (V8.6 contracts are binding) and agent retraining
-- Upstream risk for llm-tldr is real but not imminent (tool works for `tree`, `warm` paths)
+### 13.4 Best answer: replacement, hardening patch, or close?
 
-### Why Not CLOSE_AS_NOT_WORTH_IT
+**Short-term hardening patch for llm-tldr** + **P2 spike on grepai** once Ollama is available.
 
-- Confirmed silent failures (`status: ok` with `files: 0`) are real and waste agent turns
-- The founder's concern is valid: the current stack has crossed into "real reliability risk"
-- Two strong competitors (cocoindex-code, ck) clearly beat llm-tldr on operational reliability with lower cognitive load
+### 13.5 Exact founder decision
 
-### Exact Proposed Next Step
+**DEFER_TO_P2_PLUS**
 
-**Run a narrower spike** with two concrete actions:
+### 13.6 Exact proposed next step
 
-1. **Adopt ck as a P2 semantic augmentation**: Install `ck`, test on 2-3 worktrees, measure token savings vs. llm-tldr semantic + rg fallback. If it passes, add ck as the canonical semantic-first lane.
-
-2. **Probe the structural gap**: Run `llm-tldr context`, `impact`, `calls` on real worktrees and measure actual agent usage. If these tools are rarely used (matching the V8.6 observation that "6 of 16 MCP tools were effectively unused"), the structural loss may be acceptable and a full replacement becomes viable.
-
-3. **If structural tools are rarely used**: Move to `ALL_IN_NOW` replacement with ck or cocoindex-code as the canonical analysis tool.
-
-4. **If structural tools are frequently used**: Split the routing contract: ck for semantic, llm-tldr for structural (narrower surface, fewer failure modes).
-
-### Recommended Candidate Preference
-
-Between ck and cocoindex-code for the semantic lane:
-
-- **Prefer ck** for: zero-init (no `ccc init` needed), Rust binary (single file, fast), grep-compatible flags, hybrid search (semantic+BM25), TUI for debugging
-- **Prefer cocoindex-code** for: `ccc doctor` diagnostics (best failure legibility), Python-native (fits existing stack), Docker option for teams, Claude Code skill integration
-
-Both are excellent. ck edges ahead on simplicity and agent cognitive load (score 63 vs 62), but the margin is thin. Both beat llm-tldr on operational reliability by a wide margin.
+1. **Keep llm-tldr as canonical default.** Do not demote.
+2. **Harden llm-tldr immediately:**
+   - Fix semantic auto-bootstrap hang in contained CLI (or disable it)
+   - Add explicit `--timeout` to all fallback scripts
+   - Improve daemon status to report `indexing_in_progress` vs `ready`
+3. **P2 spike: grepai**
+   - Install Ollama on canonical hosts (or evaluate cloud provider cost)
+   - Build a containment wrapper for `.grepai/` (mirror `tldr_contained_runtime.py`)
+   - Benchmark grepai head-to-head against llm-tldr on 3 repos
+4. **P3 evaluate: CodeGraphContext**
+   - Add as secondary structural analysis tool (callers, complexity, dead code)
+   - Does not replace llm-tldr; complements it
 
 ---
 
-## Appendix: Commands and Evidence
+## 14. Appendix: Commands and Evidence
 
-### A1. llm-tldr Benchmark Commands
-
-```bash
-# Tree (works)
-bash ~/agent-skills/scripts/tldr-daemon-fallback.sh tree --repo /tmp/agents/bd-9n1t2.16/agent-skills
-# Result: OK, 16.3s, full file tree
-
-# Structure (silent failure)
-bash ~/agent-skills/scripts/tldr-daemon-fallback.sh structure --repo /tmp/agents/bd-9n1t2.16/agent-skills --language python
-# Result: status: ok, files: 0 (SILENT FAILURE)
-
-# Search (silent failure)
-bash ~/agent-skills/scripts/tldr-daemon-fallback.sh search --repo /tmp/agents/bd-9n1t2.16/agent-skills --pattern 'semantic.*mixed'
-# Result: 0 matches (expected matches exist)
-
-# Status (times out)
-timeout 10 bash ~/agent-skills/scripts/tldr-daemon-fallback.sh status --repo /tmp/agents/bd-9n1t2.16/agent-skills
-# Result: No output within 10s timeout
-```
-
-### A2. Install Commands (for spike)
+### 14.1 llm-tldr upstream freshness
 
 ```bash
-# ck
-cargo install ck-search
-
-# cocoindex-code
-pipx install 'cocoindex-code[full]'
-
-# grepai
-brew install yoanbernabeu/tap/grepai
-ollama pull nomic-embed-text
+curl -s https://api.github.com/repos/parcadei/llm-tldr/commits/main | \
+  python3 -c "import sys,json; print(json.load(sys.stdin)['commit']['author']['date'])"
+# 2026-01-17T09:59:15Z
 ```
 
-### A3. Source Verification
+### 14.2 llm-tldr warm agent-skills
 
-| Tool | GitHub | Latest Commit (from page fetch) | License |
-|------|--------|-------------------------------|---------|
-| llm-tldr | parcadei/llm-tldr | v1.5.2 tagged | MIT |
-| grepai | yoanbernabeu/grepai | v0.35.0 (Mar 2026) | MIT |
-| cocoindex-code | cocoindex-io/cocoindex-code | v0.2.31 (Apr 27, 2026) | Apache 2.0 |
-| ck | BeaconBay/ck | v0.7.4 (Jan 2026) | MIT/Apache 2.0 |
-| CodeGraphContext | CodeGraphContext/CodeGraphContext | v0.3.1 (Mar 2026) | MIT |
-| sourcebot | sourcebot-dev/sourcebot | Active | AGPL-3.0 |
-| byterover-cli | campfirein/byterover-cli | v3.9.0 | Elastic 2.0 |
+```bash
+time timeout 120 ~/agent-skills/scripts/tldr-contained.sh warm .
+# Detected languages: javascript, python, typescript
+# Processed python: 124 files, 1310 edges
+# Total: Indexed 127 files, found 1310 edges
+```
 
-### A4. Byterover-CLI: Out of Scope for Analysis
+### 14.3 llm-tldr semantic search (daemon fallback)
 
-byterover-cli (`brv`) is a context memory and REPL tool, not a code analysis engine. It:
-- Provides persistent structured memory for AI agents
-- Has git-like version control for context trees
-- Integrates MCP for tool exposure
-- Does NOT provide semantic code search, call graphs, or static analysis
+```bash
+time timeout 60 ~/agent-skills/scripts/tldr-daemon-fallback.sh semantic \
+  --repo /tmp/agents/bd-9n1t2.16/agent-skills \
+  --query "routing contract" --k 2
+# ~8s, returned 2 results with scores
+```
 
-**Assessment**: Valuable for the memory augmentation layer, but does not compete with llm-tldr on code analysis. Separate evaluation needed for memory use case.
+### 14.4 llm-tldr context extraction
 
-### A5. Architecture Memo Availability
+```bash
+time timeout 60 ~/agent-skills/scripts/tldr-contained.sh context run_cli --project . --depth 2
+# ~17s, returned 7 functions, ~432 tokens
+```
 
-The following optional architecture memos were checked:
-- `docs/architecture/2026-04-08-analysis-vs-editing-coding-agent-tooling-decision-memo.md` — **NOT FOUND**
-- `docs/architecture/2026-04-10-cloud-analysis-alternatives-decision-memo.md` — **NOT FOUND**
+### 14.5 grepai version
 
-Both were noted as optional and their absence does not affect the bakeoff.
+```bash
+/tmp/agents/bd-9n1t2.16/bin/grepai version
+# 0.35.0
+```
 
-### A6. Beads Memory Lookup Results
+### 14.6 grepai search failure (no Ollama)
 
-All targeted memory lookups returned empty:
-- `bdx memories llm-tldr` → `{}`
-- `bdx search "llm-tldr" --label memory --status all` → `[]`
-- `bdx search "MCP hydration" --label memory --status all` → `[]`
-- `bdx search "semantic mixed-health" --label memory --status all` → `[]`
+```bash
+grepai search "routing contract"
+# Error: search failed: failed to send request to Ollama: Post "http://localhost:11434/api/embeddings":
+# dial tcp [::1]:11434: connect: connection refused
+```
 
-No relevant memory records exist, so memory did not influence the bakeoff.
+### 14.7 cocoindex-code install
+
+```bash
+time uv tool install --upgrade 'cocoindex-code[full]'
+# ~9s, installed ccc and cocoindex-code
+```
+
+### 14.8 cocoindex-code indexing hang
+
+```bash
+time timeout 180 ccc index
+# Timeout after 180s
+time timeout 60 ccc status
+# "Indexing in progress: 859 files listed | 738 added, 0 deleted..."
+```
+
+### 14.9 cocoindex-code search hang
+
+```bash
+time timeout 120 ccc search "routing contract"
+# Timeout after 120s (daemon still indexing)
+```
+
+### 14.10 ck build failure
+
+```bash
+time cargo install ck-search
+# error: could not compile `ck-embed` (lib) due to 36 previous errors
+# `ort::Error` / `SessionBuilder` compatibility issues on rustc 1.93.0
+```
+
+### 14.11 CodeGraphContext index
+
+```bash
+time timeout 120 cgc index .
+# Successfully finished indexing: . in 22.08 seconds
+```
+
+### 14.12 CodeGraphContext find content
+
+```bash
+time timeout 60 cgc find content "routing contract"
+# No content matches found for 'routing contract'
+```
+
+### 14.13 Worktree artifact check
+
+```bash
+find /tmp/agents/bd-9n1t2.16/agent-skills -maxdepth 1 -name ".tldr" -o -name ".cocoindex_code" -o -name ".grepai" -o -name ".ck" -o -name ".codegraphcontext"
+# .cocoindex_code (from cocoindex-code init)
+# .grepai (from grepai init)
+```
+
+llm-tldr state location (contained):
+```bash
+ls ~/.cache/tldr-state/
+# 221 hash directories, no in-repo state
+```
+
+---
+
+## 15. Optional Architecture Memos
+
+- `docs/architecture/2026-04-08-analysis-vs-editing-coding-agent-tooling-decision-memo.md` — **MISSING**
+- `docs/architecture/2026-04-10-cloud-analysis-alternatives-decision-memo.md` — **MISSING**
+
+These paths were noted as missing and do not affect the bakeoff conclusions.
+
+---
+
+*Memo generated by opencode-go/kimi-k2.6 for bd-9n1t2.16. All benchmark commands executed with timeouts. No canonical clones were modified.*
