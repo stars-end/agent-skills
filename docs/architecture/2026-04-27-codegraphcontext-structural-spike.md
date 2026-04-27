@@ -257,4 +257,4 @@ Exact result line/status:
 ## PR Metadata
 
 PR_URL: https://github.com/stars-end/agent-skills/pull/596  
-PR_HEAD_SHA: e3b5158d004418c75f82a5eee3ea19e23f659602
+PR_HEAD_SHA: d2fb27ac0e7aaf9fd6557e7d21ee6d23dd403659
