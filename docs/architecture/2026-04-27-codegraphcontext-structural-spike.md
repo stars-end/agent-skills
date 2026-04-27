@@ -240,7 +240,21 @@ Recommended lane classification:
 - **Use as a structural complement lane now** for fast deterministic call graph + dead-code + complexity checks.
 - **Keep `llm-tldr` canonical** where broader unified structural+context routing and existing contracts are still required.
 
+## Validation
+
+Command:
+
+```bash
+~/agent-skills/scripts/dx-verify-clean.sh
+```
+
+Exact result line/status:
+
+```text
+✅ PASS: All canonical clones have no blocking hygiene issues.
+```
+
 ## PR Metadata
 
 PR_URL: https://github.com/stars-end/agent-skills/pull/596  
-PR_HEAD_SHA: 22770655b9662860784626eb80f9a4b93b76728c
+PR_HEAD_SHA: e3b5158d004418c75f82a5eee3ea19e23f659602
