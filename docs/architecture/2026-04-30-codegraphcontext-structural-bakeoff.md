@@ -296,5 +296,5 @@ dead-code/complexity sweeps -> CodeGraphContext advisory only
 ## PR Artifacts
 
 PR_URL: https://github.com/stars-end/agent-skills/pull/601  
-PR_HEAD_SHA: dc2efc5c5894d2ca39d1db32f00243596d2882c5  
+PR_HEAD_SHA: 2e63df032fff72412887b134ec9a6c91e23a1d1d  
 BEADS_SUBTASK: bd-9n1t2.30.2
