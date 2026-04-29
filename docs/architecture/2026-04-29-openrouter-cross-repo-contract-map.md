@@ -6,6 +6,8 @@ Inputs:
 
 - Affordabot investigation: https://github.com/stars-end/affordabot/pull/446 @ `e3b81f5839687959fa8cae41eec165da459f3dd9`
 - Prime Radiant investigation: https://github.com/stars-end/prime-radiant-ai/pull/1118 @ `6fc8bcfb3ae69fcebf3b9f2768deb425d9cdf983`
+- Affordabot OpenRouter env contract: https://github.com/stars-end/affordabot/pull/447 @ `e0ed87f3f0072378008d99b5281169c65af10189`
+- Prime Radiant OpenRouter env contract: https://github.com/stars-end/prime-radiant-ai/pull/1119 @ `fa9abafe4c06bfe6fab39cb92871b5a329a38c32`
 - Prior llm-tldr synthesis: https://github.com/stars-end/agent-skills/pull/595
 
 ## Decision
@@ -32,6 +34,17 @@ OPENROUTER_CACHE_OK
 ```
 
 Implication: the earlier `bd-9n1t2.19` grepai/OpenRouter blocker should be re-tested with the same cache-only contract before closing that lane.
+
+## Live OpenRouter Embedding Probe Status
+
+The app-side OpenRouter contract inventories added no-secret-print qwen embedding probes and validated the same OpenRouter model needed by grepai:
+
+| Repo | PR | Model | Dimensions | Observed Latency | Result |
+|---|---|---|---:|---:|---|
+| affordabot | https://github.com/stars-end/affordabot/pull/447 | `qwen/qwen3-embedding-8b` | 4096 | 946 ms | pass |
+| prime-radiant-ai | https://github.com/stars-end/prime-radiant-ai/pull/1119 | `qwen/qwen3-embedding-8b` | 4096 | 908 ms | pass |
+
+These probes validate OpenRouter auth, model routing, and embedding dimensionality, but they do not prove grepai indexing/query behavior. The grepai spike still needs tool-specific measurements for index latency, query embedding latency, retrieval latency, failure behavior, and worktree state containment.
 
 ## Cross-Repo Findings
 
@@ -98,6 +111,8 @@ Smokes should skip or fail with a clear reason when `OPENROUTER_API_KEY` is abse
 ### 3. Re-Run grepai/OpenRouter Spike
 
 Decision: `DEFER_TO_P2_PLUS` after auth inventory
+
+Status on 2026-04-29: re-dispatched under `bd-9n1t2.19` after OpenRouter cache and app-side qwen embedding probes passed.
 
 Re-dispatch `bd-9n1t2.19` only after confirming agent-safe OpenRouter cache in the worker runtime. Required measurements remain:
 
