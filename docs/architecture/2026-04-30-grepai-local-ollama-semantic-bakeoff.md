@@ -308,8 +308,6 @@ Do not replace `llm-tldr semantic` with grepai by default. A decisive replacemen
 
 ## PR Artifacts
 
-To be filled after draft PR creation:
-
-- PR_URL: TBD
-- PR_HEAD_SHA: TBD
+- PR_URL: https://github.com/stars-end/agent-skills/pull/600
+- PR_HEAD_SHA: see final handoff and PR head; a committed memo cannot self-reference the commit SHA produced by editing this section
 - BEADS_SUBTASK: bd-9n1t2.30.1
