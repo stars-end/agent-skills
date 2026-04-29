@@ -249,4 +249,4 @@ Rationale: useful capability, but current bounded runtime behavior and cloud dep
 ## Draft PR Artifact
 
 PR_URL: `https://github.com/stars-end/agent-skills/pull/598`  
-PR_HEAD_SHA: `52894336ac882adfe66681e7804478461b78ed31`
+PR_HEAD_SHA: `aa656be4b7e33ad4004c755eb23ef9834bc1d076`
