@@ -11,6 +11,8 @@ stale_if_paths:
   - health/**
   - infra/**
   - railway/**
+  - safety/**
+  - search/**
   - scripts/publish-baseline.zsh
   - scripts/compile_agent_context.sh
   - templates/**
@@ -26,7 +28,7 @@ This map is the first-stop orientation for `agent-skills` brownfield work.
 The repo ships:
 
 - skill definitions and templates (`core/`, `extended/`, `health/`, `infra/`,
-  `dispatch/`, `railway/`, `safety/`)
+  `dispatch/`, `railway/`, `safety/`, `search/`)
 - operational scripts (`scripts/`)
 - policy/runbook docs (`docs/`)
 - generated distribution artifacts (`dist/`)

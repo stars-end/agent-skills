@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 83a21ee990047019c7ce7acd0aa0282701ed834b -->
-<!-- Last updated: 2026-04-16 19:36:32 UTC -->
+<!-- Source SHA: f8b816704442e447babb9b93049b41324822b6c1 -->
+<!-- Last updated: 2026-04-29 18:24:52 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -669,6 +669,24 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **multi-agent-dispatch** | Cross-VM task dispatch with dx-runner as canonical governance runner and OpenCode as primary execution lane. dx-dispatch is a BREAK-GLASS compatibility shim for remote fanout when dx-runner is unavailable. EPYC6 is currently disabled - see enablement gate. | `dx-dispatch is a BREAK-GLASS compatibility shim for remote f` | workflow, dispatch, dx-runner, governance, cross-vm |
 
 
+## Safety & Guardrails
+
+| Skill | Description | Example | Tags |
+|-------|-------------|---------|------|
+| **beads-guard** | Safe Beads workflow helper (warning-only). Use before Beads mutations to avoid Beads conflict. Ensures you are on a feature branch, up to date with origin/master, and executes Beads operations against canonical Dolt control-plane context with runtime pinned at `~/.beads-runtime/.beads`. | — | beads, dx, guardrail |
+| **dcg-safety** | Destructive Command Guard (DCG) safety hook for all AI coding agents. Rust-based PreToolUse hook that blocks dangerous git and filesystem commands. Use when agent attempts destructive operations, safety verification is needed, or when checking protection status across VMs. Keywords: safety, git reset, rm -rf, destructive, guard, hooks, protection | — | safety, hooks, git, protection |
+
+
+## Search & Context
+
+| Skill | Description | Example | Tags |
+|-------|-------------|---------|------|
+| **area-context-create** | Create repo-local codebase area context skills for rapid navigation (compatibility/legacy pattern). Use for repo-local area context skills only. Canonical skill work uses `agent-skills-creator`. Handles ONE-TIME auto-detection with Serena, template-based generation, and manual maintenance. Use when creating new area contexts or regenerating existing ones, or when user mentions "create context skill", "generate area context", "map codebase area", skill generation, codebase navigation, area mapping, or template-based skill creation. | — | meta, skill-creation, context, automation, compatibility |
+| **cass-search** | Coding Agent Session Search (CASS) for semantic search over past agent sessions. Use when looking for how something was solved before, finding past solutions, or searching conversation history. Keywords: search, history, session, past, solved, conversation, semantic | — | search, history, knowledge |
+| **context-database-schema** | Supabase PostgreSQL schema management, 86+ migrations, RLS policies, and type generation. Handles table creation, schema changes, migrations, foreign key constraints, and migration workflows. Use when working with database schema, migrations, data modeling, or type definitions, or when user mentions database changes, table modifications, schema updates, migration failures, "relation does not exist" errors, foreign key issues, Supabase schema operations, users table, accounts table, or holdings table. | — | database, schema, migrations, supabase |
+| **docs-create** | Create repo-local documentation skill with external reference docs (compatibility/legacy pattern). Use for repo-local doc caching only. Canonical skill work uses `agent-skills-creator`. Fetches URLs, caches full content, generates summaries, and creates repo-local auto-activating skill. Use when starting work on epic that requires external documentation context (API docs, tool guides, reference materials), or when user mentions "cache docs", "external docs", "API documentation", URLs for docs, documentation needs, reference materials, knowledge caching, or epic context documentation. | — | meta, documentation, skill-creation, caching, compatibility |
+
+
 ## Railway Deployment
 
 | Skill | Description | Example | Tags |
@@ -688,7 +706,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 
 
 ---
-**Discovery**: Skills auto-load from `~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md`
+**Discovery**: Skills auto-load from `~/agent-skills/{core,extended,health,infra,railway,dispatch,safety,search}/*/SKILL.md`
 **Details**: Each skill's SKILL.md contains full documentation
 **Specification**: https://agentskills.io/specification
 **Source**: Generated from agent-skills commit shown in header
