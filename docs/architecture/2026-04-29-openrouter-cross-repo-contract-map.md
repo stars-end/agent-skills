@@ -8,6 +8,8 @@ Inputs:
 - Prime Radiant investigation: https://github.com/stars-end/prime-radiant-ai/pull/1118 @ `6fc8bcfb3ae69fcebf3b9f2768deb425d9cdf983`
 - Affordabot OpenRouter env contract: https://github.com/stars-end/affordabot/pull/447 @ `e0ed87f3f0072378008d99b5281169c65af10189`
 - Prime Radiant OpenRouter env contract: https://github.com/stars-end/prime-radiant-ai/pull/1119 @ `fa9abafe4c06bfe6fab39cb92871b5a329a38c32`
+- grepai/OpenRouter semantic spike rerun: https://github.com/stars-end/agent-skills/pull/598 @ `7a62cfdae91beed0214c1762098a2b58d1ecdc65`
+- affordabot OpenRouter guard repair: https://github.com/stars-end/affordabot/pull/448 @ `36b289e7febe6dc95f68bac0ec1ae6857b120ae2`
 - Prior llm-tldr synthesis: https://github.com/stars-end/agent-skills/pull/595
 
 ## Decision
@@ -45,6 +47,33 @@ The app-side OpenRouter contract inventories added no-secret-print qwen embeddin
 | prime-radiant-ai | https://github.com/stars-end/prime-radiant-ai/pull/1119 | `qwen/qwen3-embedding-8b` | 4096 | 908 ms | pass |
 
 These probes validate OpenRouter auth, model routing, and embedding dimensionality, but they do not prove grepai indexing/query behavior. The grepai spike still needs tool-specific measurements for index latency, query embedding latency, retrieval latency, failure behavior, and worktree state containment.
+
+## grepai/OpenRouter Rerun Result
+
+Rerun artifact: https://github.com/stars-end/agent-skills/pull/598 @ `7a62cfdae91beed0214c1762098a2b58d1ecdc65`
+
+Evidence quality review:
+
+- Accepted: official grepai/OpenRouter docs and source were inspected.
+- Accepted: OpenRouter usage was source-checked as embeddings-only for grepai index/search.
+- Accepted: benchmark commands used bounded `timeout 120`.
+- Accepted: `agent-skills` and `affordabot` were both attempted as real repos.
+- Accepted: latency measurements separate empty/partial-index query behavior from indexing behavior.
+- Caveat: the worker memo's embedded PR head line trails the final metadata-only repair commit, which is self-referential if kept perfectly current. Treat GitHub PR metadata above as the PR-head source of truth.
+
+Measured result:
+
+| Measurement | Result |
+|---|---|
+| `grepai init` | Fast: 49 ms on `agent-skills`, 27 ms on `affordabot` |
+| Cold index/watch bounded at 120s | Did not complete on either repo |
+| `agent-skills` partial index | 396 files / 2099 chunks / 51.9 MB |
+| `affordabot` index | 0 files / 0 chunks after bounded run |
+| Query latency after partial index | p50 977.5 ms, p95 1774 ms |
+| Repeated single-query latency | p50 1118 ms, p95 1847 ms |
+| Failure modes | Timeout cancellation; provider/network errors are legible |
+
+Conclusion: `grepai + OpenRouter` is viable only as async/on-demand semantic enrichment. It should not demote or replace `llm-tldr` semantic in the default critical-path lookup loop.
 
 ## Cross-Repo Findings
 
@@ -112,7 +141,7 @@ Smokes should skip or fail with a clear reason when `OPENROUTER_API_KEY` is abse
 
 Decision: `DEFER_TO_P2_PLUS` after auth inventory
 
-Status on 2026-04-29: re-dispatched under `bd-9n1t2.19` after OpenRouter cache and app-side qwen embedding probes passed.
+Status on 2026-04-29: re-dispatched under `bd-9n1t2.19` after OpenRouter cache and app-side qwen embedding probes passed. Result: `async/on-demand enrichment only`; do not make it the default first-hop semantic lookup.
 
 Re-dispatch `bd-9n1t2.19` only after confirming agent-safe OpenRouter cache in the worker runtime. Required measurements remain:
 
@@ -127,6 +156,24 @@ Re-dispatch `bd-9n1t2.19` only after confirming agent-safe OpenRouter cache in t
 - `.grepai/` containment implications
 
 Classification target: async/on-demand semantic enrichment unless query-time cloud embedding is exceptionally fast and reliable.
+
+Actual classification: async/on-demand semantic enrichment only.
+
+### 3a. Affordabot Guard Drift Repair
+
+Decision: `ALL_IN_NOW`
+
+Follow-up PR opened: https://github.com/stars-end/affordabot/pull/448
+
+Reason: app-side inventory found several paths that accepted `OPENAI_API_KEY` or `ZAI_API_KEY` as sufficient while constructing OpenRouter-backed embedding clients. The repair makes those OpenRouter paths require `OPENROUTER_API_KEY` explicitly and adds an OPENAI-only regression test for the cron harvester path.
+
+### 3b. Prime RAG qwen Dimension Validation
+
+Decision: `DEFER_TO_P2_PLUS` until exact Railway target context is supplied
+
+Beads: `bd-9n1t2.27`
+
+Railway auth works, but the Prime worktree has no linked project and checked-in source does not prove the exact project/environment/service id. Per the no-guessing Railway contract, do not mutate or run app-level RAG validation until the backend Railway target is known.
 
 ### 4. LiteLLM Architecture Decision
 
