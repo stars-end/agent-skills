@@ -7,7 +7,7 @@ Inputs:
 - Affordabot investigation: https://github.com/stars-end/affordabot/pull/446 @ `e3b81f5839687959fa8cae41eec165da459f3dd9`
 - Prime Radiant investigation: https://github.com/stars-end/prime-radiant-ai/pull/1118 @ `6fc8bcfb3ae69fcebf3b9f2768deb425d9cdf983`
 - Affordabot OpenRouter env contract: https://github.com/stars-end/affordabot/pull/447 @ `e0ed87f3f0072378008d99b5281169c65af10189`
-- Prime Radiant OpenRouter env contract: https://github.com/stars-end/prime-radiant-ai/pull/1119 @ `fa9abafe4c06bfe6fab39cb92871b5a329a38c32`
+- Prime Radiant OpenRouter env contract: https://github.com/stars-end/prime-radiant-ai/pull/1119 @ `48433c818d56d600ab0058b81dc0025a551c6a23`
 - grepai/OpenRouter semantic spike rerun: https://github.com/stars-end/agent-skills/pull/598 @ `7a62cfdae91beed0214c1762098a2b58d1ecdc65`
 - affordabot OpenRouter guard repair: https://github.com/stars-end/affordabot/pull/448 @ `36b289e7febe6dc95f68bac0ec1ae6857b120ae2`
 - Prior llm-tldr synthesis: https://github.com/stars-end/agent-skills/pull/595
@@ -44,7 +44,7 @@ The app-side OpenRouter contract inventories added no-secret-print qwen embeddin
 | Repo | PR | Model | Dimensions | Observed Latency | Result |
 |---|---|---|---:|---:|---|
 | affordabot | https://github.com/stars-end/affordabot/pull/447 | `qwen/qwen3-embedding-8b` | 4096 | 946 ms | pass |
-| prime-radiant-ai | https://github.com/stars-end/prime-radiant-ai/pull/1119 | `qwen/qwen3-embedding-8b` | 4096 | 908 ms | pass |
+| prime-radiant-ai | https://github.com/stars-end/prime-radiant-ai/pull/1119 | `qwen/qwen3-embedding-8b` | 4096 | 908 ms local / 633 ms Railway dev backend | pass |
 
 These probes validate OpenRouter auth, model routing, and embedding dimensionality, but they do not prove grepai indexing/query behavior. The grepai spike still needs tool-specific measurements for index latency, query embedding latency, retrieval latency, failure behavior, and worktree state containment.
 
@@ -169,11 +169,28 @@ Reason: app-side inventory found several paths that accepted `OPENAI_API_KEY` or
 
 ### 3b. Prime RAG qwen Dimension Validation
 
-Decision: `DEFER_TO_P2_PLUS` until exact Railway target context is supplied
+Decision: `DEFER_TO_P2_PLUS` until qwen is tested against a disposable vector table
 
 Beads: `bd-9n1t2.27`
 
-Railway auth works, but the Prime worktree has no linked project and checked-in source does not prove the exact project/environment/service id. Per the no-guessing Railway contract, do not mutate or run app-level RAG validation until the backend Railway target is known.
+Correction after live verification: Railway auth and OP cache both work. The earlier blocker was too broad. The actual issue was documentation drift:
+
+- `railway list --json` proves the Prime project id `f0875753-5125-42d4-93c5-a04818e13dc6` with `dev` and `backend`.
+- This installed Railway CLI accepts `-p/--project` on `railway link`, but not on `railway run`.
+- Disposable worktrees must link first, then run with `railway run -e dev -s backend -- <command>`.
+
+Runtime evidence from Prime dev/backend:
+
+| Variable / Probe | Result |
+|---|---|
+| `OPENROUTER_API_KEY` | set |
+| `USE_PGVECTOR_RAG` | true |
+| `VECTOR_DATABASE_URL` | set |
+| effective `EMBEDDING_MODEL` | `text-embedding-3-small` |
+| effective `PGVECTOR_DIMENSIONS` | 1536 |
+| qwen smoke override | 4096 dims, 633 ms, cost `0.00000009` |
+
+Implication: Prime has the OpenRouter secret and vector DB context, but qwen is not the RAG default. Do not mutate Railway env from this spike. Next step is a disposable-table qwen RAG validation, then an intentional Railway variable update if qwen should become the app default.
 
 ### 4. LiteLLM Architecture Decision
 
@@ -222,8 +239,9 @@ rg -n "OPENROUTER|openrouter|qwen/qwen3-embedding-8b|OpenRouterClient|OpenAIEmbe
 For app runtime mutation, first identify Railway target explicitly:
 
 ```bash
-railway status
-railway variables --service <service>
+~/agent-skills/scripts/dx-load-railway-auth.sh -- railway list --json
+~/agent-skills/scripts/dx-load-railway-auth.sh -- \
+  railway link -p <project-id> -e <environment> -s <service>
 ```
 
-Use `railway run -p <project-id> -e <environment> -s <service> -- <cmd>` or a repo-native `dx-railway-run.sh` wrapper from worktrees. Do not rely on ambient linked state from another repo.
+For the current Railway CLI, use `railway run -e <environment> -s <service> -- <cmd>` after the worktree is explicitly linked. Do not rely on ambient linked state from another repo.
