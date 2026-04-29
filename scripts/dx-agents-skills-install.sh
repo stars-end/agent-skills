@@ -21,7 +21,7 @@ set -euo pipefail
 #
 # Notes:
 #   - This script only links; it does not copy secrets or modify other dotfiles.
-#   - Skills are sourced from: ~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md
+#   - Skills are sourced from: ~/agent-skills/{core,extended,health,infra,railway,dispatch,safety,search}/*/SKILL.md
 #   - Symlinks are supported by Codex skill discovery.
 
 usage() {
@@ -75,7 +75,7 @@ if [[ ! -d "$CANONICAL_REPO" ]]; then
 fi
 
 DEST_DIR="${DEST_DIR:-$HOME/.agents/skills}"
-declare -a CATEGORIES=( core extended health infra railway dispatch )
+declare -a CATEGORIES=( core extended health infra railway dispatch safety search )
 
 extract_name() {
   local skill_md="$1"

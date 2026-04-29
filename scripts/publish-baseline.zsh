@@ -190,6 +190,10 @@ generate_table "Health & Monitoring" "health"
 echo "" >> "$OUTFILE"; echo "" >> "$BASELINE_FILE"
 generate_table "Infrastructure" "infra" "dispatch"
 echo "" >> "$OUTFILE"; echo "" >> "$BASELINE_FILE"
+generate_table "Safety & Guardrails" "safety"
+echo "" >> "$OUTFILE"; echo "" >> "$BASELINE_FILE"
+generate_table "Search & Context" "search"
+echo "" >> "$OUTFILE"; echo "" >> "$BASELINE_FILE"
 generate_table "Railway Deployment" "railway"
 
 # Footer
@@ -199,7 +203,7 @@ echo "" >> "$OUTFILE"
 cat >> "$OUTFILE" <<EOF
 
 ## Skill Discovery
-**Auto-loaded from:** \`~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md\`
+**Auto-loaded from:** \`~/agent-skills/{core,extended,health,infra,railway,dispatch,safety,search}/*/SKILL.md\`
 **Specification**: https://agentskills.io/specification
 
 **Regenerate this index:**
@@ -216,7 +220,7 @@ EOF
 cat >> "$BASELINE_FILE" <<EOF
 
 ---
-**Discovery**: Skills auto-load from \`~/agent-skills/{core,extended,health,infra,railway,dispatch}/*/SKILL.md\`
+**Discovery**: Skills auto-load from \`~/agent-skills/{core,extended,health,infra,railway,dispatch,safety,search}/*/SKILL.md\`
 **Details**: Each skill's SKILL.md contains full documentation
 **Specification**: https://agentskills.io/specification
 **Source**: Generated from agent-skills commit shown in header
