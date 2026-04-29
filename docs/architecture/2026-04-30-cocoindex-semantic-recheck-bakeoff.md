@@ -284,5 +284,5 @@ An async enrichment lane can tolerate slower indexing, but it still needs reliab
 
 CocoIndex/cocoindex-code remains promising on paper, but the current installed version did not fix the runtime blocker. Keep the default fallback as targeted `rg`/direct reads plus any currently working llm-tldr fallback. Do not replace `llm-tldr semantic` with `ccc`, and do not add `ccc` to the default agent routing path.
 
-PR_URL: pending
-PR_HEAD_SHA: pending
+PR_URL: https://github.com/stars-end/agent-skills/pull/602
+PR_HEAD_SHA: fd699e09969993a7cb118c52ad5c5e21e16c6961
