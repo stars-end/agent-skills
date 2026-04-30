@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: f8b816704442e447babb9b93049b41324822b6c1 -->
-<!-- Last updated: 2026-04-30 18:46:35 UTC -->
+<!-- Source SHA: 606a02666f83222f944e8d7e1bddf17ca71ebc2c -->
+<!-- Last updated: 2026-04-30 19:36:59 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -681,6 +681,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **environment** | This skill should be used when the user asks "what's the config", "show me the configuration", "what variables are set", "environment config", "service config", "railway config", or wants to add/set/delete variables, change build/deploy settings, scale replicas, connect repos, or delete services. | — |  |
 | **metrics** | This skill should be used when the user asks about resource usage, CPU, memory, network, disk, or service performance. Covers questions like "how much memory is my service using" or "is my service slow". | — |  |
 | **new** | This skill should be used when the user says "setup", "deploy to railway", "initialize", "create project", "create service", or wants to deploy from GitHub. Handles initial setup AND adding services to existing projects. For databases, use the database skill instead. | — |  |
+| **prime-radiant-topology** | Prime Radiant AI Railway dev topology and safe runtime context. MUST BE USED when working in prime-radiant-ai and the task needs Railway project/environment/service IDs, dev service endpoints, pgvector, Postgres, MinIO, Windmill/LSP services, backend/frontend domains, or non-interactive Railway linking. Use for: "Prime Radiant Railway", "prime-radiant-ai endpoints", "railway/dev", "frontend-dev-f8a3", "backend-dev-6dd5", "postgres-dev-50c2", "bucket-dev-2f3a", "console-dev-f0c3", "pgvector", "lsp". | — | railway, prime-radiant-ai, topology, endpoints, runtime, dx |
 | **projects** | This skill should be used when the user wants to list all projects, switch projects, rename a project, enable/disable PR deploys, make a project public/private, or modify project settings. | — |  |
 | **railway-docs** | This skill should be used when the user asks about Railway features, how Railway works, or shares a docs.railway.com URL. Fetches up-to-date Railway docs to answer accurately. | — |  |
 | **service** | This skill should be used when the user asks about service status, wants to rename a service, change service icons, link services, or create services with Docker images. For creating services with local code, prefer the `new` skill. For GitHub repo sources, use `new` skill to create empty service then `environment` skill to configure source. | — |  |
