@@ -15,7 +15,7 @@ This is not an all-in adoption of a third-party replacement. The final bakeoff d
 Two follow-up corrections matter:
 
 - grepai was not rejected. It is blocked from default routing until Ollama is installed, model-pulled, indexed, and wrapped with machine-safe readiness/error checks.
-- CocoIndex as a project was not fully tested. The worker tested `cocoindex-code 0.2.31` through the `ccc` path. CocoIndex V1 is live and explicitly moves to an embedded LMDB, state-driven model that may address the daemon/state burden observed here. The tested `ccc` path is rejected; CocoIndex V1/latest deserves a focused rerun before the replacement search is closed.
+- `cocoindex-code` / `ccc` has been removed from the bakeoff entirely. It is not a replacement candidate and should not be used as evidence for or against CocoIndex V1. The remaining CocoIndex question is V1 framework viability: whether `cocoindex>=1.0.0` is worth building on as our own local incremental semantic index substrate.
 
 Default lookup should become:
 
@@ -65,7 +65,7 @@ bd-9n1t2
   bd-9n1t2.30 Final bakeoff: llm-tldr replacement candidates
     bd-9n1t2.30.1 grepai local Ollama semantic replacement
     bd-9n1t2.30.2 CodeGraphContext structural replacement
-    bd-9n1t2.30.3 CocoIndex final semantic recheck
+    bd-9n1t2.30.3 CocoIndex V1 framework viability
     bd-9n1t2.30.4 Synthesis: final llm-tldr replacement bakeoff decision
 ```
 
@@ -77,7 +77,7 @@ bd-9n1t2
 |---|---|---|---|---|
 | A | grepai local Ollama | https://github.com/stars-end/agent-skills/pull/600 | 2297c76c8e7e9b82fef15baba9f84e0fd050a0bc | async/on-demand semantic enrichment only |
 | B | CodeGraphContext | https://github.com/stars-end/agent-skills/pull/601 | 3105ede2de16b5e44ff7695d8b98de398239d2bc | complement llm-tldr structural |
-| C | CocoIndex/cocoindex-code 0.2.31 `ccc` path | https://github.com/stars-end/agent-skills/pull/602 | 4d82a2862f5012dc532e2d3c400291706a2cf4b5 | reject tested path; rerun CocoIndex V1/latest |
+| C | CocoIndex V1 framework viability | pending retargeted worker | n/a | `cocoindex-code` / `ccc` removed entirely; test `cocoindex>=1.0.0` only |
 
 ## Evidence-Quality Review
 
@@ -126,23 +126,20 @@ Coordinator action: requested one repair pass because the memo's embedded PR hea
 
 Conclusion supported by evidence: CodeGraphContext is a good advisory structural tool, but not a default critical-path replacement.
 
-### CocoIndex
+### CocoIndex V1
 
-Evidence quality: strong reject.
+Evidence quality: pending retargeted worker.
 
-Good evidence:
+The prior Worker C evidence is now superseded. It tested `cocoindex-code` / `ccc`, which is no longer part of the candidate set. That evidence may explain why the CLI surface was confusing, but it must not drive the CocoIndex V1 decision.
 
-- Installed `cocoindex-code 0.2.31`.
-- `ccc init` completed.
-- `ccc index` timed out at 120s.
-- `ccc search` timed out at 120s.
-- `ccc doctor` timed out while the daemon remained stuck indexing.
-- `ccc status` showed partial progress: 91 of 373 files indexed, project still `indexing`.
-- `.cocoindex_code/` appeared in the worktree as untracked state.
+Current infra preflight shows `cocoindex>=1.0.0` is installable and the V1 app/update path works in a disposable smoke:
 
-Conclusion supported by evidence: reject the tested `cocoindex-code 0.2.31 / ccc` path. Do not generalize that to CocoIndex V1/latest.
+- `uvx --from 'cocoindex>=1.0.0' cocoindex --version` reports `cocoindex version 1.0.2`.
+- A minimal V1 app with `COCOINDEX_DB=./cocoindex.db` ran `cocoindex update main.py --force`.
+- The first update created target output and local state.
+- The second update reported the memoized file-processing step as unchanged.
 
-CocoIndex V1 was announced live on 2026-04-22. Its published design directly targets the failure class we saw: V1 replaces the prior engine-bookkeeping shape with embedded LMDB local state and a state-driven async Python model. The final bakeoff did not exercise that V1 path. A fair final rerun should use the latest documented V1/pre-release invocation or the current `cocoindex-code` path only if it is confirmed to be V1-backed.
+Conclusion supported by evidence: CocoIndex V1 deserves a focused framework-only bakeoff if we want to assess it. It is not a ready-made drop-in tool in this decision memo, and `ccc` is excluded entirely.
 
 ## Lane Decisions
 
@@ -154,8 +151,7 @@ Decision: **neither third-party candidate becomes default semantic replacement.*
 |---|---|---|
 | `llm-tldr semantic` | remove from default | Common failure path adds cognitive load before `rg`. |
 | grepai local Ollama | async/on-demand only | Needs managed Ollama/model/index readiness; zero-exit error payload is unsafe for automation. |
-| CocoIndex 0.2.31 `ccc` path | reject | Index/search/doctor timed out and left daemon/index state behind. |
-| CocoIndex V1/latest | rerun required | V1 is live and claims embedded LMDB local state, which directly addresses the observed daemon/state burden. |
+| CocoIndex V1 framework | rerun required | V1 app/update infra now smokes cleanly, but code-search harness complexity and query behavior are unmeasured. |
 | rg/direct reads | default | Fast, reliable, transparent, no hidden index. |
 
 ### Structural Lane
@@ -179,8 +175,7 @@ Decision: **do not replace structural default with CodeGraphContext yet.**
 | llm-tldr structural | optional bounded | optional | Use only when command shape is known and timeout-wrapped. |
 | grepai | no | possible after managed Ollama/index | Needs readiness wrapper and error-payload checks. |
 | CodeGraphContext | no default | possible advisory structural | Needs state wrapper and machine-readable output before default automation. |
-| CocoIndex 0.2.31 `ccc` path | no | no | Reject tested path. |
-| CocoIndex V1/latest | no default yet | candidate for focused rerun | Must prove bounded index/search and clean state behavior in worktrees. |
+| CocoIndex V1 framework | no default yet | candidate for focused rerun | Must prove low-complexity code-index/search harness, bounded updates, and clean state behavior in worktrees. |
 
 ## Cognitive-Load Comparison
 
@@ -189,8 +184,7 @@ Decision: **do not replace structural default with CodeGraphContext yet.**
 | Current `llm-tldr semantic -> failure -> rg` | high | Agents must remember routing, fallback, index state, timeout semantics, and then still use `rg`. |
 | grepai default | medium-high | Simpler CLI, but host service/model/index readiness must be known first. |
 | CodeGraphContext default | medium | Commands are understandable, but state mode, graph DB, no JSON, and output parsing add burden. |
-| CocoIndex 0.2.31 default | high | Daemon/indexing state and timeout behavior recreate the same problem. |
-| CocoIndex V1/latest default | unknown | Not tested; V1 claims embedded LMDB local state and must be validated separately. |
+| CocoIndex V1 framework default | unknown | App/update path works, but building and owning a code-search harness may add too much agent burden. |
 | `rg`/direct reads default | low | Immediate, inspectable, deterministic. |
 
 ## Founder HITL-Load Comparison
@@ -200,8 +194,7 @@ Decision: **do not replace structural default with CodeGraphContext yet.**
 | Keep current llm-tldr default | high | Founder keeps seeing agents explain the same semantic-index failure. |
 | Adopt grepai default now | medium-high | Requires Ollama install/service/model/index management on every relevant host. |
 | Adopt CodeGraphContext default now | medium | Requires wrapper and agent retraining; automation is weakened by no JSON. |
-| Adopt CocoIndex 0.2.31 `ccc` path | high | Requires monitoring stuck index/daemon state. |
-| Adopt CocoIndex V1/latest | unknown | Potentially lower, but unproven in this bakeoff. |
+| Adopt CocoIndex V1 framework | unknown | Potentially lower long-term, but only if a small owned harness is genuinely simpler than grepai. |
 | Remove llm-tldr from default first-hop | low | No new daemon, no new model, no new cloud path, no hidden readiness state. |
 
 ## Privacy, Cost, and Rate Limits
@@ -209,8 +202,7 @@ Decision: **do not replace structural default with CodeGraphContext yet.**
 - `rg`, direct reads, serena, and CodeGraphContext local structural queries have no code egress or per-query cloud cost.
 - grepai with local Ollama has no code egress at query time after model setup, but it adds host resource and model-management cost.
 - grepai with OpenRouter/qwen remains acceptable only for explicit async/on-demand enrichment because every semantic query needs live cloud embedding.
-- The tested CocoIndex 0.2.31 local mode avoids cloud egress, but its reliability failure dominates.
-- CocoIndex V1/latest may reduce local state/daemon burden through embedded LMDB, but that was not measured in the worker lane.
+- CocoIndex V1 local framework use can avoid cloud egress if paired with local embeddings, but the owned harness and vector target choices are not yet measured.
 - Any OpenRouter/qwen embedding path must avoid the default critical path unless a future managed index/search contract proves query latency, rate-limit behavior, and fallback semantics.
 
 ## Recommended Routing Contract Change
@@ -231,8 +223,7 @@ For structural questions:
 For semantic enrichment:
   1. Use grepai only when explicitly requested or when a managed Ollama/index readiness check passes.
   2. Treat OpenRouter/qwen semantic enrichment as async/on-demand only.
-  3. Reject the tested CocoIndex 0.2.31 `ccc` path.
-  4. Re-run CocoIndex V1/latest before closing the semantic replacement search.
+  3. Evaluate CocoIndex V1 framework only through `cocoindex>=1.0.0`; do not use `cocoindex-code` / `ccc`.
 ```
 
 ## Exact Next Steps
@@ -242,16 +233,16 @@ For semantic enrichment:
 3. Add a short `rg`/direct-read first-hop contract for code discovery.
 4. Keep `llm-tldr` structural commands only as bounded optional fallbacks, not canonical first-hop.
 5. Run one focused grepai repair bakeoff after Ollama is installed and `nomic-embed-text` is pulled on the host.
-6. Run one focused CocoIndex V1/latest bakeoff that confirms whether the CLI/MCP path is actually V1-backed and whether embedded LMDB state fixes the observed daemon/index hang.
+6. Run one focused CocoIndex V1 framework bakeoff using `cocoindex>=1.0.0`, `COCOINDEX_DB=./cocoindex.db`, and a minimal owned local code-index/search harness. Do not use `cocoindex-code` / `ccc`.
 7. Create a P2 follow-up for CodeGraphContext only if a wrapper can provide per-worktree state and machine-readable output.
 
 ## Final Answer
 
 **ALL_IN_NOW:** remove `llm-tldr` from default first-hop routing.
 
-Do not replace it with grepai, CodeGraphContext, or the tested CocoIndex 0.2.31 path today. The replacement for the default path is the simpler existing behavior agents already fall back to: `rg`, direct reads, and `serena` for symbol-aware edits.
+Do not replace it with grepai, CodeGraphContext, or CocoIndex V1 today. The replacement for the default path is the simpler existing behavior agents already fall back to: `rg`, direct reads, and `serena` for symbol-aware edits.
 
 Do not close the replacement search until two short repair reruns complete:
 
 - grepai with Ollama already installed and `nomic-embed-text` available.
-- CocoIndex V1/latest, explicitly verifying the embedded-LMDB state path.
+- CocoIndex V1 framework, explicitly verifying the embedded-LMDB state path and the cost of owning a minimal code-search harness.
