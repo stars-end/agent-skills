@@ -12,10 +12,11 @@
 
 This is not an all-in adoption of a third-party replacement. The final bakeoff did not produce a candidate that can replace the full `llm-tldr` surface today. The all-in action is the routing change: stop making agents try `llm-tldr semantic` before doing the reliable thing they already do after it fails.
 
-Two repair reruns are now complete:
+Three repair/rerun lanes are now complete:
 
 - grepai with local Ollama works when pre-warmed, but remains async/on-demand only because query latency is seconds, readiness is subtle, and empty indexes can produce successful empty JSON results.
 - CocoIndex V1 framework works as an incremental LMDB-backed state engine, but should be deferred to P2+ because we would need to own the code-search harness, vector target, query API, readiness checks, and wrapper semantics.
+- CocoIndex Code / `ccc` product was too aggressively removed from P2 consideration: scoped/warm `affordabot` search was usable, but full `agent-skills` indexing failed the drop-in bar with a 300s daemon-loss failure, a 900s partial-index timeout, and a 120s post-timeout search timeout.
 
 Default lookup should become:
 
@@ -66,10 +67,11 @@ bd-9n1t2
     bd-9n1t2.30.1 grepai local Ollama semantic replacement
     bd-9n1t2.30.2 CodeGraphContext structural replacement
     bd-9n1t2.30.3 CocoIndex V1 framework viability
+    bd-9n1t2.30.5 CocoIndex Code product rerun
     bd-9n1t2.30.4 Synthesis: final llm-tldr replacement bakeoff decision
 ```
 
-`bd-9n1t2.30.4` is blocked by the three worker lanes.
+`bd-9n1t2.30.4` is blocked by the four worker lanes.
 
 ## Worker PRs
 
@@ -78,6 +80,7 @@ bd-9n1t2
 | A | grepai local Ollama | https://github.com/stars-end/agent-skills/pull/600 | 39abc6badb66296a483cc2859429276fee0dd1ec | async/on-demand semantic enrichment only |
 | B | CodeGraphContext | https://github.com/stars-end/agent-skills/pull/601 | 3105ede2de16b5e44ff7695d8b98de398239d2bc | complement llm-tldr structural |
 | C | CocoIndex V1 framework viability | https://github.com/stars-end/agent-skills/pull/604 | ffe855bde0e5f610fb088d10788178e9c2209f8f | defer CocoIndex V1 to P2+ |
+| D | CocoIndex Code / `ccc` product rerun | https://github.com/stars-end/agent-skills/pull/606 | 314bb8c0c88fc2df28aed5cffdee25739983d14c | async/on-demand semantic enrichment only |
 
 ## Evidence-Quality Review
 
@@ -149,6 +152,34 @@ The V1 rerun in PR #604 tested `cocoindex>=1.0.0` only.
 
 Conclusion supported by evidence: CocoIndex V1 is viable as a future first-party incremental index substrate, but not a near-term `llm-tldr` replacement. Defer to P2+ unless the product goal becomes owning a local code-index/search harness.
 
+### CocoIndex Code / `ccc`
+
+Evidence quality: good after valid product rerun and one clerical repair.
+
+This rerun exists because the earlier synthesis over-corrected: it separated CocoIndex V1 framework evidence from `cocoindex-code` product evidence, but then treated `ccc` as out of consideration entirely. PR #606 tested the actual product surface: `ccc init`, `ccc doctor`, `ccc index`, `ccc status`, `ccc search`, daemon behavior, MCP entrypoint shape, and per-repo state.
+
+Good evidence:
+
+- Upstream source was checked against `cocoindex-io/cocoindex-code` commit `51ea6efea1878ca1b412b155adedbadc1dd611ad`.
+- Runtime was current product packaging: `cocoindex-code 0.2.31` with `cocoindex 1.0.2`.
+- `ccc doctor` passed model checks with local `sentence-transformers` embeddings and file walks on both required repos.
+- Full `agent-skills` evidence was real and bounded: 856 matched files, 300s first index ending with daemon-loss signal, then one fresh 900s retry that still timed out with only partial state (`356/856` files, 3,633 chunks).
+- Post-timeout `agent-skills` search also timed out at 120s, so the partial index was not a reliable fallback search surface.
+- Scoped clean `affordabot` evidence showed the upside: after excluding generated/artifact-heavy paths, first index still timed out at 600s, but the second no-change index completed in about 18.3s, incremental update in about 2.2s, and 10 warm searches had about 1.1s p50 and 1.87s p95 latency.
+- State behavior was observed: per-repo `.cocoindex_code/` plus global daemon/model settings/logs under `~/.cocoindex_code`.
+- Cold local mode still emitted HuggingFace `HEAD`/`GET` traffic for the default model path, so "local embeddings" is not the same as "offline/no egress unless pre-cached."
+
+Limitations:
+
+- The product did not complete first indexing on either required real repo within bounded windows: 900s partial timeout for `agent-skills`, 600s timeout for scoped `affordabot`.
+- `ccc` can leave long-lived daemon/indexing state that requires `ccc daemon status` and `ccc daemon stop` interpretation.
+- Full-repo readiness is not a simple yes/no: partial indexed state exists, but search can block or time out.
+- Useful results depend on warm/indexed state and careful excludes; this is not drop-in default behavior for arbitrary agent worktrees.
+
+Coordinator action: accepted the evidence and stopped the leftover `ccc` daemon after review. The PR head used in this synthesis is GitHub's current PR #606 head, `314bb8c0c88fc2df28aed5cffdee25739983d14c`; the worker memo's footer has the usual self-referential SHA limitation and should not be treated as the source of truth for the final PR head.
+
+Conclusion supported by evidence: removing `ccc` from all future consideration was too aggressive. It may be useful as explicit async/on-demand semantic enrichment after managed indexing. It should not replace `llm-tldr semantic` as the default first-hop.
+
 ## Lane Decisions
 
 ### Semantic Lane
@@ -160,6 +191,7 @@ Decision: **neither third-party candidate becomes default semantic replacement.*
 | `llm-tldr semantic` | remove from default | Common failure path adds cognitive load before `rg`. |
 | grepai local Ollama | async/on-demand only | Works when warm, but seconds-level query latency and readiness semantics are unsafe for mandatory first-hop. |
 | CocoIndex V1 framework | defer to P2+ | Framework works, but near-term usefulness requires owning a code-search/vector/query harness. |
+| CocoIndex Code / `ccc` | async/on-demand only | Warm/scoped search can be useful, but first-index timeouts, partial state, and daemon lifecycle make it unsafe as a drop-in default. |
 | rg/direct reads | default | Fast, reliable, transparent, no hidden index. |
 
 ### Structural Lane
@@ -184,6 +216,7 @@ Decision: **do not replace structural default with CodeGraphContext yet.**
 | grepai | no | yes, explicit only | Works for warm local semantic enrichment, but agents should not wait on it by default. |
 | CodeGraphContext | no default | possible advisory structural | Needs state wrapper and machine-readable output before default automation. |
 | CocoIndex V1 framework | no | P2+ substrate | Framework state works, but no ready semantic product surface. |
+| CocoIndex Code / `ccc` | no | yes, explicit only | Product search can be useful after indexing, but full-repo first-index readiness failed bounded drop-in tests. |
 
 ## Cognitive-Load Comparison
 
@@ -193,6 +226,7 @@ Decision: **do not replace structural default with CodeGraphContext yet.**
 | grepai default | medium-high | Simpler CLI, but host service/model/index readiness and empty-success handling must be known first. |
 | CodeGraphContext default | medium | Commands are understandable, but state mode, graph DB, no JSON, and output parsing add burden. |
 | CocoIndex V1 framework default | high | App/update path works, but agents would need a first-party harness and wrapper before it helps discovery. |
+| CocoIndex Code / `ccc` default | high | Agents must reason about daemon state, partial indexes, first-index timeouts, and excludes before trusting search. |
 | `rg`/direct reads default | low | Immediate, inspectable, deterministic. |
 
 ## Founder HITL-Load Comparison
@@ -203,6 +237,7 @@ Decision: **do not replace structural default with CodeGraphContext yet.**
 | Adopt grepai default now | medium-high | Requires Ollama install/service/model/index management plus readiness wrapper review. |
 | Adopt CodeGraphContext default now | medium | Requires wrapper and agent retraining; automation is weakened by no JSON. |
 | Adopt CocoIndex V1 framework | high now | Requires architecture and maintenance of a first-party code-search/vector/query harness. |
+| Adopt CocoIndex Code / `ccc` default now | medium-high | Requires managed indexing, daemon cleanup, egress/pre-cache policy, and wrapper logic around partial state. |
 | Remove llm-tldr from default first-hop | low | No new daemon, no new model, no new cloud path, no hidden readiness state. |
 
 ## Privacy, Cost, and Rate Limits
@@ -211,6 +246,7 @@ Decision: **do not replace structural default with CodeGraphContext yet.**
 - grepai with local Ollama has no code egress at query time after model setup, but it adds host resource and model-management cost; observed local query latency was seconds, not subsecond.
 - grepai with OpenRouter/qwen remains acceptable only for explicit async/on-demand enrichment because every semantic query needs live cloud embedding.
 - CocoIndex V1 local framework use can avoid cloud egress if paired with local embeddings, but we would own the semantic harness, vector target choice, and query surface.
+- CocoIndex Code / `ccc` with local embeddings avoids per-query embedding API spend, but cold model validation/download can still reach HuggingFace unless the model is pre-cached; first-index CPU time is the dominant cost.
 - Any OpenRouter/qwen embedding path must avoid the default critical path unless a future managed index/search contract proves query latency, rate-limit behavior, and fallback semantics.
 
 ## Recommended Routing Contract Change
@@ -231,7 +267,8 @@ For structural questions:
 For semantic enrichment:
   1. Use grepai only when explicitly requested or when a managed Ollama/index readiness check passes.
   2. Treat OpenRouter/qwen semantic enrichment as async/on-demand only.
-  3. Treat CocoIndex V1 as a P2+ substrate candidate only; do not use `cocoindex-code` / `ccc`.
+  3. Treat CocoIndex Code / ccc as explicit async/on-demand only, never default first-hop.
+  4. Treat CocoIndex V1 as a P2+ substrate candidate only.
 ```
 
 ## Exact Next Steps
@@ -241,13 +278,14 @@ For semantic enrichment:
 3. Add a short `rg`/direct-read first-hop contract for code discovery.
 4. Keep `llm-tldr` structural commands only as bounded optional fallbacks, not canonical first-hop.
 5. Create a P2 follow-up for a grepai readiness wrapper only if semantic enrichment remains valuable after routing cleanup.
-6. Create a P2+ follow-up for CocoIndex V1 only if we explicitly want to own a first-party local code-index/search harness.
-7. Create a P2 follow-up for CodeGraphContext only if a wrapper can provide per-worktree state and machine-readable output.
+6. Create a P2 follow-up for CocoIndex Code only if we want managed async semantic indexing with explicit excludes, pre-cached model policy, daemon cleanup, and readiness checks.
+7. Create a P2+ follow-up for CocoIndex V1 only if we explicitly want to own a first-party local code-index/search harness.
+8. Create a P2 follow-up for CodeGraphContext only if a wrapper can provide per-worktree state and machine-readable output.
 
 ## Final Answer
 
 **ALL_IN_NOW:** remove `llm-tldr` from default first-hop routing.
 
-Do not replace it with grepai, CodeGraphContext, or CocoIndex V1 today. The replacement for the default path is the simpler existing behavior agents already fall back to: `rg`, direct reads, and `serena` for symbol-aware edits.
+Do not replace it with grepai, CodeGraphContext, CocoIndex V1, or CocoIndex Code / `ccc` today. The replacement for the default path is the simpler existing behavior agents already fall back to: `rg`, direct reads, and `serena` for symbol-aware edits.
 
-The two repair reruns are complete. For P0/P1 purposes, close the replacement search: no evaluated tool should replace `llm-tldr semantic` as default first-hop. Keep grepai, CocoIndex V1, and CodeGraphContext as P2+ optional lanes only if a later implementation plan shows they reduce, rather than increase, operational burden.
+The repair reruns are complete. For P0/P1 purposes, close the replacement search: no evaluated tool should replace `llm-tldr semantic` as default first-hop. Keep grepai, CocoIndex Code, CocoIndex V1, and CodeGraphContext as P2+ optional lanes only if a later implementation plan shows they reduce, rather than increase, operational burden.
