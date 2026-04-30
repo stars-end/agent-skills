@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 7dd26996c0336790a68338bddddf73d090437341
-last_verified_at: 2026-04-17T05:48:13Z
+last_verified_commit: cdaeafce148579d43c4c5ffb79bb36b2fbf56e3e
+last_verified_at: 2026-04-30T16:53:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -65,6 +65,14 @@ For changes that touch architecture or workflow behavior, read in this order:
 3. `docs/architecture/WORKFLOWS_AND_PATTERNS.md`
 4. relevant `SKILL.md` files in the affected namespace
 5. source verification using `llm-tldr`
+
+## Railway Skill Notes
+
+- `railway/affordabot-topology/SKILL.md` is the canonical non-secret topology
+  reference for Affordabot dev Railway context. It captures project,
+  environment, service ids, public dev domains, `searxng-private`, and safe
+  cache-backed auth/link commands so agents do not block on Rediscovery or use
+  raw 1Password commands.
 
 ## Current High-Risk Zones
 
