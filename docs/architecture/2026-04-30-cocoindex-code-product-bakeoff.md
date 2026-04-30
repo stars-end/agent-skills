@@ -247,6 +247,5 @@ Was ripping out `cocoindex-code` / `ccc` from consideration too aggressive?
 
 ## Draft PR metadata
 
-- PR_URL: PENDING
-- PR_HEAD_SHA: PENDING
-
+- PR_URL: https://github.com/stars-end/agent-skills/pull/606
+- PR_HEAD_SHA: 22087d96d6cb4903955dedb7e92fe10e6d73796b
