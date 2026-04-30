@@ -5,101 +5,78 @@
 **BEADS_SUBTASK**: bd-9n1t2.30.1
 **Feature-Key**: bd-9n1t2.30.1
 **Mode**: qa_pass
-**Candidate**: grepai 0.35.0 with local Ollama embeddings
+**Candidate**: grepai 0.35.0 with local Ollama `nomic-embed-text`
+**Existing PR**: https://github.com/stars-end/agent-skills/pull/600
 
 ## Verdict
 
 **Verdict: async/on-demand semantic enrichment only**
 
-grepai should not replace `llm-tldr semantic` as the default critical-path semantic lane yet. The CLI is simple, project-local, and fails fast when Ollama is absent, but the local-Ollama dependency adds a host-level service and model-management requirement that is not currently boring enough for mandatory first-hop agent routing.
+grepai should not replace or become the mandatory first-hop successor to
+`llm-tldr semantic`. With a warm local index, it can return relevant semantic
+results, but local query embedding costs seconds per query and the readiness
+surface is not machine-safe enough for default agent routing.
 
-The right use is optional/on-demand enrichment after a repo or host has a known-good Ollama service and prebuilt grepai index. It is not safe as the default critical path because a missing Ollama daemon produces query failure even though `grepai status --no-ui` exits successfully with `Files indexed: 0`.
+The useful product shape is explicit enrichment: run grepai only when a managed
+Ollama service, model, and completed per-worktree index are already known-good.
+The default critical path should stay `rg` / direct reads, with `serena` for
+known-symbol edits.
 
-## Prior Evidence Read
+## Source Of Truth Read First
 
-- PR #593 memo: `docs/architecture/2026-04-25-llm-tldr-competitor-bakeoff.md`
-- PR #594 analysis: `docs/investigations/2026-04-27-llm-tldr-competitor-bakeoff-analysis.md`
-- PR #594 tech-lead review: `docs/investigations/TECHLEAD-REVIEW-llm-tldr-competitor-bakeoff.md`
+Read coordinator synthesis PR #603 head
+`260210c62f54a22fa8fedaccde60ac285f049d0e`:
 
-Prior bakeoff framed grepai as the strongest replacement candidate because it is a single Go binary with semantic search, MCP, call graph tracing, and local Ollama support. It also identified the key unresolved risk: grepai requires Ollama/model management and does not cover the full `llm-tldr` structural surface.
-
-## Official Source Notes
-
-- grepai docs describe it as local/private when configured with Ollama, with `grepai init`, `grepai watch`, and `grepai search` as the basic workflow.
-- grepai installation docs list Ollama or a cloud API key as prerequisites and recommend `ollama pull nomic-embed-text`.
-- grepai embedder docs configure Ollama as:
-
-```yaml
-embedder:
-  provider: ollama
-  model: nomic-embed-text
-  endpoint: http://localhost:11434
-  dimensions: 768
+```bash
+git fetch origin pull/603/head:refs/remotes/origin/pr-603
+git show 260210c62f54a22fa8fedaccde60ac285f049d0e:docs/architecture/2026-04-30-final-llm-tldr-replacement-bakeoff-synthesis.md
 ```
 
-- Ollama embedding docs describe embeddings as numeric vectors whose length depends on the model, and state that the same model should be used for indexing and querying.
+Relevant coordinator finding: the prior grepai worker evidence was incomplete
+because Ollama was absent. This rerun verifies the repaired local-Ollama lane.
 
-Sources:
-- https://yoanbernabeu.github.io/grepai/
-- https://yoanbernabeu.github.io/grepai/installation/
-- https://yoanbernabeu.github.io/grepai/backends/embedders/
-- https://github.com/yoanbernabeu/grepai
-- https://docs.ollama.com/capabilities/embeddings
-
-## Environment
-
-| Item | Result |
-|---|---|
-| Worktree | `/tmp/agents/bd-9n1t2.30.1/agent-skills` |
-| Required comparison repo | `/tmp/agents/bd-9n1t2.30.1/affordabot` |
-| grepai | `/home/fengning/.local/bin/grepai`, version `0.35.0` |
-| Ollama CLI | Not found on PATH |
-| Ollama service | `systemctl --user is-active ollama`: inactive; `systemctl is-active ollama`: inactive |
-| Ollama API | `curl http://localhost:11434/api/tags`: connection refused |
-| Model | Intended: `nomic-embed-text`, 768 dimensions; not pulled because Ollama install was blocked |
-
-## Setup Commands
+Beads preflight comments were read:
 
 ```bash
 bdx show bd-9n1t2.30.1 --json
-dx-worktree create bd-9n1t2.30.1 agent-skills
-git fetch origin pull/593/head:pr-593 pull/594/head:pr-594 --prune
-git show pr-593:docs/architecture/2026-04-25-llm-tldr-competitor-bakeoff.md
-git show pr-594:docs/investigations/2026-04-27-llm-tldr-competitor-bakeoff-analysis.md
-git show pr-594:docs/investigations/TECHLEAD-REVIEW-llm-tldr-competitor-bakeoff.md
-dx-worktree create bd-9n1t2.30.1 affordabot
-timeout 120 grepai version
-timeout 120 grepai init --provider ollama --model nomic-embed-text --backend gob --yes
-timeout 10 curl -sS http://localhost:11434/api/tags
-timeout 120 grepai watch --no-ui
-timeout 120 grepai search --json --limit 5 "<query>"
-timeout 120 grepai status --no-ui
+bdx comments bd-9n1t2.30.1 --json
 ```
 
-Official Ollama install attempt:
+The Beads comment said the host should have grepai 0.35.0, Ollama 0.22.0, an
+active `ollama-user.service`, and `nomic-embed-text:latest`.
+
+## Infra Preflight
+
+Ran in `/tmp/agents/bd-9n1t2.30.1/agent-skills`:
 
 ```bash
-timeout 300 sh -c 'curl -fsSL https://ollama.com/install.sh | sh'
+grepai version
+ollama --version
+systemctl --user is-active ollama-user.service
+ollama list
 ```
 
-Result:
+Observed:
 
 ```text
->>> Installing ollama to /usr/local
-sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper
-sudo: a password is required
-elapsed=1.27s user=0.09s sys=0.03s
+grepai version 0.35.0
+ollama version is 0.22.0
+active
+nomic-embed-text:latest    0a109f422b47    274 MB
 ```
 
-## Exact Config
+Setup was already installed. No secrets were needed. No OpenRouter or cloud
+embedding path was used.
 
-Generated by:
+## Exact Local Config
+
+Command:
 
 ```bash
-grepai init --provider ollama --model nomic-embed-text --backend gob --yes
+timeout 60 grepai init --provider ollama --model nomic-embed-text --backend gob --yes
 ```
 
-Relevant non-secret config:
+Non-secret generated config:
 
 ```yaml
 version: 1
@@ -137,62 +114,106 @@ ignore:
   - venv
 ```
 
-Full generated config was identical in `agent-skills` and `affordabot`, excluding paths.
+`grepai init` created `.grepai/config.yaml` and appended `.grepai/` to the repo
+`.gitignore`. That `.gitignore` change is intentional for worktree containment.
 
-## Timing Table
+## Commands Used
+
+All benchmark commands were bounded:
+
+```bash
+dx-worktree create bd-9n1t2.30.1 agent-skills
+dx-worktree create bd-9n1t2.30.1 affordabot
+timeout 30 grepai watch --stop
+rm -rf .grepai
+timeout 60 grepai init --provider ollama --model nomic-embed-text --backend gob --yes
+timeout 60 grepai watch --background
+timeout 20 grepai status --no-ui
+timeout 30 grepai search --json --limit 3 "<query>"
+timeout 30 grepai watch --stop
+```
+
+A foreground smoke attempt was also bounded. `/usr/bin/time` is not installed on
+this host, so timing used Python `time.perf_counter()` wrappers.
+
+## Results Summary
 
 | Measurement | agent-skills | affordabot | Notes |
 |---|---:|---:|---|
-| `grepai init --provider ollama --model nomic-embed-text --backend gob --yes` | <1s | <1s | Created `.grepai/config.yaml`; appended `.grepai/` to `.gitignore` |
-| Ollama API probe | immediate fail | same host | `curl: (7) Failed to connect to localhost port 11434` |
-| Official Ollama installer | 1.27s fail | same host | Blocked by non-interactive sudo |
-| `grepai watch --no-ui` | 0.04s fail | 0.05s fail | Clear Ollama connection-refused error |
-| `grepai status --no-ui` | 0.03s | 0.02s | Exits OK with 0 files / 0 chunks |
-| State size after init/status | 12K | 12K | `.grepai/config.yaml`, `index.gob`, `index.gob.lock` |
-| Index/build time | not measured | not measured | Blocked by absent Ollama service/model |
-| Incremental update | not measured | not measured | Watcher cannot start without Ollama |
+| install/preflight | already installed | already installed | grepai 0.35.0, Ollama 0.22.0 |
+| init | 0.03s when already initialized; subsecond from clean | not completed in final pass | creates `.grepai/config.yaml` |
+| warm indexed state observed | 140 files, 798 chunks, 4.8 MB | not reached | from existing worktree index before clean rerun |
+| warm-index status latency | about 0.52s | n/a | `grepai status --no-ui` |
+| warm first semantic query | 5.79s | n/a | Beads memory query |
+| warm 10-query p50 / p95 | about 5.15s / about 6.78s | n/a | successful semantic calls |
+| interrupted clean rerun state | 0 files, 0 chunks | no project initialized | after coordinator stop request |
+| empty-index 10-query p50 / p95 | 2.18s / 5.13s | n/a | exits 0 with `[]` |
+| foreground/background watch behavior | operationally confusing | n/a | background start can wait 30s and report readiness timeout while watcher exists |
+| incremental update | not proven | not proven | stopped before allowing more watch time |
 
-## Critical-Path Latency Table
+The successful warm-index result is enough to show grepai can work. The stopped
+clean rerun is also material: the operational surface makes it easy for an
+agent/coordinator to see a long-lived watcher, only `.gitignore` changed, and no
+memo progress. That is not acceptable as mandatory first-hop behavior.
 
-Ten representative `grepai search --json --limit 5` calls were run in `agent-skills` with Ollama unavailable. All returned JSON error payloads and process exit code `0`.
+## Representative Query Results
 
-| Query | Latency | Result |
+Warm-index successful agent-skills run returned relevant results for some
+queries:
+
+| Query | Latency | Top result |
 |---|---:|---|
-| where is semantic mixed-health handled? | 0.02s | Ollama connection refused |
-| where are MCP hydration rules documented? | 0.02s | Ollama connection refused |
-| where is OpenRouter or embedding provider configured? | 0.02s | Ollama connection refused |
-| local government corpus structured source proof cataloged_intent live_proven | 0.02s | Ollama connection refused |
-| where are Beads memory conventions defined? | 0.01s | Ollama connection refused |
-| where is Railway auth loaded for agents? | 0.01s | Ollama connection refused |
-| where is dx-worktree policy documented? | 0.03s | Ollama connection refused |
-| where are llm-tldr fallback scripts defined? | 0.03s | Ollama connection refused |
-| where is AGENTS baseline generated? | not separately emitted by shell timing | Ollama connection refused |
-| where are PR metadata rules enforced? | 0.01-0.03s | Ollama connection refused |
+| where are Beads memory conventions defined? | 5.79s | `core/beads-memory/SKILL.md` and `docs/BEADS_MEMORY_CONVENTION.md` reference |
+| where is semantic mixed-health handled? | 6.42s | weak/noisy Beads health docs |
+| where are MCP hydration rules documented? | 5.21s | weak/noisy hydration-related docs |
+| where is OpenRouter or embedding provider configured? | 4.93s | weak/noisy `.claude/settings.local.json`, `configs/fleet_hosts.yaml` |
+| local government corpus structured source proof cataloged_intent live_proven | 5.09s | unrelated fleet/spec docs |
 
-Observed failure-latency summary: p50 approximately 0.02s, p95 approximately 0.03s. This measures failure speed, not useful semantic retrieval.
+After the clean rerun was stopped, `grepai status --no-ui` showed:
 
-Representative error:
-
-```json
-{
-  "error": "failed to send request to Ollama: Post \"http://localhost:11434/api/embeddings\": dial tcp [::1]:11434: connect: connection refused"
-}
+```text
+Files indexed: 0
+Total chunks: 0
+Index size: 384 B
+Last updated: Never
+Provider: ollama (nomic-embed-text)
+Watcher: not running
 ```
+
+Ten bounded searches against that empty index still exited `0` and returned
+empty JSON arrays. Latencies were:
+
+```text
+min 1.136s, p50 2.1785s, p95 5.1284s, max 5.015s
+```
+
+This is worse than a hard failure for automation because callers must inspect
+both exit status and payload semantics.
 
 ## Baseline Comparison
 
-| Tool | Command | Result | Latency |
-|---|---|---|---:|
-| Targeted `rg` / direct reads | `rg -n "semantic.*mixed|mixed.*health|MCP hydration|Codex desktop hydration|OpenRouter|embedding provider|Beads memory conventions|Railway auth|dx-worktree|tldr-daemon-fallback|publish-baseline|PR title must include|Agent:" ...` | Found relevant docs/scripts, but also noisy matches in large reference corpora | 0.09s |
-| llm-tldr daemon fallback exact search | `timeout 120 bash ~/agent-skills/scripts/tldr-daemon-fallback.sh search --repo ... --pattern 'MCP hydration'` | Found `scripts/tldr-daemon-fallback.py` and `extended/llm-tldr/SKILL.md` | 8.10s |
-| llm-tldr semantic fallback | `timeout 120 bash ~/agent-skills/scripts/tldr-daemon-fallback.sh semantic --repo ... --query 'where are MCP hydration rules documented?'` | `semantic_index_missing`; points to prewarm command and `rg` fallback | 0.75s |
-| grepai local Ollama search | `timeout 120 grepai search --json --limit 5 ...` | JSON error because Ollama unavailable | 0.01-0.03s |
+Targeted `rg` / direct reads for the same concepts was immediate and
+transparent:
 
-Takeaway: targeted `rg` remains the fastest reliable baseline on this host. Current llm-tldr semantic is not ready either, but it fails with actionable prewarm guidance. grepai fails faster but exits `0` with an error JSON payload, which is dangerous for unattended agent scripts unless callers parse the payload.
+```bash
+timeout 10 rg -n "Beads memory conventions|semantic mixed-health|MCP hydration rules|OpenRouter|embedding provider|cataloged_intent|live_proven" docs core extended scripts configs AGENTS.md
+```
 
-## State Location and Containment
+Representative hits included:
 
-grepai creates project-local state:
+```text
+scripts/install-contextplus-patched.sh: OpenRouter embeddings patch
+docs/specs/contextplus-openrouter-split-implementation.md: OpenRouter embedding provider config
+docs/architecture/2026-04-30-grepai-local-ollama-semantic-bakeoff.md: prior recorded query/failure evidence
+```
+
+`rg` is noisy for broad natural-language phrasing, but the user-wait and failure
+mode are much better: no daemon, no model, no hidden index, no empty-success
+semantic result.
+
+## State, Cache, And Git Behavior
+
+grepai state is project-local:
 
 ```text
 .grepai/config.yaml
@@ -200,114 +221,85 @@ grepai creates project-local state:
 .grepai/index.gob.lock
 ```
 
-`grepai init` appends `.grepai/` to `.gitignore` when a `.gitignore` exists. This is good worktree containment, but it is still a write to the repository. For canonical use, agents must run init only inside `/tmp/agents/<beads-id>/<repo>` worktrees or pre-provision `.grepai/` ignore rules through an approved repo change.
-
 Watcher logs are outside the worktree:
 
 ```text
 /home/fengning/.local/state/grepai/logs/grepai-worktree-<hash>.log
 ```
 
-## Watcher / Incremental Behavior
+`.grepai/` must be ignored. `grepai init` appended it to `.gitignore`, which is
+the only intentional codebase change besides this memo.
 
-The watcher contract is promising: docs/help say it performs initial scan, compares modification times, indexes modified/new files, watches create/modify/delete/rename events, debounces changes at 500ms, and supports background mode.
+Worktree behavior is acceptable if and only if agents never initialize grepai in
+canonical clones. The tool writes local config and index files by design.
 
-Runtime result on this host:
-
-```text
-Starting grepai watch in /tmp/agents/bd-9n1t2.30.1/agent-skills
-Provider: ollama (nomic-embed-text)
-Backend: gob
-RPG: disabled
-Error: cannot connect to Ollama: failed to reach Ollama at http://localhost:11434: Get "http://localhost:11434/api/tags": dial tcp [::1]:11434: connect: connection refused
-Make sure Ollama is running and has the nomic-embed-text model
-```
-
-Incremental behavior could not be measured because local embedding setup was unavailable. The failure is clear and fast, but it means grepai cannot be the default unless Ollama is a managed host invariant.
-
-## Timeout / Failure Behavior
+## Timeout And Failure Behavior
 
 Good:
-- `grepai watch --no-ui` fails fast with a clear Ollama diagnostic.
-- `grepai status --no-ui` is fast and shows provider, watcher state, file count, chunk count, and log path.
-- State is transparent and easy to delete.
+
+- Local Ollama mode avoids code egress.
+- Successful warm search returns JSON and relevant semantic hits for some
+  documentation questions.
+- `grepai watch --stop` stopped the observed background watcher cleanly.
 
 Bad:
-- `grepai search --json` exits `0` even when the JSON body contains an `"error"` field.
-- `grepai status --no-ui` exits OK with `Files indexed: 0`, `Total chunks: 0`, and `Watcher: not running`; agents must know that status OK is not readiness.
-- Local setup requires host-level Ollama install/start/model pull. The official installer required sudo in this environment.
 
-## Async-Indexing Suitability
+- `grepai watch --background` can spend 30s waiting for readiness and return a
+  readiness-timeout error while a watcher process continues doing work.
+- Foreground `grepai watch --no-ui` is expected to keep running until timeout,
+  which is easy for a coordinator to interpret as a stall.
+- `grepai status --no-ui` exits successfully with zero indexed files.
+- `grepai search --json` exits successfully with `[]` against an empty index
+  after spending seconds on query embedding.
+- Incremental update behavior was not proven in the final bounded pass.
 
-grepai looks suitable for async/on-demand enrichment if a host-level setup job guarantees:
+## Privacy, Cost, And Resource Notes
 
-1. `ollama` installed.
-2. Ollama service running.
-3. `nomic-embed-text` pulled.
-4. `grepai init` run in the worktree.
-5. `grepai watch --background` or equivalent pre-index job completed.
-6. Caller parses JSON for `"error"` and treats zero indexed files as not ready.
+Local Ollama mode has the right privacy shape: embeddings are sent to
+`http://localhost:11434`, not a cloud provider. There is no per-query API cost
+after install.
 
-Without those guardrails, query-time local embedding is not acceptable for default critical-path use. The failure is short, but it still consumes an agent decision turn and can be silently misclassified as success because of exit code `0`.
+The cost is operational instead:
 
-## Privacy / IP Egress Risk
+- every host needs Ollama installed and running;
+- every host needs `nomic-embed-text:latest` pulled;
+- every worktree needs `.grepai` initialization and a completed index;
+- local query embedding still costs roughly 2-6s per query on this host;
+- status/readiness needs a wrapper that treats zero files/chunks as not ready.
 
-Local Ollama mode has good privacy properties once installed and running: embeddings are sent only to `http://localhost:11434`, so code/IP should not leave the host during indexing or search.
+## Agent Cognitive-Load Assessment
 
-Egress risks:
-- Initial grepai install/update pulls binaries from GitHub or Homebrew.
-- Ollama install pulls from `ollama.com`.
-- `ollama pull nomic-embed-text` downloads model artifacts.
-- Cloud providers (`openai`, `openrouter`) are supported by grepai but were not used in this lane; they would send code chunks/queries to a provider and are unsuitable as default.
+Default critical-path use would increase agent load. The agent has to remember
+Ollama readiness, model availability, `.grepai` state, watcher lifecycle,
+foreground-vs-background behavior, exit-code-vs-payload checks, and whether the
+index is current. That is too much ceremony for "where does X live?" queries
+that usually resolve with `rg` and direct reads.
 
-## Cost Estimate
+Async/on-demand use is reasonable because the agent can opt into that ceremony
+when semantic enrichment is worth the delay.
 
-Local Ollama mode:
-- Direct API cost: $0.
-- Operational cost: host storage for model + `.grepai` indexes, CPU/GPU time during indexing/query embedding, and ongoing service management.
+## Founder HITL-Load Assessment
 
-Cloud mode:
-- Not tested per assignment. grepai docs cite OpenAI `text-embedding-3-small` at about $0.02 per 1M tokens and estimate a 10k-line codebase initial index around $0.001, but this has privacy/IP egress risk and is not acceptable as the default critical path.
+Founder HITL load would rise if grepai became default now. The coordinator
+already had to intervene because the worker appeared stuck on a watcher with
+only `.gitignore` changed. That is exactly the type of recurring manual
+oversight the routing change is supposed to remove.
 
-## Agent Cognitive Load
-
-Lower than llm-tldr in command count and concept count:
-
-- `grepai init`
-- `grepai watch`
-- `grepai status`
-- `grepai search`
-
-But the Ollama dependency adds an external readiness ladder:
-
-- Is `ollama` installed?
-- Is the service running?
-- Is `nomic-embed-text` pulled?
-- Does grepai status show nonzero indexed files?
-- Did `search --json` return results or an `"error"` payload with exit code `0`?
-
-That is too much for mandatory first-hop analysis unless wrapped by a readiness helper.
-
-## Founder HITL Load
-
-Current founder load would be medium:
-
-- Approve or provision Ollama installation on every canonical host.
-- Ensure model pull succeeds on every host.
-- Decide how watcher/background jobs are managed.
-- Ensure `.grepai/` containment policy is installed where needed.
-- Teach agents that grepai status OK is not enough.
-
-This is acceptable for a P2 async enrichment lane. It is not P0/P1 default-routing material without a managed bootstrap/check wrapper.
+Founder load stays low if grepai is documented as optional enrichment behind a
+readiness wrapper, not default first-hop routing.
 
 ## Decision
 
-`async/on-demand semantic enrichment only`
+**async/on-demand semantic enrichment only**
 
-Do not replace `llm-tldr semantic` with grepai by default. A decisive replacement would remove one unreliable critical-path dependency but add another unmanaged one: Ollama availability. The better product decision is to keep grepai as an opt-in enrichment candidate and only revisit default routing after an Ollama+grepai readiness wrapper proves boring across required repos and hosts.
+Do not replace `llm-tldr semantic` with grepai in the canonical default route.
+Remove failed semantic first-hop rituals from the default path and use
+`rg`/direct reads first. Keep grepai as a possible local enrichment tool after a
+future wrapper proves:
 
-## PR Artifacts
-
-- PR_URL: https://github.com/stars-end/agent-skills/pull/600
-- PR_HEAD_SHA: see final handoff and PR head; a committed memo cannot self-reference the commit SHA produced by editing this section
-- BEADS_SUBTASK: bd-9n1t2.30.1
+- Ollama service active;
+- model present;
+- `.grepai` initialized in a worktree;
+- index has nonzero files/chunks;
+- watcher is stopped or known healthy;
+- search payload is non-error and non-empty when the task requires a hit.
