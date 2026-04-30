@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 83a21ee990047019c7ce7acd0aa0282701ed834b -->
-<!-- Last updated: 2026-04-16 19:36:32 UTC -->
+<!-- Source SHA: f8b816704442e447babb9b93049b41324822b6c1 -->
+<!-- Last updated: 2026-04-30 18:46:35 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -684,6 +684,7 @@ Use `dx-repo-memory-check --repo .` to validate map freshness.
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
+| **affordabot-topology** | Affordabot Railway dev topology and safe runtime context. MUST BE USED when working in affordabot and the task needs Railway project/environment/service IDs, dev service endpoints, pgvector, MinIO, SearXNG, backend/frontend domains, or non-interactive Railway linking. Use for: "Affordabot Railway", "affordabot endpoints", "railway/dev", "dev topology", "pgvector-dev", "backend-dev", "bucket-dev", "searxng-private", "runtime readiness". | — | railway, affordabot, topology, endpoints, runtime, dx |
 | **database** | This skill should be used when the user wants to add a database (Postgres, Redis, MySQL, MongoDB), says "add postgres", "add redis", "add database", "connect to database", or "wire up the database". For other templates (Ghost, Strapi, n8n, etc.), use the templates skill. | — |  |
 | **deploy** | This skill should be used when the user wants to push code to Railway, says "railway up", "deploy", "deploy to railway", "ship", or "push". For initial setup or creating services, use new skill. For Docker images, use environment skill. | — |  |
 | **deployment** | This skill should be used when the user wants to manage Railway deployments, view logs, or debug issues. Covers deployment lifecycle (remove, stop, redeploy, restart), deployment visibility (list, status, history), and troubleshooting (logs, errors, failures, crashes, why deploy failed). NOT for deleting services - use environment skill with isDeleted for that. | — |  |
