@@ -13,8 +13,11 @@ scripts/semantic-search query --repo /path/to/repo "natural language query" --li
 Status returns exactly one value:
 
 - `missing`: `.cocoindex_code/settings.yml` or `.cocoindex_code/target_sqlite.db` absent
+- `missing`: `.cocoindex_code/settings.yml` or `.cocoindex_code/target_sqlite.db` absent,
+  or `ccc` is unavailable/unexecutable on this host/path
 - `indexing`: bounded `ccc status` indicates indexing in progress (or times out)
-- `stale`: index exists but repo appears ahead (dirty tree or newer git ref/index mtime)
+- `stale`: index exists but repo appears ahead (dirty tree or newer git ref/index mtime),
+  or `ccc status` returns a nonzero exit without an explicit indexing signal
 - `ready`: index exists, not indexing, and not stale
 
 ## Query behavior

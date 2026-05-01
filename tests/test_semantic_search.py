@@ -112,6 +112,21 @@ def test_status_stale_when_repo_dirty(tmp_path, monkeypatch, capsys):
     assert out == "stale"
 
 
+def test_status_missing_when_ccc_unavailable(tmp_path, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    _prepare_index(repo)
+
+    rc = semantic_search.main(
+        ["--ccc-bin", str(tmp_path / "no-such-ccc"), "status", "--repo", str(repo)]
+    )
+    out = capsys.readouterr().out.strip()
+
+    assert rc == 0
+    assert out == "missing"
+
+
 def test_query_non_ready_does_not_call_search(tmp_path, monkeypatch, capsys):
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -133,6 +148,28 @@ def test_query_non_ready_does_not_call_search(tmp_path, monkeypatch, capsys):
     assert semantic_search.UNAVAILABLE_MESSAGE in captured.err
     assert "status" in logged
     assert "search" not in logged
+
+
+def test_query_ccc_unavailable_falls_back_cleanly(tmp_path, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    _prepare_index(repo)
+
+    rc = semantic_search.main(
+        [
+            "--ccc-bin",
+            str(tmp_path / "no-such-ccc"),
+            "query",
+            "--repo",
+            str(repo),
+            "any query",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 2
+    assert semantic_search.UNAVAILABLE_MESSAGE in captured.err
 
 
 def test_query_ready_runs_bounded_search_with_limit(tmp_path, monkeypatch, capsys):

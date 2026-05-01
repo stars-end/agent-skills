@@ -112,10 +112,14 @@ def classify_status(
         )
     except subprocess.TimeoutExpired:
         return "indexing"
+    except OSError:
+        return "missing"
 
     combined = f"{status_cp.stdout}\n{status_cp.stderr}"
     if _parse_indexing(combined):
         return "indexing"
+    if status_cp.returncode != 0:
+        return "stale"
     if _is_stale(repo, target_db):
         return "stale"
     return "ready"
@@ -186,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
             ["search", args.query, "--limit", str(args.limit)],
             timeout_seconds=max(1, args.search_timeout),
         )
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, OSError):
         print(UNAVAILABLE_MESSAGE, file=sys.stderr)
         return 2
 
