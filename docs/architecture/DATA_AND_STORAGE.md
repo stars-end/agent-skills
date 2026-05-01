@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 1ffddab676d19e8ab2a6bea7854afaafad0352ec
-last_verified_at: 2026-04-22T23:18:56Z
+last_verified_commit: 606a02666f83222f944e8d7e1bddf17ca71ebc2c
+last_verified_at: 2026-04-30T17:45:00Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -25,6 +25,9 @@ surfaces. This file records their ownership boundaries.
    - versioned by git; reviewable in PRs
    - handoff runbooks and delegated prompts under `docs/runbook/` and
      `docs/prompts/` are portable context surfaces, not runtime state
+   - non-secret product topology can live in targeted skills, such as the
+     Affordabot and Prime Radiant AI Railway dev topology skills; credentials
+     and tokens remain external runtime state behind cache-backed auth helpers
 2. Beads runtime state
    - active runtime path: `~/.beads-runtime/.beads`
    - durable records live in shared Dolt server backend configured by runtime

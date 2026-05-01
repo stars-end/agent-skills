@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 83a21ee990047019c7ce7acd0aa0282701ed834b -->
-<!-- Last updated: 2026-04-16 19:36:32 UTC -->
+<!-- Source SHA: 606a02666f83222f944e8d7e1bddf17ca71ebc2c -->
+<!-- Last updated: 2026-04-30 19:36:59 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -684,6 +684,7 @@ Use `dx-repo-memory-check --repo .` to validate map freshness.
 
 | Skill | Description | Example | Tags |
 |-------|-------------|---------|------|
+| **affordabot-topology** | Affordabot Railway dev topology and safe runtime context. MUST BE USED when working in affordabot and the task needs Railway project/environment/service IDs, dev service endpoints, pgvector, MinIO, SearXNG, backend/frontend domains, or non-interactive Railway linking. Use for: "Affordabot Railway", "affordabot endpoints", "railway/dev", "dev topology", "pgvector-dev", "backend-dev", "bucket-dev", "searxng-private", "runtime readiness". | — | railway, affordabot, topology, endpoints, runtime, dx |
 | **database** | This skill should be used when the user wants to add a database (Postgres, Redis, MySQL, MongoDB), says "add postgres", "add redis", "add database", "connect to database", or "wire up the database". For other templates (Ghost, Strapi, n8n, etc.), use the templates skill. | — |  |
 | **deploy** | This skill should be used when the user wants to push code to Railway, says "railway up", "deploy", "deploy to railway", "ship", or "push". For initial setup or creating services, use new skill. For Docker images, use environment skill. | — |  |
 | **deployment** | This skill should be used when the user wants to manage Railway deployments, view logs, or debug issues. Covers deployment lifecycle (remove, stop, redeploy, restart), deployment visibility (list, status, history), and troubleshooting (logs, errors, failures, crashes, why deploy failed). NOT for deleting services - use environment skill with isDeleted for that. | — |  |
@@ -691,6 +692,7 @@ Use `dx-repo-memory-check --repo .` to validate map freshness.
 | **environment** | This skill should be used when the user asks "what's the config", "show me the configuration", "what variables are set", "environment config", "service config", "railway config", or wants to add/set/delete variables, change build/deploy settings, scale replicas, connect repos, or delete services. | — |  |
 | **metrics** | This skill should be used when the user asks about resource usage, CPU, memory, network, disk, or service performance. Covers questions like "how much memory is my service using" or "is my service slow". | — |  |
 | **new** | This skill should be used when the user says "setup", "deploy to railway", "initialize", "create project", "create service", or wants to deploy from GitHub. Handles initial setup AND adding services to existing projects. For databases, use the database skill instead. | — |  |
+| **prime-radiant-topology** | Prime Radiant AI Railway dev topology and safe runtime context. MUST BE USED when working in prime-radiant-ai and the task needs Railway project/environment/service IDs, dev service endpoints, pgvector, Postgres, MinIO, Windmill/LSP services, backend/frontend domains, or non-interactive Railway linking. Use for: "Prime Radiant Railway", "prime-radiant-ai endpoints", "railway/dev", "frontend-dev-f8a3", "backend-dev-6dd5", "postgres-dev-50c2", "bucket-dev-2f3a", "console-dev-f0c3", "pgvector", "lsp". | — | railway, prime-radiant-ai, topology, endpoints, runtime, dx |
 | **projects** | This skill should be used when the user wants to list all projects, switch projects, rename a project, enable/disable PR deploys, make a project public/private, or modify project settings. | — |  |
 | **railway-docs** | This skill should be used when the user asks about Railway features, how Railway works, or shares a docs.railway.com URL. Fetches up-to-date Railway docs to answer accurately. | — |  |
 | **service** | This skill should be used when the user asks about service status, wants to rename a service, change service icons, link services, or create services with Docker images. For creating services with local code, prefer the `new` skill. For GitHub repo sources, use `new` skill to create empty service then `environment` skill to configure source. | — |  |

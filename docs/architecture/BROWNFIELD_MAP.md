@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 7dd26996c0336790a68338bddddf73d090437341
-last_verified_at: 2026-04-17T05:48:13Z
+last_verified_commit: 606a02666f83222f944e8d7e1bddf17ca71ebc2c
+last_verified_at: 2026-04-30T17:45:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -65,6 +65,18 @@ For changes that touch architecture or workflow behavior, read in this order:
 3. `docs/architecture/WORKFLOWS_AND_PATTERNS.md`
 4. relevant `SKILL.md` files in the affected namespace
 5. source verification using `llm-tldr`
+
+## Railway Skill Notes
+
+- `railway/affordabot-topology/SKILL.md` is the canonical non-secret topology
+  reference for Affordabot dev Railway context. It captures project,
+  environment, service ids, public dev domains, `searxng-private`, and safe
+  cache-backed auth/link commands so agents do not block on rediscovery or use
+  raw 1Password commands.
+- `railway/prime-radiant-topology/SKILL.md` is the matching non-secret topology
+  reference for Prime Radiant AI dev Railway context. It captures project,
+  environment, service ids, screenshot-visible dev domains, Postgres/pgvector,
+  MinIO, Windmill LSP, and safe cache-backed auth/link commands.
 
 ## Current High-Risk Zones
 
