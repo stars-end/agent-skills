@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 83a21ee990047019c7ce7acd0aa0282701ed834b -->
-<!-- Last updated: 2026-04-16 19:36:32 UTC -->
+<!-- Source SHA: f8b816704442e447babb9b93049b41324822b6c1 -->
+<!-- Last updated: 2026-05-01 22:42:15 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -338,12 +338,13 @@ Agents should think in terms of **capability**, not transport:
 - explicit symbol operation -> \`serena\`
 - ordinary edit -> patch/diff-first CLI workflow
 
-For qualifying tasks, agents MUST route the first discovery action through the matching tool before broad shell search or repeated file traversal:
-- semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`llm-tldr\` (semantic tool, requires \`tldr warm\` first)
-- exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> \`llm-tldr\`
-- "understand this function and its dependencies" -> \`llm-tldr\` (context tool, 95% token savings)
-- "what tests need to run" -> \`llm-tldr\` (change_impact tool)
+For qualifying tasks, route by capability without forcing semantic-first discovery:
+- repo discovery and "where does X live?" -> use targeted `rg` / `fd` / direct reads first
+- exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> targeted direct reads first; use bounded `llm-tldr` structural/context commands when the command is known useful
+- "understand this function and its dependencies" -> direct reads or bounded `llm-tldr context`
+- "what tests need to run" -> direct read + targeted `rg`; optionally `llm-tldr change_impact` when available and useful
 - rename/refactor, insert-before/after-symbol, replace known symbol body/signature, or symbol lookup directly tied to an edit -> \`serena\`
+- semantic enrichment tools are optional; use only when explicitly requested or when a managed ready-state check passes
 
 Transport handling rule:
 - prefer the local contained MCP surface when the tool is available in the current runtime
@@ -358,15 +359,13 @@ Codex desktop hydration check:
 1. run \`codex mcp list\` and confirm the tool is configured
 2. restart Codex desktop once after MCP config or baseline changes
 3. retry one real in-thread MCP call
-4. only then escalate to fallback scripts, daemon debugging, or \`Tool routing exception\`
+4. only then escalate to fallback scripts or daemon debugging
 
-Fallback to shell/file reads or ordinary patch editing is allowed only when:
+Fallback to shell/file reads or ordinary patch editing is always valid for discovery and routine edits, and is additionally expected when:
 - the MCP tool is unavailable in the current runtime and no canonical fallback exists
 - the MCP tool cannot answer the question after one reasonable attempt
 - the MCP server process cannot read the host-local project path and the local contained fallback is unavailable or insufficient
 - the task is trivially faster with direct file access
-
-If the agent does not use the matching MCP tool on a qualifying task, it MUST state \`Tool routing exception: <reason>\` in the final response or handoff.
 
 ## 6) Parallel Agent Orchestration (V8.6)
 

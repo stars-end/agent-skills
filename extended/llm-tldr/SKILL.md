@@ -97,7 +97,7 @@ research for a Codex desktop visibility problem, do this cheap check first:
 1. Run `codex mcp list` and confirm `llm-tldr` is configured
 2. Restart Codex desktop once so the client reloads MCP server state
 3. Retry one real in-thread `llm-tldr` call
-4. Only then use the canonical fallback or report `Tool routing exception: ...`
+4. Only then use the canonical fallback with a concrete reason
 
 This separates:
 - config visible but stale client state
@@ -348,15 +348,17 @@ Every MCP tool accepts `project` (default `"."`):
 
 ## Required Trigger Contract
 
-Use `llm-tldr` first for ALL of the following analysis tasks:
+Use `llm-tldr` for bounded structural and static-analysis questions when the
+exact command is known useful.
 
-**Semantic discovery (V8.6):**
+**Default discovery path (V8.6):**
 - locating the part of the repo responsible for a concept or feature
 - mapping related files/modules before editing
 - answering "where does X live?" or "what code is related to X?"
-- natural language code search by meaning
+- start with targeted `rg` / `fd` / direct reads
+- semantic search is optional enrichment only (explicit request or managed ready-state)
 
-**Exact static analysis:**
+**Exact static analysis where `llm-tldr` is useful:**
 - call graph or reverse-call impact
 - CFG/DFG/program slice
 - dead code or architecture layer analysis
@@ -366,8 +368,9 @@ Use `llm-tldr` first for ALL of the following analysis tasks:
 - "understand this function and its dependencies" -> `context` tool (95% token savings)
 - "what tests need to run" -> `change_impact` tool
 
-Do not skip directly to repeated `read_file` traversal for these questions unless
-a documented fallback condition applies.
+Direct reads and targeted grep are valid first-line methods; use `llm-tldr`
+when those methods are insufficient or when its structural tools are the most
+efficient path.
 
 ### Key Functions
 

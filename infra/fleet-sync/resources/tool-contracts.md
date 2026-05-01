@@ -7,7 +7,7 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 | Tool | Class | Canonical Install | Canonical Health | Routing (V8.6) |
 |------|-------|-------------------|------------------|-----------------|
 | `cass-memory` | `cli` | `npm install -g Dicklesworthstone/cass_memory_system` | `cm --version`, `cm quickstart --json` | N/A (disabled) |
-| `llm-tldr` | `mcp` | `uv tool install "llm-tldr==1.5.2"` | `tldr-mcp --version \|\| llm-tldr --version` | **Canonical default** (semantic + structural) |
+| `llm-tldr` | `mcp` | `uv tool install "llm-tldr==1.5.2"` | `tldr-mcp --version \|\| llm-tldr --version` | Canonical bounded structural/context fallback |
 | `serena` | `mcp` | `uv tool install git+https://github.com/oraios/serena.git` | `serena --help \| head -1` | Canonical default (edits + memory) |
 
 ## Canonical Rules
@@ -25,7 +25,7 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 
 | Task Shape | Canonical First Tool | Reason |
 |------------|---------------------|--------|
-| Semantic discovery ("where does X live?") | `llm-tldr` | FAISS semantic search; prewarm with `all-MiniLM-L6-v2` for agent/fresh-device use |
+| Semantic discovery ("where does X live?") | `rg` / `fd` / direct reads | Fast default discovery without semantic index dependency |
 | Exact structural analysis (CFG/DFG/slice/impact) | `llm-tldr` | Precise static analysis |
 | Context from entry point | `llm-tldr` | 95% token savings |
 | Test targeting for changed files | `llm-tldr` | change_impact tool |
@@ -37,7 +37,7 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 | Tool | Layer 1-3 | Layer 4 | Layer 5 | Notes |
 |------|-----------|---------|---------|-------|
 | `cass-memory` | Disabled | N/A | N/A | Pilot-only |
-| `llm-tldr` | Pass | Pass | Active (V8.6) | Canonical default for semantic + structural |
+| `llm-tldr` | Pass | Pass | Active (V8.6) | Structural/context fallback; semantic optional |
 | `serena` | Pass | Pass | Active | Canonical default for edits + memory |
 
 **Layer 4 Client Visibility (observed 2026-03-10):**
@@ -87,5 +87,6 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
 ## Removed Tools
 
 - `context-plus` was fully removed in bd-rb0c.8 (2026-03-29). It was replaced by
-  `llm-tldr` for semantic discovery and `serena` for symbol-aware edits. See
+  `rg`/`fd`/direct reads for default discovery, optional `llm-tldr` structural/context
+  fallback, and `serena` for symbol-aware edits. See
   `extended/context-plus/SKILL.md` for historical reference.
