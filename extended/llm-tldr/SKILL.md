@@ -1,7 +1,7 @@
 ---
 name: llm-tldr
 description: |
-  Canonical analysis tool for semantic discovery and exact static analysis with low-token context extraction.
+  Canonical analysis tool for bounded structural/context and exact static analysis with low-token context extraction.
   Prefer the MCP surface when available; otherwise use the canonical local fallback.
 tags:
   - mcp
@@ -16,7 +16,7 @@ tags:
 
 # llm-tldr (Fleet Sync V2.3)
 
-Canonical analysis tool for semantic discovery and exact static analysis with reduced token overhead.
+Canonical analysis tool for bounded structural/context and exact static analysis with reduced token overhead.
 
 ## Tool Class
 
@@ -28,11 +28,13 @@ read the target project path.
 
 ## Routing Status
 
-**Canonical default** for semantic discovery and exact static analysis (V8.6 routing contract).
+**Optional bounded fallback** for structural/context and exact static analysis (V8.6 routing contract).
 
 ### Agent-Facing Routing Rule
 
-Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
+Use `llm-tldr` for bounded structural/context and static-analysis tasks when
+targeted `rg`/direct reads are insufficient or when the exact tool command is
+known to be efficient.
 
 - Preferred surface: local contained MCP when the `llm-tldr` tool is visible in the active runtime
 - Canonical fallback: the contained local helper when MCP is unavailable in the current runtime
@@ -83,7 +85,7 @@ bdx comments <memory-id> --json
 
 Then validate memory claims with `llm-tldr` before acting:
 
-- use semantic discovery to confirm where behavior currently lives
+- use targeted direct reads first to confirm where behavior currently lives
 - use context/static analysis to verify referenced symbols and paths
 - use change-impact/impact tooling to evaluate `mem.stale_if_paths`
 
@@ -97,7 +99,7 @@ research for a Codex desktop visibility problem, do this cheap check first:
 1. Run `codex mcp list` and confirm `llm-tldr` is configured
 2. Restart Codex desktop once so the client reloads MCP server state
 3. Retry one real in-thread `llm-tldr` call
-4. Only then use the canonical fallback or report `Tool routing exception: ...`
+4. Only then use the canonical fallback with a concrete reason
 
 This separates:
 - config visible but stale client state
@@ -348,15 +350,17 @@ Every MCP tool accepts `project` (default `"."`):
 
 ## Required Trigger Contract
 
-Use `llm-tldr` first for ALL of the following analysis tasks:
+Use `llm-tldr` for bounded structural and static-analysis questions when the
+exact command is known useful.
 
-**Semantic discovery (V8.6):**
+**Default discovery path (V8.6):**
 - locating the part of the repo responsible for a concept or feature
 - mapping related files/modules before editing
 - answering "where does X live?" or "what code is related to X?"
-- natural language code search by meaning
+- start with targeted `rg` / `fd` / direct reads
+- semantic search is optional enrichment only (explicit request or managed ready-state)
 
-**Exact static analysis:**
+**Exact static analysis where `llm-tldr` is useful:**
 - call graph or reverse-call impact
 - CFG/DFG/program slice
 - dead code or architecture layer analysis
@@ -366,8 +370,9 @@ Use `llm-tldr` first for ALL of the following analysis tasks:
 - "understand this function and its dependencies" -> `context` tool (95% token savings)
 - "what tests need to run" -> `change_impact` tool
 
-Do not skip directly to repeated `read_file` traversal for these questions unless
-a documented fallback condition applies.
+Direct reads and targeted grep are valid first-line methods; use `llm-tldr`
+when those methods are insufficient or when its structural tools are the most
+efficient path.
 
 ### Key Functions
 
@@ -391,7 +396,7 @@ a documented fallback condition applies.
 
 The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools were effectively unused. V8.6 closes this gap:
 
-- `semantic`: Now the canonical semantic lane.
+- `semantic`: Optional enrichment lane only; not default first-hop discovery.
 - `context`: Was never routed. Biggest missed opportunity (95% token savings).
 - `change_impact`: Was never routed. Now surfaced for test targeting.
 - `dead`: Was never routed. Now surfaced for refactoring.

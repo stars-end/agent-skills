@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 83a21ee990047019c7ce7acd0aa0282701ed834b -->
-<!-- Last updated: 2026-04-16 19:36:32 UTC -->
+<!-- Source SHA: 21e16f7a50e518afd24b298d4c827dc3c514db87 -->
+<!-- Last updated: 2026-05-01 22:47:10 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -312,8 +312,9 @@ If a named skill contains an explicit `BLOCKED` contract:
 ### 5.4) MCP Tool-First Routing Contract (V8.6)
 
 - **Canonical active assistant stack**:
-  - \`llm-tldr\`: semantic discovery + exact static analysis / trace / impact
-  - \`serena\`: explicit symbol-aware edits
+  - \`rg\` / \`fd\` / direct reads: default repo discovery and feature location
+  - \`llm-tldr\`: optional bounded structural/context analysis (including exact static trace/impact when useful)
+  - \`serena\`: explicit symbol-aware edits/refactors
 - **Default durable memory surface**:
   - Beads via `bdx remember` and closed `memory` issues
 - **Canonical non-default memory surface**:
@@ -334,16 +335,18 @@ any new memory service or wrapper.
 - **Detailed convention**: \`~/agent-skills/docs/BEADS_MEMORY_CONVENTION.md\`.
 
 Agents should think in terms of **capability**, not transport:
-- analysis/discovery/trace -> \`llm-tldr\`
+- repo discovery / feature location -> \`rg\` / \`fd\` / direct reads
+- bounded structural/context trace/impact -> \`llm-tldr\`
 - explicit symbol operation -> \`serena\`
 - ordinary edit -> patch/diff-first CLI workflow
 
-For qualifying tasks, agents MUST route the first discovery action through the matching tool before broad shell search or repeated file traversal:
-- semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`llm-tldr\` (semantic tool, requires \`tldr warm\` first)
-- exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> \`llm-tldr\`
-- "understand this function and its dependencies" -> \`llm-tldr\` (context tool, 95% token savings)
-- "what tests need to run" -> \`llm-tldr\` (change_impact tool)
+For qualifying tasks, route by capability without forcing semantic-first discovery:
+- repo discovery and "where does X live?" -> use targeted `rg` / `fd` / direct reads first
+- exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> targeted direct reads first; use bounded `llm-tldr` structural/context commands when the command is known useful
+- "understand this function and its dependencies" -> direct reads or bounded `llm-tldr context`
+- "what tests need to run" -> direct read + targeted `rg`; optionally `llm-tldr change_impact` when available and useful
 - rename/refactor, insert-before/after-symbol, replace known symbol body/signature, or symbol lookup directly tied to an edit -> \`serena\`
+- semantic enrichment tools are optional; use only when explicitly requested or when a managed ready-state check passes
 
 Transport handling rule:
 - prefer the local contained MCP surface when the tool is available in the current runtime
@@ -358,15 +361,13 @@ Codex desktop hydration check:
 1. run \`codex mcp list\` and confirm the tool is configured
 2. restart Codex desktop once after MCP config or baseline changes
 3. retry one real in-thread MCP call
-4. only then escalate to fallback scripts, daemon debugging, or \`Tool routing exception\`
+4. only then escalate to fallback scripts or daemon debugging
 
-Fallback to shell/file reads or ordinary patch editing is allowed only when:
+Fallback to shell/file reads or ordinary patch editing is always valid for discovery and routine edits, and is additionally expected when:
 - the MCP tool is unavailable in the current runtime and no canonical fallback exists
 - the MCP tool cannot answer the question after one reasonable attempt
 - the MCP server process cannot read the host-local project path and the local contained fallback is unavailable or insufficient
 - the task is trivially faster with direct file access
-
-If the agent does not use the matching MCP tool on a qualifying task, it MUST state \`Tool routing exception: <reason>\` in the final response or handoff.
 
 ## 6) Parallel Agent Orchestration (V8.6)
 
@@ -608,7 +609,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **cass-memory** | Pilot-only CLI episodic memory workflow for explicit cross-agent memory experiments. | — |  |
 | **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary implementation dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. For dx-review, cc-glm is the primary GLM review lane and OpenCode is fallback. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode |
 | **cli-mastery** | CLI environment and command-line usage guidance for Railway, GitHub, and general repo workflows. | — |  |
-| **context-plus** | REMOVED from canonical fleet contract (bd-rb0c.8). context-plus was fully removed in favor of llm-tldr for semantic discovery and serena for symbol-aware edits. This skill is retained as a tombstone only. | — |  |
+| **context-plus** | REMOVED from canonical fleet contract (bd-rb0c.8). context-plus was fully removed in favor of default discovery via rg/fd/direct reads, serena for symbol-aware edits, and optional bounded llm-tldr structural/context fallback. This skill is retained as a tombstone only. | — |  |
 | **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with dx-runner as canonical governance surface, OpenCode as primary execution lane, and cc-glm as reliability backstop. dx-dispatch is break-glass only. | — |  |
 | **design-md** | Analyze Stitch projects and synthesize a semantic design system into DESIGN.md files | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty or WIP repositories. Standardizes snapshotting uncommitted work to a WIP branch before destructive operations. | — |  |
@@ -624,7 +625,7 @@ VISUAL_BASE_URL=http://localhost:5173 pnpm --filter frontend test:visual:update
 | **impeccable** | Design skills for AI coding tools. Create distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Includes 7 reference guides and 17 design commands. Use when building web components, pages, artifacts, posters, or applications. Keywords: frontend, design, UI, UX, typography, color, motion, interaction, responsive, audit, polish | — | design, frontend, ui, ux, typography, color, motion, accessibility |
 | **implementation-planner** | Create self-contained implementation specs with canonical Beads epic/subtask/dependency structure. MUST BE USED when the user asks for an implementation plan, tech spec, rollout plan, migration plan, or explicitly asks for "a comprehensive implementation plan with Beads epic, dependencies, and subtasks". Use for new systems, multi-phase refactors, cross-repo work, infra changes, or any work that needs a reviewable plan before execution. | — | planning, beads, specification, workflow, architecture |
 | **lint-check** | Run quick linting checks on changed files. MUST BE USED when user wants to check code quality. Fast validation (<5s) following V3 trust-environments philosophy. Use when user says "lint my code", "check formatting", or "run linters", or when user mentions uncommitted changes, pre-commit state, formatting issues, code quality, style checks, validation, prettier, eslint, pylint, or ruff. | — | workflow, quality, linting, validation |
-| **llm-tldr** | Canonical analysis tool for semantic discovery and exact static analysis with low-token context extraction. Prefer the MCP surface when available; otherwise use the canonical local fallback. | — |  |
+| **llm-tldr** | Canonical analysis tool for bounded structural/context and exact static analysis with low-token context extraction. Prefer the MCP surface when available; otherwise use the canonical local fallback. | — |  |
 | **loop-orchestration** | Orchestrate Codex-first implementation loops built around `dx-runner` dispatch, bounded sleep intervals, status checks, review passes, and deterministic re-dispatch. Use when a live session should repeatedly dispatch work, wait, inspect `dx-runner` state, review outcomes, and continue until merge-ready or blocked. Invoke when users mention "poll every 5m", "check this runner repeatedly", "sleep loop", "babysit this PR", "re-dispatch round N", "keep checking until merge-ready", or "build a loop orchestrator". `/loop` is only a prototype model for the desired behavior, not the required runtime surface. | — |  |
 | **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | `dx-runner start --provider opencode --beads bd-xxx --prompt-` | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |
 | **plan-refine** | Iteratively refine implementation plans using the "Convexity" pattern. Simulates a multi-round architectural critique to converge on a secure, robust specification. Use when you have a draft plan that needs deep architectural review or "APR" style optimization. | — | architecture, planning, review, refinement, apr |

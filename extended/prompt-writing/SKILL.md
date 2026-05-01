@@ -105,11 +105,11 @@ Every generated delegation prompt MUST enforce:
 - If missing, delegate must return blocker with exact next commands.
 
 6) **Tool routing contract for the delegated task**
-- semantic discovery -> `llm-tldr` (V8.6)
+- repo discovery / feature location -> targeted `rg` / `fd` / direct reads first
 - exact static analysis -> `llm-tldr`
 - durable cross-agent memory -> Beads (`bdx remember` or closed `memory` issues)
 - symbol-aware editing -> `serena`
-- If a delegated agent intentionally skips the expected tool, it must return `Tool routing exception: <reason>`
+- semantic enrichment tooling is optional and must not block default discovery
 
 7) **dx-loop-first contract for chained/non-trivial work**
 - When the task is chained Beads work, multi-step, or expected to need implement/review baton flow, the prompt should make `dx-loop` the primary execution surface.
