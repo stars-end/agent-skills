@@ -175,8 +175,9 @@ If a named skill contains an explicit `BLOCKED` contract:
 ### 5.4) MCP Tool-First Routing Contract (V8.6)
 
 - **Canonical active assistant stack**:
-  - \`llm-tldr\`: semantic discovery + exact static analysis / trace / impact
-  - \`serena\`: explicit symbol-aware edits
+  - \`rg\` / \`fd\` / direct reads: default repo discovery and feature location
+  - \`llm-tldr\`: optional bounded structural/context analysis (including exact static trace/impact when useful)
+  - \`serena\`: explicit symbol-aware edits/refactors
 - **Default durable memory surface**:
   - Beads via `bdx remember` and closed `memory` issues
 - **Canonical non-default memory surface**:
@@ -197,7 +198,8 @@ any new memory service or wrapper.
 - **Detailed convention**: \`~/agent-skills/docs/BEADS_MEMORY_CONVENTION.md\`.
 
 Agents should think in terms of **capability**, not transport:
-- analysis/discovery/trace -> \`llm-tldr\`
+- repo discovery / feature location -> \`rg\` / \`fd\` / direct reads
+- bounded structural/context trace/impact -> \`llm-tldr\`
 - explicit symbol operation -> \`serena\`
 - ordinary edit -> patch/diff-first CLI workflow
 

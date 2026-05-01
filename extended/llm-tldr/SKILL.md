@@ -1,7 +1,7 @@
 ---
 name: llm-tldr
 description: |
-  Canonical analysis tool for semantic discovery and exact static analysis with low-token context extraction.
+  Canonical analysis tool for bounded structural/context and exact static analysis with low-token context extraction.
   Prefer the MCP surface when available; otherwise use the canonical local fallback.
 tags:
   - mcp
@@ -16,7 +16,7 @@ tags:
 
 # llm-tldr (Fleet Sync V2.3)
 
-Canonical analysis tool for semantic discovery and exact static analysis with reduced token overhead.
+Canonical analysis tool for bounded structural/context and exact static analysis with reduced token overhead.
 
 ## Tool Class
 
@@ -28,11 +28,13 @@ read the target project path.
 
 ## Routing Status
 
-**Canonical default** for semantic discovery and exact static analysis (V8.6 routing contract).
+**Optional bounded fallback** for structural/context and exact static analysis (V8.6 routing contract).
 
 ### Agent-Facing Routing Rule
 
-Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
+Use `llm-tldr` for bounded structural/context and static-analysis tasks when
+targeted `rg`/direct reads are insufficient or when the exact tool command is
+known to be efficient.
 
 - Preferred surface: local contained MCP when the `llm-tldr` tool is visible in the active runtime
 - Canonical fallback: the contained local helper when MCP is unavailable in the current runtime
@@ -83,7 +85,7 @@ bdx comments <memory-id> --json
 
 Then validate memory claims with `llm-tldr` before acting:
 
-- use semantic discovery to confirm where behavior currently lives
+- use targeted direct reads first to confirm where behavior currently lives
 - use context/static analysis to verify referenced symbols and paths
 - use change-impact/impact tooling to evaluate `mem.stale_if_paths`
 
@@ -394,7 +396,7 @@ efficient path.
 
 The investigation cycle (bd-rb0c.3) identified that at least 6 of 16 MCP tools were effectively unused. V8.6 closes this gap:
 
-- `semantic`: Now the canonical semantic lane.
+- `semantic`: Optional enrichment lane only; not default first-hop discovery.
 - `context`: Was never routed. Biggest missed opportunity (95% token savings).
 - `change_impact`: Was never routed. Now surfaced for test targeting.
 - `dead`: Was never routed. Now surfaced for refactoring.
