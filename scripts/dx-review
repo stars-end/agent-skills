@@ -4,10 +4,8 @@ set -euo pipefail
 # dx-review
 # Minimal review quorum wrapper over dx-runner profiles.
 # Default reviewers:
-#   - cc-glm-review      -> GLM-5.1 via cc-glm transport
-#   - gemini-burst       -> Gemini review lane
-# Fallback:
-#   - opencode-review    -> OpenCode GLM-5.1 if cc-glm fails at start/preflight
+#   - opencode-go-kimi-review      -> opencode-go/kimi-k2.6
+#   - opencode-go-deepseek-review  -> opencode-go/deepseek-v4-pro
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 if [[ -L "$SCRIPT_SOURCE" ]]; then
@@ -23,11 +21,11 @@ dx-review
 
 Usage:
   dx-review run --beads <bd-id> --worktree <path> (--prompt <text> | --prompt-file <path> | --template <name> | --pr <ref>) [options]
-  dx-review doctor --worktree <path> [--gemini]
-  dx-review summarize --beads <bd-id> [--gemini]
+  dx-review doctor --worktree <path>
+  dx-review summarize --beads <bd-id>
 
 Options:
-  --gemini              Compatibility no-op; gemini-burst is included by default.
+  --gemini              Compatibility no-op; Gemini is not part of the default review quorum.
   --pr <url|repo#num>   Include GitHub PR metadata from gh.
   --github-pr <ref>     Alias for --pr.
   --template <name>     Review template: smoke, code-review, architecture-review, arch-review, security-review.
@@ -70,6 +68,8 @@ reviewer_id_for_profile() {
     local beads="$1"
     local profile="$2"
     case "$profile" in
+        opencode-go-kimi-review) printf '%s.kimi' "$beads" ;;
+        opencode-go-deepseek-review) printf '%s.deepseek' "$beads" ;;
         cc-glm-review) printf '%s.glm' "$beads" ;;
         opencode-review) printf '%s.opencode' "$beads" ;;
         gemini-burst) printf '%s.gemini' "$beads" ;;
@@ -365,6 +365,8 @@ build_review_prompt() {
 
 profile_for_reviewer() {
     case "$1" in
+        *.kimi) printf 'opencode-go-kimi-review' ;;
+        *.deepseek) printf 'opencode-go-deepseek-review' ;;
         *.glm) printf 'cc-glm-review' ;;
         *.opencode) printf 'opencode-review' ;;
         *.gemini) printf 'gemini-burst' ;;
@@ -374,6 +376,7 @@ profile_for_reviewer() {
 
 provider_hint_for_reviewer() {
     case "$1" in
+        *.kimi|*.deepseek) printf 'opencode' ;;
         *.glm) printf 'cc-glm' ;;
         *.opencode) printf 'opencode' ;;
         *.gemini) printf 'gemini' ;;
@@ -383,6 +386,8 @@ provider_hint_for_reviewer() {
 
 logical_lane_for_reviewer() {
     case "$1" in
+        *.kimi) printf 'kimi' ;;
+        *.deepseek) printf 'deepseek' ;;
         *.glm|*.opencode) printf 'glm' ;;
         *.gemini) printf 'gemini' ;;
         *) printf '%s' "$1" ;;
@@ -433,24 +438,20 @@ summarize_reviews() {
     local run_dir="/tmp/dx-review/${beads}"
     local summary_json="$run_dir/summary.json"
     local summary_md="$run_dir/summary.md"
-    local -a profiles=("cc-glm-review")
+    local -a profiles=("opencode-go-kimi-review" "opencode-go-deepseek-review")
     local -a reviewers=()
     local -a entries=()
     local -a md_rows=()
     local raw_total=0 raw_completed=0 raw_failed=0 raw_not_reached=0
     local total=0 completed=0 failed=0 quorum_not_reached=0
-    local glm_completed=false glm_failed=false glm_not_reached=false
-    local gemini_completed=false gemini_failed=false gemini_not_reached=false
+    local kimi_completed=false kimi_failed=false kimi_not_reached=false
+    local deepseek_completed=false deepseek_failed=false deepseek_not_reached=false
     local profile reviewer
 
     mkdir -p "$run_dir"
-    profiles+=("gemini-burst")
     for profile in "${profiles[@]}"; do
         reviewers+=("$(reviewer_id_for_profile "$beads" "$profile")")
     done
-    if reviewer_attempted "$(reviewer_id_for_profile "$beads" "opencode-review")" "opencode" "$run_dir"; then
-        reviewers+=("$(reviewer_id_for_profile "$beads" "opencode-review")")
-    fi
 
     for reviewer in "${reviewers[@]}"; do
         raw_total=$((raw_total + 1))
@@ -618,15 +619,15 @@ EOF
 
         lane="$(logical_lane_for_reviewer "$reviewer")"
         case "$lane" in
-            glm)
-                [[ "$reviewer_completed" == "true" ]] && glm_completed=true
-                [[ "$reviewer_failed" == "true" ]] && glm_failed=true
-                [[ "$reviewer_not_reached" == "true" ]] && glm_not_reached=true
+            kimi)
+                [[ "$reviewer_completed" == "true" ]] && kimi_completed=true
+                [[ "$reviewer_failed" == "true" ]] && kimi_failed=true
+                [[ "$reviewer_not_reached" == "true" ]] && kimi_not_reached=true
                 ;;
-            gemini)
-                [[ "$reviewer_completed" == "true" ]] && gemini_completed=true
-                [[ "$reviewer_failed" == "true" ]] && gemini_failed=true
-                [[ "$reviewer_not_reached" == "true" ]] && gemini_not_reached=true
+            deepseek)
+                [[ "$reviewer_completed" == "true" ]] && deepseek_completed=true
+                [[ "$reviewer_failed" == "true" ]] && deepseek_failed=true
+                [[ "$reviewer_not_reached" == "true" ]] && deepseek_not_reached=true
                 ;;
         esac
 
@@ -648,8 +649,8 @@ EOF
 
     total=2
 
-    if [[ "$glm_completed" == "true" ]]; then completed=$((completed + 1)); elif [[ "$glm_not_reached" == "true" ]]; then quorum_not_reached=$((quorum_not_reached + 1)); else failed=$((failed + 1)); fi
-    if [[ "$gemini_completed" == "true" ]]; then completed=$((completed + 1)); elif [[ "$gemini_not_reached" == "true" ]]; then quorum_not_reached=$((quorum_not_reached + 1)); else failed=$((failed + 1)); fi
+    if [[ "$kimi_completed" == "true" ]]; then completed=$((completed + 1)); elif [[ "$kimi_not_reached" == "true" ]]; then quorum_not_reached=$((quorum_not_reached + 1)); else failed=$((failed + 1)); fi
+    if [[ "$deepseek_completed" == "true" ]]; then completed=$((completed + 1)); elif [[ "$deepseek_not_reached" == "true" ]]; then quorum_not_reached=$((quorum_not_reached + 1)); else failed=$((failed + 1)); fi
 
     if [[ "$quorum_not_reached" -gt 0 ]]; then
         exit_code=2
@@ -691,10 +692,9 @@ run_doctor_for_profiles() {
     local worktree="$1"
     local include_gemini="$2"
     local failures=0 profile rc
-    local -a profiles=("cc-glm-review")
+    local -a profiles=("opencode-go-kimi-review" "opencode-go-deepseek-review")
 
     [[ -n "$worktree" && -d "$worktree" ]] || { echo "doctor requires existing --worktree" >&2; return 2; }
-    profiles+=("gemini-burst")
 
     for profile in "${profiles[@]}"; do
         [[ -n "$profile" ]] || continue
@@ -853,8 +853,7 @@ run_cmd() {
     fi
     [[ -f "$prompt_file" ]] || { echo "prompt file not found: $prompt_file" >&2; exit 2; }
 
-    local -a profiles=("cc-glm-review")
-    profiles+=("gemini-burst")
+    local -a profiles=("opencode-go-kimi-review" "opencode-go-deepseek-review")
 
     local -a reviewers=()
     local -a start_pids=()
@@ -896,40 +895,6 @@ run_cmd() {
         else
             start_failed[$i]=false
             final_states[$i]=running
-        fi
-    done
-
-    local fallback_profile fallback_reviewer fallback_start_log fallback_start_rc
-    for i in "${!profiles[@]}"; do
-        if [[ "${profiles[$i]}" == "cc-glm-review" && "${start_failed[$i]:-false}" == "true" ]]; then
-            fallback_profile="opencode-review"
-            fallback_reviewer="$(reviewer_id_for_profile "$beads" "$fallback_profile")"
-            fallback_start_log="$run_dir/${fallback_reviewer}.start.log"
-            echo "glm_primary_start_failed reviewer=${reviewers[$i]} profile=cc-glm-review; launching fallback reviewer=$fallback_reviewer profile=$fallback_profile start_log=$fallback_start_log" >&2
-            profiles+=("$fallback_profile")
-            reviewers+=("$fallback_reviewer")
-            start_logs+=("$fallback_start_log")
-            "$DX_RUNNER" start --profile "$fallback_profile" --beads "$fallback_reviewer" --prompt-file "$prompt_file" --worktree "$worktree" >"$fallback_start_log" 2>&1 &
-            local fallback_pid="$!"
-            set +e
-            wait "$fallback_pid"
-            fallback_start_rc=$?
-            set -e
-            start_rcs+=("$fallback_start_rc")
-            echo "start result reviewer=$fallback_reviewer profile=$fallback_profile rc=$fallback_start_rc"
-            sed -n '1,220p' "$fallback_start_log"
-            if [[ "$fallback_start_rc" -ne 0 ]]; then
-                echo "reviewer_start_failed reviewer=$fallback_reviewer profile=$fallback_profile rc=$fallback_start_rc start_log=$fallback_start_log" >&2
-                start_failed+=(true)
-                final_states+=(start_failed)
-                failures=$((failures + 1))
-            else
-                start_failed+=(false)
-                final_states+=(running)
-                if [[ "$failures" -gt 0 ]]; then
-                    failures=$((failures - 1))
-                fi
-            fi
         fi
     done
 

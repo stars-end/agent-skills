@@ -50,26 +50,25 @@ case "$cmd" in
     echo "start:$beads:$profile:$(date +%s)" >> "$DX_REVIEW_FAKE_LOG"
     echo "prompt_file:$beads:$prompt_file" >> "$DX_REVIEW_FAKE_LOG"
     case "$profile" in
-      cc-glm-review)
-        if [[ "${DX_REVIEW_FAKE_CC_GLM_START_FAIL:-0}" == "1" ]]; then
+      opencode-go-kimi-review)
+        if [[ "${DX_REVIEW_FAKE_KIMI_START_FAIL:-0}" == "1" ]]; then
           mkdir -p "$state_dir"
           printf '1\n' > "$state_dir/${beads}.start_failed"
-          echo "reason_code=secret_auth_resolution_failed_after_preflight"
-          echo "secret_ref_category=op-ref:default-Agent-Secrets-Production-ZAI_API_KEY"
-          echo "preflight gate failed for provider cc-glm" >&2
+          echo "reason_code=model_unavailable"
+          echo "preflight gate failed for provider opencode" >&2
           exit 22
         fi
-        echo "started beads=$beads provider=cc-glm"
+        echo "started beads=$beads provider=opencode model=opencode-go/kimi-k2.6"
         ;;
-      opencode-review)
-        if [[ "${DX_REVIEW_FAKE_OPENCODE_START_FAIL:-0}" == "1" ]]; then
+      opencode-go-deepseek-review)
+        if [[ "${DX_REVIEW_FAKE_DEEPSEEK_START_FAIL:-0}" == "1" ]]; then
           mkdir -p "$state_dir"
           printf '1\n' > "$state_dir/${beads}.start_failed"
           echo "reason_code=opencode_mise_untrusted"
           echo "preflight gate failed for provider opencode" >&2
           exit 21
         fi
-        echo "started beads=$beads provider=opencode"
+        echo "started beads=$beads provider=opencode model=opencode-go/deepseek-v4-pro"
         ;;
       *)
         echo "started beads=$beads provider=$profile"
@@ -79,42 +78,36 @@ case "$cmd" in
   check)
     beads="$(arg_value --beads "$@")"
     echo "check:$beads:$(date +%s)" >> "$DX_REVIEW_FAKE_LOG"
-    if [[ "${DX_REVIEW_FAKE_REPORT_MISSING:-0}" == "1" && "$beads" == *.glm ]]; then
+    if [[ "${DX_REVIEW_FAKE_REPORT_MISSING:-0}" == "1" && "$beads" == *.kimi ]]; then
       echo '{"beads":"'"$beads"'","state":"missing","reason_code":"no_meta"}'
       exit 1
     elif [[ -f "$state_dir/${beads}.start_failed" ]]; then
-      if [[ "$beads" == *.glm ]]; then provider="cc-glm"; elif [[ "$beads" == *.opencode ]]; then provider="opencode"; else provider="unknown"; fi
+      provider="opencode"
       echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"start_failed","reason_code":"dx_runner_start_failed"}'
-    elif [[ "${DX_REVIEW_FAKE_FORCE_START_FAILED:-0}" == "1" && "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"start_failed","reason_code":"dx_runner_start_failed"}'
-    elif [[ "${DX_REVIEW_FAKE_GEMINI_STOPPED:-0}" == "1" && "$beads" == *.gemini ]]; then
-      echo '{"beads":"'"$beads"'","provider":"gemini","state":"stopped","reason_code":"manual_stop","mutation_count":1}'
-    elif [[ "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc"}'
-    elif [[ "$beads" == *.gemini ]]; then
-      echo '{"beads":"'"$beads"'","provider":"gemini","state":"exited_ok","reason_code":"process_exit_with_rc"}'
+    elif [[ "${DX_REVIEW_FAKE_FORCE_START_FAILED:-0}" == "1" && "$beads" == *.kimi ]]; then
+      echo '{"beads":"'"$beads"'","provider":"opencode","state":"start_failed","reason_code":"dx_runner_start_failed"}'
+    elif [[ "${DX_REVIEW_FAKE_DEEPSEEK_STOPPED:-0}" == "1" && "$beads" == *.deepseek ]]; then
+      echo '{"beads":"'"$beads"'","provider":"opencode","state":"stopped","reason_code":"manual_stop","mutation_count":1}'
     else
       echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc"}'
     fi
     ;;
   report)
     beads="$(arg_value --beads "$@")"
-    if [[ "${DX_REVIEW_FAKE_REPORT_MISSING:-0}" == "1" && "$beads" == *.glm ]]; then
+    if [[ "${DX_REVIEW_FAKE_REPORT_MISSING:-0}" == "1" && "$beads" == *.kimi ]]; then
       echo '{"beads":"'"$beads"'","state":"missing","reason_code":"no_meta"}'
       exit 1
-    elif [[ "${DX_REVIEW_FAKE_GEMINI_STOPPED:-0}" == "1" && "$beads" == *.gemini ]]; then
-      echo '{"beads":"'"$beads"'","provider":"gemini","state":"stopped","reason_code":"manual_stop","mutations":1}'
-    elif [[ "${DX_REVIEW_FAKE_EMPTY_SUCCESS:-0}" == "1" && "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc"}'
+    elif [[ "${DX_REVIEW_FAKE_DEEPSEEK_STOPPED:-0}" == "1" && "$beads" == *.deepseek ]]; then
+      echo '{"beads":"'"$beads"'","provider":"opencode","state":"stopped","reason_code":"manual_stop","mutations":1}'
+    elif [[ "${DX_REVIEW_FAKE_EMPTY_SUCCESS:-0}" == "1" && "$beads" == *.kimi ]]; then
+      echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc"}'
     elif [[ "${DX_REVIEW_FAKE_REPORT_USAGE:-0}" == "1" ]]; then
-      if [[ "$beads" == *.glm ]]; then provider="cc-glm"; elif [[ "$beads" == *.opencode ]]; then provider="opencode"; else provider="gemini"; fi
+      provider="opencode"
       echo '{"beads":"'"$beads"'","provider":"'"$provider"'","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":2,"read_only_enforcement":"contract_only","input_tokens":101,"output_tokens":29,"total_tokens":130,"estimated_cost_usd":0.42}'
-    elif [[ "$beads" == *.opencode ]]; then
-      echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass","findings_count":0,"read_only_enforcement":"contract_only"}'
-    elif [[ "$beads" == *.glm ]]; then
-      echo '{"beads":"'"$beads"'","provider":"cc-glm","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":1,"read_only_enforcement":"contract_only"}'
+    elif [[ "$beads" == *.kimi ]]; then
+      echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":1,"read_only_enforcement":"contract_only"}'
     else
-      echo '{"beads":"'"$beads"'","provider":"gemini","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":2,"read_only_enforcement":"contract_only"}'
+      echo '{"beads":"'"$beads"'","provider":"opencode","state":"exited_ok","reason_code":"process_exit_with_rc","verdict":"pass_with_findings","findings_count":2,"read_only_enforcement":"contract_only"}'
     fi
     ;;
   preflight)
@@ -159,10 +152,10 @@ EOF
     chmod +x "$path"
 }
 
-test_default_glm_and_fallback() {
-    echo "=== Testing dx-review GLM default lane + fallback handling ==="
+test_default_opencode_go_pair() {
+    echo "=== Testing dx-review default OpenCode model pair ==="
 
-    local tmp fake worktree out rc glm_ts opencode_ts gemini_ts
+    local tmp fake worktree out rc kimi_ts deepseek_ts
     local summary_json summary_md
     tmp="$(mktemp -d)"
     fake="$tmp/dx-runner"
@@ -171,47 +164,33 @@ test_default_glm_and_fallback() {
     make_fake_runner "$fake"
     export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
     export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
-    export DX_REVIEW_FAKE_CC_GLM_START_FAIL=1
-    unset DX_REVIEW_FAKE_OPENCODE_START_FAIL
+    unset DX_REVIEW_FAKE_KIMI_START_FAIL
+    unset DX_REVIEW_FAKE_DEEPSEEK_START_FAIL
 
     set +e
     out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" run --beads bd-test --worktree "$worktree" --prompt "review only" --wait --timeout-sec 8 --poll-sec 1 2>&1)"
     rc=$?
     set -e
 
-    glm_ts="$(awk -F: '$3=="cc-glm-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
-    opencode_ts="$(awk -F: '$3=="opencode-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
-    gemini_ts="$(awk -F: '$3=="gemini-burst"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
-    if [[ -n "$glm_ts" && -n "$gemini_ts" ]] && [[ -z "$(awk -F: '$3=="claude-code-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")" ]]; then
-        pass "default run launches GLM and Gemini lanes without Claude reviewer"
+    kimi_ts="$(awk -F: '$3=="opencode-go-kimi-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
+    deepseek_ts="$(awk -F: '$3=="opencode-go-deepseek-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
+    if [[ -n "$kimi_ts" && -n "$deepseek_ts" ]] \
+        && [[ -z "$(awk -F: '$3=="cc-glm-review" || $3=="opencode-review" || $3=="gemini-burst" || $3=="claude-code-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")" ]]; then
+        pass "default run launches only Kimi and DeepSeek OpenCode reviewer lanes"
     else
         fail "default reviewer set incorrect: $out"
     fi
 
-    if [[ "$rc" -eq 0 ]] && echo "$out" | grep -q "glm_primary_start_failed" && [[ -n "$opencode_ts" ]]; then
-        pass "cc-glm start failure launches OpenCode fallback and preserves successful logical quorum"
+    if [[ "$rc" -eq 0 ]] && echo "$out" | grep -q "reviewer=bd-test.kimi" && echo "$out" | grep -q "reviewer=bd-test.deepseek"; then
+        pass "wait loop reports both OpenCode reviewers"
     else
-        fail "cc-glm fallback behavior incorrect: rc=$rc output=$out"
-    fi
-
-    if echo "$out" | grep -q "secret_auth_resolution_failed_after_preflight"; then
-        pass "cc-glm auth start failure preserves specific secret resolution reason"
-    else
-        fail "cc-glm auth start failure did not preserve specific reason: $out"
-    fi
-
-    local glm_checks
-    glm_checks="$(grep -c "check:bd-test.glm" "$DX_REVIEW_FAKE_LOG" || true)"
-    if [[ "$glm_checks" -le 1 ]]; then
-        pass "start-failed cc-glm primary is not polled during wait loop (only summarize probes once)"
-    else
-        fail "start-failed cc-glm primary was polled repeatedly: count=$glm_checks"
+        fail "wait loop did not report both reviewers: rc=$rc output=$out"
     fi
 
     if echo "$out" | grep -q "state=exited_ok raw_state=exited_ok"; then
-        pass "fallback reviewer terminal state is surfaced during wait loop"
+        pass "reviewer terminal states are surfaced during wait loop"
     else
-        fail "fallback reviewer terminal state was not summarized clearly: $out"
+        fail "reviewer terminal states were not summarized clearly: $out"
     fi
 
     summary_json="/tmp/dx-review/bd-test/summary.json"
@@ -223,7 +202,7 @@ test_default_glm_and_fallback() {
     fi
 
     if echo "$out" | grep -q "effective quorum: 2/2 completed, 0 failed" \
-        && echo "$out" | grep -q "provider outcomes: 2 completed, 0 failed, 1 not reached" \
+        && echo "$out" | grep -q "provider outcomes: 2 completed, 0 failed, 0 not reached" \
         && echo "$out" | grep -q "summary.json:"; then
         pass "run --wait prints effective quorum, provider outcomes, and summary artifact paths"
     else
@@ -243,7 +222,8 @@ test_summarize_default_reviewers_and_usage_unavailable() {
     export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
     export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
     unset DX_REVIEW_FAKE_FORCE_START_FAILED
-    unset DX_REVIEW_FAKE_OPENCODE_START_FAIL
+    unset DX_REVIEW_FAKE_KIMI_START_FAIL
+    unset DX_REVIEW_FAKE_DEEPSEEK_START_FAIL
     unset DX_REVIEW_FAKE_REPORT_USAGE
 
     rm -rf /tmp/dx-review/bd-sum
@@ -300,7 +280,7 @@ test_summarize_start_failed_exit_semantics() {
     set -e
 
     summary_json="/tmp/dx-review/bd-sf/summary.json"
-    if [[ "$rc" -eq 2 ]] && grep -q '"reviewer":"bd-sf.glm"' "$summary_json" && grep -q '"state":"start_failed"' "$summary_json"; then
+    if [[ "$rc" -eq 2 ]] && grep -q '"reviewer":"bd-sf.kimi"' "$summary_json" && grep -q '"state":"start_failed"' "$summary_json"; then
         pass "summarize returns exit 2 and records start_failed reviewer"
     else
         fail "summarize start_failed semantics incorrect: rc=$rc output=$out"
@@ -322,8 +302,12 @@ test_doctor_runs_both_profiles() {
     export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
 
     out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" doctor --worktree "$worktree" 2>&1)"
-    if ! echo "$out" | grep -q "doctor profile=claude-code-review" && echo "$out" | grep -q "doctor profile=cc-glm-review" && echo "$out" | grep -q "doctor profile=gemini-burst" && ! echo "$out" | grep -q "doctor profile=opencode-review"; then
-        pass "doctor checks primary review profiles without requiring fallback"
+    if echo "$out" | grep -q "doctor profile=opencode-go-kimi-review" \
+        && echo "$out" | grep -q "doctor profile=opencode-go-deepseek-review" \
+        && ! echo "$out" | grep -q "doctor profile=cc-glm-review" \
+        && ! echo "$out" | grep -q "doctor profile=gemini-burst" \
+        && ! echo "$out" | grep -q "doctor profile=claude-code-review"; then
+        pass "doctor checks only the default OpenCode review profiles"
     else
         fail "doctor profile coverage incorrect: $out"
     fi
@@ -345,7 +329,8 @@ test_template_pr_prompt_generation() {
     export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
     export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
     unset DX_REVIEW_FAKE_FORCE_START_FAILED
-    unset DX_REVIEW_FAKE_OPENCODE_START_FAIL
+    unset DX_REVIEW_FAKE_KIMI_START_FAIL
+    unset DX_REVIEW_FAKE_DEEPSEEK_START_FAIL
     unset DX_REVIEW_FAKE_REPORT_USAGE
 
     set +e
@@ -396,7 +381,7 @@ test_summarize_parses_log_schema_usage() {
     unset DX_REVIEW_FAKE_REPORT_USAGE
 
     rm -rf /tmp/dx-review/bd-logparse
-    log_path="/tmp/dx-runner/cc-glm/bd-logparse.glm.log"
+    log_path="/tmp/dx-runner/opencode/bd-logparse.kimi.log"
     mkdir -p "$(dirname "$log_path")"
     cat > "$log_path" <<'EOF'
 **VERDICT: pass_with_findings**
@@ -448,7 +433,7 @@ test_summarize_empty_success_is_unusable() {
     summary_json="/tmp/dx-review/bd-empty/summary.json"
 
     if [[ "$rc" -eq 1 ]] \
-        && grep -q '"reviewer":"bd-empty.glm"' "$summary_json" \
+        && grep -q '"reviewer":"bd-empty.kimi"' "$summary_json" \
         && grep -q '"state":"review_unusable"' "$summary_json" \
         && grep -q '"usable_review":false' "$summary_json" \
         && grep -q '"review_status_reason":"missing_review_schema"' "$summary_json" \
@@ -476,7 +461,7 @@ test_summarize_ignores_prose_without_schema() {
     unset DX_REVIEW_FAKE_REPORT_USAGE
 
     rm -rf /tmp/dx-review/bd-prose
-    log_path="/tmp/dx-runner/cc-glm/bd-prose.glm.log"
+    log_path="/tmp/dx-runner/opencode/bd-prose.kimi.log"
     mkdir -p "$(dirname "$log_path")"
     cat > "$log_path" <<'EOF'
 ## Verdict
@@ -493,7 +478,7 @@ EOF
     summary_json="/tmp/dx-review/bd-prose/summary.json"
 
     if [[ "$rc" -eq 1 ]] \
-        && grep -q '"reviewer":"bd-prose.glm"' "$summary_json" \
+        && grep -q '"reviewer":"bd-prose.kimi"' "$summary_json" \
         && grep -q '"state":"review_unusable"' "$summary_json" \
         && grep -q '"usable_review":false' "$summary_json" \
         && grep -q '"review_status_reason":"missing_review_schema"' "$summary_json"; then
@@ -507,8 +492,8 @@ EOF
     rm -rf "$tmp"
 }
 
-test_summarize_gemini_stopped_is_incomplete() {
-    echo "=== Testing dx-review summarize treats stopped Gemini as incomplete ==="
+test_summarize_deepseek_stopped_is_incomplete() {
+    echo "=== Testing dx-review summarize treats stopped DeepSeek as incomplete ==="
 
     local tmp fake out rc summary_json run_dir
     tmp="$(mktemp -d)"
@@ -516,23 +501,23 @@ test_summarize_gemini_stopped_is_incomplete() {
     make_fake_runner "$fake"
     export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
     export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
-    export DX_REVIEW_FAKE_GEMINI_STOPPED=1
+    export DX_REVIEW_FAKE_DEEPSEEK_STOPPED=1
     unset DX_REVIEW_FAKE_FORCE_START_FAILED
     unset DX_REVIEW_FAKE_REPORT_USAGE
 
-    run_dir="/tmp/dx-review/bd-gemstop"
+    run_dir="/tmp/dx-review/bd-deepstop"
     rm -rf "$run_dir"
     mkdir -p "$run_dir"
     printf '## Read-Only Review Mode\n' > "$run_dir/review.prompt"
 
     set +e
-    out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" summarize --beads bd-gemstop --gemini 2>&1)"
+    out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" summarize --beads bd-deepstop 2>&1)"
     rc=$?
     set -e
     summary_json="$run_dir/summary.json"
 
     if [[ "$rc" -eq 2 ]] \
-        && grep -q '"reviewer":"bd-gemstop.gemini"' "$summary_json" \
+        && grep -q '"reviewer":"bd-deepstop.deepseek"' "$summary_json" \
         && grep -q '"state":"timeout_manual_stop"' "$summary_json" \
         && grep -q '"reason_code":"timeout_manual_stop"' "$summary_json" \
         && grep -q '"process_success":false' "$summary_json" \
@@ -540,12 +525,12 @@ test_summarize_gemini_stopped_is_incomplete() {
         && grep -q '"mutation_count":1' "$summary_json" \
         && grep -q '"mutation_warning":"read_only_mutation_detected"' "$summary_json" \
         && echo "$out" | grep -q "effective quorum: 1/2 completed, 0 failed"; then
-        pass "stopped Gemini lane is incomplete and mutation-warning aware"
+        pass "stopped DeepSeek lane is incomplete and mutation-warning aware"
     else
-        fail "stopped Gemini lane was not classified correctly: rc=$rc output=$out"
+        fail "stopped DeepSeek lane was not classified correctly: rc=$rc output=$out"
     fi
 
-    unset DX_REVIEW_FAKE_GEMINI_STOPPED
+    unset DX_REVIEW_FAKE_DEEPSEEK_STOPPED
     rm -rf "$tmp"
 }
 
@@ -564,10 +549,10 @@ test_summarize_start_log_reason_when_metadata_missing() {
 
     rm -rf /tmp/dx-review/bd-nometa
     mkdir -p /tmp/dx-review/bd-nometa
-    start_log="/tmp/dx-review/bd-nometa/bd-nometa.glm.start.log"
+    start_log="/tmp/dx-review/bd-nometa/bd-nometa.kimi.start.log"
     cat > "$start_log" <<'EOF'
 reason_code=canonical_model_probe_timeout
-model probe timed out for zhipuai/glm-5.1
+model probe timed out for opencode-go/kimi-k2.6
 EOF
 
     set +e
@@ -577,7 +562,7 @@ EOF
     summary_json="/tmp/dx-review/bd-nometa/summary.json"
 
     if [[ "$rc" -eq 2 ]] \
-        && grep -q '"reviewer":"bd-nometa.glm"' "$summary_json" \
+        && grep -q '"reviewer":"bd-nometa.kimi"' "$summary_json" \
         && grep -q '"state":"start_failed"' "$summary_json" \
         && grep -q '"reason_code":"canonical_model_probe_timeout"' "$summary_json"; then
         pass "summarize preserves useful start-log root cause when runner metadata is missing"
@@ -589,7 +574,7 @@ EOF
 }
 
 main() {
-    test_default_glm_and_fallback
+    test_default_opencode_go_pair
     test_summarize_default_reviewers_and_usage_unavailable
     test_summarize_start_failed_exit_semantics
     test_doctor_runs_both_profiles
@@ -597,7 +582,7 @@ main() {
     test_summarize_parses_log_schema_usage
     test_summarize_empty_success_is_unusable
     test_summarize_ignores_prose_without_schema
-    test_summarize_gemini_stopped_is_incomplete
+    test_summarize_deepseek_stopped_is_incomplete
     test_summarize_start_log_reason_when_metadata_missing
     echo ""
     echo "=== Summary ==="

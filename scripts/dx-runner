@@ -2421,7 +2421,9 @@ Providers:
 
 Built-in Profiles (bd-8wdg.1):
   opencode-prod    Production-safe OpenCode with strict governance
-  opencode-review  Review-safe OpenCode with zhipuai/glm-5.1
+  opencode-go-kimi-review Review-safe OpenCode with opencode-go/kimi-k2.6
+  opencode-go-deepseek-review Review-safe OpenCode with opencode-go/deepseek-v4-pro
+  opencode-review  Compatibility alias for opencode-go/kimi-k2.6
   claude-code-review Native Claude Code Opus review lane
   cc-glm-fallback  Reliability backstop profile
   gemini-burst     Burst capacity using Gemini CLI

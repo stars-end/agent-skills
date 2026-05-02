@@ -2,7 +2,7 @@
 name: cc-glm
 description: |
   Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution.
-  Batch by outcome (not file). Primary implementation dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. For dx-review, cc-glm is the primary GLM review lane and OpenCode is fallback.
+  Batch by outcome (not file). Primary implementation dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. dx-review now uses OpenCode Kimi/DeepSeek lanes only; cc-glm is not part of its default review quorum.
   Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution.
 tags: [workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode]
 allowed-tools:
@@ -20,7 +20,7 @@ allowed-tools:
 
 - Primary implementation throughput lane: OpenCode headless CLI (`opencode run`)
 - Reliability backstop implementation lane: cc-glm via `dx-runner --provider cc-glm` with baseline/integrity/feature-key gates
-- Primary `dx-review` GLM lane: `cc-glm-review` profile, with `opencode-review` as fallback transport
+- Legacy/manual review lane: `cc-glm-review` profile remains available outside the default `dx-review` quorum
 - Use cc-glm when OpenCode misses SLOs, fails governance gates, or the wave is marked critical
 
 `cc-glm` is **not native Claude Code provider support**. It is the existing Z.ai/GLM wrapper path that uses the `claude` CLI as a transport with explicit Z.ai auth/routing and `glm-*` models. Do not infer Anthropic account auth, Claude Code model aliases, or generic Claude Code session semantics from `dx-runner --provider cc-glm`.

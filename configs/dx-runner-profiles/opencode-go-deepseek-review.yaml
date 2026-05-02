@@ -1,14 +1,14 @@
-# dx-runner profile: opencode-review
-# Compatibility alias for the primary dx-review OpenCode Kimi lane.
+# dx-runner profile: opencode-go-deepseek-review
+# Default dx-review lane using DeepSeek V4 Pro through OpenCode.
 
 profile:
-  name: opencode-review
-  description: Compatibility alias for review-safe OpenCode Kimi K2.6 dispatch
+  name: opencode-go-deepseek-review
+  description: Review-safe OpenCode DeepSeek V4 Pro lane
   version: "1.0.0"
 
 provider:
   name: opencode
-  model: opencode-go/kimi-k2.6
+  model: opencode-go/deepseek-v4-pro
   allow_model_override: false
   execution_mode: run
   fallback_provider: null

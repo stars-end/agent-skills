@@ -82,10 +82,10 @@ For changes that touch architecture or workflow behavior, read in this order:
 
 - baseline generation and AGENTS compilation scripts
 - review/orchestration templates under `templates/dx-review`
-- `dx-review` skill and wrapper policy: current review quorum is GLM-first
-  (`cc-glm-review` with `opencode-review` fallback) plus Gemini; Claude is not
-  part of the dx-review surface even though `dx-runner` may still expose a
-  generic `claude-code` provider for other workflows
+- `dx-review` skill and wrapper policy: current review quorum is OpenCode-only:
+  `opencode-go/kimi-k2.6` plus `opencode-go/deepseek-v4-pro`. cc-glm, Gemini,
+  and Claude are not part of the default dx-review surface even though
+  `dx-runner` may still expose those providers for other workflows.
 - routing contracts for `llm-tldr`, Serena, and Beads runtime assumptions
 - scripts that enforce cross-repo policy (`dx-*` checks, dispatch helpers)
 - stale "canonical dx-batch" wording in generated baselines, skill metadata,

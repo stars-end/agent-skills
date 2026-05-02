@@ -2315,7 +2315,7 @@ test_opencode_preflight_worktree_authority() {
     cat > "$fake_op" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "models" ]]; then
-  echo "zhipuai/glm-5.1"
+  echo "opencode-go/kimi-k2.6"
   exit 0
 fi
 if [[ "${1:-}" == "run" ]]; then
@@ -2354,7 +2354,7 @@ EOF
 
     rm -f /tmp/dx-runner/opencode/.models_cache
     set +e
-    out="$(cd "$caller" && PATH="$bin:$PATH" OPENCODE_MODELS_CACHE_TTL_SEC=0 BEADS_DIR="${BEADS_DIR:-$HOME/.beads-runtime/.beads}" "$DX_RUNNER" preflight --profile opencode-review --worktree "$target" 2>&1)"
+    out="$(cd "$caller" && PATH="$bin:$PATH" OPENCODE_MODELS_CACHE_TTL_SEC=0 BEADS_DIR="${BEADS_DIR:-$HOME/.beads-runtime/.beads}" "$DX_RUNNER" preflight --profile opencode-go-kimi-review --worktree "$target" 2>&1)"
     rc=$?
     set -e
     if [[ "$rc" -eq 0 ]] && echo "$out" | grep -q "explicit worktree has no .mise target" && ! echo "$out" | grep -q "opencode_mise_untrusted"; then

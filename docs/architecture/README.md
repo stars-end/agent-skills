@@ -19,9 +19,8 @@ stale_if_paths:
 - `WORKFLOWS_AND_PATTERNS.md`: recurring workflow contracts, orchestration
   surface hierarchy, and anti-drift rules
 
-Current review-dispatch policy lives in the map docs: `dx-review` uses the GLM
-lane plus Gemini by default, with OpenCode as GLM fallback and no Claude review
-lane.
+Current review-dispatch policy lives in the map docs: `dx-review` uses only the
+OpenCode Kimi K2.6 and DeepSeek V4 Pro lanes by default.
 
 Scheduled repo-memory refreshes must keep this index in sync whenever mapped
 architecture docs are added, removed, or materially reorganized.

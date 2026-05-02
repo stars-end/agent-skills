@@ -18,7 +18,7 @@ allowed-tools:
 It provides:
 
 - **Single command surface**: start/status/check/restart/stop/watchdog/report/preflight
-- **Multi-provider support**: cc-glm (Z.ai/GLM reliability backstop and primary `dx-review` GLM lane), opencode (primary throughput and `dx-review` fallback GLM transport), claude-code (native Claude Code review lane), gemini (optional burst)
+- **Multi-provider support**: opencode (primary throughput and the `dx-review` Kimi/DeepSeek quorum), cc-glm (Z.ai/GLM reliability backstop outside the default review quorum), claude-code (native Claude Code lane for explicit non-default use), gemini (optional burst outside the default review quorum)
 - **Unified governance**: preflight, permission gates, no-op detection, baseline/integrity/feature-key gates
 - **Deterministic outputs**: Machine-readable JSON with stable schemas
 
@@ -55,11 +55,7 @@ export BEADS_DIR="$HOME/.beads-runtime/.beads"
 # Start a job with cc-glm provider and explicit repo worktree
 dx-runner start --beads bd-xxx --provider cc-glm --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/task.prompt
 
-# Start the native Claude Code review lane with Opus
-dx-runner start --beads bd-xxx.claude --profile claude-code-review --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/review.prompt
-
-# Run the minimal two-reviewer quorum wrapper: Claude Code Opus + cc-glm GLM-5
-# OpenCode GLM-5.1 is launched only if the cc-glm review lane fails at start/preflight.
+# Run the minimal two-reviewer quorum wrapper: Kimi K2.6 + DeepSeek V4 Pro via OpenCode.
 dx-review run --beads bd-xxx --worktree /tmp/agents/bd-xxx/agent-skills --prompt-file /tmp/review.prompt --wait
 
 # Run source-backed research wrapper and read merged summary first.
@@ -170,7 +166,7 @@ Run preflight checks:
 
 ```bash
 dx-runner preflight [--provider <name>]
-dx-runner preflight --profile claude-code-review
+dx-runner preflight --profile opencode-go-kimi-review
 ```
 
 ### probe
@@ -252,7 +248,7 @@ Canonical repos are clean mirrors. Use: dx-worktree create bd-xxx agent-skills
 
 ## Providers
 
-### cc-glm (Reliability Backstop + Primary Review GLM Lane)
+### cc-glm (Reliability Backstop)
 
 Z.ai/GLM wrapper lane using `cc-glm-headless.sh` and proven patterns from `cc-glm-job.sh`. This is not native Claude Code provider support.
 
@@ -280,13 +276,14 @@ dx-runner start --beads bd-xxx --provider opencode --prompt-file /tmp/task.promp
 ```
 
 **Model policy:**
-- Review/default required: `zhipuai/glm-5.1`
-- For implementation throughput, if unavailable: fail fast and dispatch via `cc-glm` or `gemini`
-- For `dx-review`, OpenCode is fallback transport after `cc-glm-review` start/preflight failure
+- Direct opencode dispatch default: `zhipuai/glm-5.1`
+- For implementation throughput, if unavailable: fail fast and dispatch via an available fallback provider
+- For `dx-review`, profile-pinned OpenCode runs both default review lanes:
+  `opencode-go/kimi-k2.6` and `opencode-go/deepseek-v4-pro`
 
-### claude-code (Native Claude Code Review Lane)
+### claude-code (Explicit Non-Default Lane)
 
-Native Anthropic Claude Code CLI in headless prompt mode. Use this for review quorum work that explicitly needs Claude Code Opus separate from the `cc-glm` Z.ai/GLM wrapper lane.
+Native Anthropic Claude Code CLI in headless prompt mode. Use this only for explicit non-default work that needs Claude Code Opus; it is not part of the default `dx-review` quorum.
 
 ```bash
 dx-runner start --beads bd-xxx.claude --profile claude-code-review --worktree /tmp/agents/bd-xxx/repo --prompt-file /tmp/review.prompt
@@ -322,11 +319,10 @@ Profiles provide pre-configured settings for common workflows:
 # Use production profile (strict governance)
 dx-runner start --beads bd-xxx --profile opencode-prod --prompt-file /tmp/task.prompt
 
-# Use explicit review profile
-dx-runner start --beads bd-xxx.glm --profile cc-glm-review --prompt-file /tmp/review.prompt --worktree /tmp/agents/bd-xxx/repo
+# Use default dx-review profiles directly
+dx-runner start --beads bd-xxx.kimi --profile opencode-go-kimi-review --prompt-file /tmp/review.prompt --worktree /tmp/agents/bd-xxx/repo
 
-# Use native Claude Code Opus review profile
-dx-runner start --beads bd-xxx.claude --profile claude-code-review --prompt-file /tmp/review.prompt --worktree /tmp/agents/bd-xxx/repo
+dx-runner start --beads bd-xxx.deepseek --profile opencode-go-deepseek-review --prompt-file /tmp/review.prompt --worktree /tmp/agents/bd-xxx/repo
 
 # List available profiles
 dx-runner profiles
@@ -337,9 +333,11 @@ dx-runner profiles
 | Profile | Provider | Description |
 |---------|----------|-------------|
 | `opencode-prod` | opencode | Production: strict governance, canonical model only |
-| `cc-glm-review` | cc-glm | Review: primary GLM lane, `glm-5` |
-| `opencode-review` | opencode | Review fallback: strict governance, `zhipuai/glm-5.1` |
-| `claude-code-review` | claude-code | Review: strict governance, `opus` |
+| `opencode-go-kimi-review` | opencode | Review: `opencode-go/kimi-k2.6` |
+| `opencode-go-deepseek-review` | opencode | Review: `opencode-go/deepseek-v4-pro` |
+| `opencode-review` | opencode | Compatibility alias for `opencode-go/kimi-k2.6` |
+| `cc-glm-review` | cc-glm | Legacy/manual review profile; not part of default `dx-review` |
+| `claude-code-review` | claude-code | Explicit non-default review profile, `opus` |
 | `cc-glm-fallback` | cc-glm | Reliability backstop for critical waves |
 | `gemini-burst` | gemini | Burst capacity with relaxed constraints |
 | `dev` | opencode | Development: permissive, allows model override |
@@ -362,7 +360,7 @@ Profile priority: CLI flags > profile settings > defaults
 
 ## Model Drift Blocking (bd-8wdg.2)
 
-OpenCode adapter enforces canonical model `zhipuai/glm-5.1` by default. The `OPENCODE_MODEL` environment variable is **ignored** by default.
+OpenCode adapter enforces its active profile model by default. Direct `--provider opencode` dispatch uses `zhipuai/glm-5.1`; `dx-review` profiles pin `opencode-go/kimi-k2.6` and `opencode-go/deepseek-v4-pro`. The `OPENCODE_MODEL` environment variable is **ignored** by default.
 
 ### Override Policy
 
