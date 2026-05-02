@@ -15,7 +15,8 @@ stale_if_paths:
   repo-specific Railway topology skills such as Affordabot and Prime Radiant
   dev context
 - `DATA_AND_STORAGE.md`: memory, storage, portable handoff context, delegated
-  prompt, and orchestration runtime artifact ownership boundaries
+  prompt, optional ccc semantic-index cache, and orchestration runtime artifact
+  ownership boundaries
 - `WORKFLOWS_AND_PATTERNS.md`: recurring workflow contracts, orchestration
   surface hierarchy, and anti-drift rules
 

@@ -32,8 +32,16 @@ surfaces. This file records their ownership boundaries.
    - active runtime path: `~/.beads-runtime/.beads`
    - durable records live in shared Dolt server backend configured by runtime
 3. External tool state (not committed)
-   - e.g., `llm-tldr` contained state under external cache locations
-   - runtime caches are operational state, not canonical repo memory
+    - e.g., `llm-tldr` contained state under external cache locations
+    - runtime caches are operational state, not canonical repo memory
+    - `ccc` / CocoIndex Code semantic index state lives under
+      `~/.cache/agent-semantic-indexes/<repo-name>/` when the optional
+      semantic-hints lane is enabled; this contains non-canonical index clones,
+      per-repo `COCOINDEX_CODE_DIR` daemon state, `state.json`, logs, and locks
+    - `~/.cache/agent-semantic-indexes/` is disposable operational cache:
+      disabling the scheduled refresh and removing this directory is the
+      rollback path, while committed docs/config/scripts remain the source of
+      truth
 4. Orchestration runtime state (not committed)
    - `dx-loop` runtime artifacts live outside the repo and are operational
      coordination state
