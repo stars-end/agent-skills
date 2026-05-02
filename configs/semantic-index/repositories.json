@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "default_index_root": "~/.cache/agent-semantic-indexes",
+  "allowlist": [
+    "agent-skills",
+    "prime-radiant-ai",
+    "affordabot",
+    "llm-common"
+  ],
+  "repositories": {
+    "agent-skills": {
+      "canonical_path": "/home/fengning/agent-skills",
+      "source_remote": "git@github.com:stars-end/agent-skills.git",
+      "source_branch": "master"
+    },
+    "prime-radiant-ai": {
+      "canonical_path": "/home/fengning/prime-radiant-ai",
+      "source_remote": "git@github.com:stars-end/prime-radiant-ai.git",
+      "source_branch": "master"
+    },
+    "affordabot": {
+      "canonical_path": "/home/fengning/affordabot",
+      "source_remote": "git@github.com:stars-end/affordabot.git",
+      "source_branch": "master"
+    },
+    "llm-common": {
+      "canonical_path": "/home/fengning/llm-common",
+      "source_remote": "git@github.com:stars-end/llm-common.git",
+      "source_branch": "master"
+    }
+  }
+}
