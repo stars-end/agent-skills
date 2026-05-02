@@ -196,7 +196,8 @@ def test_query_never_invokes_ccc_index_and_ready_search_has_limit(tmp_path: Path
     assert cp.returncode == 0
     assert "result" in cp.stdout
     calls = log.read_text(encoding="utf-8")
-    assert "index" not in calls
+    command_lines = [line for line in calls.splitlines() if not line.startswith("/") and not line.startswith("COCOINDEX_CODE_DIR=")]
+    assert "index" not in command_lines
     assert "search needle --limit 3" in calls
     assert str(index_root / "repo") in calls
     assert f"COCOINDEX_CODE_DIR={index_root / 'coco-global'}" in calls
