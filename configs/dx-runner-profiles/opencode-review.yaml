@@ -1,14 +1,14 @@
 # dx-runner profile: opencode-review
-# Fallback review-lane OpenCode dispatch using the canonical locally advertised model ID.
+# Compatibility alias for the primary dx-review OpenCode Kimi lane.
 
 profile:
   name: opencode-review
-  description: Review-safe OpenCode fallback dispatch with zhipuai/glm-5.1
+  description: Compatibility alias for review-safe OpenCode Kimi K2.6 dispatch
   version: "1.0.0"
 
 provider:
   name: opencode
-  model: zhipuai/glm-5.1
+  model: opencode-go/kimi-k2.6
   allow_model_override: false
   execution_mode: run
   fallback_provider: null

@@ -1,0 +1,7 @@
+reviewers:
+  - id: kimi
+    provider: opencode
+    model: opencode-go/kimi-k2.6
+  - id: deepseek
+    provider: opencode
+    model: opencode-go/deepseek-v4-pro

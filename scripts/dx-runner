@@ -188,6 +188,30 @@ requires_railway_auth() {
     is_truthy "${REQUIRE_RAILWAY_AUTH:-${DX_RUNNER_REQUIRE_RAILWAY_AUTH:-0}}"
 }
 
+apply_explicit_model_for_provider() {
+    local provider="$1"
+    local model="$2"
+    [[ -n "$model" ]] || return 0
+    case "$provider" in
+        opencode)
+            export OPENCODE_MODEL="$model"
+            export OPENCODE_CANONICAL_MODEL="$model"
+            ;;
+        claude-code)
+            export CLAUDE_CODE_MODEL="$model"
+            export CLAUDE_CODE_CANONICAL_MODEL="$model"
+            ;;
+        cc-glm)
+            export CC_GLM_MODEL="$model"
+            ;;
+        gemini)
+            export GEMINI_MODEL="$model"
+            ;;
+    esac
+    ALLOW_MODEL_OVERRIDE=1
+    export DX_RUNNER_ALLOW_MODEL_OVERRIDE=1
+}
+
 railway_auth_gate() {
     local provider="${1:-}"
     if ! requires_railway_auth "$provider"; then
@@ -2421,7 +2445,7 @@ Providers:
 
 Built-in Profiles (bd-8wdg.1):
   opencode-prod    Production-safe OpenCode with strict governance
-  opencode-review  Review-safe OpenCode with zhipuai/glm-5.1
+  opencode-review  Compatibility alias for opencode-go/kimi-k2.6
   claude-code-review Native Claude Code Opus review lane
   cc-glm-fallback  Reliability backstop profile
   gemini-burst     Burst capacity using Gemini CLI
@@ -2530,6 +2554,8 @@ start_cmd() {
     [[ -f "$adapter" ]] || { echo "provider adapter not found: $adapter" >&2; exit 20; }
     
     job_paths "$BEADS" "$PROVIDER"
+
+    apply_explicit_model_for_provider "$PROVIDER" "$MODEL_ID"
     
     local state
     state="$(job_state "$PID_FILE")"
@@ -2668,27 +2694,9 @@ EOF
         echo "provider switch detected for beads=$BEADS: ${switched_from} -> ${PROVIDER}" >&2
     fi
     
-    # Source adapter and run
+    # Source adapter and run. Explicit --model has already been exported so
+    # adapter-level canonical model variables initialize from it.
     source "$adapter"
-    
-    # Pass explicit --model flag to the active adapter.
-    if [[ -n "$MODEL_ID" ]]; then
-        case "$PROVIDER" in
-            opencode)
-                export OPENCODE_MODEL="$MODEL_ID"
-                ;;
-            claude-code)
-                export CLAUDE_CODE_MODEL="$MODEL_ID"
-                ;;
-            cc-glm)
-                export CC_GLM_MODEL="$MODEL_ID"
-                ;;
-            gemini)
-                export GEMINI_MODEL="$MODEL_ID"
-                ;;
-        esac
-        export DX_RUNNER_ALLOW_MODEL_OVERRIDE=1
-    fi
     
     if ! declare -f adapter_start >/dev/null 2>&1; then
         echo "adapter_start not found in $adapter" >&2
@@ -3405,6 +3413,7 @@ preflight_cmd() {
         maybe_auto_trust_mise "$preflight_worktree"
         export DX_RUNNER_PREFLIGHT_WORKTREE="$preflight_worktree"
     fi
+    apply_explicit_model_for_provider "$PROVIDER" "$MODEL_ID"
     unified_preflight "$PROVIDER"
     exit $?
 }

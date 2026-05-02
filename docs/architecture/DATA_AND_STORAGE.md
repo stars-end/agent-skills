@@ -40,8 +40,10 @@ surfaces. This file records their ownership boundaries.
    - `dx-runner` reports/logs live outside the repo and are provider execution
      evidence, not canonical product memory
    - `dx-review` summary and reviewer artifacts live under `/tmp/dx-review`
-     and `/tmp/dx-runner`; they are disposable review evidence, while the
-     durable contract is the repo-reviewed wrapper, skill, and template files
+     and `/tmp/dx-runner`; default review execution is configured by
+     `configs/dx-review/default.yaml`, and these runtime artifacts are
+     disposable review evidence while the durable contract is the repo-reviewed
+     wrapper, skill, config, and template files
    - `dx-batch`/`dx-wave` artifacts are legacy compatibility or operator
      substrate state and should not be treated as the default agent workflow
      record

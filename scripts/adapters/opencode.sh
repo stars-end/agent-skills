@@ -67,6 +67,7 @@ adapter_is_allowed_phase_model() {
     local model="$1"
     case "$model" in
         zhipuai/glm-5.1|zai-coding-plan/glm-5.1|zhipuai-coding-plan/glm-5.1) return 0 ;;
+        opencode-go/*) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -425,7 +426,7 @@ adapter_resolve_model() {
         fi
     done < <(adapter_canonical_model_aliases "$required")
 
-    echo "|unavailable|model '$required' unavailable; use cc-glm or gemini"
+    echo "|unavailable|model '$required' unavailable; choose an available configured provider/model"
     return 1
 }
 

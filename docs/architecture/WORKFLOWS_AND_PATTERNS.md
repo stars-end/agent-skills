@@ -55,11 +55,11 @@ not rediscover them from scratch.
 ## Core Pattern: Review Contracts
 
 Templates under `templates/dx-review/` define expected reviewer behavior.
-`dx-review` itself is a thin dispatcher: it runs the GLM lane through
-`cc-glm-review`, falls back to `opencode-review` for that GLM lane when needed,
-and runs Gemini as the second default review lane. Claude is intentionally not
-part of the dx-review quorum; do not reintroduce Claude by editing tests or
-generated baseline text without a new explicit policy change.
+`dx-review` itself is a thin dispatcher over `dx-runner`: it reads reviewer
+`id/provider/model` rows from `configs/dx-review/default.yaml` and passes each
+configured lane through `dx-runner --provider <provider> --model <model>`.
+The default YAML currently contains only OpenCode Kimi K2.6 and DeepSeek V4 Pro;
+cc-glm, Gemini, and Claude are intentionally not part of the default quorum.
 
 Architecture review should evaluate:
 

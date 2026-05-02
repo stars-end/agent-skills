@@ -2,12 +2,8 @@
 set -euo pipefail
 
 # dx-review
-# Minimal review quorum wrapper over dx-runner profiles.
-# Default reviewers:
-#   - cc-glm-review      -> GLM-5.1 via cc-glm transport
-#   - gemini-burst       -> Gemini review lane
-# Fallback:
-#   - opencode-review    -> OpenCode GLM-5.1 if cc-glm fails at start/preflight
+# Minimal review quorum wrapper over dx-runner.
+# Default reviewers are configured in configs/dx-review/default.yaml.
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 if [[ -L "$SCRIPT_SOURCE" ]]; then
@@ -16,6 +12,13 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 DX_RUNNER="${DX_RUNNER_BIN:-$SCRIPT_DIR/dx-runner}"
 TEMPLATES_DIR="${DX_REVIEW_TEMPLATES_DIR:-$SCRIPT_DIR/../templates/dx-review}"
+DX_REVIEW_CONFIG="${DX_REVIEW_CONFIG:-$SCRIPT_DIR/../configs/dx-review/default.yaml}"
+
+declare -a DX_REVIEW_IDS=()
+declare -a DX_REVIEW_MODELS=()
+declare -a DX_REVIEW_PROVIDERS=()
+declare -a DX_REVIEW_PROFILE_HINTS=()
+DX_REVIEW_CONFIG_LOADED=false
 
 usage() {
     cat <<'EOF'
@@ -23,11 +26,12 @@ dx-review
 
 Usage:
   dx-review run --beads <bd-id> --worktree <path> (--prompt <text> | --prompt-file <path> | --template <name> | --pr <ref>) [options]
-  dx-review doctor --worktree <path> [--gemini]
-  dx-review summarize --beads <bd-id> [--gemini]
+  dx-review doctor --worktree <path>
+  dx-review summarize --beads <bd-id>
 
 Options:
-  --gemini              Compatibility no-op; gemini-burst is included by default.
+  --gemini              Compatibility no-op; Gemini is not part of the default review quorum.
+  DX_REVIEW_CONFIG      Override reviewer config path (default: configs/dx-review/default.yaml).
   --pr <url|repo#num>   Include GitHub PR metadata from gh.
   --github-pr <ref>     Alias for --pr.
   --template <name>     Review template: smoke, code-review, architecture-review, arch-review, security-review.
@@ -66,15 +70,155 @@ json_escape() {
     printf '%s' "$s"
 }
 
+join_by() {
+    local delim="$1"
+    shift || true
+    local out="" first=true item
+    for item in "$@"; do
+        if [[ "$first" == "true" ]]; then
+            out="$item"
+            first=false
+        else
+            out="${out}${delim}${item}"
+        fi
+    done
+    printf '%s' "$out"
+}
+
+load_reviewers_config() {
+    [[ "$DX_REVIEW_CONFIG_LOADED" == "true" ]] && return 0
+    [[ -f "$DX_REVIEW_CONFIG" ]] || { echo "dx-review config not found: $DX_REVIEW_CONFIG" >&2; return 2; }
+
+    local id suffix profile model provider
+    while IFS='|' read -r id suffix profile model provider; do
+        [[ -n "$id" || -n "$suffix" || -n "$profile" || -n "$model" || -n "$provider" ]] || continue
+
+        id="${id:-$suffix}"
+        if [[ -z "$id" ]]; then
+            case "$profile" in
+                opencode-go-kimi-review) id="kimi" ;;
+                opencode-go-deepseek-review) id="deepseek" ;;
+                cc-glm-review) id="glm" ;;
+                opencode-review) id="opencode" ;;
+                gemini-burst) id="gemini" ;;
+            esac
+        fi
+
+        provider="${provider:-}"
+        model="${model:-}"
+        if [[ -z "$provider" ]]; then
+            case "$profile" in
+                opencode-go-kimi-review|opencode-go-deepseek-review|opencode-review) provider="opencode" ;;
+                cc-glm-review) provider="cc-glm" ;;
+                gemini-burst) provider="gemini" ;;
+            esac
+        fi
+        if [[ -z "$model" ]]; then
+            case "$profile" in
+                opencode-go-kimi-review) model="opencode-go/kimi-k2.6" ;;
+                opencode-go-deepseek-review) model="opencode-go/deepseek-v4-pro" ;;
+            esac
+        fi
+
+        [[ -n "$id" ]] || { echo "missing reviewer id in $DX_REVIEW_CONFIG" >&2; return 2; }
+        [[ -n "$provider" ]] || { echo "missing provider for reviewer id '$id' in $DX_REVIEW_CONFIG" >&2; return 2; }
+        [[ -n "$model" ]] || { echo "missing model for reviewer id '$id' in $DX_REVIEW_CONFIG" >&2; return 2; }
+        if [[ ! "$id" =~ ^[a-z0-9]+$ ]]; then
+            echo "invalid dx-review reviewer id '$id' in $DX_REVIEW_CONFIG; use lowercase alphanumeric IDs so reviewer Beads IDs remain valid" >&2
+            return 2
+        fi
+        DX_REVIEW_IDS+=("$id")
+        DX_REVIEW_MODELS+=("$model")
+        DX_REVIEW_PROVIDERS+=("$provider")
+        DX_REVIEW_PROFILE_HINTS+=("$profile")
+    done < <(awk '
+        function trim(s) {
+            sub(/^[[:space:]]+/, "", s)
+            sub(/[[:space:]]+$/, "", s)
+            return s
+        }
+        function clean(v) {
+            v = trim(v)
+            sub(/[[:space:]]+#.*$/, "", v)
+            gsub(/^["'\'']|["'\'']$/, "", v)
+            return v
+        }
+        function parse(line, key, value) {
+            line = trim(line)
+            if (line ~ /^(id|suffix|profile|model|provider):/) {
+                key = line
+                sub(/:.*/, "", key)
+                value = line
+                sub(/^[^:]+:/, "", value)
+                value = clean(value)
+                if (key == "id") id = value
+                else if (key == "suffix") suffix = value
+                else if (key == "profile") profile = value
+                else if (key == "model") model = value
+                else if (key == "provider") provider = value
+            }
+        }
+        function flush() {
+            if (id != "" || suffix != "" || profile != "" || model != "" || provider != "") {
+                print id "|" suffix "|" profile "|" model "|" provider
+            }
+            id = suffix = profile = model = provider = ""
+        }
+        /^[[:space:]]*#/ { next }
+        /^[[:space:]]*reviewers:[[:space:]]*$/ { next }
+        /^[[:space:]]*-[[:space:]]*/ {
+            flush()
+            sub(/^[[:space:]]*-[[:space:]]*/, "")
+            parse($0)
+            next
+        }
+        { parse($0) }
+        END { flush() }
+    ' "$DX_REVIEW_CONFIG")
+
+    if [[ "${#DX_REVIEW_IDS[@]}" -eq 0 ]]; then
+        echo "dx-review config has no reviewers: $DX_REVIEW_CONFIG" >&2
+        return 2
+    fi
+
+    DX_REVIEW_CONFIG_LOADED=true
+}
+
+allowed_review_models() {
+    load_reviewers_config || return $?
+    join_by "," "${DX_REVIEW_MODELS[@]}"
+}
+
 reviewer_id_for_profile() {
     local beads="$1"
     local profile="$2"
     case "$profile" in
+        opencode-go-kimi-review) printf '%s.kimi' "$beads" ;;
+        opencode-go-deepseek-review) printf '%s.deepseek' "$beads" ;;
         cc-glm-review) printf '%s.glm' "$beads" ;;
         opencode-review) printf '%s.opencode' "$beads" ;;
         gemini-burst) printf '%s.gemini' "$beads" ;;
         *) printf '%s.%s' "$beads" "$(printf '%s' "$profile" | tr -cd 'a-z0-9')" ;;
     esac
+}
+
+reviewer_id_for_config() {
+    local beads="$1"
+    local reviewer_id="$2"
+    printf '%s.%s' "$beads" "$reviewer_id"
+}
+
+reviewer_index_by_suffix() {
+    load_reviewers_config || return 2
+    local suffix="$1"
+    local i
+    for i in "${!DX_REVIEW_IDS[@]}"; do
+        if [[ "${DX_REVIEW_IDS[$i]}" == "$suffix" ]]; then
+            printf '%s' "$i"
+            return 0
+        fi
+    done
+    return 1
 }
 
 state_from_check_json() {
@@ -364,7 +508,20 @@ build_review_prompt() {
 }
 
 profile_for_reviewer() {
+    local suffix="${1##*.}"
+    local idx
+    if idx="$(reviewer_index_by_suffix "$suffix" 2>/dev/null)"; then
+        local configured_profile="${DX_REVIEW_PROFILE_HINTS[$idx]:-}"
+        if [[ -n "$configured_profile" ]]; then
+            printf '%s' "$configured_profile"
+            return 0
+        fi
+        printf '%s/%s' "${DX_REVIEW_PROVIDERS[$idx]}" "${DX_REVIEW_MODELS[$idx]}"
+        return 0
+    fi
     case "$1" in
+        *.kimi) printf 'opencode-go-kimi-review' ;;
+        *.deepseek) printf 'opencode-go-deepseek-review' ;;
         *.glm) printf 'cc-glm-review' ;;
         *.opencode) printf 'opencode-review' ;;
         *.gemini) printf 'gemini-burst' ;;
@@ -373,7 +530,14 @@ profile_for_reviewer() {
 }
 
 provider_hint_for_reviewer() {
+    local suffix="${1##*.}"
+    local idx
+    if idx="$(reviewer_index_by_suffix "$suffix" 2>/dev/null)"; then
+        printf '%s' "${DX_REVIEW_PROVIDERS[$idx]}"
+        return 0
+    fi
     case "$1" in
+        *.kimi|*.deepseek) printf 'opencode' ;;
         *.glm) printf 'cc-glm' ;;
         *.opencode) printf 'opencode' ;;
         *.gemini) printf 'gemini' ;;
@@ -381,11 +545,17 @@ provider_hint_for_reviewer() {
     esac
 }
 
-logical_lane_for_reviewer() {
+model_hint_for_reviewer() {
+    local suffix="${1##*.}"
+    local idx
+    if idx="$(reviewer_index_by_suffix "$suffix" 2>/dev/null)"; then
+        printf '%s' "${DX_REVIEW_MODELS[$idx]}"
+        return 0
+    fi
     case "$1" in
-        *.glm|*.opencode) printf 'glm' ;;
-        *.gemini) printf 'gemini' ;;
-        *) printf '%s' "$1" ;;
+        *.kimi) printf 'opencode-go/kimi-k2.6' ;;
+        *.deepseek) printf 'opencode-go/deepseek-v4-pro' ;;
+        *) printf 'unknown' ;;
     esac
 }
 
@@ -433,28 +603,23 @@ summarize_reviews() {
     local run_dir="/tmp/dx-review/${beads}"
     local summary_json="$run_dir/summary.json"
     local summary_md="$run_dir/summary.md"
-    local -a profiles=("cc-glm-review")
     local -a reviewers=()
     local -a entries=()
     local -a md_rows=()
     local raw_total=0 raw_completed=0 raw_failed=0 raw_not_reached=0
     local total=0 completed=0 failed=0 quorum_not_reached=0
-    local glm_completed=false glm_failed=false glm_not_reached=false
-    local gemini_completed=false gemini_failed=false gemini_not_reached=false
-    local profile reviewer
+    local reviewer
 
     mkdir -p "$run_dir"
-    profiles+=("gemini-burst")
-    for profile in "${profiles[@]}"; do
-        reviewers+=("$(reviewer_id_for_profile "$beads" "$profile")")
+    load_reviewers_config || return $?
+    local i
+    for i in "${!DX_REVIEW_IDS[@]}"; do
+        reviewers+=("$(reviewer_id_for_config "$beads" "${DX_REVIEW_IDS[$i]}")")
     done
-    if reviewer_attempted "$(reviewer_id_for_profile "$beads" "opencode-review")" "opencode" "$run_dir"; then
-        reviewers+=("$(reviewer_id_for_profile "$beads" "opencode-review")")
-    fi
 
     for reviewer in "${reviewers[@]}"; do
         raw_total=$((raw_total + 1))
-        local reviewer_profile state reason provider display_state verdict
+        local reviewer_profile reviewer_model state reason provider display_state verdict
         local check_json check_rc report_json report_rc report_path log_path start_log
         local start_log_text start_reason
         local input_tokens output_tokens total_tokens estimated_cost usage_available usage_source
@@ -463,9 +628,9 @@ summarize_reviews() {
         local process_success=false review_success=false usable_review=false review_schema_present=false
         local mutation_count mutation_source mutation_warning review_body_path review_status_reason
         local reviewer_failed=false reviewer_completed=false reviewer_not_reached=false
-        local lane
 
         reviewer_profile="$(profile_for_reviewer "$reviewer")"
+        reviewer_model="$(model_hint_for_reviewer "$reviewer")"
         start_log="$run_dir/${reviewer}.start.log"
         report_path="$run_dir/${reviewer}.report.json"
         start_log_text=""
@@ -616,25 +781,19 @@ EOF
             review_status_reason="$reason"
         fi
 
-        lane="$(logical_lane_for_reviewer "$reviewer")"
-        case "$lane" in
-            glm)
-                [[ "$reviewer_completed" == "true" ]] && glm_completed=true
-                [[ "$reviewer_failed" == "true" ]] && glm_failed=true
-                [[ "$reviewer_not_reached" == "true" ]] && glm_not_reached=true
-                ;;
-            gemini)
-                [[ "$reviewer_completed" == "true" ]] && gemini_completed=true
-                [[ "$reviewer_failed" == "true" ]] && gemini_failed=true
-                [[ "$reviewer_not_reached" == "true" ]] && gemini_not_reached=true
-                ;;
-        esac
+        if [[ "$reviewer_completed" == "true" ]]; then
+            completed=$((completed + 1))
+        elif [[ "$reviewer_not_reached" == "true" ]]; then
+            quorum_not_reached=$((quorum_not_reached + 1))
+        else
+            failed=$((failed + 1))
+        fi
 
         entries+=("$(cat <<EOF
-{"reviewer":"$(json_escape "$reviewer")","profile":"$(json_escape "$reviewer_profile")","state":"$(json_escape "$display_state")","process_success":${process_success},"review_success":${review_success},"usable_review":${usable_review},"review_status_reason":"$(json_escape "$review_status_reason")","reason_code":"$(json_escape "$reason")","verdict":${verdict_json},"findings_count":${findings_count},"read_only_enforcement":"$(json_escape "$read_only_enforcement")","mutation_count":${mutation_count},"mutation_source":"$(json_escape "$mutation_source")","mutation_warning":"$(json_escape "$mutation_warning")","report_path":"$(json_escape "$report_path")","log_path":"$(json_escape "$log_path")","review_body_path":"$(json_escape "$review_body_path")","start_log":"$(json_escape "$start_log")","usage":${usage_json}}
+{"reviewer":"$(json_escape "$reviewer")","profile":"$(json_escape "$reviewer_profile")","provider":"$(json_escape "$provider")","model":"$(json_escape "$reviewer_model")","state":"$(json_escape "$display_state")","process_success":${process_success},"review_success":${review_success},"usable_review":${usable_review},"review_status_reason":"$(json_escape "$review_status_reason")","reason_code":"$(json_escape "$reason")","verdict":${verdict_json},"findings_count":${findings_count},"read_only_enforcement":"$(json_escape "$read_only_enforcement")","mutation_count":${mutation_count},"mutation_source":"$(json_escape "$mutation_source")","mutation_warning":"$(json_escape "$mutation_warning")","report_path":"$(json_escape "$report_path")","log_path":"$(json_escape "$log_path")","review_body_path":"$(json_escape "$review_body_path")","start_log":"$(json_escape "$start_log")","usage":${usage_json}}
 EOF
 )")
-        md_rows+=("| ${reviewer} | ${reviewer_profile} | ${display_state} | process=${process_success} review=${review_success} usable=${usable_review} | ${reason} | ${verdict:-n/a} | ${findings_count} | ${read_only_enforcement} | ${mutation_count} ${mutation_warning} | available=${usage_available} | ${review_body_path:-n/a} |")
+        md_rows+=("| ${reviewer} | ${provider} | ${reviewer_model} | ${display_state} | process=${process_success} review=${review_success} usable=${usable_review} | ${reason} | ${verdict:-n/a} | ${findings_count} | ${read_only_enforcement} | ${mutation_count} ${mutation_warning} | available=${usage_available} | ${review_body_path:-n/a} |")
     done
 
     local i exit_code
@@ -646,10 +805,7 @@ EOF
         reviewers_json+="${entries[$i]}"
     done
 
-    total=2
-
-    if [[ "$glm_completed" == "true" ]]; then completed=$((completed + 1)); elif [[ "$glm_not_reached" == "true" ]]; then quorum_not_reached=$((quorum_not_reached + 1)); else failed=$((failed + 1)); fi
-    if [[ "$gemini_completed" == "true" ]]; then completed=$((completed + 1)); elif [[ "$gemini_not_reached" == "true" ]]; then quorum_not_reached=$((quorum_not_reached + 1)); else failed=$((failed + 1)); fi
+    total="${#reviewers[@]}"
 
     if [[ "$quorum_not_reached" -gt 0 ]]; then
         exit_code=2
@@ -667,8 +823,8 @@ EOF
         printf '# dx-review summary: %s\n\n' "$beads"
         printf 'effective quorum: %s/%s completed, %s failed\n' "$completed" "$total" "$failed"
         printf 'provider outcomes: %s completed, %s failed, %s not reached\n\n' "$raw_completed" "$raw_failed" "$raw_not_reached"
-        printf '| reviewer | profile | state | success | reason | verdict | findings | read-only | mutations | usage | review body |\n'
-        printf '|---|---|---|---|---|---|---|---|---|---|---|\n'
+        printf '| reviewer | provider | model | state | success | reason | verdict | findings | read-only | mutations | usage | review body |\n'
+        printf '|---|---|---|---|---|---|---|---|---|---|---|---|\n'
         local row
         for row in "${md_rows[@]}"; do
             printf '%s\n' "$row"
@@ -690,17 +846,19 @@ EOF
 run_doctor_for_profiles() {
     local worktree="$1"
     local include_gemini="$2"
-    local failures=0 profile rc
-    local -a profiles=("cc-glm-review")
+    local failures=0 rc
 
     [[ -n "$worktree" && -d "$worktree" ]] || { echo "doctor requires existing --worktree" >&2; return 2; }
-    profiles+=("gemini-burst")
+    load_reviewers_config || return $?
 
-    for profile in "${profiles[@]}"; do
-        [[ -n "$profile" ]] || continue
-        echo "doctor profile=$profile"
+    local i reviewer_id provider model
+    for i in "${!DX_REVIEW_IDS[@]}"; do
+        reviewer_id="${DX_REVIEW_IDS[$i]}"
+        provider="${DX_REVIEW_PROVIDERS[$i]}"
+        model="${DX_REVIEW_MODELS[$i]}"
+        echo "doctor reviewer=${reviewer_id} provider=${provider} model=${model}"
         set +e
-        DX_RUNNER_PREFLIGHT_WORKTREE="$worktree" "$DX_RUNNER" preflight --profile "$profile" --worktree "$worktree"
+        DX_RUNNER_PREFLIGHT_WORKTREE="$worktree" "$DX_RUNNER" preflight --provider "$provider" --model "$model" --worktree "$worktree"
         rc=$?
         set -e
         if [[ "$rc" -ne 0 ]]; then
@@ -853,83 +1011,54 @@ run_cmd() {
     fi
     [[ -f "$prompt_file" ]] || { echo "prompt file not found: $prompt_file" >&2; exit 2; }
 
-    local -a profiles=("cc-glm-review")
-    profiles+=("gemini-burst")
-
     local -a reviewers=()
+    local -a providers=()
+    local -a models=()
     local -a start_pids=()
     local -a start_logs=()
     local -a start_rcs=()
     local -a start_failed=()
     local -a final_states=()
     local failures=0
-    local profile reviewer start_log
+    local reviewer provider model start_log i
 
-    echo "dx-review reviewers: ${profiles[*]}"
-    for profile in "${profiles[@]}"; do
-        reviewer="$(reviewer_id_for_profile "$beads" "$profile")"
+    load_reviewers_config || exit $?
+    echo "dx-review config: $DX_REVIEW_CONFIG"
+    for i in "${!DX_REVIEW_IDS[@]}"; do
+        reviewer="$(reviewer_id_for_config "$beads" "${DX_REVIEW_IDS[$i]}")"
+        provider="${DX_REVIEW_PROVIDERS[$i]}"
+        model="${DX_REVIEW_MODELS[$i]}"
         reviewers+=("$reviewer")
+        providers+=("$provider")
+        models+=("$model")
         start_log="$run_dir/${reviewer}.start.log"
         start_logs+=("$start_log")
-        echo "launching reviewer=$reviewer profile=$profile start_log=$start_log"
-        "$DX_RUNNER" start --profile "$profile" --beads "$reviewer" --prompt-file "$prompt_file" --worktree "$worktree" >"$start_log" 2>&1 &
+        echo "launching reviewer=$reviewer provider=$provider model=$model start_log=$start_log"
+        "$DX_RUNNER" start --provider "$provider" --model "$model" --beads "$reviewer" --prompt-file "$prompt_file" --worktree "$worktree" >"$start_log" 2>&1 &
         start_pids+=("$!")
     done
 
-    local i start_rc
+    local start_rc
     for i in "${!start_pids[@]}"; do
         reviewer="${reviewers[$i]}"
-        profile="${profiles[$i]}"
+        provider="${providers[$i]}"
+        model="${models[$i]}"
         start_log="${start_logs[$i]}"
         set +e
         wait "${start_pids[$i]}"
         start_rc=$?
         set -e
         start_rcs[$i]="$start_rc"
-        echo "start result reviewer=$reviewer profile=$profile rc=$start_rc"
+        echo "start result reviewer=$reviewer provider=$provider model=$model rc=$start_rc"
         sed -n '1,220p' "$start_log"
         if [[ "$start_rc" -ne 0 ]]; then
-            echo "reviewer_start_failed reviewer=$reviewer profile=$profile rc=$start_rc start_log=$start_log" >&2
+            echo "reviewer_start_failed reviewer=$reviewer provider=$provider model=$model rc=$start_rc start_log=$start_log" >&2
             start_failed[$i]=true
             final_states[$i]=start_failed
             failures=$((failures + 1))
         else
             start_failed[$i]=false
             final_states[$i]=running
-        fi
-    done
-
-    local fallback_profile fallback_reviewer fallback_start_log fallback_start_rc
-    for i in "${!profiles[@]}"; do
-        if [[ "${profiles[$i]}" == "cc-glm-review" && "${start_failed[$i]:-false}" == "true" ]]; then
-            fallback_profile="opencode-review"
-            fallback_reviewer="$(reviewer_id_for_profile "$beads" "$fallback_profile")"
-            fallback_start_log="$run_dir/${fallback_reviewer}.start.log"
-            echo "glm_primary_start_failed reviewer=${reviewers[$i]} profile=cc-glm-review; launching fallback reviewer=$fallback_reviewer profile=$fallback_profile start_log=$fallback_start_log" >&2
-            profiles+=("$fallback_profile")
-            reviewers+=("$fallback_reviewer")
-            start_logs+=("$fallback_start_log")
-            "$DX_RUNNER" start --profile "$fallback_profile" --beads "$fallback_reviewer" --prompt-file "$prompt_file" --worktree "$worktree" >"$fallback_start_log" 2>&1 &
-            local fallback_pid="$!"
-            set +e
-            wait "$fallback_pid"
-            fallback_start_rc=$?
-            set -e
-            start_rcs+=("$fallback_start_rc")
-            echo "start result reviewer=$fallback_reviewer profile=$fallback_profile rc=$fallback_start_rc"
-            sed -n '1,220p' "$fallback_start_log"
-            if [[ "$fallback_start_rc" -ne 0 ]]; then
-                echo "reviewer_start_failed reviewer=$fallback_reviewer profile=$fallback_profile rc=$fallback_start_rc start_log=$fallback_start_log" >&2
-                start_failed+=(true)
-                final_states+=(start_failed)
-                failures=$((failures + 1))
-            else
-                start_failed+=(false)
-                final_states+=(running)
-                if [[ "$failures" -gt 0 ]]; then
-                    failures=$((failures - 1))
-                fi
-            fi
         fi
     done
 
@@ -981,8 +1110,8 @@ run_cmd() {
         reviewer="${reviewers[$i]}"
         echo "--- $reviewer ---"
         if [[ "${start_failed[$i]:-false}" == "true" ]]; then
-            printf '{"beads":"%s","provider_profile":"%s","state":"start_failed","reason_code":"dx_runner_start_failed","start_exit_code":%s,"start_log":"%s"}\n' \
-                "$(json_escape "$reviewer")" "$(json_escape "${profiles[$i]}")" "${start_rcs[$i]:-1}" "$(json_escape "${start_logs[$i]}")"
+            printf '{"beads":"%s","provider":"%s","model":"%s","state":"start_failed","reason_code":"dx_runner_start_failed","start_exit_code":%s,"start_log":"%s"}\n' \
+                "$(json_escape "$reviewer")" "$(json_escape "${providers[$i]}")" "$(json_escape "${models[$i]}")" "${start_rcs[$i]:-1}" "$(json_escape "${start_logs[$i]}")"
             continue
         fi
         local report_json report_rc report_state
