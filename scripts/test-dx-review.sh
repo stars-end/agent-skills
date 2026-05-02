@@ -44,13 +44,14 @@ arg_value() {
 
 case "$cmd" in
   start)
-    profile="$(arg_value --profile "$@")"
+    provider="$(arg_value --provider "$@")"
+    model="$(arg_value --model "$@")"
     beads="$(arg_value --beads "$@")"
     prompt_file="$(arg_value --prompt-file "$@")"
-    echo "start:$beads:$profile:$(date +%s)" >> "$DX_REVIEW_FAKE_LOG"
+    echo "start:$beads:$provider:$model:$(date +%s)" >> "$DX_REVIEW_FAKE_LOG"
     echo "prompt_file:$beads:$prompt_file" >> "$DX_REVIEW_FAKE_LOG"
-    case "$profile" in
-      opencode-go-kimi-review)
+    case "$model" in
+      opencode-go/kimi-k2.6)
         if [[ "${DX_REVIEW_FAKE_KIMI_START_FAIL:-0}" == "1" ]]; then
           mkdir -p "$state_dir"
           printf '1\n' > "$state_dir/${beads}.start_failed"
@@ -60,7 +61,7 @@ case "$cmd" in
         fi
         echo "started beads=$beads provider=opencode model=opencode-go/kimi-k2.6"
         ;;
-      opencode-go-deepseek-review)
+      opencode-go/deepseek-v4-pro)
         if [[ "${DX_REVIEW_FAKE_DEEPSEEK_START_FAIL:-0}" == "1" ]]; then
           mkdir -p "$state_dir"
           printf '1\n' > "$state_dir/${beads}.start_failed"
@@ -71,7 +72,7 @@ case "$cmd" in
         echo "started beads=$beads provider=opencode model=opencode-go/deepseek-v4-pro"
         ;;
       *)
-        echo "started beads=$beads provider=$profile"
+        echo "started beads=$beads provider=$provider model=$model"
         ;;
     esac
     ;;
@@ -172,10 +173,10 @@ test_default_opencode_go_pair() {
     rc=$?
     set -e
 
-    kimi_ts="$(awk -F: '$3=="opencode-go-kimi-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
-    deepseek_ts="$(awk -F: '$3=="opencode-go-deepseek-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")"
+    kimi_ts="$(awk -F: '$4=="opencode-go/kimi-k2.6"{print $5; exit}' "$DX_REVIEW_FAKE_LOG")"
+    deepseek_ts="$(awk -F: '$4=="opencode-go/deepseek-v4-pro"{print $5; exit}' "$DX_REVIEW_FAKE_LOG")"
     if [[ -n "$kimi_ts" && -n "$deepseek_ts" ]] \
-        && [[ -z "$(awk -F: '$3=="cc-glm-review" || $3=="opencode-review" || $3=="gemini-burst" || $3=="claude-code-review"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")" ]]; then
+        && [[ -z "$(awk -F: '$4!="opencode-go/kimi-k2.6" && $4!="opencode-go/deepseek-v4-pro"{print $4; exit}' "$DX_REVIEW_FAKE_LOG")" ]]; then
         pass "default run launches only Kimi and DeepSeek OpenCode reviewer lanes"
     else
         fail "default reviewer set incorrect: $out"
@@ -207,6 +208,53 @@ test_default_opencode_go_pair() {
         pass "run --wait prints effective quorum, provider outcomes, and summary artifact paths"
     else
         fail "run --wait missing quorum/summary output: $out"
+    fi
+
+    rm -rf "$tmp"
+}
+
+test_override_config_launches_three_reviewers() {
+    echo "=== Testing dx-review YAML override with third reviewer ==="
+
+    local tmp fake worktree out rc override_cfg
+    tmp="$(mktemp -d)"
+    fake="$tmp/dx-runner"
+    worktree="$tmp/worktree"
+    mkdir -p "$worktree"
+    make_fake_runner "$fake"
+    export DX_REVIEW_FAKE_LOG="$tmp/fake.log"
+    export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
+    unset DX_REVIEW_FAKE_KIMI_START_FAIL
+    unset DX_REVIEW_FAKE_DEEPSEEK_START_FAIL
+
+    override_cfg="$tmp/reviewers.yaml"
+    cat > "$override_cfg" <<'EOF'
+reviewers:
+  - id: kimi
+    provider: opencode
+    model: opencode-go/kimi-k2.6
+  - id: deepseek
+    provider: opencode
+    model: opencode-go/deepseek-v4-pro
+  - id: qwen
+    provider: opencode
+    model: opencode-go/qwen3-coder
+EOF
+
+    set +e
+    out="$(DX_RUNNER_BIN="$fake" DX_REVIEW_CONFIG="$override_cfg" "$DX_REVIEW" run --beads bd-three --worktree "$worktree" --prompt "review only" --wait --timeout-sec 8 --poll-sec 1 2>&1)"
+    rc=$?
+    set -e
+
+    if [[ "$rc" -eq 0 ]] \
+        && echo "$out" | grep -q "reviewer=bd-three.kimi" \
+        && echo "$out" | grep -q "reviewer=bd-three.deepseek" \
+        && echo "$out" | grep -q "reviewer=bd-three.qwen" \
+        && echo "$out" | grep -q "effective quorum: 3/3 completed, 0 failed" \
+        && [[ "$(awk -F: '$1=="start"{count++} END{print count+0}' "$DX_REVIEW_FAKE_LOG")" -eq 3 ]]; then
+        pass "override config adds a third reviewer without shell/script edits"
+    else
+        fail "override config did not launch all three reviewers: rc=$rc output=$out"
     fi
 
     rm -rf "$tmp"
@@ -289,8 +337,8 @@ test_summarize_start_failed_exit_semantics() {
     rm -rf "$tmp"
 }
 
-test_doctor_runs_both_profiles() {
-    echo "=== Testing dx-review doctor profile coverage ==="
+test_doctor_uses_configured_provider_model_pairs() {
+    echo "=== Testing dx-review doctor provider/model coverage ==="
 
     local tmp fake worktree out
     tmp="$(mktemp -d)"
@@ -302,14 +350,12 @@ test_doctor_runs_both_profiles() {
     export DX_REVIEW_FAKE_STATE_DIR="$tmp/state"
 
     out="$(DX_RUNNER_BIN="$fake" "$DX_REVIEW" doctor --worktree "$worktree" 2>&1)"
-    if echo "$out" | grep -q "doctor profile=opencode-go-kimi-review" \
-        && echo "$out" | grep -q "doctor profile=opencode-go-deepseek-review" \
-        && ! echo "$out" | grep -q "doctor profile=cc-glm-review" \
-        && ! echo "$out" | grep -q "doctor profile=gemini-burst" \
-        && ! echo "$out" | grep -q "doctor profile=claude-code-review"; then
-        pass "doctor checks only the default OpenCode review profiles"
+    if echo "$out" | grep -q "doctor reviewer=kimi provider=opencode model=opencode-go/kimi-k2.6" \
+        && echo "$out" | grep -q "doctor reviewer=deepseek provider=opencode model=opencode-go/deepseek-v4-pro" \
+        && ! echo "$out" | grep -q "doctor reviewer=qwen"; then
+        pass "doctor checks configured reviewer provider/model pairs"
     else
-        fail "doctor profile coverage incorrect: $out"
+        fail "doctor provider/model coverage incorrect: $out"
     fi
 
     rm -rf "$tmp"
@@ -575,9 +621,10 @@ EOF
 
 main() {
     test_default_opencode_go_pair
+    test_override_config_launches_three_reviewers
     test_summarize_default_reviewers_and_usage_unavailable
     test_summarize_start_failed_exit_semantics
-    test_doctor_runs_both_profiles
+    test_doctor_uses_configured_provider_model_pairs
     test_template_pr_prompt_generation
     test_summarize_parses_log_schema_usage
     test_summarize_empty_success_is_unusable

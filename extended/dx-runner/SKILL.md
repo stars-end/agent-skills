@@ -166,7 +166,7 @@ Run preflight checks:
 
 ```bash
 dx-runner preflight [--provider <name>]
-dx-runner preflight --profile opencode-go-kimi-review
+dx-runner preflight --provider opencode --model opencode-go/kimi-k2.6 --worktree /tmp/agents/bd-xxx/repo
 ```
 
 ### probe
@@ -278,8 +278,9 @@ dx-runner start --beads bd-xxx --provider opencode --prompt-file /tmp/task.promp
 **Model policy:**
 - Direct opencode dispatch default: `zhipuai/glm-5.1`
 - For implementation throughput, if unavailable: fail fast and dispatch via an available fallback provider
-- For `dx-review`, profile-pinned OpenCode runs both default review lanes:
-  `opencode-go/kimi-k2.6` and `opencode-go/deepseek-v4-pro`
+- For `dx-review`, reviewer `id/provider/model` rows live in
+  `configs/dx-review/default.yaml`; `dx-review` passes each configured model to
+  `dx-runner --provider opencode --model <model>`
 
 ### claude-code (Explicit Non-Default Lane)
 
@@ -319,10 +320,8 @@ Profiles provide pre-configured settings for common workflows:
 # Use production profile (strict governance)
 dx-runner start --beads bd-xxx --profile opencode-prod --prompt-file /tmp/task.prompt
 
-# Use default dx-review profiles directly
-dx-runner start --beads bd-xxx.kimi --profile opencode-go-kimi-review --prompt-file /tmp/review.prompt --worktree /tmp/agents/bd-xxx/repo
-
-dx-runner start --beads bd-xxx.deepseek --profile opencode-go-deepseek-review --prompt-file /tmp/review.prompt --worktree /tmp/agents/bd-xxx/repo
+# Use explicit provider/model dispatch directly
+dx-runner start --beads bd-xxx.kimi --provider opencode --model opencode-go/kimi-k2.6 --prompt-file /tmp/review.prompt --worktree /tmp/agents/bd-xxx/repo
 
 # List available profiles
 dx-runner profiles
@@ -333,8 +332,6 @@ dx-runner profiles
 | Profile | Provider | Description |
 |---------|----------|-------------|
 | `opencode-prod` | opencode | Production: strict governance, canonical model only |
-| `opencode-go-kimi-review` | opencode | Review: `opencode-go/kimi-k2.6` |
-| `opencode-go-deepseek-review` | opencode | Review: `opencode-go/deepseek-v4-pro` |
 | `opencode-review` | opencode | Compatibility alias for `opencode-go/kimi-k2.6` |
 | `cc-glm-review` | cc-glm | Legacy/manual review profile; not part of default `dx-review` |
 | `claude-code-review` | claude-code | Explicit non-default review profile, `opus` |
@@ -360,7 +357,11 @@ Profile priority: CLI flags > profile settings > defaults
 
 ## Model Drift Blocking (bd-8wdg.2)
 
-OpenCode adapter enforces its active profile model by default. Direct `--provider opencode` dispatch uses `zhipuai/glm-5.1`; `dx-review` profiles pin `opencode-go/kimi-k2.6` and `opencode-go/deepseek-v4-pro`. The `OPENCODE_MODEL` environment variable is **ignored** by default.
+OpenCode adapter enforces its active model by default. Direct `--provider opencode`
+dispatch uses `zhipuai/glm-5.1` unless `--model <id>` is passed. `dx-review`
+reads configured reviewer models from `configs/dx-review/default.yaml` and passes
+them explicitly to `dx-runner`. The `OPENCODE_MODEL` environment variable is
+**ignored** by default.
 
 ### Override Policy
 

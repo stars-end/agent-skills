@@ -8,10 +8,12 @@ allowed-tools:
 
 # dx-review
 
-`dx-review` is the minimal review quorum wrapper over `dx-runner`. It launches:
+`dx-review` is the minimal review quorum wrapper over `dx-runner`. Reviewer lanes
+are configured in `configs/dx-review/default.yaml` as `id/provider/model` rows.
+The default config launches:
 
-- `opencode-go-kimi-review`: OpenCode lane pinned to `opencode-go/kimi-k2.6`
-- `opencode-go-deepseek-review`: OpenCode lane pinned to `opencode-go/deepseek-v4-pro`
+- `kimi`: `provider=opencode`, `model=opencode-go/kimi-k2.6`
+- `deepseek`: `provider=opencode`, `model=opencode-go/deepseek-v4-pro`
 
 Use it when the desired outcome is independent review feedback, not implementation. It should stay thin: provider health, model pinning, logs, reports, and failure taxonomy belong in `dx-runner`.
 
@@ -47,8 +49,8 @@ Before a live review on a new worktree, run:
 dx-review doctor --worktree /tmp/agents/bd-xxx/repo
 ```
 
-`doctor` checks both default OpenCode review profiles and lets `dx-runner` perform safe
-worktree preparation such as `mise trust` before strict provider preflight.
+`doctor` checks all configured reviewer rows and lets `dx-runner` perform safe
+worktree preparation such as `mise trust` before strict provider/model preflight.
 
 After reviewers complete, generate the merged artifact:
 
@@ -86,8 +88,8 @@ Review templates must not request PR creation, commits, pushes, or code fixes.
 
 ## Provider Contract
 
-- `opencode-go-kimi-review` is the first default review lane.
-- `opencode-go-deepseek-review` is the second default review lane.
+- `kimi` is the first default review lane.
+- `deepseek` is the second default review lane.
 - The only default dx-review models are `opencode-go/kimi-k2.6` and `opencode-go/deepseek-v4-pro`.
 - `cc-glm-review`, `gemini-burst`, and `claude-code-review` are not part of the default `dx-review` quorum.
 - Start-time provider failures are terminal for that provider attempt and should
@@ -109,8 +111,8 @@ Review templates must not request PR creation, commits, pushes, or code fixes.
 ## Failure Handling
 
 - If either OpenCode review lane fails preflight, check `opencode models` and
-  `dx-runner preflight --profile opencode-go-kimi-review --worktree <path>` or
-  `dx-runner preflight --profile opencode-go-deepseek-review --worktree <path>`.
+  rerun `dx-review doctor --worktree <path>` to validate configured
+  `provider/model` pairs.
 - If an OpenCode lane reports `opencode_mise_untrusted`, run the exact `mise trust '<path>'` command emitted by preflight.
 - `beads-mcp binary: MISSING` is an expected warning on hosts without the optional Beads MCP helper. It does not block the fallback OpenCode review lane unless a profile explicitly escalates `beads_mcp_missing` to error.
 - Do not retry repeatedly. One retry after fixing auth/tooling is enough.

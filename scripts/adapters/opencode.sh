@@ -67,7 +67,7 @@ adapter_is_allowed_phase_model() {
     local model="$1"
     case "$model" in
         zhipuai/glm-5.1|zai-coding-plan/glm-5.1|zhipuai-coding-plan/glm-5.1) return 0 ;;
-        opencode-go/kimi-k2.6|opencode-go/deepseek-v4-pro) return 0 ;;
+        opencode-go/*) return 0 ;;
         *) return 1 ;;
     esac
 }
