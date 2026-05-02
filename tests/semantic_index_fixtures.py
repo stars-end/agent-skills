@@ -24,10 +24,12 @@ def init_git_repo(path: Path) -> str:
 def write_config(config_path: Path, repo_name: str, canonical_path: Path, index_root: Path) -> None:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
+        "schema_version": 1,
+        "default_index_root": str(index_root.parent),
+        "allowlist": [repo_name],
         "repositories": {
             repo_name: {
                 "canonical_path": str(canonical_path),
-                "index_root": str(index_root),
                 "source_branch": "master",
             }
         }
@@ -37,6 +39,9 @@ def write_config(config_path: Path, repo_name: str, canonical_path: Path, index_
 
 def write_state(index_root: Path, *, repo_name: str, indexed_head: str, schema_version: int = 1, status: str = "success") -> None:
     index_root.mkdir(parents=True, exist_ok=True)
+    project_dir = index_root / "repo" / ".cocoindex_code"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (index_root / "coco-global").mkdir(parents=True, exist_ok=True)
     state = {
         "schema_version": schema_version,
         "repo_name": repo_name,
@@ -44,8 +49,8 @@ def write_state(index_root: Path, *, repo_name: str, indexed_head: str, schema_v
         "status": status,
     }
     (index_root / "state.json").write_text(json.dumps(state), encoding="utf-8")
-    (index_root / "target_sqlite.db").write_bytes(b"db")
-    (index_root / "settings.yml").write_text("ok: true\n", encoding="utf-8")
+    (project_dir / "target_sqlite.db").write_bytes(b"db")
+    (project_dir / "settings.yml").write_text("ok: true\n", encoding="utf-8")
 
 
 def write_ccc_stub(path: Path, body: str) -> None:

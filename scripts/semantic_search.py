@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import subprocess
@@ -36,10 +37,17 @@ class ResolvedRepo:
     source_branch: str
 
 
-def _run(args: list[str], *, cwd: Path | None = None, timeout: int = 5) -> subprocess.CompletedProcess[str]:
+def _run(
+    args: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    timeout: int = 5,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         args,
         cwd=str(cwd) if cwd else None,
+        env=env,
         capture_output=True,
         text=True,
         check=False,
@@ -51,6 +59,7 @@ def _resolve_repo_configs(config_path: Path) -> dict[str, RepoConfig]:
     if not config_path.exists():
         return {}
     payload = json.loads(config_path.read_text(encoding="utf-8"))
+    default_index_root = Path(str(payload.get("default_index_root", DEFAULT_INDEX_ROOT))).expanduser().resolve()
     repos = payload.get("repositories", payload)
     if not isinstance(repos, dict):
         return {}
@@ -63,7 +72,7 @@ def _resolve_repo_configs(config_path: Path) -> dict[str, RepoConfig]:
         if not canonical:
             continue
         canonical_path = Path(str(canonical)).expanduser().resolve()
-        index_root = Path(str(raw.get("index_root", DEFAULT_INDEX_ROOT / repo_name))).expanduser().resolve()
+        index_root = Path(str(raw.get("index_root", default_index_root / repo_name))).expanduser().resolve()
         source_branch = str(raw.get("source_branch", "master"))
         out[repo_name] = RepoConfig(
             repo_name=repo_name,
@@ -98,16 +107,60 @@ def _state_path(resolved: ResolvedRepo) -> Path:
     return resolved.index_root / "state.json"
 
 
-def _db_path(resolved: ResolvedRepo) -> Path:
-    return resolved.index_root / "target_sqlite.db"
+def _index_surface(resolved: ResolvedRepo) -> Path:
+    return resolved.index_root / "repo"
 
 
-def _settings_path(resolved: ResolvedRepo) -> Path:
-    return resolved.index_root / "settings.yml"
+def _coco_dir(resolved: ResolvedRepo) -> Path:
+    return resolved.index_root / "coco-global"
+
+
+def _ccc_project_dir(resolved: ResolvedRepo) -> Path:
+    return _index_surface(resolved) / ".cocoindex_code"
+
+
+def _db_candidates(resolved: ResolvedRepo) -> list[Path]:
+    return [
+        _ccc_project_dir(resolved) / "target_sqlite.db",
+        _coco_dir(resolved) / "target_sqlite.db",
+    ]
+
+
+def _settings_candidates(resolved: ResolvedRepo) -> list[Path]:
+    return [
+        _ccc_project_dir(resolved) / "settings.yml",
+        _coco_dir(resolved) / "settings.yml",
+    ]
 
 
 def _lock_path(resolved: ResolvedRepo) -> Path:
     return resolved.index_root / "refresh.lock"
+
+
+def _scoped_env(resolved: ResolvedRepo) -> dict[str, str]:
+    env = dict(os.environ)
+    env["COCOINDEX_CODE_DIR"] = str(_coco_dir(resolved))
+    return env
+
+
+def _refresh_lock_active(resolved: ResolvedRepo) -> bool:
+    path = _lock_path(resolved)
+    if not path.exists():
+        return False
+    try:
+        with path.open("a+") as handle:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            finally:
+                try:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                except OSError:
+                    pass
+    except OSError:
+        return True
+    return False
 
 
 def _load_state(resolved: ResolvedRepo) -> dict | None:
@@ -151,7 +204,8 @@ def _ccc_status(ccc_bin: str, resolved: ResolvedRepo, timeout_seconds: int) -> t
     try:
         cp = _run(
             [ccc_bin, "status"],
-            cwd=resolved.index_root,
+            cwd=_index_surface(resolved),
+            env=_scoped_env(resolved),
             timeout=max(1, timeout_seconds),
         )
     except subprocess.TimeoutExpired:
@@ -167,9 +221,13 @@ def _ccc_status(ccc_bin: str, resolved: ResolvedRepo, timeout_seconds: int) -> t
 
 
 def classify_status(resolved: ResolvedRepo, *, ccc_bin: str, status_timeout_seconds: int) -> str:
-    if _lock_path(resolved).exists():
+    if _refresh_lock_active(resolved):
         return "indexing"
-    if not _settings_path(resolved).exists() or not _db_path(resolved).exists():
+    if not _index_surface(resolved).is_dir():
+        return "missing"
+    if not any(path.exists() for path in _settings_candidates(resolved)):
+        return "missing"
+    if not any(path.exists() for path in _db_candidates(resolved)):
         return "missing"
 
     state = _load_state(resolved)
@@ -255,7 +313,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cp = _run(
             [args.ccc_bin, "search", args.query, "--limit", str(args.limit)],
-            cwd=resolved.index_root,
+            cwd=_index_surface(resolved),
+            env=_scoped_env(resolved),
             timeout=max(1, args.search_timeout),
         )
     except (subprocess.TimeoutExpired, OSError):

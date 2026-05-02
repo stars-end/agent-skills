@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import fcntl
 from pathlib import Path
 
 from tests.semantic_index_fixtures import init_git_repo, sh, write_ccc_stub, write_config, write_state
@@ -37,13 +38,35 @@ def test_status_indexing_via_lock(tmp_path: Path) -> None:
     head = init_git_repo(canonical)
     index_root = tmp_path / "indexes" / "agent-skills"
     write_state(index_root, repo_name="agent-skills", indexed_head=head)
+    lock_path = index_root / "refresh.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_handle = lock_path.open("a+")
+    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    config = tmp_path / "repositories.json"
+    write_config(config, "agent-skills", canonical, index_root)
+    ccc = tmp_path / "ccc"
+    write_ccc_stub(ccc, "#!/usr/bin/env bash\nexit 0\n")
+    try:
+        cp = run_tool(repo_root, ["status", "--repo", str(canonical)], ccc, config)
+        assert cp.stdout.strip() == "indexing"
+    finally:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        lock_handle.close()
+
+
+def test_stale_lock_file_does_not_block_ready_status(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    canonical = tmp_path / "agent-skills"
+    head = init_git_repo(canonical)
+    index_root = tmp_path / "indexes" / "agent-skills"
+    write_state(index_root, repo_name="agent-skills", indexed_head=head)
     (index_root / "refresh.lock").write_text("", encoding="utf-8")
     config = tmp_path / "repositories.json"
     write_config(config, "agent-skills", canonical, index_root)
     ccc = tmp_path / "ccc"
     write_ccc_stub(ccc, "#!/usr/bin/env bash\nexit 0\n")
     cp = run_tool(repo_root, ["status", "--repo", str(canonical)], ccc, config)
-    assert cp.stdout.strip() == "indexing"
+    assert cp.stdout.strip() == "ready"
 
 
 def test_status_stale_head_mismatch(tmp_path: Path) -> None:
@@ -157,6 +180,8 @@ def test_query_never_invokes_ccc_index_and_ready_search_has_limit(tmp_path: Path
         ccc,
         "#!/usr/bin/env bash\n"
         f"echo \"$@\" >> {log}\n"
+        "pwd >> " + str(log) + "\n"
+        "echo \"COCOINDEX_CODE_DIR=${COCOINDEX_CODE_DIR:-}\" >> " + str(log) + "\n"
         "if [ \"$1\" = \"status\" ]; then exit 0; fi\n"
         "if [ \"$1\" = \"search\" ]; then echo \"result\"; exit 0; fi\n"
         "if [ \"$1\" = \"index\" ]; then exit 9; fi\n"
@@ -173,6 +198,8 @@ def test_query_never_invokes_ccc_index_and_ready_search_has_limit(tmp_path: Path
     calls = log.read_text(encoding="utf-8")
     assert "index" not in calls
     assert "search needle --limit 3" in calls
+    assert str(index_root / "repo") in calls
+    assert f"COCOINDEX_CODE_DIR={index_root / 'coco-global'}" in calls
 
 
 def test_query_fallback_for_non_ready_and_timeout(tmp_path: Path) -> None:
