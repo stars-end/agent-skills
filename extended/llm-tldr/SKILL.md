@@ -28,11 +28,14 @@ read the target project path.
 
 ## Routing Status
 
-**Canonical default** for semantic discovery and exact static analysis (V8.6 routing contract).
+Default for structural/context/static-analysis operations. Semantic first-hop
+discovery is no longer required; use `scripts/semantic-search` as optional
+warmed hints when available.
 
 ### Agent-Facing Routing Rule
 
-Use `llm-tldr` whenever the task is analysis, discovery, or structural trace.
+Use `llm-tldr` for analysis, structural trace, context, and exact static
+analysis.
 
 - Preferred surface: local contained MCP when the `llm-tldr` tool is visible in the active runtime
 - Canonical fallback: the contained local helper when MCP is unavailable in the current runtime
