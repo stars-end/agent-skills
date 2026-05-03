@@ -221,10 +221,14 @@ def refresh_one(repo_name: str, repo_cfg: dict[str, Any], *, index_root: Path, d
             stats.update(parse_stats(status_result.stdout + "\n" + status_result.stderr))
             if status_result.returncode != 0:
                 raise RefreshError(f"ccc status failed: {status_result.stderr.strip()}")
+            db_found = False
             for db_path in ccc_db_candidates(repo_dir, coco_dir):
                 if db_path.exists():
                     stats["db_bytes"] = db_path.stat().st_size
+                    db_found = True
                     break
+            if not db_found:
+                raise RefreshError("ccc index DB missing after successful status")
             exit_code = 0
             status = "success"
     except RefreshError as exc:
