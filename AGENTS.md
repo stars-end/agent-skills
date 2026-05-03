@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 4afc782e69e4a8167dfefe710fd26b947fd873f9 -->
-<!-- Last updated: 2026-05-02 18:06:13 UTC -->
+<!-- Source SHA: 4b015ebd3613d6ecdc06ad2d87d8096ffebba26b -->
+<!-- Last updated: 2026-05-03 02:01:01 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -335,8 +335,9 @@ Agents should think in terms of **capability**, not transport:
 - explicit symbol operation -> \`serena\`
 - ordinary edit -> patch/diff-first CLI workflow
 
-For qualifying tasks, agents MUST route the first discovery action through the matching tool before broad shell search or repeated file traversal:
-- semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`llm-tldr\` (semantic tool, requires \`tldr warm\` first)
+For qualifying tasks, agents SHOULD use the matching tool before broad shell
+search or repeated file traversal:
+- warmed semantic hints (optional) -> \`scripts/semantic-search query\` when \`status\` is \`ready\`; otherwise fall back to \`rg\`
 - exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> \`llm-tldr\`
 - "understand this function and its dependencies" -> \`llm-tldr\` (context tool, 95% token savings)
 - "what tests need to run" -> \`llm-tldr\` (change_impact tool)
@@ -617,7 +618,7 @@ Use `dx-repo-memory-check --repo .` to validate map freshness.
 | **brownfield-map-first** | Route brownfield implementation work through repo-owned architecture maps before code changes. Use when tracing existing pipelines, data/storage boundaries, frontend read models, or when avoiding repeated rediscovery in large existing systems. | — | workflow, brownfield, repo-memory, architecture |
 | **bv-integration** | Beads Viewer (BV) integration for visual task management and smart task selection. Use for Kanban views, dependency graphs, and the robot-plan API for auto-selecting next tasks. Keywords: beads, viewer, kanban, dependency graph, robot-plan, task selection, bottleneck | — | workflow, beads, visualization, task-selection |
 | **cass-memory** | Pilot-only CLI episodic memory workflow for explicit cross-agent memory experiments. | — |  |
-| **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary implementation dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. For dx-review, cc-glm is the primary GLM review lane and OpenCode is fallback. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode |
+| **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary implementation dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. dx-review now uses OpenCode Kimi/DeepSeek lanes only; cc-glm is not part of its default review quorum. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode |
 | **cli-mastery** | CLI environment and command-line usage guidance for Railway, GitHub, and general repo workflows. | — |  |
 | **context-plus** | REMOVED from canonical fleet contract (bd-rb0c.8). context-plus was fully removed in favor of llm-tldr for semantic discovery and serena for symbol-aware edits. This skill is retained as a tombstone only. | — |  |
 | **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with dx-runner as canonical governance surface, OpenCode as primary execution lane, and cc-glm as reliability backstop. dx-dispatch is break-glass only. | — |  |
@@ -627,7 +628,7 @@ Use `dx-repo-memory-check --repo .` to validate map freshness.
 | **dx-loop-review-contract** | Deterministic review contract for dx-loop reviewer runs. Enforces findings-first review style, concrete verdicts, and machine-actionable end states for baton automation. | — | workflow, review, dx-loop, baton |
 | **dx-loop** | `dx-loop` is the default execution surface for chained Beads work, multi-step outcomes, and implement/review baton flows. It is a PR-aware orchestration surface that reuses Ralph's proven patterns (baton, topological dependencies, checkpoint/resume) while replacing the control plane with governed `dx-runner` dispatch and enforcing PR artifact contracts. | `dx-ensure-bins.sh` |  |
 | **dx-research** | Source-backed deep research wrapper over dx-runner for agent use. Use when the goal is evidence-based research and decision memo output, not implementation dispatch or code-review quorum. | `dx-research run \` | workflow, research, evidence, decision-memo, dx-runner, gemini, cc-glm |
-| **dx-review** | Dispatch a low-friction review quorum through dx-review: cc-glm GLM-5.1 primary, OpenCode GLM-5.1 fallback, plus Gemini as the second default lane. Use when the user asks for multi-model review, GLM-focused review quorum, or a quick POC of reviewer lanes. | `dx-review run \` | workflow, review, dispatch, cc-glm, opencode, gemini, dx-runner |
+| **dx-review** | Dispatch a low-friction review quorum through dx-review: OpenCode Kimi K2.6 and DeepSeek V4 Pro lanes only. Use when the user asks for multi-model review, Kimi/DeepSeek review quorum, or a quick POC of reviewer lanes. | `dx-review run \` | workflow, review, dispatch, opencode, kimi, deepseek, dx-runner |
 | **dx-runner** | Lower-level unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, claude-code, or gemini providers with unified preflight, gates, and failure taxonomy. Use directly for provider debugging, custom orchestration, headless jobs, or when a task-specific shim such as dx-loop, dx-review, or dx-research delegates to it. | `dx-runner start --beads bd-xxx --provider cc-glm --worktree ` | workflow, dispatch, governance, multi-provider, automation |
 | **fleet-sync** | Fleet Sync orchestrator for MCP tool convergence, health checks, and IDE config management across canonical VMs. | — |  |
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |

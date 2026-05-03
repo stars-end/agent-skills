@@ -35,9 +35,28 @@ not rediscover them from scratch.
 
 ## Core Pattern: Verify Before Edit
 
-- use `llm-tldr` for semantic and static verification on current source
+- use warmed `scripts/semantic-search` only as optional semantic hints when
+  status is `ready`; if it returns `missing`, `indexing`, or `stale`, use `rg`
+  and direct reads
+- do not index from the live query path; scheduled `scripts/semantic-index-refresh`
+  owns ccc index updates under `~/.cache/agent-semantic-indexes/`
+- use bounded structural/context tools only when they are available and
+  useful; do not require legacy `llm-tldr` semantic prewarm for normal repo
+  discovery
 - use Serena for symbol-aware edits where symbol safety matters
 - use patch/diff edits for non-symbolic changes
+
+## Core Pattern: Canonical Semantic Indexes
+
+- ccc semantic indexes are warmed from non-canonical cache clones, not from
+  per-PR worktrees.
+- worktree queries resolve back to the allowlisted canonical repo name and use
+  the warmed canonical HEAD as the semantic baseline.
+- the approved cache layout is
+  `~/.cache/agent-semantic-indexes/<repo-name>/{repo,coco-global,state.json,refresh.log,refresh.lock}`.
+- `extended/wooyun-legacy/` was removed because the generated reference corpus
+  made `agent-skills` semantic indexing operationally impractical and was not
+  part of the active default skill workflow.
 
 ## Core Pattern: Orchestration Surface Hierarchy
 
