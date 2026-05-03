@@ -9,7 +9,6 @@ Check if tools are installed and executable.
 | Tool | Command | Expected |
 |------|---------|----------|
 | `cass-memory` | `cm --version` | Version string (e.g., `0.2.3`) |
-| `llm-tldr` | `tldr-mcp --version \|\| llm-tldr --version` | Version string (e.g., `1.5.2`) |
 | `serena` | `serena --help \| head -1` | Help output |
 
 ## Layer 2: Config Convergence

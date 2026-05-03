@@ -1,9 +1,5 @@
 {
   "mcp": {
-    "llm-tldr": {
-      "type": "local",
-      "command": ["~/agent-skills/scripts/tldr-mcp-contained-launch.py"]
-    },
     "serena": {
       "type": "local",
       "command": [

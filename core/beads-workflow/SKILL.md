@@ -116,7 +116,6 @@ bdx show <memory-id> --json
 bdx comments <memory-id> --json
 ```
 
-Memory is a lead, not proof. Verify source-grounded claims with `llm-tldr`
 before acting, then use `serena` for symbol-aware edits when precision matters.
 
 Fail-loud remediation (first response):

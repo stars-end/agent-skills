@@ -34,7 +34,6 @@ Follow this order:
 1. Read `AGENTS.local.md` if present; otherwise read `AGENTS.md`.
 2. Open repo-owned map docs listed by AGENTS routing guidance.
 3. Read Beads pointer memory for known gotchas and prior decisions.
-4. Verify map claims against current source with `llm-tldr`.
 5. Use Serena for symbol-aware changes.
 6. Use ordinary patch/diff edits for non-symbolic edits.
 
@@ -46,7 +45,6 @@ verification is mandatory before making changes.
 For brownfield changes, capture this in your notes or handoff:
 
 - docs consulted
-- paths verified with `llm-tldr`
 - stale docs updated or explicitly waived
 - whether Serena was required for symbol-safe edits
 
@@ -55,12 +53,10 @@ For brownfield changes, capture this in your notes or handoff:
 - Do not embed repo architecture truth in skills.
 - Do not recreate context-area generated skill maps.
 - Do not skip repo map docs when stale-if paths overlap the task.
-- Do not replace `llm-tldr` verification with broad ad hoc grep-only exploration
   when semantic/static analysis is available.
 
 ## Related Surfaces
 
 - Repo map docs (canonical architecture/data/workflow map)
 - Beads memory (pointer + durable decisions)
-- `llm-tldr` (verification)
 - Serena (symbol edits)

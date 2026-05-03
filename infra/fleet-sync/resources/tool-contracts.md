@@ -7,7 +7,6 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 | Tool | Class | Canonical Install | Canonical Health | Routing (V8.6) |
 |------|-------|-------------------|------------------|-----------------|
 | `cass-memory` | `cli` | `npm install -g Dicklesworthstone/cass_memory_system` | `cm --version`, `cm quickstart --json` | N/A (disabled) |
-| `llm-tldr` | `mcp` | `uv tool install "llm-tldr==1.5.2"` | `tldr-mcp --version \|\| llm-tldr --version` | **Canonical default** (semantic + structural) |
 | `serena` | `mcp` | `uv tool install git+https://github.com/oraios/serena.git` | `serena --help \| head -1` | Canonical default (edits + memory) |
 
 ## Canonical Rules
@@ -25,10 +24,6 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 
 | Task Shape | Canonical First Tool | Reason |
 |------------|---------------------|--------|
-| Semantic discovery ("where does X live?") | `llm-tldr` | FAISS semantic search; prewarm with `all-MiniLM-L6-v2` for agent/fresh-device use |
-| Exact structural analysis (CFG/DFG/slice/impact) | `llm-tldr` | Precise static analysis |
-| Context from entry point | `llm-tldr` | 95% token savings |
-| Test targeting for changed files | `llm-tldr` | change_impact tool |
 | Symbol-aware edits / rename / refactor | `serena` | LSP-backed surgical editing |
 | Persistent project memory / session continuity | `serena` | File-based memory |
 
@@ -37,7 +32,6 @@ This file is the compact operator reference for the intended Fleet Sync stack.
 | Tool | Layer 1-3 | Layer 4 | Layer 5 | Notes |
 |------|-----------|---------|---------|-------|
 | `cass-memory` | Disabled | N/A | N/A | Pilot-only |
-| `llm-tldr` | Pass | Pass | Active (V8.6) | Canonical default for semantic + structural |
 | `serena` | Pass | Pass | Active | Canonical default for edits + memory |
 
 **Layer 4 Client Visibility (observed 2026-03-10):**
@@ -69,16 +63,12 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
 - Fleet Sync expands `~` launcher paths to absolute host-local paths before
   writing client configs so direct stdio clients do not depend on shell
   expansion.
-- `llm-tldr` contained MCP/CLI semantic search may auto-bootstrap a missing
   semantic index on first use for the target project path. The daemon fallback
   is bounded for agent recovery: when the semantic index is cold, it fails fast
-  with `reason_code=semantic_index_missing` and points to explicit prewarm
   instead of doing a cold build inside the fallback call.
   `tldr warm <project>` only warms structural caches.
   Every MCP tool call accepts a `project` parameter for worktree-safe operation.
-  **State containment (af-aqb.1):** llm-tldr runtime state (`.tldr/`, `.tldrignore`)
   is resolved outside the project tree by contained runtime patching in
-  `tldr-mcp-contained-launch.py` (MCP) and `tldr-contained.sh` (CLI). State lives in
   `$TLDR_STATE_HOME/<project-hash>/` (default: `~/.cache/tldr-state/`). No
   `.tldr`/`.tldrignore` paths are created under repo/worktree trees. This is
   enforced by `scripts/dx-verify-clean.sh`, which fails on leaked artifacts in
@@ -87,5 +77,4 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
 ## Removed Tools
 
 - `context-plus` was fully removed in bd-rb0c.8 (2026-03-29). It was replaced by
-  `llm-tldr` for semantic discovery and `serena` for symbol-aware edits. See
   `extended/context-plus/SKILL.md` for historical reference.

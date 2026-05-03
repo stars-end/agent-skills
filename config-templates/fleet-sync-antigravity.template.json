@@ -1,10 +1,5 @@
 {
   "mcpServers": {
-    "llm-tldr": {
-      "type": "stdio",
-      "command": "~/agent-skills/scripts/tldr-mcp-contained-launch.py",
-      "args": []
-    },
     "serena": {
       "type": "stdio",
       "command": "~/.local/bin/serena",

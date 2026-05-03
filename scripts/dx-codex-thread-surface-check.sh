@@ -28,7 +28,7 @@ import sys
 from datetime import datetime, timezone
 
 db_path, cwd, max_age_hours = sys.argv[1], sys.argv[2], int(sys.argv[3])
-required = ["llm-tldr", "serena"]
+required = ["serena"]
 
 try:
     conn = sqlite3.connect(db_path)
