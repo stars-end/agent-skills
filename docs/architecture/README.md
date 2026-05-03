@@ -18,7 +18,9 @@ stale_if_paths:
   prompt, optional ccc semantic-index cache, and orchestration runtime artifact
   ownership boundaries
 - `WORKFLOWS_AND_PATTERNS.md`: recurring workflow contracts, orchestration
-  surface hierarchy, and anti-drift rules
+  surface hierarchy, anti-drift rules, and the active discovery contract:
+  `rg` + direct reads first, optional `scripts/semantic-search query` only
+  when semantic status is `ready`, and `serena` for symbol-aware edits
 
 Current review-dispatch policy lives in `configs/dx-review/default.yaml` and the
 map docs: `dx-review` reads reviewer `id/provider/model` rows and uses only the
