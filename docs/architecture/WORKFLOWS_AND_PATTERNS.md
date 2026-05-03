@@ -40,9 +40,8 @@ not rediscover them from scratch.
   and direct reads
 - do not index from the live query path; scheduled `scripts/semantic-index-refresh`
   owns ccc index updates under `~/.cache/agent-semantic-indexes/`
-- use bounded structural/context tools only when they are available and
-  useful; do not require legacy `llm-tldr` semantic prewarm for normal repo
-  discovery
+- use bounded helper tools only when they are available and useful; do not
+  require legacy semantic prewarm paths for normal repo discovery
 - use Serena for symbol-aware edits where symbol safety matters
 - use patch/diff edits for non-symbolic changes
 

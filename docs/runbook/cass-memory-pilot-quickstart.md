@@ -22,7 +22,7 @@ Out of scope examples:
 
 ## Canonical Tool Boundary
 
-- `llm-tldr`: discovery / static analysis
+- `rg` + direct file reads: discovery / static verification
 - `serena`: assistant continuity / symbol-aware memory
 - `cass-memory` pilot: reusable procedural playbooks across agents/VMs
 

@@ -6,7 +6,6 @@ This is the pre-merge gate for Fleet Sync MCP+CLI rollout.
 
 Managed MCP tools:
 - `context-plus`
-- `llm-tldr`
 - `serena`
 
 Managed CLI-only tools:
@@ -16,7 +15,6 @@ Managed CLI-only tools:
 
 1. Layer 1 host runtime:
 - `cm --version`
-- `tldr-mcp --version`
 - `test -f ~/.local/share/contextplus-patched/build/index.js`
 - `serena --help`
 
@@ -36,7 +34,7 @@ Managed CLI-only tools:
 ## Layer 4 Client Visibility Matrix (Required Before Merge)
 
 Legend:
-- `PASS`: all three managed MCP tools visible
+- `PASS`: all managed MCP tools visible
 - `N/A`: client not required on that host
 - `FAIL`: missing/incorrect visibility
 
@@ -71,7 +69,7 @@ done
 
 Do not merge if any required cell fails:
 - `No MCP servers configured` on Gemini or OpenCode
-- missing `context-plus`, `llm-tldr`, or `serena` in required clients
+- missing `context-plus` or `serena` in required clients
 - Codex on `macmini` missing any managed MCP tool or not `enabled`
 - stale/manual-only state that is not preserved by Layer 2 converge
 

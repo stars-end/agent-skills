@@ -162,14 +162,13 @@ Fleet Sync operates with two tool classes:
 
 | Class | Rendering | Layer 4 Check | Example |
 |-------|-----------|---------------|---------|
-| `mcp` | IDE config | `claude mcp list` | llm-tldr, serena |
+| `mcp` | IDE config | `claude mcp list` | serena |
 | `cli` | None | N/A | cass-memory |
 
 ### Current Tool Roster
 
 | Tool | Mode | Status | Health Command |
 |------|------|--------|----------------|
-| `llm-tldr` | mcp | Enabled | `tldr-mcp --version` |
 | `cass-memory` | cli | Disabled | `cm --version` |
 | `serena` | mcp | Enabled | `serena --help` |
 
@@ -177,7 +176,7 @@ Fleet Sync operates with two tool classes:
 
 Active tools pass Layer 1-3 checks:
 - CLI tools (`cass-memory`): Disabled by default (pilot-only)
-- MCP tools (`llm-tldr`, `serena`): Green when:
+- MCP tools (`serena`): Green when:
   1. Host runtime health passes
   2. IDE configs are rendered
   3. Client visibility confirmed

@@ -1,5 +1,10 @@
 # Fleet Sync MCP Tool Restoration Research (bd-d8f4)
 
+> Superseded note (2026-05-03): this document is historical research context.
+> It is not the current routing/tooling contract for agents.
+> Current active contract uses `rg` + direct reads for discovery and `serena`
+> for symbol-aware MCP operations.
+
 ## Overview
 This document captures the current status, installation methods, and validation requirements for the intended Fleet Sync MCP tool stack across all canonical VMs and IDE surfaces.
 

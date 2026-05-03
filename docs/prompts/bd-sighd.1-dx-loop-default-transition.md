@@ -128,9 +128,11 @@ rg -n "dx-batch|dx-loop|dx-runner|dx-wave|canonical|default|preferred" docs exte
 rg -n "Canonical batch orchestrator|Preferred batch entrypoint|use `dx-batch`|dx-batch.*default|default.*dx-batch|dx-batch.*canonical|canonical.*dx-batch" docs extended fragments scripts templates dispatch core health infra railway --glob '!extended/wooyun-legacy/**'
 ```
 
-Use `llm-tldr` for semantic/static discovery if available. If it is unavailable, state:
+Use `rg` + direct reads for semantic/static discovery. Optional semantic hints
+may use `scripts/semantic-search query` only when status is `ready`. If a
+routing constraint requires fallback disclosure, state:
 
-`Tool routing exception: llm-tldr unavailable or unindexed for this worktree; used targeted rg/direct reads.`
+`Tool routing exception: semantic index unavailable or runtime tool constraint; used targeted rg/direct reads.`
 
 ## Acceptance Criteria
 

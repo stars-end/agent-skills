@@ -28,7 +28,7 @@ Review focus:
    - If changed files intersect map `stale_if_paths`, were map docs updated or a
      waiver documented?
    - Did it preserve the boundary: skills = workflow, repo docs = architecture
-     truth, Beads = pointers/decisions, llm-tldr = source verification?
+     truth, Beads = pointers/decisions, `rg`/direct reads = source verification?
 
 Output expectations:
 - Highlight structural risks and concrete consequences.

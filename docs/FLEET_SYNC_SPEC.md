@@ -228,7 +228,6 @@ Each tool in `configs/mcp-tools.yaml` has an `integration_mode` field:
 
 | Tool | Mode | Status | Notes |
 |------|------|--------|-------|
-| `llm-tldr` | mcp | Enabled | Static analysis context slicing |
 | `cass-memory` | cli | Disabled by default | Pilot-only CLI memory, no IDE rendering |
 | `serena` | mcp | Enabled | Install from GitHub (PyPI collision) |
 
@@ -251,8 +250,7 @@ Ops infrastructure is healthy but tool-value lane is partial:
 **Current State (as of 2026-04-13): FULL_GO for the active canonical tool set**
 
 Active MCP tools are:
-- `llm-tldr` (mcp): Static analysis context slicing
-- `serena` (mcp): AI assistant memory
+- `serena` (mcp): symbol-aware editing/inspection
 
 `cass-memory` remains pilot-only CLI memory and is disabled by default in
 `configs/mcp-tools.yaml`.
