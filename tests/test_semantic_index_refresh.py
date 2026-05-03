@@ -137,6 +137,29 @@ def test_failure_writes_non_ready_state_and_nonzero(tmp_path: Path, monkeypatch:
     assert not (index_root / "agent-skills" / "refresh.lock").exists()
 
 
+def test_missing_binary_writes_failure_state_and_cleans_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg_path = write_config(tmp_path)
+    index_root = tmp_path / "indexes"
+
+    def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        if cmd[:2] == ["git", "clone"]:
+            (index_root / "agent-skills" / "repo").mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[:2] == ["ccc", "daemon"]:
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[:2] == ["ccc", "init"]:
+            raise FileNotFoundError("ccc")
+        return subprocess.CompletedProcess(cmd, 0, "abc123\n" if cmd[-1] == "HEAD" else "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    rc = sir.main(["--repo-name", "agent-skills", "--config", str(cfg_path)])
+    assert rc != 0
+    state = json.loads((index_root / "agent-skills" / "state.json").read_text())
+    assert state["status"] == "failure"
+    assert "command failed: ccc" in state["error"]
+    assert not (index_root / "agent-skills" / "refresh.lock").exists()
+
+
 def test_missing_db_after_successful_status_is_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg_path = write_config(tmp_path)
     index_root = tmp_path / "indexes"
@@ -223,11 +246,48 @@ def test_daemon_cleanup_attempted_and_scoped(tmp_path: Path, monkeypatch: pytest
     assert any(c[0][:2] == ["pgrep", "-f"] and coco in c[0][2] for c in calls)
 
 
-def test_no_canonical_clone_write_in_test_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_daemon_cleanup_missing_tools_do_not_skip_state_or_lock_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg_path = write_config(tmp_path)
-    home_before = Path("/home/fengning/agent-skills")
-    assert home_before.exists()
+    index_root = tmp_path / "indexes"
+
+    def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        if cmd[:2] == ["git", "clone"]:
+            (index_root / "agent-skills" / "repo").mkdir(parents=True, exist_ok=True)
+        if cmd[:2] == ["ccc", "index"]:
+            project_dir = Path(kwargs["cwd"]) / ".cocoindex_code"
+            project_dir.mkdir(parents=True, exist_ok=True)
+            (project_dir / "target_sqlite.db").write_bytes(b"db")
+        if cmd[:2] == ["ccc", "daemon"]:
+            raise FileNotFoundError("ccc")
+        return subprocess.CompletedProcess(cmd, 0, "abc123\n" if cmd[-1] == "HEAD" else "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    rc = sir.main(["--repo-name", "agent-skills", "--config", str(cfg_path)])
+    assert rc == 0
+    state = json.loads((index_root / "agent-skills" / "state.json").read_text())
+    assert state["status"] == "success"
+    assert "ccc daemon stop failed" in state["error"]
+    assert not (index_root / "agent-skills" / "refresh.lock").exists()
+
+
+def test_no_canonical_clone_write_in_test_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    canonical = tmp_path / "canonical-agent-skills"
+    canonical.mkdir()
+    cfg = {
+        "schema_version": 1,
+        "default_index_root": str(tmp_path / "indexes"),
+        "allowlist": ["agent-skills"],
+        "repositories": {
+            "agent-skills": {
+                "canonical_path": str(canonical),
+                "source_remote": "git@github.com:stars-end/agent-skills.git",
+                "source_branch": "master",
+            }
+        },
+    }
+    cfg_path = tmp_path / "repositories.json"
+    cfg_path.write_text(json.dumps(cfg))
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 0, "", ""))
     rc = sir.main(["--repo-name", "agent-skills", "--config", str(cfg_path), "--dry-run"])
     assert rc == 0
-    assert not (home_before / "state.json").exists()
+    assert not (canonical / "state.json").exists()

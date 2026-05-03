@@ -76,6 +76,8 @@ def run_command(
         return subprocess.run(cmd, cwd=str(cwd) if cwd else None, env=env, capture_output=True, text=True, timeout=timeout, check=False)
     except subprocess.TimeoutExpired as exc:
         raise RefreshError(f"timeout: {' '.join(cmd)}") from exc
+    except OSError as exc:
+        raise RefreshError(f"command failed: {cmd[0]}: {exc}") from exc
 
 
 def parse_stats(text: str) -> dict[str, Any]:
@@ -133,33 +135,52 @@ def lock_file(path: Path):
     return fd
 
 
-def cleanup_daemon(coco_dir: Path, timeouts: Timeouts) -> None:
+def cleanup_daemon(coco_dir: Path, timeouts: Timeouts) -> str | None:
     env = scoped_env(coco_dir)
-    stop = subprocess.run(["ccc", "daemon", "stop"], env=env, capture_output=True, text=True, timeout=timeouts.daemon_stop, check=False)
+    try:
+        stop = subprocess.run(
+            ["ccc", "daemon", "stop"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeouts.daemon_stop,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return "timeout: ccc daemon stop"
+    except OSError as exc:
+        return f"ccc daemon stop failed: {exc}"
     if stop.returncode == 0:
-        return
+        return None
     # Fallback is scoped to this COCOINDEX_CODE_DIR path pattern only.
-    pids = subprocess.run(["pgrep", "-f", str(coco_dir)], capture_output=True, text=True, check=False)
+    try:
+        pids = subprocess.run(["pgrep", "-f", str(coco_dir)], capture_output=True, text=True, timeout=10, check=False)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return f"scoped daemon process lookup failed: {exc}"
     for token in pids.stdout.split():
         if token.isdigit():
-            subprocess.run(["kill", "-TERM", token], capture_output=True, text=True, check=False)
+            try:
+                subprocess.run(["kill", "-TERM", token], capture_output=True, text=True, timeout=10, check=False)
+            except (subprocess.TimeoutExpired, OSError):
+                continue
+    return None
 
 
 def ensure_index_surface(repo_dir: Path, remote: str, branch: str) -> tuple[str, str]:
     if not repo_dir.exists():
-        clone = run_command(["git", "clone", remote, str(repo_dir)])
+        clone = run_command(["git", "clone", remote, str(repo_dir)], timeout=300)
         if clone.returncode != 0:
             raise RefreshError(f"git clone failed: {clone.stderr.strip()}")
-    fetch = run_command(["git", "-C", str(repo_dir), "fetch", "origin", branch])
+    fetch = run_command(["git", "-C", str(repo_dir), "fetch", "origin", branch], timeout=300)
     if fetch.returncode != 0:
         raise RefreshError(f"git fetch failed: {fetch.stderr.strip()}")
-    checkout = run_command(["git", "-C", str(repo_dir), "checkout", "-B", branch, f"origin/{branch}"])
+    checkout = run_command(["git", "-C", str(repo_dir), "checkout", "-B", branch, f"origin/{branch}"], timeout=120)
     if checkout.returncode != 0:
         raise RefreshError(f"git checkout failed: {checkout.stderr.strip()}")
-    head = run_command(["git", "-C", str(repo_dir), "rev-parse", "HEAD"])
+    head = run_command(["git", "-C", str(repo_dir), "rev-parse", "HEAD"], timeout=30)
     if head.returncode != 0:
         raise RefreshError(f"git rev-parse failed: {head.stderr.strip()}")
-    current_remote = run_command(["git", "-C", str(repo_dir), "remote", "get-url", "origin"])
+    current_remote = run_command(["git", "-C", str(repo_dir), "remote", "get-url", "origin"], timeout=30)
     return head.stdout.strip(), current_remote.stdout.strip() if current_remote.returncode == 0 else remote
 
 
@@ -234,10 +255,9 @@ def refresh_one(repo_name: str, repo_cfg: dict[str, Any], *, index_root: Path, d
     except RefreshError as exc:
         error = str(exc)
     finally:
-        try:
-            cleanup_daemon(coco_dir, timeouts)
-        except subprocess.TimeoutExpired:
-            error = error or "timeout: ccc daemon stop"
+        cleanup_error = cleanup_daemon(coco_dir, timeouts)
+        if cleanup_error:
+            error = error or cleanup_error
         finished_at = utc_now_iso()
         state = {
             "schema_version": 1,

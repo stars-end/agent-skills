@@ -16,7 +16,9 @@ UNAVAILABLE_MESSAGE = "semantic index unavailable; use rg."
 DEFAULT_STATUS_TIMEOUT_SECONDS = 5
 DEFAULT_SEARCH_TIMEOUT_SECONDS = 15
 DEFAULT_LIMIT = 10
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INDEX_ROOT = Path("~/.cache/agent-semantic-indexes").expanduser()
+DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "semantic-index" / "repositories.json"
 EXPECTED_SCHEMA_VERSION = 1
 
 
@@ -272,7 +274,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="semantic-search", description="Optional semantic hints wrapper.")
     parser.add_argument(
         "--config",
-        default="configs/semantic-index/repositories.json",
+        default=str(DEFAULT_CONFIG_PATH),
         help="Semantic index repository mapping file.",
     )
     parser.add_argument("--ccc-bin", default=os.environ.get("SEMANTIC_SEARCH_CCC_BIN", "ccc"))
@@ -321,7 +323,8 @@ def main(argv: list[str] | None = None) -> int:
         print(UNAVAILABLE_MESSAGE, file=sys.stderr)
         return 2
 
-    head_line = f"indexed_head={_load_state(resolved).get('indexed_head','unknown')}"
+    state = _load_state(resolved) or {}
+    head_line = f"indexed_head={state.get('indexed_head','unknown')}"
     print(head_line, file=sys.stderr)
     usable = bool(cp.stdout.strip())
     if cp.stdout:

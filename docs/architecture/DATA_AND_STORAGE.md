@@ -35,13 +35,6 @@ surfaces. This file records their ownership boundaries.
 3. External tool state (not committed)
    - e.g., `llm-tldr` contained state under external cache locations
    - runtime caches are operational state, not canonical repo memory
-   - semantic index operational cache root:
-     `~/.cache/agent-semantic-indexes/<repo-name>/`
-     - owner: semantic index refresh workflow (`scripts/semantic-index-refresh`)
-     - contents: non-canonical `repo/`, repo-scoped `coco-global/`,
-       `state.json`, `refresh.log`, `refresh.lock`
-     - rollback: disable scheduler, then remove or rename
-       `~/.cache/agent-semantic-indexes`
    - `ccc` / CocoIndex Code semantic index state lives under
      `~/.cache/agent-semantic-indexes/<repo-name>/` when the optional
      semantic-hints lane is enabled
