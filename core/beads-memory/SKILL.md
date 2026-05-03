@@ -97,7 +97,6 @@ queues.
 ## Tool Synergy
 
 - Use Beads memory to find prior knowledge.
-- Use `llm-tldr` to verify current source, impact, call paths, and stale paths.
 - Use `serena` only for explicit symbol-aware edits after retrieval and
   verification.
 

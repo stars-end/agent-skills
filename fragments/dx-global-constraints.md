@@ -175,7 +175,6 @@ If a named skill contains an explicit `BLOCKED` contract:
 ### 5.4) MCP Tool-First Routing Contract (V8.6)
 
 - **Canonical active assistant stack**:
-  - \`llm-tldr\`: semantic discovery + exact static analysis / trace / impact
   - \`serena\`: explicit symbol-aware edits
 - **Default durable memory surface**:
   - Beads via `bdx remember` and closed `memory` issues
@@ -192,45 +191,27 @@ any new memory service or wrapper.
 - **Memory body**: put the durable fact, decision, gotcha, runbook, or handoff in \`description\` / \`notes\`; use \`bdx comments add\` for provenance and follow-up history.
 - **Required metadata for structured memory**: \`mem.kind\`, \`mem.repo\`, \`mem.maturity\`, \`mem.confidence\`, \`mem.source_issue\`, and source grounding such as \`mem.source_commit\`, \`mem.paths\`, or \`mem.stale_if_paths\` when known.
 - **Retrieval**: search short facts with \`bdx memories <keyword>\`; search structured records with \`bdx search <keyword> --label memory --status all\` and metadata filters such as \`bdx search memory --label memory --metadata-field mem.repo=agent-skills --status all\`.
-- **Source of truth**: memory is a lead, not proof. Verify source-grounded claims with \`llm-tldr\` or direct source inspection before acting.
+- **Source of truth**: memory is a lead, not proof. Verify source-grounded claims with direct source inspection before acting.
 - **Wrapper threshold**: add a dedicated \`bd-mem\` helper only if agents repeatedly fail to follow this convention.
 - **Detailed convention**: \`~/agent-skills/docs/BEADS_MEMORY_CONVENTION.md\`.
 
 Agents should think in terms of **capability**, not transport:
-- analysis/discovery/trace -> \`llm-tldr\`
+- discovery/trace -> `rg` + direct file reads
+- optional warmed semantic hints -> `scripts/semantic-search query` only when status is `ready`
 - explicit symbol operation -> \`serena\`
 - ordinary edit -> patch/diff-first CLI workflow
 
-For qualifying tasks, agents SHOULD use the matching tool before broad shell
-search or repeated file traversal:
-- warmed semantic hints (optional) -> \`scripts/semantic-search query\` when \`status\` is \`ready\`; otherwise fall back to \`rg\`
-- exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> \`llm-tldr\`
-- "understand this function and its dependencies" -> \`llm-tldr\` (context tool, 95% token savings)
-- "what tests need to run" -> \`llm-tldr\` (change_impact tool)
+For qualifying tasks, agents SHOULD use this routing:
+- exact discovery: `rg` and direct file reads first
+- warmed semantic hints (optional): `scripts/semantic-search query` only when `status` is `ready`
+- when semantic status is missing/stale/indexing: exit cleanly with `semantic index unavailable; use rg`
+- no live query should block on indexing
 - rename/refactor, insert-before/after-symbol, replace known symbol body/signature, or symbol lookup directly tied to an edit -> \`serena\`
 
 Transport handling rule:
-- prefer the local contained MCP surface when the tool is available in the current runtime
-- \`llm-tldr\` is filesystem-local: the MCP server process must run on a host that can read the requested project path
-- if \`llm-tldr\` MCP is unavailable in the current runtime, use the canonical local fallback instead of inventing a new analysis path
-- agents should not manually choose among MCP vs daemon vs raw CLI surfaces beyond this fallback rule
-- timeout policy is layered:
-  - MCP path timeout is controlled by client/runtime tool-call policy
-  - CLI fallback must be wrapped by GNU \`timeout\` and on timeout must fall back to targeted \`rg\` or direct source reads
-
-Codex desktop hydration check:
-1. run \`codex mcp list\` and confirm the tool is configured
-2. restart Codex desktop once after MCP config or baseline changes
-3. retry one real in-thread MCP call
-4. only then escalate to fallback scripts, daemon debugging, or \`Tool routing exception\`
-
-Fallback to shell/file reads or ordinary patch editing is allowed only when:
-- the MCP tool is unavailable in the current runtime and no canonical fallback exists
-- the MCP tool cannot answer the question after one reasonable attempt
-- the MCP server process cannot read the host-local project path and the local contained fallback is unavailable or insufficient
-- the task is trivially faster with direct file access
-
-If the agent does not use the matching MCP tool on a qualifying task, it MUST state \`Tool routing exception: <reason>\` in the final response or handoff.
+- semantic-search query is optional and non-blocking; status gates are authoritative
+- if status is not `ready`, do not trigger indexing from query path
+- fallback is always `rg` + direct reads
 
 ## 6) Parallel Agent Orchestration (V8.6)
 

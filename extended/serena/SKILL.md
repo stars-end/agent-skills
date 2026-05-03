@@ -104,7 +104,6 @@ Use Beads memory to accelerate symbol targeting, then validate and edit in this
 order:
 
 1. retrieve memory (`bdx memories`, `bdx search --label memory`, `bdx show`)
-2. verify memory claims with `llm-tldr`
 3. execute symbol-aware edits with `serena`
 
 Memory can store `mem.paths` and `mem.symbols`, but those are hints. Do not
@@ -194,5 +193,4 @@ uv tool install git+https://github.com/oraios/serena.git
 ## Related
 
 - `fleet-sync`: Fleet Sync orchestrator
-- `llm-tldr`: Canonical default for semantic + structural analysis (V8.6)
 - `cass-memory`: Pilot-only CLI memory

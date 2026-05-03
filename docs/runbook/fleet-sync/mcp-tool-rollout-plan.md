@@ -26,7 +26,7 @@ This plan outlines the recommended order of restoration and validation for the F
 
 ## Phase 3: Validation
 - Run `~/agent-skills/scripts/dx-mcp-tools-sync.sh --check --json` on each host.
-- Confirm `cm --version`, `contextplus --version`, `serena start-mcp-server --help`, and `llm-tldr --version` all pass.
+- Confirm `cm --version`, `contextplus --version`, and `serena start-mcp-server --help` all pass.
 
 ## Rollback/Disable Strategy
 - **Emergency Disable:** Set `enabled: false` in `configs/mcp-tools.yaml` and run `dx-fleet converge --apply`.

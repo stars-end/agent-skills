@@ -65,7 +65,7 @@ For changes that touch architecture or workflow behavior, read in this order:
 2. `docs/architecture/DATA_AND_STORAGE.md`
 3. `docs/architecture/WORKFLOWS_AND_PATTERNS.md`
 4. relevant `SKILL.md` files in the affected namespace
-5. source verification using `llm-tldr`
+5. source verification using `rg` + direct file reads (optionally `scripts/semantic-search query` when status is `ready`)
 
 ## Railway Skill Notes
 
@@ -87,7 +87,7 @@ For changes that touch architecture or workflow behavior, read in this order:
   `opencode-go/kimi-k2.6` plus `opencode-go/deepseek-v4-pro`. cc-glm, Gemini,
   and Claude are not part of the default dx-review surface even though
   `dx-runner` may still expose those providers for other workflows.
-- routing contracts for `llm-tldr`, Serena, and Beads runtime assumptions
+- routing contracts for `rg`/semantic-search readiness, Serena, and Beads runtime assumptions
 - scripts that enforce cross-repo policy (`dx-*` checks, dispatch helpers)
 - stale "canonical dx-batch" wording in generated baselines, skill metadata,
   or wrapper help text; treat this as policy drift and route through the

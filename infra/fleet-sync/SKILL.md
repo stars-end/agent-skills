@@ -50,7 +50,6 @@ Keep Fleet Sync honest and executable:
 | Tool | Class | Status | Routing (V8.6) | Notes |
 |------|-------|--------|-----------------|-------|
 | `cass-memory` | `cli` | Disabled | N/A | Pilot-only CLI, not rendered to IDE configs |
-| `llm-tldr` | `mcp` | Enabled | **Canonical default** | Semantic discovery + exact static analysis |
 | `serena` | `mcp` | Enabled | Canonical default | Symbol-aware edits + persistent memory |
 
 ## When To Use
@@ -69,17 +68,13 @@ Use this skill when the user asks to:
   - host runtime health
   - rendered config correctness
   - client-visible MCP availability
-- For `llm-tldr`, contained MCP/CLI semantic search may auto-bootstrap a
   missing semantic index on first use for the target project path, but the
   daemon fallback fails fast on a cold semantic index and tells agents to
   prewarm explicitly or use targeted `rg` / direct reads. `tldr warm <project>`
   only warms structural caches.
   Every MCP tool call accepts a `project` parameter for
   worktree-safe operation (daemon per resolved path).
-- **llm-tldr state containment (af-aqb.1):** The MCP server is launched via
-  `tldr-mcp-contained-launch.py`, which patches llm-tldr runtime path joins so
   `.tldr/` and `.tldrignore` never resolve inside the project tree. CLI warm
-  operations should use `tldr-contained.sh`. No
   repo-local artifact leakage occurs from root or nested invocations. This is
   enforced by `scripts/dx-verify-clean.sh`, which fails when leaked `.tldr/`
   or `.tldrignore` artifacts are present in canonical repos.
@@ -104,5 +99,4 @@ Use this skill when the user asks to:
 - `fleet-deploy` for rollout mechanics
 - `mcp-doctor` for warning-style diagnostics
 - `cass-memory`
-- `llm-tldr`
 - `serena`

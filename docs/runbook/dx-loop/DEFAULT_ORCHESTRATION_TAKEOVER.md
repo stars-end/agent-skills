@@ -131,8 +131,9 @@ Do:
   `dx-batch` legacy/compatibility/internal
 - use worktrees for all edits
 - use `bdx` for Beads coordination
-- use `llm-tldr` for semantic/static discovery where available, and state a
-  tool-routing exception if falling back to targeted source reads
+- use `rg` + direct source reads for discovery, optionally use
+  `scripts/semantic-search query` only when status is `ready`, and state a
+  tool-routing exception when required routing constraints are hit
 - keep changes narrow and merge-ready
 
 ## Verification Gates

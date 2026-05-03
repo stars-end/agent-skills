@@ -81,7 +81,7 @@ check_codex_thread_surface() {
 
     case "$status" in
         pass)
-            echo -e "${GREEN}✅ Codex thread-surface check passed: llm-tldr + serena present in recent thread state${RESET}"
+            echo -e "${GREEN}✅ Codex thread-surface check passed: serena present in recent thread state${RESET}"
             return 0
             ;;
         skip)
@@ -95,7 +95,7 @@ check_codex_thread_surface() {
             echo -e "${RED}❌ Codex thread-surface check failed: recent thread state is missing required MCP tools:${missing}${RESET}"
             echo "   Thread: ${thread_id}"
             echo "   Observed dynamic tools: ${observed:-<none>}"
-            echo "   Diagnosis: codex mcp list can be green while the live thread tool surface is still missing llm-tldr/serena."
+            echo "   Diagnosis: codex mcp list can be green while the live thread tool surface is still missing required MCP tools."
             echo "   Action: restart Codex, create a fresh thread in this workspace, and re-run dx-check."
             return 1
             ;;
@@ -144,7 +144,7 @@ check_active_runtime_mcp_exposure() {
     fi
 
     local missing=""
-    for tool in llm-tldr serena; do
+    for tool in serena; do
         if ! runtime_tool_visible "$runtime" "$tool" "$out"; then
             missing="$missing $tool"
         fi
@@ -156,7 +156,7 @@ check_active_runtime_mcp_exposure() {
         return 1
     fi
 
-    echo -e "${GREEN}✅ MCP preflight passed (${runtime}): llm-tldr + serena visible${RESET}"
+    echo -e "${GREEN}✅ MCP preflight passed (${runtime}): serena visible${RESET}"
     if [[ "$runtime" == "codex" ]]; then
         check_codex_thread_surface || return 1
     fi

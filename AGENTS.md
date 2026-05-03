@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 4b015ebd3613d6ecdc06ad2d87d8096ffebba26b -->
-<!-- Last updated: 2026-05-03 02:01:01 UTC -->
+<!-- Source SHA: 327ff2f6318394378db9447ebd248f72aeaafeef -->
+<!-- Last updated: 2026-05-03 15:27:31 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -309,7 +309,6 @@ If a named skill contains an explicit `BLOCKED` contract:
 ### 5.4) MCP Tool-First Routing Contract (V8.6)
 
 - **Canonical active assistant stack**:
-  - \`llm-tldr\`: semantic discovery + exact static analysis / trace / impact
   - \`serena\`: explicit symbol-aware edits
 - **Default durable memory surface**:
   - Beads via `bdx remember` and closed `memory` issues
@@ -326,45 +325,27 @@ any new memory service or wrapper.
 - **Memory body**: put the durable fact, decision, gotcha, runbook, or handoff in \`description\` / \`notes\`; use \`bdx comments add\` for provenance and follow-up history.
 - **Required metadata for structured memory**: \`mem.kind\`, \`mem.repo\`, \`mem.maturity\`, \`mem.confidence\`, \`mem.source_issue\`, and source grounding such as \`mem.source_commit\`, \`mem.paths\`, or \`mem.stale_if_paths\` when known.
 - **Retrieval**: search short facts with \`bdx memories <keyword>\`; search structured records with \`bdx search <keyword> --label memory --status all\` and metadata filters such as \`bdx search memory --label memory --metadata-field mem.repo=agent-skills --status all\`.
-- **Source of truth**: memory is a lead, not proof. Verify source-grounded claims with \`llm-tldr\` or direct source inspection before acting.
+- **Source of truth**: memory is a lead, not proof. Verify source-grounded claims with direct source inspection before acting.
 - **Wrapper threshold**: add a dedicated \`bd-mem\` helper only if agents repeatedly fail to follow this convention.
 - **Detailed convention**: \`~/agent-skills/docs/BEADS_MEMORY_CONVENTION.md\`.
 
 Agents should think in terms of **capability**, not transport:
-- analysis/discovery/trace -> \`llm-tldr\`
+- discovery/trace -> `rg` + direct file reads
+- optional warmed semantic hints -> `scripts/semantic-search query` only when status is `ready`
 - explicit symbol operation -> \`serena\`
 - ordinary edit -> patch/diff-first CLI workflow
 
-For qualifying tasks, agents SHOULD use the matching tool before broad shell
-search or repeated file traversal:
-- warmed semantic hints (optional) -> \`scripts/semantic-search query\` when \`status\` is \`ready\`; otherwise fall back to \`rg\`
-- exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> \`llm-tldr\`
-- "understand this function and its dependencies" -> \`llm-tldr\` (context tool, 95% token savings)
-- "what tests need to run" -> \`llm-tldr\` (change_impact tool)
+For qualifying tasks, agents SHOULD use this routing:
+- exact discovery: `rg` and direct file reads first
+- warmed semantic hints (optional): `scripts/semantic-search query` only when `status` is `ready`
+- when semantic status is missing/stale/indexing: exit cleanly with `semantic index unavailable; use rg`
+- no live query should block on indexing
 - rename/refactor, insert-before/after-symbol, replace known symbol body/signature, or symbol lookup directly tied to an edit -> \`serena\`
 
 Transport handling rule:
-- prefer the local contained MCP surface when the tool is available in the current runtime
-- \`llm-tldr\` is filesystem-local: the MCP server process must run on a host that can read the requested project path
-- if \`llm-tldr\` MCP is unavailable in the current runtime, use the canonical local fallback instead of inventing a new analysis path
-- agents should not manually choose among MCP vs daemon vs raw CLI surfaces beyond this fallback rule
-- timeout policy is layered:
-  - MCP path timeout is controlled by client/runtime tool-call policy
-  - CLI fallback must be wrapped by GNU \`timeout\` and on timeout must fall back to targeted \`rg\` or direct source reads
-
-Codex desktop hydration check:
-1. run \`codex mcp list\` and confirm the tool is configured
-2. restart Codex desktop once after MCP config or baseline changes
-3. retry one real in-thread MCP call
-4. only then escalate to fallback scripts, daemon debugging, or \`Tool routing exception\`
-
-Fallback to shell/file reads or ordinary patch editing is allowed only when:
-- the MCP tool is unavailable in the current runtime and no canonical fallback exists
-- the MCP tool cannot answer the question after one reasonable attempt
-- the MCP server process cannot read the host-local project path and the local contained fallback is unavailable or insufficient
-- the task is trivially faster with direct file access
-
-If the agent does not use the matching MCP tool on a qualifying task, it MUST state \`Tool routing exception: <reason>\` in the final response or handoff.
+- semantic-search query is optional and non-blocking; status gates are authoritative
+- if status is not `ready`, do not trigger indexing from query path
+- fallback is always `rg` + direct reads
 
 ## 6) Parallel Agent Orchestration (V8.6)
 
@@ -620,7 +601,7 @@ Use `dx-repo-memory-check --repo .` to validate map freshness.
 | **cass-memory** | Pilot-only CLI episodic memory workflow for explicit cross-agent memory experiments. | — |  |
 | **cc-glm** | Use cc-glm as the reliability/quality backstop provider via dx-runner for batched delegation with plan-first execution. Batch by outcome (not file). Primary implementation dispatch is OpenCode; dx-runner --provider cc-glm is governed fallback for critical waves and OpenCode failures. dx-review now uses OpenCode Kimi/DeepSeek lanes only; cc-glm is not part of its default review quorum. Trigger when user mentions cc-glm, fallback lane, critical wave reliability, or batch execution. | `dx-runner start --provider cc-glm --beads bd-xxx --prompt-fi` | workflow, delegation, automation, zai, glm, parallel, fallback, reliability, opencode |
 | **cli-mastery** | CLI environment and command-line usage guidance for Railway, GitHub, and general repo workflows. | — |  |
-| **context-plus** | REMOVED from canonical fleet contract (bd-rb0c.8). context-plus was fully removed in favor of llm-tldr for semantic discovery and serena for symbol-aware edits. This skill is retained as a tombstone only. | — |  |
+| **context-plus** | REMOVED from canonical fleet contract (bd-rb0c.8). and serena for symbol-aware edits. This skill is retained as a tombstone only. | — |  |
 | **coordinator-dx** | Coordinator playbook for multi-repo, multi-VM parallel execution with dx-runner as canonical governance surface, OpenCode as primary execution lane, and cc-glm as reliability backstop. dx-dispatch is break-glass only. | — |  |
 | **design-md** | Analyze Stitch projects and synthesize a semantic design system into DESIGN.md files | — |  |
 | **dirty-repo-bootstrap** | Safe recovery procedure for dirty or WIP repositories. Standardizes snapshotting uncommitted work to a WIP branch before destructive operations. | — |  |
@@ -636,7 +617,6 @@ Use `dx-repo-memory-check --repo .` to validate map freshness.
 | **impeccable** | Design skills for AI coding tools. Create distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Includes 7 reference guides and 17 design commands. Use when building web components, pages, artifacts, posters, or applications. Keywords: frontend, design, UI, UX, typography, color, motion, interaction, responsive, audit, polish | — | design, frontend, ui, ux, typography, color, motion, accessibility |
 | **implementation-planner** | Create self-contained implementation specs with canonical Beads epic/subtask/dependency structure. MUST BE USED when the user asks for an implementation plan, tech spec, rollout plan, migration plan, or explicitly asks for "a comprehensive implementation plan with Beads epic, dependencies, and subtasks". Use for new systems, multi-phase refactors, cross-repo work, infra changes, or any work that needs a reviewable plan before execution. | — | planning, beads, specification, workflow, architecture |
 | **lint-check** | Run quick linting checks on changed files. MUST BE USED when user wants to check code quality. Fast validation (<5s) following V3 trust-environments philosophy. Use when user says "lint my code", "check formatting", or "run linters", or when user mentions uncommitted changes, pre-commit state, formatting issues, code quality, style checks, validation, prettier, eslint, pylint, or ruff. | — | workflow, quality, linting, validation |
-| **llm-tldr** | Canonical analysis tool for semantic discovery and exact static analysis with low-token context extraction. Prefer the MCP surface when available; otherwise use the canonical local fallback. | — |  |
 | **loop-orchestration** | Orchestrate Codex-first implementation loops built around `dx-runner` dispatch, bounded sleep intervals, status checks, review passes, and deterministic re-dispatch. Use when a live session should repeatedly dispatch work, wait, inspect `dx-runner` state, review outcomes, and continue until merge-ready or blocked. Invoke when users mention "poll every 5m", "check this runner repeatedly", "sleep loop", "babysit this PR", "re-dispatch round N", "keep checking until merge-ready", or "build a loop orchestrator". `/loop` is only a prototype model for the desired behavior, not the required runtime surface. | — |  |
 | **opencode-dispatch** | OpenCode-first dispatch workflow for parallel delegation. Use `opencode run` for headless jobs and `opencode serve` for shared server workflows; pair with governance harness for baseline/integrity/report gates. Trigger when user asks for parallel dispatch, throughput lane execution, or OpenCode benchmarking. | `dx-runner start --provider opencode --beads bd-xxx --prompt-` | workflow, dispatch, opencode, parallel, governance, benchmark, glm5 |
 | **plan-refine** | Iteratively refine implementation plans using the "Convexity" pattern. Simulates a multi-round architectural critique to converge on a secure, robust specification. Use when you have a draft plan that needs deep architectural review or "APR" style optimization. | — | architecture, planning, review, refinement, apr |

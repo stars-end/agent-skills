@@ -3,6 +3,8 @@
 ## Overview
 This document defines the authoritative configuration and registration contract for Model Context Protocol (MCP) servers across all canonical client surfaces.
 
+Current canonical MCP tooling in this repo is `serena` only.
+
 ## Client Matrix
 
 | Client | Config Path | Format | Registration Method | Verification Command | Status |
@@ -60,7 +62,6 @@ This document defines the authoritative configuration and registration contract 
 ## Tool Support Matrix
 | Tool | claude-code | gemini-cli | codex-cli | opencode |
 |------|-------------|------------|-----------|----------|
-| `llm-tldr` | MCP (contained) | MCP (contained) | MCP (contained) | MCP (contained) |
 | `serena` | MCP | MCP | MCP | MCP |
 | `cass-memory` | CLI Only | CLI Only | CLI Only | CLI Only |
 

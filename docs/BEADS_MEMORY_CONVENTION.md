@@ -107,26 +107,27 @@ bdx show <memory-id> --json
 bdx comments <memory-id> --json
 ```
 
-## llm-tldr Synergy (Verification)
+## Source Verification Synergy
 
 Memory is a lead, not proof.
 
 After retrieval:
 
-- verify memory claims against current source with `llm-tldr`
+- verify memory claims against current source with `rg` + direct file reads
+- optional semantic hints may use `scripts/semantic-search query` only when status is `ready`
 - validate any `mem.stale_if_paths` and `mem.paths` before applying memory
 - update memory maturity/confidence if source changed materially
 
 ## serena Synergy (Execution)
 
 Memory can store `mem.paths` and `mem.symbols` to accelerate editing, but
-symbol operations should still run through `serena` after memory + `llm-tldr`
-validation.
+symbol operations should still run through `serena` after memory + source
+verification.
 
 Flow:
 
 1. retrieve memory
-2. verify with `llm-tldr`
+2. verify with `rg` + direct reads
 3. execute precise symbol edits with `serena`
 
 ## Staleness Handling

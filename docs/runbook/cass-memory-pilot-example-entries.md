@@ -5,7 +5,7 @@ These are sanitized examples for the pilot. Do not copy host-specific secrets or
 ## Example 1: MCP Context EOF With Live Search Pass
 
 - Trigger: `context` fails with empty-payload EOF while `search` still works
-- Preconditions: `llm-tldr` connected in client MCP list
+- Preconditions: repository available locally; `rg` is available; use `serena` only if symbol-aware operations are needed
 - Procedure:
 1. Re-run the same entry via contained CLI context command.
 2. If CLI passes and MCP fails, restart per-project daemon.

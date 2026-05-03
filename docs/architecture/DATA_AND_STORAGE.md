@@ -10,7 +10,7 @@ stale_if_paths:
   - configs/semantic-index/**
   - templates/**
   - core/beads-memory/**
-  - extended/llm-tldr/**
+  - docs/llm-tldr-removal-inventory-bd-9n1t2.33.md
   - extended/serena/**
 ---
 
@@ -33,7 +33,6 @@ surfaces. This file records their ownership boundaries.
    - active runtime path: `~/.beads-runtime/.beads`
    - durable records live in shared Dolt server backend configured by runtime
 3. External tool state (not committed)
-   - e.g., `llm-tldr` contained state under external cache locations
    - runtime caches are operational state, not canonical repo memory
    - `ccc` / CocoIndex Code semantic index state lives under
      `~/.cache/agent-semantic-indexes/<repo-name>/` when the optional
@@ -72,7 +71,7 @@ surfaces. This file records their ownership boundaries.
 - Repo-owned architecture docs are canonical brownfield maps.
 - Beads KV/structured memory are pointer and decision surfaces.
 - Skills are workflow guidance only.
-- `llm-tldr` verifies source; Serena edits symbols.
+- `rg` + direct reads verify source; Serena edits symbols.
 - Scheduled Codex refreshes may update repo-owned map docs, but the accepted
   memory surface remains git-reviewed Markdown rather than a separate agent
   memory database.

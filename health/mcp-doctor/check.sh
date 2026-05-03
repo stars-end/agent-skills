@@ -108,7 +108,7 @@ check_mcp_client() {
   local out
   out=$(eval "$list_cmd" 2>&1 || true)
   local missing_tools=""
-  for tool in "llm-tldr" "serena"; do
+  for tool in serena; do
     if ! client_tool_visible "$client_name" "$tool" "$out"; then
       missing_tools="$missing_tools $tool"
     fi
@@ -149,7 +149,7 @@ else
   CODEX_THREAD_STATUS="$(printf '%s' "$CODEX_THREAD_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')"
   CODEX_THREAD_REASON="$(printf '%s' "$CODEX_THREAD_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("reason",""))')"
   if [[ "$CODEX_THREAD_STATUS" == "pass" ]]; then
-    echo "✅ recent thread state includes llm-tldr + serena"
+    echo "✅ recent thread state includes serena"
   elif [[ "$CODEX_THREAD_STATUS" == "skip" ]]; then
     echo "ℹ️  skipped ($CODEX_THREAD_REASON)"
   else

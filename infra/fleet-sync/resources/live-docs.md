@@ -7,8 +7,6 @@ Use primary sources whenever possible. Internal runbooks are supporting context,
 - `cass-memory`
   - GitHub: `https://github.com/Dicklesworthstone/cass_memory_system`
   - Install/use/MCP docs: `https://github.com/Dicklesworthstone/cass_memory_system#readme`
-- `llm-tldr`
-  - PyPI: `https://pypi.org/project/llm-tldr/`
 - `serena`
   - GitHub: `https://github.com/oraios/serena`
 
