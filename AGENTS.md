@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: 1d65e7027c5b5af1c2449ab474cc76f96fe37bf6 -->
-<!-- Last updated: 2026-05-02 09:17:23 UTC -->
+<!-- Source SHA: 4b015ebd3613d6ecdc06ad2d87d8096ffebba26b -->
+<!-- Last updated: 2026-05-03 02:01:01 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -335,8 +335,9 @@ Agents should think in terms of **capability**, not transport:
 - explicit symbol operation -> \`serena\`
 - ordinary edit -> patch/diff-first CLI workflow
 
-For qualifying tasks, agents MUST route the first discovery action through the matching tool before broad shell search or repeated file traversal:
-- semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`llm-tldr\` (semantic tool, requires \`tldr warm\` first)
+For qualifying tasks, agents SHOULD use the matching tool before broad shell
+search or repeated file traversal:
+- warmed semantic hints (optional) -> \`scripts/semantic-search query\` when \`status\` is \`ready\`; otherwise fall back to \`rg\`
 - exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> \`llm-tldr\`
 - "understand this function and its dependencies" -> \`llm-tldr\` (context tool, 95% token savings)
 - "what tests need to run" -> \`llm-tldr\` (change_impact tool)
@@ -646,7 +647,6 @@ Use `dx-repo-memory-check --repo .` to validate map freshness.
 | **slack-coordination** | Optional coordinator stack: Slack-based coordination loops (inbox polling, post-merge followups, lightweight locking). Uses direct Slack Web API calls and/or the slack-coordinator systemd service. Does not require MCP. | — | slack, coordination, workflow, optional |
 | **spark-prompt-writer** | Write tightly scoped, execution-ready prompts optimized for `gpt-5.3-codex-spark` implementation batches and short verification passes. Use when the user wants a Spark-specific overnight batch prompt, a large grouped-fix prompt, or a follow-on integrated verification prompt after fix waves. Preserve the `prompt-writing` DX contract: worktree-first, no canonical writes, Beads traceability, cross-VM-safe context, and required `PR_URL` + `PR_HEAD_SHA`. | — | workflow, prompts, orchestration, spark, dx |
 | **stitch-loop** | Teaches agents to iteratively build websites using Stitch with an autonomous baton-passing loop pattern | — |  |
-| **wooyun-legacy** | WooYun漏洞分析专家系统。提供基于88,636个真实漏洞案例提炼的元思考方法论、测试流程和绕过技巧。适用于漏洞挖掘、渗透测试、安全审计及代码审计。支持SQL注入、XSS、命令执行、逻辑漏洞、文件上传、未授权访问等多种漏洞类型。 | — |  |
 | **worktree-workflow** | Workspace-first git worktree management (DX V8.6). Create, open, resume, and recover workspaces while keeping canonical repos clean. All mutating work happens in /tmp/agents/<beads-id>/<repo>. Commands: create <beads-id> <repo> - Create workspace (prints path) open <beads-id> <repo> [-- <cmd>] - Show status or exec command resume <beads-id> <repo> [-- <cmd>] - Resume workspace evacuate-canonical <repo> - Recover dirty canonical repo cleanup <beads-id> - Remove workspace prune <repo> - Prune worktree metadata explain - Show workspace-first policy Use when starting work on a Beads ID, when an agent needs a clean workspace, or when recovering from dirty canonical repos. | `dx-worktree create <beads-id> <repo>` | dx, git, worktree, workspace, workflow, v86 |
 
 

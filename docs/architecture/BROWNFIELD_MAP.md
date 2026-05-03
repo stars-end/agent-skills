@@ -11,6 +11,7 @@ stale_if_paths:
   - health/**
   - infra/**
   - railway/**
+  - configs/semantic-index/**
   - scripts/publish-baseline.zsh
   - scripts/compile_agent_context.sh
   - templates/**

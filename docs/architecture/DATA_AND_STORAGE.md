@@ -7,6 +7,7 @@ last_verified_at: 2026-04-30T17:45:00Z
 stale_if_paths:
   - docs/**
   - scripts/**
+  - configs/semantic-index/**
   - templates/**
   - core/beads-memory/**
   - extended/llm-tldr/**
@@ -34,6 +35,17 @@ surfaces. This file records their ownership boundaries.
 3. External tool state (not committed)
    - e.g., `llm-tldr` contained state under external cache locations
    - runtime caches are operational state, not canonical repo memory
+   - `ccc` / CocoIndex Code semantic index state lives under
+     `~/.cache/agent-semantic-indexes/<repo-name>/` when the optional
+     semantic-hints lane is enabled
+   - owner: semantic index refresh workflow (`scripts/semantic-index-refresh`)
+   - contents: non-canonical `repo/`, repo-scoped `coco-global/`,
+     `state.json`, `refresh.log`, and `refresh.lock`
+   - ccc project DB/settings are expected under
+     `repo/.cocoindex_code/` for current ccc versions; `coco-global/` is the
+     repo-scoped `COCOINDEX_CODE_DIR` daemon/global state
+   - rollback: disable scheduler, then remove or rename
+     `~/.cache/agent-semantic-indexes`
 4. Orchestration runtime state (not committed)
    - `dx-loop` runtime artifacts live outside the repo and are operational
      coordination state

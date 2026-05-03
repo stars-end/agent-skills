@@ -201,8 +201,9 @@ Agents should think in terms of **capability**, not transport:
 - explicit symbol operation -> \`serena\`
 - ordinary edit -> patch/diff-first CLI workflow
 
-For qualifying tasks, agents MUST route the first discovery action through the matching tool before broad shell search or repeated file traversal:
-- semantic repo discovery, feature location, "where does X live?", or "what code is related to X?" -> \`llm-tldr\` (semantic tool, requires \`tldr warm\` first)
+For qualifying tasks, agents SHOULD use the matching tool before broad shell
+search or repeated file traversal:
+- warmed semantic hints (optional) -> \`scripts/semantic-search query\` when \`status\` is \`ready\`; otherwise fall back to \`rg\`
 - exact call-path, slice, impact, CFG/DFG, dead-code, architectural layers, or structural trace -> \`llm-tldr\`
 - "understand this function and its dependencies" -> \`llm-tldr\` (context tool, 95% token savings)
 - "what tests need to run" -> \`llm-tldr\` (change_impact tool)
