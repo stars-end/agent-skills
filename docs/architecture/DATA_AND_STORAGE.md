@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: e783d9f0543065576081b531db15bda01e07d026
-last_verified_at: 2026-05-04T14:45:00Z
+last_verified_commit: acda9791b30c2533550101bcc180d3def3bae86c
+last_verified_at: 2026-05-05T01:25:00Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -45,6 +45,9 @@ surfaces. This file records their ownership boundaries.
      repo-scoped `COCOINDEX_CODE_DIR` daemon/global state
    - ordinary `scripts/semantic-search status/query` calls are read-only over
      this warmed state; init/index/refresh remains infra-owned
+   - worktree creation and query paths must not start indexing; spoke cron
+     installation owns the scheduled `semantic-index-cron.sh` refresh and
+     prunes legacy llm-tldr semantic prewarm entries
    - rollback: disable scheduler, then remove or rename
      `~/.cache/agent-semantic-indexes`
 4. Orchestration runtime state (not committed)

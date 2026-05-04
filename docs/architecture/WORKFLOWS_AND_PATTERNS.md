@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: e783d9f0543065576081b531db15bda01e07d026
-last_verified_at: 2026-05-04T14:45:00Z
+last_verified_commit: acda9791b30c2533550101bcc180d3def3bae86c
+last_verified_at: 2026-05-05T01:25:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -57,6 +57,9 @@ not rediscover them from scratch.
 - agent status is metadata-only and agent query uses a bounded direct read of
   the warmed ccc SQLite index; ordinary agents must not call raw `ccc status`,
   `ccc search`, or `ccc index`.
+- worktree setup does not launch semantic prewarm jobs. Hourly canonical
+  refresh is installed by `scripts/dx-spoke-cron-install.sh` through
+  `scripts/semantic-index-cron.sh`.
 - `extended/wooyun-legacy/` was removed because the generated reference corpus
   made `agent-skills` semantic indexing operationally impractical and was not
   part of the active default skill workflow.

@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 606a02666f83222f944e8d7e1bddf17ca71ebc2c
-last_verified_at: 2026-04-30T17:45:00Z
+last_verified_commit: acda9791b30c2533550101bcc180d3def3bae86c
+last_verified_at: 2026-05-05T01:25:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -88,6 +88,9 @@ For changes that touch architecture or workflow behavior, read in this order:
   and Claude are not part of the default dx-review surface even though
   `dx-runner` may still expose those providers for other workflows.
 - routing contracts for `rg`/semantic-search readiness, Serena, and Beads runtime assumptions
+- Fleet Sync skill guidance is an active routing surface: it must describe
+  semantic search as optional warmed hints via `scripts/semantic-search`, not
+  as an MCP tool or legacy llm-tldr prewarm path.
 - scripts that enforce cross-repo policy (`dx-*` checks, dispatch helpers)
 - stale "canonical dx-batch" wording in generated baselines, skill metadata,
   or wrapper help text; treat this as policy drift and route through the
