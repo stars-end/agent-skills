@@ -2,7 +2,7 @@
 
 ## Summary
 
-Install a backup-first nightly repair job on `macmini`, `epyc12`, and `epyc6` that scans `~/.codex/sessions` for oversized JSONL artifacts, rewrites only the pathological payloads that break Codex resume/load, and records a machine-readable report.
+Install a backup-first nightly repair job on `macmini`, `homedesktop-wsl`, `epyc12`, and `epyc6` that scans `~/.codex/sessions` for oversized JSONL artifacts, rewrites only the pathological payloads that break Codex resume/load, and records a machine-readable report.
 
 ## Problem
 
@@ -22,7 +22,7 @@ The failures are durable because the broken payload stays inside the session tra
 - Repair only the oversized payloads that are known to break resume.
 - Skip “hot” sessions so the nightly job does not fight active work.
 - Produce a report artifact per run.
-- Install the nightly job only on `macmini`, `epyc12`, and `epyc6`.
+- Install the nightly job only on `macmini`, `homedesktop-wsl`, `epyc12`, and `epyc6`.
 
 ## Non-Goals
 
@@ -89,6 +89,7 @@ The failures are durable because the broken payload stays inside the session tra
 
 - installs the tool on:
   - `macmini`
+  - `homedesktop-wsl`
   - `epyc12`
   - `epyc6`
 - runs the host-local cron installer remotely
@@ -96,6 +97,7 @@ The failures are durable because the broken payload stays inside the session tra
 ## Schedule
 
 - `macmini`: `12 3 * * *`
+- `homedesktop-wsl`: `57 3 * * *`
 - `epyc12`: `27 3 * * *`
 - `epyc6`: `42 3 * * *`
 

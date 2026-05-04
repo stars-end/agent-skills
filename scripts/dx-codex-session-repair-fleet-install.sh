@@ -19,7 +19,7 @@ import yaml
 
 path = os.path.expanduser(sys.argv[1])
 hosts = yaml.safe_load(open(path, "r", encoding="utf-8"))["hosts"]
-for name in ("macmini", "epyc12", "epyc6"):
+for name in ("macmini", "homedesktop-wsl", "epyc12", "epyc6"):
     print(f"{name}|{hosts[name]['ssh']}")
 PY
 )"

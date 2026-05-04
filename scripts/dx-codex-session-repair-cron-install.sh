@@ -53,6 +53,7 @@ host_key() {
   case "$short_host" in
     v2202601262171429561*|epyc12|*epyc12*) printf 'epyc12\n' ;;
     v2202509262171386004*|epyc6|*epyc6*) printf 'epyc6\n' ;;
+    windows-r2qk3b1*|homedesktop-wsl|*homedesktop*|*wsl*) printf 'homedesktop-wsl\n' ;;
     fengs-mac-mini-3*|macmini|*macmini*) printf 'macmini\n' ;;
     *) printf 'unsupported\n' ;;
   esac
@@ -61,6 +62,7 @@ host_key() {
 schedule_for_host() {
   case "$(host_key)" in
     macmini) printf '12 3 * * *\n' ;;
+    homedesktop-wsl) printf '57 3 * * *\n' ;;
     epyc12) printf '27 3 * * *\n' ;;
     epyc6) printf '42 3 * * *\n' ;;
     *) return 1 ;;
