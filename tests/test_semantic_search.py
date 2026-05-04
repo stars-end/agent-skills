@@ -1,13 +1,21 @@
 from __future__ import annotations
 
-import subprocess
 import fcntl
+import os
+import subprocess
 from pathlib import Path
 
 from tests.semantic_index_fixtures import init_git_repo, sh, write_ccc_stub, write_config, write_state
 
 
-def run_tool(repo_root: Path, args: list[str], ccc_bin: Path, config: Path) -> subprocess.CompletedProcess[str]:
+def run_tool(
+    repo_root: Path,
+    args: list[str],
+    ccc_bin: Path,
+    config: Path,
+    *,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     cmd = [
         "python3",
         str(repo_root / "scripts/semantic-search"),
@@ -17,7 +25,10 @@ def run_tool(repo_root: Path, args: list[str], ccc_bin: Path, config: Path) -> s
         str(config),
         *args,
     ]
-    return subprocess.run(cmd, cwd=str(repo_root), capture_output=True, text=True, check=False)
+    run_env = dict(os.environ)
+    if env:
+        run_env.update(env)
+    return subprocess.run(cmd, cwd=str(repo_root), env=run_env, capture_output=True, text=True, check=False)
 
 
 def test_status_missing(tmp_path: Path) -> None:
@@ -166,7 +177,7 @@ def test_dirty_worktree_is_stale(tmp_path: Path) -> None:
     assert cp.stdout.strip() == "stale"
 
 
-def test_query_never_invokes_ccc_index_and_ready_search_has_limit(tmp_path: Path) -> None:
+def test_query_never_invokes_raw_ccc_and_ready_search_has_limit(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     canonical = tmp_path / "agent-skills"
     head = init_git_repo(canonical)
@@ -179,28 +190,33 @@ def test_query_never_invokes_ccc_index_and_ready_search_has_limit(tmp_path: Path
     write_ccc_stub(
         ccc,
         "#!/usr/bin/env bash\n"
-        f"echo \"$@\" >> {log}\n"
-        "pwd >> " + str(log) + "\n"
-        "echo \"COCOINDEX_CODE_DIR=${COCOINDEX_CODE_DIR:-}\" >> " + str(log) + "\n"
-        "if [ \"$1\" = \"status\" ]; then exit 0; fi\n"
-        "if [ \"$1\" = \"search\" ]; then echo \"result\"; exit 0; fi\n"
-        "if [ \"$1\" = \"index\" ]; then exit 9; fi\n"
-        "exit 1\n",
+        f"echo raw-ccc:$@ >> {log}\n"
+        "exit 99\n",
+    )
+    runner = tmp_path / "query-runner"
+    write_ccc_stub(
+        runner,
+        "#!/usr/bin/env bash\n"
+        f"echo runner:$@ >> {log}\n"
+        f"echo runner-cwd:$(pwd) >> {log}\n"
+        f"echo runner-coco:${{COCOINDEX_CODE_DIR:-}} >> {log}\n"
+        "echo 'result'\n",
     )
     cp = run_tool(
         repo_root,
         ["query", "--repo", str(canonical), "needle", "--limit", "3"],
         ccc,
         config,
+        env={"SEMANTIC_SEARCH_QUERY_RUNNER": str(runner)},
     )
     assert cp.returncode == 0
     assert "result" in cp.stdout
     calls = log.read_text(encoding="utf-8")
-    command_lines = [line for line in calls.splitlines() if not line.startswith("/") and not line.startswith("COCOINDEX_CODE_DIR=")]
-    assert "index" not in command_lines
-    assert "search needle --limit 3" in calls
-    assert str(index_root / "repo") in calls
-    assert f"COCOINDEX_CODE_DIR={index_root / 'coco-global'}" in calls
+    assert "raw-ccc:" not in calls
+    assert "runner:--db" in calls
+    assert "--query needle --limit 3" in calls
+    assert f"runner-cwd:{index_root / 'repo'}" in calls
+    assert f"runner-coco:{index_root / 'coco-global'}" in calls
 
 
 def test_query_fallback_for_non_ready_and_timeout(tmp_path: Path) -> None:
@@ -212,13 +228,9 @@ def test_query_fallback_for_non_ready_and_timeout(tmp_path: Path) -> None:
     config = tmp_path / "repositories.json"
     write_config(config, "agent-skills", canonical, index_root)
     ccc = tmp_path / "ccc"
-    write_ccc_stub(
-        ccc,
-        "#!/usr/bin/env bash\n"
-        "if [ \"$1\" = \"status\" ]; then exit 0; fi\n"
-        "if [ \"$1\" = \"search\" ]; then sleep 2; echo \"late\"; exit 0; fi\n"
-        "exit 1\n",
-    )
+    write_ccc_stub(ccc, "#!/usr/bin/env bash\nexit 99\n")
+    runner = tmp_path / "query-runner"
+    write_ccc_stub(runner, "#!/usr/bin/env bash\nsleep 2; echo late\n")
     # stale path
     (canonical / "a.txt").write_text("x\n", encoding="utf-8")
     sh(["git", "add", "a.txt"], cwd=canonical)
@@ -239,6 +251,26 @@ def test_query_fallback_for_non_ready_and_timeout(tmp_path: Path) -> None:
         ["--search-timeout", "1", "query", "--repo", str(canonical2), "q"],
         ccc,
         config2,
+        env={"SEMANTIC_SEARCH_QUERY_RUNNER": str(runner)},
     )
     assert cp2.returncode != 0
-    assert cp2.stderr.strip() == "semantic index unavailable; use rg."
+    assert cp2.stderr.strip().endswith("semantic index unavailable; use rg.")
+
+
+def test_status_never_invokes_raw_ccc(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    canonical = tmp_path / "agent-skills"
+    head = init_git_repo(canonical)
+    index_root = tmp_path / "indexes" / "agent-skills"
+    write_state(index_root, repo_name="agent-skills", indexed_head=head)
+    config = tmp_path / "repositories.json"
+    write_config(config, "agent-skills", canonical, index_root)
+    log = tmp_path / "ccc.log"
+    ccc = tmp_path / "ccc"
+    write_ccc_stub(ccc, "#!/usr/bin/env bash\n" f"echo raw-ccc:$@ >> {log}\n" "exit 99\n")
+
+    cp = run_tool(repo_root, ["status", "--repo", str(canonical)], ccc, config)
+
+    assert cp.returncode == 0
+    assert cp.stdout.strip() == "ready"
+    assert not log.exists()

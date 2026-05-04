@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 606a02666f83222f944e8d7e1bddf17ca71ebc2c
-last_verified_at: 2026-04-30T17:45:00Z
+last_verified_commit: e783d9f0543065576081b531db15bda01e07d026
+last_verified_at: 2026-05-04T14:45:00Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -43,6 +43,8 @@ surfaces. This file records their ownership boundaries.
    - ccc project DB/settings are expected under
      `repo/.cocoindex_code/` for current ccc versions; `coco-global/` is the
      repo-scoped `COCOINDEX_CODE_DIR` daemon/global state
+   - ordinary `scripts/semantic-search status/query` calls are read-only over
+     this warmed state; init/index/refresh remains infra-owned
    - rollback: disable scheduler, then remove or rename
      `~/.cache/agent-semantic-indexes`
 4. Orchestration runtime state (not committed)

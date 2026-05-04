@@ -21,8 +21,12 @@ Output is exactly one of:
 - `stale`
 
 `ready` requires valid schema v1 metadata (`state.json`), ccc DB + settings in
-the non-canonical index surface, healthy bounded `ccc status`, canonical HEAD
-match with `indexed_head`, and a clean worktree relationship policy.
+the non-canonical index surface, canonical HEAD match with `indexed_head`, and a
+clean worktree relationship policy.
+
+The status path is intentionally metadata-only. It does not call `ccc status`
+because current ccc versions can start daemon-side indexing while answering a
+status request.
 
 ## Query
 
@@ -32,9 +36,15 @@ Command:
 scripts/semantic-search query --repo <worktree-or-canonical-path> "<query>" --limit <n>
 ```
 
-Query runs bounded `ccc search` only when status is `ready`. It never runs
-`ccc index` on the query path. Results are tagged with `indexed_head=<sha>` on
-stderr so hints are anchored to the indexed canonical baseline.
+Query performs a bounded direct read against the warmed ccc SQLite index only
+when status is `ready`. It does not call raw `ccc search`, `ccc status`, or
+`ccc index` on the agent query path. Results are tagged with
+`indexed_head=<sha>` on stderr so hints are anchored to the indexed canonical
+baseline.
+
+The direct read still embeds the live query using the ccc global embedding
+configuration for that index surface. This is optional semantic enrichment, not
+a required first-hop lookup path.
 
 For non-ready status, timeout, missing `ccc`, or unusable `ccc` results, it
 prints exactly:
@@ -66,8 +76,8 @@ Per-repo runtime layout:
 - `refresh.log` append-only command log
 - `refresh.lock` per-repo concurrency guard
 
-`ccc` commands run from `repo/` with `COCOINDEX_CODE_DIR` pointed at
-`coco-global/`. Current ccc versions store the project DB/settings in
+Infra-owned refresh commands run from `repo/` with `COCOINDEX_CODE_DIR` pointed
+at `coco-global/`. Current ccc versions store the project DB/settings in
 `repo/.cocoindex_code/`; wrappers should not assume the DB lives directly under
 the cache root.
 
@@ -78,6 +88,7 @@ scripts/semantic-index-refresh --repo-name agent-skills
 scripts/semantic-index-refresh --all
 scripts/semantic-index-refresh --repo-name llm-common --dry-run
 scripts/semantic-index-refresh --all --index-root /tmp/semantic-indexes
+scripts/dx-ccc-refresh --repo-name prime-radiant-ai
 ```
 
 Dry-run behavior is non-mutating: it prints planned operations and does not
@@ -110,3 +121,16 @@ This wrapper runs `--all` and writes logs to:
 
 It is safe to invoke from cron or a systemd timer, but this repo does not
 install or enable timers automatically.
+
+## Agent Contract
+
+Ordinary agents should only use:
+
+```bash
+scripts/semantic-search status --repo "$PWD"
+scripts/semantic-search query --repo "$PWD" "natural language query"
+```
+
+They must not run raw `ccc init`, `ccc index`, `ccc status`, or `ccc search`
+inside canonical repositories or implementation worktrees. If status is
+`missing`, `indexing`, or `stale`, use `rg` and direct reads.
