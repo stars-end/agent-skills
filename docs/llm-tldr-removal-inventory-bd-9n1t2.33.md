@@ -16,3 +16,18 @@
 | Historical specs/runbooks/evidence mentioning llm-tldr | all repos | tombstone (keep) | Historical records retained; not active routing instructions | bd-9n1t2.33.1 |
 | Home MCP client configs (`~/.codex`, `~/.claude.json`, `~/.gemini/*`, `~/.config/opencode`) | host | inventory only | Uninstall/config cleanup owned by fleet lane; no local mutation in this lane | bd-9n1t2.33.4 |
 | Local binaries (`~/.local/bin/llm-tldr`, `tldr`, `tldr-mcp`) | host | inventory only | Runtime uninstall owned by fleet lane | bd-9n1t2.33.4 |
+
+## 2026-05-05 Follow-up Status
+
+- `extended/llm-tldr/SKILL.md`, `scripts/tldr-*`,
+  `scripts/tldr_contained_runtime.py`, and the `llm-tldr` MCP manifest block
+  are absent from current `agent-skills`.
+- Worktree creation no longer starts legacy per-worktree semantic prewarm.
+  Worktrees rely on canonical warmed indexes through `scripts/semantic-search`
+  or fall back to `rg` and direct reads.
+- Spoke cron installation now prunes legacy `tldr-semantic-prewarm.sh` entries
+  and installs the hourly `semantic-index-cron.sh` refresh.
+- The orphaned `tests/test_tldr_contained_runtime.py` test was removed because
+  it imported a runtime module that has already been removed.
+- Product repo baseline cleanup and host-level binary/client config uninstall
+  remain separate follow-up surfaces unless handled by their owner tasks.

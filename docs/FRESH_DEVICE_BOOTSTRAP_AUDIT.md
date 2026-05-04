@@ -3,6 +3,14 @@
 Feature-Key: `bd-0oal8.2`
 Scope: fresh-device/bootstrap cleanup + role-aware entrypoint rollout
 
+## Supersession Note
+
+The llm-tldr routing and bounded fallback sections below are historical audit
+findings from `bd-0oal8.2`. Current routing uses `rg` and direct reads first,
+with `scripts/semantic-search` as an optional warmed semantic hint lane only
+when status is `ready`. Query and worktree-creation paths must not trigger
+semantic indexing.
+
 ## Decision Categories
 
 - `canonical`: keep as active contract surface.
@@ -17,8 +25,8 @@ Scope: fresh-device/bootstrap cleanup + role-aware entrypoint rollout
 - Beads runtime truth: `~/.beads-runtime/.beads`.
 - Beads coordination command surface: `bdx` (transport/safety wrapper) to hub host `epyc12`.
 - `~/beads` is Beads source/build checkout; `~/bd` is legacy/rollback state only.
-- MCP routing contract: `llm-tldr` for semantic/static analysis, `serena` for symbol-aware edits.
-- `llm-tldr` locality rule: analysis runs on the host that can read the path; do not send Mac-local worktree paths to an `epyc12`-hosted process unless mirrored.
+- Historical MCP routing contract at audit time: `llm-tldr` for semantic/static analysis, `serena` for symbol-aware edits.
+- Historical `llm-tldr` locality rule at audit time: analysis runs on the host that can read the path; do not send Mac-local worktree paths to an `epyc12`-hosted process unless mirrored.
 - Auth topology: `epyc12` is OP cache refresh source; spokes sync cache artifacts.
 - macOS GUI `op` (`op signin`, `op whoami`) is human bootstrap/recovery only.
 - Host scheduling: cron/systemd by role; legacy `io.agentskills.ru` LaunchAgent must stay disabled.
@@ -73,7 +81,7 @@ The following stale themes are still present and should be handled in later clea
   longer installed by `scripts/setup-git-hooks.sh`.
 - Legacy mounts (`~/.agent/skills`) remain as compatibility behavior in `dx-hydrate.sh`.
 
-## llm-tldr Bounded Fallback Requirement
+## Historical llm-tldr Bounded Fallback Requirement
 
 ### Current finding on this Mac
 

@@ -68,16 +68,15 @@ Use this skill when the user asks to:
   - host runtime health
   - rendered config correctness
   - client-visible MCP availability
-  missing semantic index on first use for the target project path, but the
-  daemon fallback fails fast on a cold semantic index and tells agents to
-  prewarm explicitly or use targeted `rg` / direct reads. `tldr warm <project>`
-  only warms structural caches.
-  Every MCP tool call accepts a `project` parameter for
-  worktree-safe operation (daemon per resolved path).
-  `.tldr/` and `.tldrignore` never resolve inside the project tree. CLI warm
-  repo-local artifact leakage occurs from root or nested invocations. This is
-  enforced by `scripts/dx-verify-clean.sh`, which fails when leaked `.tldr/`
-  or `.tldrignore` artifacts are present in canonical repos.
+- Semantic hints are optional and non-blocking. Agents should use `rg` and
+  direct reads first, then `scripts/semantic-search query` only when
+  `scripts/semantic-search status` reports `ready`.
+- Do not start semantic indexing from worktree creation or query paths.
+  Canonical warmed indexes are refreshed by scheduled infrastructure jobs.
+  If status is `missing`, `indexing`, or `stale`, agents should use targeted
+  `rg` and direct reads.
+- Legacy `.tldr/` and `.tldrignore` artifacts must not appear under repo or
+  worktree trees. This is enforced by `scripts/dx-verify-clean.sh`.
 - `antigravity` and `gemini-cli` use wrapped launcher form with the repo
   path inside the exec string.
 - Do not claim full GO while `serena` remains unresolved unless the contract explicitly excludes it.

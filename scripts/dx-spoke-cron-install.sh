@@ -121,6 +121,51 @@ remove_wrapper_job_entries() {
   fi
 }
 
+remove_cron_entries_matching() {
+  local pattern="$1"
+  local label="$2"
+  local current_cron updated_cron
+
+  current_cron="$(crontab -l 2>/dev/null || true)"
+  updated_cron="$(
+    printf '%s\n' "$current_cron" | awk -v pattern="$pattern" '
+      /^[[:space:]]*#/ { print; next }
+      /^[[:space:]]*$/ { print; next }
+      {
+        if (index($0, pattern) > 0) {
+          next
+        }
+        print
+      }
+    '
+  )"
+
+  if [[ "$updated_cron" != "$current_cron" ]]; then
+    printf '%s\n' "$updated_cron" | install_crontab_from_stdin
+    printf 'Pruned cron entries matching: %s\n' "$label"
+  fi
+}
+
+remove_cron_marker_entry() {
+  local marker="$1"
+  local current_cron updated_cron
+
+  current_cron="$(crontab -l 2>/dev/null || true)"
+  updated_cron="$(
+    printf '%s\n' "$current_cron" | awk -v marker="$marker" '
+      BEGIN { skip_next=0 }
+      skip_next { skip_next=0; next }
+      $0 == "# " marker { skip_next=1; next }
+      { print }
+    '
+  )"
+
+  if [[ "$updated_cron" != "$current_cron" ]]; then
+    printf '%s\n' "$updated_cron" | install_crontab_from_stdin
+    printf 'Removed cron marker: %s\n' "$marker"
+  fi
+}
+
 install_fetch_jobs() {
   remove_wrapper_job_entries "fetch-agent-skills" "canonical-fetch.sh"
   remove_wrapper_job_entries "fetch-prime" "canonical-fetch.sh"
@@ -140,10 +185,12 @@ install_fetch_jobs() {
     "0 */2 * * * $BASH_PATH $WRAPPER reconcile -- $AGENTS_ROOT/scripts/canonical-reconcile.sh >> $HOME/logs/dx/reconcile.log 2>&1"
 }
 
-install_tldr_semantic_prewarm_job() {
+install_semantic_index_refresh_job() {
+  remove_cron_marker_entry "DX spoke: tldr-semantic-prewarm"
   remove_wrapper_job_entries "tldr-semantic-prewarm" "tldr-semantic-prewarm.sh"
-  install_cron_entry "DX spoke: tldr-semantic-prewarm" \
-    "27 */6 * * * $BASH_PATH $WRAPPER tldr-semantic-prewarm -- $AGENTS_ROOT/scripts/tldr-semantic-prewarm.sh --canonical --active-worktrees --since-hours 48 >> $HOME/logs/dx/tldr-semantic-prewarm.log 2>&1"
+  remove_cron_entries_matching "tldr-semantic-prewarm.sh" "legacy tldr semantic prewarm"
+  install_cron_entry "DX spoke: semantic-index-refresh" \
+    "17 * * * * SEMANTIC_INDEX_CRON_PATH_READY=1 PATH=$HOME/.local/bin:$HOME/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin $AGENTS_ROOT/scripts/semantic-index-cron.sh"
 }
 
 install_cache_sync_job() {
@@ -159,7 +206,7 @@ install_cache_sync_job() {
 
 main() {
   install_fetch_jobs
-  install_tldr_semantic_prewarm_job
+  install_semantic_index_refresh_job
   install_cache_sync_job
 }
 
