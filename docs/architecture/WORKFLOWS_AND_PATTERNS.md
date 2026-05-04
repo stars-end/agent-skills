@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 7dd26996c0336790a68338bddddf73d090437341
-last_verified_at: 2026-04-17T05:48:13Z
+last_verified_commit: e783d9f0543065576081b531db15bda01e07d026
+last_verified_at: 2026-05-04T14:45:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -39,7 +39,8 @@ not rediscover them from scratch.
   status is `ready`; if it returns `missing`, `indexing`, or `stale`, use `rg`
   and direct reads
 - do not index from the live query path; scheduled `scripts/semantic-index-refresh`
-  owns ccc index updates under `~/.cache/agent-semantic-indexes/`
+  and its `scripts/dx-ccc-refresh` alias own ccc index updates under
+  `~/.cache/agent-semantic-indexes/`
 - use bounded helper tools only when they are available and useful; do not
   require legacy semantic prewarm paths for normal repo discovery
 - use Serena for symbol-aware edits where symbol safety matters
@@ -53,6 +54,9 @@ not rediscover them from scratch.
   the warmed canonical HEAD as the semantic baseline.
 - the approved cache layout is
   `~/.cache/agent-semantic-indexes/<repo-name>/{repo,coco-global,state.json,refresh.log,refresh.lock}`.
+- agent status is metadata-only and agent query uses a bounded direct read of
+  the warmed ccc SQLite index; ordinary agents must not call raw `ccc status`,
+  `ccc search`, or `ccc index`.
 - `extended/wooyun-legacy/` was removed because the generated reference corpus
   made `agent-skills` semantic indexing operationally impractical and was not
   part of the active default skill workflow.

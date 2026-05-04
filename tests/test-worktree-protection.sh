@@ -50,12 +50,12 @@ assert_equals() {
     
     if [[ "$expected" == "$actual" ]]; then
         echo -e "${GREEN}✓ PASS${NC}: $message"
-        ((PASSED++))
+        ((PASSED += 1))
     else
         echo -e "${RED}✗ FAIL${NC}: $message"
         echo "  Expected: $expected"
         echo "  Actual:   $actual"
-        ((FAILED++))
+        ((FAILED += 1))
     fi
 }
 
@@ -65,10 +65,10 @@ assert_file_exists() {
     
     if [[ -f "$path" ]]; then
         echo -e "${GREEN}✓ PASS${NC}: $message"
-        ((PASSED++))
+        ((PASSED += 1))
     else
         echo -e "${RED}✗ FAIL${NC}: $message (file not found: $path)"
-        ((FAILED++))
+        ((FAILED += 1))
     fi
 }
 
@@ -78,10 +78,10 @@ assert_path_exists() {
 
     if [[ -e "$path" ]]; then
         echo -e "${GREEN}✓ PASS${NC}: $message"
-        ((PASSED++))
+        ((PASSED += 1))
     else
         echo -e "${RED}✗ FAIL${NC}: $message (path not found: $path)"
-        ((FAILED++))
+        ((FAILED += 1))
     fi
 }
 
@@ -91,10 +91,10 @@ assert_path_missing() {
 
     if [[ ! -e "$path" ]]; then
         echo -e "${GREEN}✓ PASS${NC}: $message"
-        ((PASSED++))
+        ((PASSED += 1))
     else
         echo -e "${RED}✗ FAIL${NC}: $message (still exists: $path)"
-        ((FAILED++))
+        ((FAILED += 1))
     fi
 }
 
@@ -105,12 +105,12 @@ assert_exit_code() {
     
     if [[ "$expected" -eq "$actual" ]]; then
         echo -e "${GREEN}✓ PASS${NC}: $message (exit code: $actual)"
-        ((PASSED++))
+        ((PASSED += 1))
     else
         echo -e "${RED}✗ FAIL${NC}: $message"
         echo "  Expected exit code: $expected"
         echo "  Actual exit code:   $actual"
-        ((FAILED++))
+        ((FAILED += 1))
     fi
 }
 
@@ -124,10 +124,10 @@ setup
 # In a linked worktree, .git is a file, not a directory
 if [[ -f "$TEST_DIR/worktrees/test-wt/.git" ]]; then
     echo -e "${GREEN}✓ PASS${NC}: Linked worktree .git is a file"
-    ((PASSED++))
+    ((PASSED += 1))
 else
     echo -e "${RED}✗ FAIL${NC}: Linked worktree .git not found"
-    ((FAILED++))
+    ((FAILED += 1))
 fi
 
 # Extract gitdir from .git file
@@ -137,7 +137,7 @@ if [[ "$GITDIR" =~ ^gitdir:\ (.+)$ ]]; then
     assert_path_exists "$GITDIR_PATH" "Gitdir from .git file exists"
 else
     echo -e "${RED}✗ FAIL${NC}: .git file doesn't contain gitdir"
-    ((FAILED++))
+    ((FAILED += 1))
 fi
 
 teardown
@@ -155,10 +155,10 @@ touch "$GITDIR_PATH/index.lock"
 if [[ -f "$GITDIR_PATH/index.lock" ]]; then
     assert_file_exists "$GITDIR_PATH/index.lock" "Git lock file detected in linked worktree gitdir"
     echo -e "${GREEN}✓ PASS${NC}: Lock detection works with linked worktrees"
-    ((PASSED++))
+    ((PASSED += 1))
 else
     echo -e "${RED}✗ FAIL${NC}: Lock file not found in gitdir"
-    ((FAILED++))
+    ((FAILED += 1))
 fi
 
 teardown
@@ -177,7 +177,7 @@ assert_file_exists "$GITDIR_PATH/MERGE_HEAD" "MERGE_HEAD created in gitdir"
 # Verify it would be detected
 if [[ -f "$GITDIR_PATH/MERGE_HEAD" ]]; then
     echo -e "${GREEN}✓ PASS${NC}: Merge state detectable in linked worktree"
-    ((PASSED++))
+    ((PASSED += 1))
 fi
 
 rm "$GITDIR_PATH/MERGE_HEAD"
@@ -186,7 +186,7 @@ assert_file_exists "$GITDIR_PATH/REBASE_HEAD" "REBASE_HEAD created in gitdir"
 
 if [[ -f "$GITDIR_PATH/REBASE_HEAD" ]]; then
     echo -e "${GREEN}✓ PASS${NC}: Rebase state detectable in linked worktree"
-    ((PASSED++))
+    ((PASSED += 1))
 fi
 
 teardown
@@ -278,10 +278,10 @@ print('  ✓ Python validation functions work correctly')
 "
 
 if [[ $? -eq 0 ]]; then
-    ((PASSED++))
+    ((PASSED += 1))
 else
     echo -e "${RED}✗ FAIL${NC}: Python validation functions"
-    ((FAILED++))
+    ((FAILED += 1))
 fi
 
 # Test 8: Working hours function
@@ -293,10 +293,10 @@ export WORKTREE_CLEANUP_PROTECT_END=18
 
 if [[ "$CURRENT_HOUR" -ge 8 && "$CURRENT_HOUR" -lt 18 ]]; then
     echo -e "${GREEN}✓ PASS${NC}: Currently in working hours ($CURRENT_HOUR:00)"
-    ((PASSED++))
+    ((PASSED += 1))
 else
     echo -e "${GREEN}✓ PASS${NC}: Currently outside working hours ($CURRENT_HOUR:00)"
-    ((PASSED++))
+    ((PASSED += 1))
 fi
 
 # Test 7: Skip log file creation
@@ -313,10 +313,10 @@ assert_file_exists "$LOG_FILE" "Skip log file created"
 # Verify log format is machine-readable
 if grep -q "beads_id=test-123" "$LOG_FILE"; then
     echo -e "${GREEN}✓ PASS${NC}: Skip log format is machine-readable"
-    ((PASSED++))
+    ((PASSED += 1))
 else
     echo -e "${RED}✗ FAIL${NC}: Skip log format not machine-readable"
-    ((FAILED++))
+    ((FAILED += 1))
 fi
 
 echo ""

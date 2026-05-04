@@ -107,14 +107,17 @@ section "bd-kuhj.3: Canonical path rejection"
 
 # Test 2.1: dx-runner rejects canonical path
 echo "Test 2.1: dx-runner rejects canonical repo"
+test_prompt="/tmp/test-workspace-first-contract-$$.txt"
+printf 'test prompt\n' > "$test_prompt"
 set +e
 result="$("$CURRENT_BASH" "$AGENTS_ROOT/scripts/dx-runner" start \
     --beads bd-test-canonical \
     --provider opencode \
     --worktree "$HOME/agent-skills" \
-    --prompt-file /tmp/test.txt 2>&1)" || true
+    --prompt-file "$test_prompt" 2>&1)" || true
 rc=$?
 set -e
+rm -f "$test_prompt"
 
 # Accept either canonical_worktree_forbidden OR beads cwd gate (both are valid rejections)
 if [[ "$result" == *"canonical_worktree_forbidden"* ]]; then

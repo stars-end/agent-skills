@@ -89,11 +89,12 @@ published guidance.
 
 - Resolves the repo to a configured canonical index surface.
 - Reads `state.json`.
-- Runs bounded `ccc status` only against the index surface.
-- Runs bounded `ccc search` only when status is `ready`.
+- Performs a bounded direct read against the warmed ccc SQLite index only when
+  status is `ready`.
 - For `missing`, `indexing`, or `stale`, exits nonzero and prints exactly:
   `semantic index unavailable; use rg.`
-- Never runs `ccc init`, `ccc index`, `git pull`, or package/model install.
+- Never runs raw `ccc init`, `ccc index`, `ccc status`, `ccc search`,
+  `git pull`, or package/model install.
 
 ### Status Contract
 
@@ -102,9 +103,10 @@ published guidance.
 Returns exactly one of:
 
 - `ready`: index DB exists, `state.json` records a successful refresh for the
-  same canonical repo and indexed HEAD, and `ccc status` is healthy.
+  same canonical repo and indexed HEAD, and worktree/canonical HEAD policy
+  matches the indexed baseline.
 - `indexing`: lock or state says a refresh is in progress, or bounded
-  `ccc status` times out / reports indexing.
+  metadata lock inspection reports indexing.
 - `missing`: no configured index surface, no settings, no DB, no metadata, or
   `ccc` is unavailable.
 - `stale`: index exists but metadata shows a different indexed HEAD than the
@@ -249,8 +251,9 @@ Required behavior:
 - Worktree resolver from `/tmp/agents/<beads-id>/<repo>` to `<repo-name>`.
 - Routing docs remove `llm-tldr` semantic as the default first-hop and describe
   `semantic-search` as optional warmed hints only.
-- Query path asserts no `ccc index` invocation.
-- Bounded `ccc status` and `ccc search`.
+- Query and status paths assert no raw `ccc` invocation.
+- Bounded direct query reads use the ccc Python environment and warmed SQLite
+  DB without going through the ccc daemon request path.
 
 ### Slice B: Refresh Workflow and Cron
 
@@ -304,10 +307,10 @@ Required test cases:
 - `status=missing` with no metadata/DB.
 - `status=indexing` when lock/state says refresh in progress.
 - `status=stale` when indexed HEAD differs from canonical HEAD.
-- `status=ready` with valid metadata and healthy stubbed `ccc status`.
-- `query` never invokes `ccc index`.
+- `status=ready` with valid metadata and no raw `ccc status` call.
+- `query` never invokes raw `ccc`.
 - `query` falls back cleanly for missing/indexing/stale.
-- `query` times out and falls back cleanly on slow `ccc search`.
+- `query` times out and falls back cleanly on slow direct query.
 - refresh dry-run does not clone, pull, init, or index.
 - refresh rejects non-allowlisted repo.
 - refresh lock prevents concurrent run.
@@ -331,8 +334,8 @@ scripts/semantic-search status --repo "$tmp/llm-common"
 scripts/semantic-search query --repo "$tmp/llm-common" "OpenRouter provider config" --limit 3
 ```
 
-The exact smoke can use a stubbed `ccc` in CI; one real local smoke should be
-recorded before merge on epyc12.
+The exact smoke can use a stubbed direct query runner in CI; one real local
+smoke should be recorded before merge on epyc12.
 
 ### Repo Hygiene
 

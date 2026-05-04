@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 606a02666f83222f944e8d7e1bddf17ca71ebc2c
-last_verified_at: 2026-04-30T17:45:00Z
+last_verified_commit: 1860c9ad30a874b653cf7b18147371990fb7fdbd
+last_verified_at: 2026-05-04T14:48:00Z
 stale_if_paths:
   - docs/architecture/**
 ---
@@ -19,8 +19,9 @@ stale_if_paths:
   ownership boundaries
 - `WORKFLOWS_AND_PATTERNS.md`: recurring workflow contracts, orchestration
   surface hierarchy, anti-drift rules, and the active discovery contract:
-  `rg` + direct reads first, optional `scripts/semantic-search query` only
-  when semantic status is `ready`, and `serena` for symbol-aware edits
+  `rg` + direct reads first, optional read-only `scripts/semantic-search`
+  status/query only when semantic status is `ready`, and `serena` for
+  symbol-aware edits
 
 Current review-dispatch policy lives in `configs/dx-review/default.yaml` and the
 map docs: `dx-review` reads reviewer `id/provider/model` rows and uses only the

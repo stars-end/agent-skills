@@ -7,8 +7,10 @@ import argparse
 import fcntl
 import json
 import os
+import shutil
 import subprocess
 import sys
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +22,69 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INDEX_ROOT = Path("~/.cache/agent-semantic-indexes").expanduser()
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "semantic-index" / "repositories.json"
 EXPECTED_SCHEMA_VERSION = 1
+
+DIRECT_CCC_QUERY_CODE = r"""
+import asyncio
+import json
+import os
+import sys
+from pathlib import Path
+
+from cocoindex.connectors import sqlite as coco_sqlite
+from cocoindex_code.query import query_codebase
+from cocoindex_code.settings import load_user_settings
+from cocoindex_code.shared import EMBEDDER, QUERY_EMBED_PARAMS, SQLITE_DB, create_embedder
+
+
+class _Env:
+    def __init__(self, values):
+        self._values = values
+
+    def get_context(self, key):
+        return self._values[key]
+
+
+async def _main():
+    db_path = Path(sys.argv[1])
+    query = sys.argv[2]
+    limit = int(sys.argv[3])
+
+    settings = load_user_settings()
+    for key, value in settings.envs.items():
+        os.environ.setdefault(str(key), str(value))
+
+    embedder = create_embedder(
+        settings.embedding,
+        settings.embedding.indexing_params or {},
+    )
+    env = _Env(
+        {
+            SQLITE_DB: coco_sqlite.connect(str(db_path), load_vec=True),
+            EMBEDDER: embedder,
+            QUERY_EMBED_PARAMS: dict(settings.embedding.query_params or {}),
+        }
+    )
+    results = await query_codebase(query, db_path, env, limit=limit)
+    print(
+        json.dumps(
+            [
+                {
+                    "file_path": item.file_path,
+                    "language": item.language,
+                    "content": item.content,
+                    "start_line": item.start_line,
+                    "end_line": item.end_line,
+                    "score": item.score,
+                }
+                for item in results
+            ],
+            ensure_ascii=False,
+        )
+    )
+
+
+asyncio.run(_main())
+"""
 
 
 @dataclass
@@ -128,6 +193,13 @@ def _db_candidates(resolved: ResolvedRepo) -> list[Path]:
     ]
 
 
+def _first_existing_db(resolved: ResolvedRepo) -> Path | None:
+    for path in _db_candidates(resolved):
+        if path.exists():
+            return path
+    return None
+
+
 def _settings_candidates(resolved: ResolvedRepo) -> list[Path]:
     return [
         _ccc_project_dir(resolved) / "settings.yml",
@@ -202,27 +274,7 @@ def _is_ancestor(older: str, newer: str, repo: Path) -> bool:
     return cp.returncode == 0
 
 
-def _ccc_status(ccc_bin: str, resolved: ResolvedRepo, timeout_seconds: int) -> tuple[bool, str]:
-    try:
-        cp = _run(
-            [ccc_bin, "status"],
-            cwd=_index_surface(resolved),
-            env=_scoped_env(resolved),
-            timeout=max(1, timeout_seconds),
-        )
-    except subprocess.TimeoutExpired:
-        return False, "timeout"
-    except OSError:
-        return False, "missing"
-    combined = f"{cp.stdout}\n{cp.stderr}".lower()
-    if "indexing" in combined:
-        return False, "indexing"
-    if cp.returncode != 0:
-        return False, "failed"
-    return True, "ok"
-
-
-def classify_status(resolved: ResolvedRepo, *, ccc_bin: str, status_timeout_seconds: int) -> str:
+def classify_status(resolved: ResolvedRepo) -> str:
     if _refresh_lock_active(resolved):
         return "indexing"
     if not _index_surface(resolved).is_dir():
@@ -260,14 +312,104 @@ def classify_status(resolved: ResolvedRepo, *, ccc_bin: str, status_timeout_seco
     if target_head != indexed_head and not _is_ancestor(indexed_head, target_head, resolved.target_repo):
         return "stale"
 
-    ok, reason = _ccc_status(ccc_bin, resolved, status_timeout_seconds)
-    if not ok:
-        if reason == "timeout" or reason == "indexing":
-            return "indexing"
-        if reason == "missing":
-            return "missing"
-        return "stale"
     return "ready"
+
+
+def _python_from_ccc_bin(ccc_bin: str) -> str | None:
+    candidate = shutil.which(ccc_bin) if not os.path.isabs(ccc_bin) else ccc_bin
+    if not candidate:
+        return None
+    path = Path(candidate)
+    try:
+        first_line = path.read_text(encoding="utf-8", errors="ignore").splitlines()[0]
+    except (OSError, IndexError):
+        return None
+    if not first_line.startswith("#!"):
+        return None
+    executable = first_line[2:].strip().split()[0]
+    if "python" not in Path(executable).name:
+        return None
+    return executable
+
+
+def _format_direct_results(raw: str) -> str:
+    rows = json.loads(raw)
+    if not isinstance(rows, list) or not rows:
+        return ""
+    chunks: list[str] = []
+    for idx, row in enumerate(rows, 1):
+        score = float(row.get("score", 0.0))
+        file_path = row.get("file_path", "")
+        start = row.get("start_line", "")
+        end = row.get("end_line", "")
+        language = row.get("language", "")
+        content = row.get("content", "")
+        chunks.append(
+            f"\n--- Result {idx} (score: {score:.3f}) ---\n"
+            f"File: {file_path}:{start}-{end} [{language}]\n"
+            f"{content}"
+        )
+    return "\n".join(chunks).lstrip("\n") + "\n"
+
+
+def _direct_query(
+    resolved: ResolvedRepo,
+    *,
+    ccc_bin: str,
+    query: str,
+    limit: int,
+    timeout_seconds: int,
+) -> tuple[bool, str, str]:
+    db_path = _first_existing_db(resolved)
+    if db_path is None:
+        return False, "", "missing-db"
+
+    env = _scoped_env(resolved)
+    test_runner = os.environ.get("SEMANTIC_SEARCH_QUERY_RUNNER")
+    if test_runner:
+        cmd = [
+            test_runner,
+            "--db",
+            str(db_path),
+            "--repo",
+            str(_index_surface(resolved)),
+            "--query",
+            query,
+            "--limit",
+            str(limit),
+        ]
+    else:
+        ccc_python = _python_from_ccc_bin(ccc_bin)
+        if not ccc_python:
+            return False, "", "missing-python"
+        cmd = [
+            ccc_python,
+            "-c",
+            textwrap.dedent(DIRECT_CCC_QUERY_CODE),
+            str(db_path),
+            query,
+            str(limit),
+        ]
+
+    try:
+        cp = _run(cmd, cwd=_index_surface(resolved), env=env, timeout=max(1, timeout_seconds))
+    except subprocess.TimeoutExpired:
+        return False, "", "timeout"
+    except OSError as exc:
+        return False, "", f"failed: {exc}"
+    if cp.returncode != 0:
+        return False, cp.stdout, cp.stderr.strip() or "failed"
+
+    if test_runner:
+        output = cp.stdout
+    else:
+        try:
+            output = _format_direct_results(cp.stdout)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            return False, cp.stdout, f"invalid-results: {exc}"
+    if not output.strip():
+        return False, output, "empty"
+    return True, output, cp.stderr
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -298,11 +440,7 @@ def main(argv: list[str] | None = None) -> int:
     resolved = _resolve_repo(args.repo, repo_configs)
     status = "missing"
     if resolved:
-        status = classify_status(
-            resolved,
-            ccc_bin=args.ccc_bin,
-            status_timeout_seconds=max(1, args.status_timeout),
-        )
+        status = classify_status(resolved)
 
     if args.command == "status":
         print(status)
@@ -312,26 +450,22 @@ def main(argv: list[str] | None = None) -> int:
         print(UNAVAILABLE_MESSAGE, file=sys.stderr)
         return 2
 
-    try:
-        cp = _run(
-            [args.ccc_bin, "search", args.query, "--limit", str(args.limit)],
-            cwd=_index_surface(resolved),
-            env=_scoped_env(resolved),
-            timeout=max(1, args.search_timeout),
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        print(UNAVAILABLE_MESSAGE, file=sys.stderr)
-        return 2
+    ok, output, err = _direct_query(
+        resolved,
+        ccc_bin=args.ccc_bin,
+        query=args.query,
+        limit=args.limit,
+        timeout_seconds=max(1, args.search_timeout),
+    )
 
     state = _load_state(resolved) or {}
     head_line = f"indexed_head={state.get('indexed_head','unknown')}"
     print(head_line, file=sys.stderr)
-    usable = bool(cp.stdout.strip())
-    if cp.stdout:
-        print(cp.stdout, end="")
-    if cp.stderr:
-        print(cp.stderr, end="", file=sys.stderr)
-    if not usable:
+    if output:
+        print(output, end="")
+    if err:
+        print(err, end="\n" if not err.endswith("\n") else "", file=sys.stderr)
+    if not ok:
         print(UNAVAILABLE_MESSAGE, file=sys.stderr)
         return 2
     return 0
