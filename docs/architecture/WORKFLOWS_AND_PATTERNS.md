@@ -31,6 +31,11 @@ not rediscover them from scratch.
 - canonical fetch/sync/evacuation/worktree cleanup scripts must use
   `scripts/lib/canonical-git-remotes.sh` for branch and origin decisions rather
   than assuming `origin/master`
+- routine canonical hook installation writes only untracked `.git/hooks/*`;
+  updating tracked `.githooks/pre-commit` or `.githooks/commit-msg` requires
+  explicit `scripts/install-canonical-precommit.sh --update-versioned` or
+  `DX_UPDATE_VERSIONED_GITHOOKS=1` so bootstrap cannot dirty every canonical
+  repo by default
 - `scripts/dx-verify-clean.sh` is allowed one narrow self-heal: if a canonical
   clone is on its expected branch and the only dirty paths are generated
   `.githooks/commit-msg` or `.githooks/pre-commit`, it restores those files

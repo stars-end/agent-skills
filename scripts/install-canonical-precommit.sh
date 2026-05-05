@@ -5,6 +5,37 @@ set -euo pipefail
 # Purpose: keep canonical repos read-mostly; all work must happen in worktrees.
 
 CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common bd-symphony)
+UPDATE_VERSIONED=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --update-versioned)
+      UPDATE_VERSIONED=1
+      shift
+      ;;
+    -h|--help)
+      cat <<'EOF'
+Usage: install-canonical-precommit.sh [--update-versioned]
+
+Default behavior installs hooks only to untracked .git/hooks.
+
+To intentionally update versioned hooks in .githooks/, pass:
+  --update-versioned
+or set:
+  DX_UPDATE_VERSIONED_GITHOOKS=1
+EOF
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ "${DX_UPDATE_VERSIONED_GITHOOKS:-0}" == "1" ]]; then
+  UPDATE_VERSIONED=1
+fi
 
 install_for_repo() {
   local repo_root="$1"
@@ -220,11 +251,23 @@ HOOK
 
   chmod +x "$hooks_dir/commit-msg"
 
-  # Also update versioned .githooks if they exist (V8.1 pattern)
+  # Versioned hooks update is explicit opt-in only to avoid dirtying tracked files.
   if [[ -d "$repo_root/.githooks" ]]; then
-    cp "$hooks_dir/pre-commit" "$repo_root/.githooks/pre-commit"
-    cp "$hooks_dir/commit-msg" "$repo_root/.githooks/commit-msg"
-    chmod +x "$repo_root/.githooks/pre-commit" "$repo_root/.githooks/commit-msg"
+    if [[ "$UPDATE_VERSIONED" == "1" ]]; then
+      cp "$hooks_dir/pre-commit" "$repo_root/.githooks/pre-commit"
+      cp "$hooks_dir/commit-msg" "$repo_root/.githooks/commit-msg"
+      chmod +x "$repo_root/.githooks/pre-commit" "$repo_root/.githooks/commit-msg"
+      echo "Updated versioned hooks: $repo_root/.githooks/{pre-commit,commit-msg}" >&2
+    else
+      if [[ -f "$repo_root/.githooks/pre-commit" ]] && ! cmp -s "$hooks_dir/pre-commit" "$repo_root/.githooks/pre-commit"; then
+        echo "Warning: $repo_root/.githooks/pre-commit differs from generated hook. Not updating in default mode." >&2
+        echo "  To update intentionally: scripts/install-canonical-precommit.sh --update-versioned" >&2
+      fi
+      if [[ -f "$repo_root/.githooks/commit-msg" ]] && ! cmp -s "$hooks_dir/commit-msg" "$repo_root/.githooks/commit-msg"; then
+        echo "Warning: $repo_root/.githooks/commit-msg differs from generated hook. Not updating in default mode." >&2
+        echo "  To update intentionally: scripts/install-canonical-precommit.sh --update-versioned" >&2
+      fi
+    fi
   fi
 }
 
