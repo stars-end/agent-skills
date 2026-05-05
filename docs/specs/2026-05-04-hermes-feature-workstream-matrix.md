@@ -16,9 +16,9 @@ program scope.
 | Kanban / board workflows | Yes | Hermes | `coder`, `olivaw` | 3 | Useful if it reduces coordination drag; not a duplicate of Beads |
 | Subagent delegation | Yes | Hermes | `coder`, `olivaw` | 3 | Mainly for coding and research follow-through |
 | Execute-code workflows | Yes | Hermes | `coder` | 3 | Wrapper layer around `codex exec` / `opencode run` |
-| Google Workspace | Yes | Hermes | `olivaw`, `family`, `finance` | 2-4 | Business workspace first: `fengning@stars-end.ai` |
-| Gmail | Yes, bounded | Hermes | `olivaw`, later `finance` | 2+ | Startup mailbox first; finance mailbox access deferred |
-| Calendar | Yes | Hermes | `olivaw`, `family` | 2-4 | Founder operations and family planning are both high value |
+| Google Workspace | Yes | Hermes | `olivaw`, `family`, `finance` | 2-4 | Business workspace first: `fengning@stars-end.ai`; personal account is calendar-view only by default |
+| Gmail | Yes, bounded | Hermes | `olivaw`, later `finance` | 2+ | Startup mailbox first; keep personal Gmail separate; finance mailbox access deferred |
+| Calendar | Yes | Hermes | `olivaw`, `family` | 2-4 | Business calendar can be shared into personal GCal for unified planning visibility |
 | Drive / Docs / Sheets | Yes | Hermes | all | 2-4 | Canonical artifacts for planning, healthcare, finance, follow-up |
 | Contacts | Yes | Hermes | `olivaw`, `family` | 2-4 | Useful for outreach, reservations, logistics |
 | Browser automation | Yes | Hermes | `family`, `finance`, `olivaw` | 4 | Reservations, healthcare portals, admin-heavy workflows |
@@ -49,14 +49,14 @@ program scope.
 | Gas City pane integration | Yes | Gas City + Hermes | `coder`, `olivaw` | 5 | Gas City should surface and route, not absorb Hermes |
 | Agent Coordination coexistence | Yes | Shared | `olivaw`, `coder` | 1-2 | Deterministic transport stays there |
 | Deterministic `dx-*` input adapters | Yes | Shared | `olivaw`, `coder` | 1-2 | Hermes must consume explicit artifacts, not scrape ad hoc surfaces |
-| Deterministic producer mapping | Yes | Shared | `olivaw`, `coder` | 1-2 | Map each named producer to stdout, file, Beads, Slack, or webhook adapter |
+| Deterministic producer mapping | Yes | Shared | `olivaw`, `coder` | 1-2 | Map named producers to current surfaces, including `#railway-dev-alerts` and `#fleet-events` |
 | Healthcare workflows | Yes | Hermes | `finance`, `family` | 4 | Use docs/sheets/browser before broad inbox expansion |
 | Healthcare/finance guardrails | Yes | Shared | `finance`, `family`, `olivaw` | 0-1 | Write down the "must never" rules before granting data access |
 | Healthcare/finance technical security | Yes | Shared | `finance`, `family`, `olivaw` | 0-1 | Define redaction, retention, audit trail, and approved artifact sinks |
 | Restaurant reservations | Yes | Hermes | `family` | 4 | Browser automation + Gmail/Calendar is the useful combo |
 | Startup founder operations | Yes | Hermes | `olivaw` | 2 | One of the highest-ROI early lanes |
-| EODHD / pipeline integration | Yes | Shared | `olivaw`, `coder` | 2 | Deterministic pipeline outputs need an explicit Hermes interaction path |
-| `llm-common` disposition | Yes | Shared | `coder`, `olivaw` | 2 | Avoid duplicating shared provider/routing abstractions |
+| EODHD / pipeline integration | Yes | Shared | `olivaw`, `coder` | 2 | Start from existing summaries in `#railway-dev-alerts`; Hermes summarizes/routes, not owns alerts |
+| `llm-common` disposition | Yes | Shared | `coder`, `olivaw` | 2 | Align with LiteLLM + Pydantic AI migration and DeepSeek V4 default path |
 | Observability / traceability | Yes | Shared | all | 1-3 | Multi-hop debugging must be designed, not discovered |
 | Correlation-id log contract | Yes | Shared | all | 1 | Required for Slack -> Hermes -> host/tool traceability |
 | Cross-profile communication | Yes | Shared | all | 2-4 | Escalation and artifact handoff between profiles must be explicit |

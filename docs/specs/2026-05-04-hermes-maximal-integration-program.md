@@ -271,6 +271,10 @@ systems.
 - Startup/business Google Workspace access is allowed through
   `fengning@stars-end.ai`.
 - Personal Google account access is out of scope for the first cut.
+- The Star's End business calendar may be shared into the founder's personal
+  Google Calendar for unified planning visibility. Business Gmail should remain
+  a separate mailbox boundary; Hermes may summarize or draft from business Gmail
+  without blending raw mailboxes into the personal account.
 - Finance/health/family workflows are profile-scoped and should start with
   least-privilege inputs.
 - Sensitive finance/health workflows should begin with Docs/Sheets/Drive and
@@ -344,10 +348,10 @@ Initial producer mapping:
 | Producer | Initial Hermes adapter surface | Hermes role |
 | --- | --- | --- |
 | `dx-founder-daily.sh` | stdout/text artifact plus existing Slack-thread delimiter semantics | summarize, route, and follow up on founder-briefing outputs |
-| `dx-fleet-check.sh` | stdout/text or file artifact emitted by deterministic fleet check | summarize fleet health and suggest follow-up, without owning fleet enforcement |
+| `dx-fleet-check.sh` and canonical VM status emitters | `#fleet-events` Slack messages plus stdout/text or file artifacts emitted by deterministic fleet checks | summarize fleet health and suggest follow-up, without owning fleet enforcement |
 | `queue-hygiene-enforcer.sh` | file or Beads-linked artifact from deterministic queue policy | explain queue-health outcomes and route human follow-up |
 | `railway-parity-check.sh` | stdout/file artifact from deterministic parity check | summarize Railway drift and draft remediation tasks |
-| `dx-eodhd-monitor.sh` | deterministic monitor output, preferably file or Beads-linked artifact | summarize market-data/pipeline anomalies and route follow-up |
+| `dx-eodhd-monitor.sh` | existing `#railway-dev-alerts` Slack summaries plus deterministic monitor output where available | summarize market-data/pipeline anomalies and route follow-up |
 | Affordabot nightly dispatch | GitHub Actions artifact, Beads/task artifact, or deterministic summary output | summarize dispatch outcomes and capture follow-up work |
 
 These mappings are starting contracts. Phase 1 should verify the actual runtime
@@ -427,6 +431,8 @@ Two existing shared surfaces need explicit disposition decisions:
 - `llm-common`
   - decision: reusable provider/client abstractions that are broadly useful
     across product repos should continue to live in `llm-common`
+  - current direction: `llm-common` is undergoing significant migration toward
+    LiteLLM plus Pydantic AI, with DeepSeek V4 as the new default path
   - Hermes-specific routing, profile policy, and operator-facing workflow logic
     should remain Hermes-side and must not fork shared provider code without a
     clear reason
@@ -434,6 +440,13 @@ Two existing shared surfaces need explicit disposition decisions:
   - decision: Hermes consumes explicit outputs from deterministic EODHD
     monitoring and ETL jobs, summarizes them, and routes follow-up actions, but
     does not own the pipeline runtime or alert-production logic
+  - current source: EODHD summaries already post to Slack in
+    `#railway-dev-alerts`; Hermes should consume that existing surface before
+    inventing another alert lane
+- Fleet and canonical VM status work
+  - current source: `#fleet-events` is the canonical Slack lane for
+    `dx-*` workflow and canonical VM status updates; Hermes should consume and
+    summarize that lane without becoming the fleet-status producer
 
 ### Existing Codex-local decision already made
 
@@ -768,6 +781,14 @@ Recommended first access pattern:
 3. `finance`: Docs/Sheets/Drive first, Gmail later if needed
 
 Do **not** start by giving all profiles broad mailbox access.
+
+Personal/business account posture:
+
+- share the Star's End business calendar into the founder's personal Google
+  Calendar view when unified planning visibility is useful
+- keep business Gmail separate from personal Gmail by default
+- prefer Hermes-generated summaries, drafts, tasks, and calendar artifacts over
+  personal-account mailbox blending
 
 Additional scope:
 
