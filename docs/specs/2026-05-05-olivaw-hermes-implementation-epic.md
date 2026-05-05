@@ -363,6 +363,10 @@ Tests:
 Deliverables:
 
 - Manual verification pass using Computer Use or equivalent local UI control.
+- Manual tooling friction log comparing:
+  - Computer Use for local Slack, OAuth, and account-switching workflows
+  - Chrome DevTools MCP for browser inspection when URL/console exposure is safe
+  - `agent-browser` and Playwright as CLI/E2E fallback lanes
 - Slack Mac app checks across:
   - `#railway-dev-alerts`
   - `#fleet-events`
@@ -390,6 +394,8 @@ Tests:
 - Google UI confirms `fengning@stars-end.ai` scope and personal Gmail exclusion.
 - Dashboard/API locality is verified from the UI/browser surface when enabled.
 - Screenshots or notes do not expose healthcare or finance payloads.
+- Tooling notes identify which surface worked better per scenario and call out
+  account-permission or sensitive-URL exposure issues.
 
 ## Global Test Matrix
 
@@ -406,6 +412,7 @@ Tests:
 | Observability | correlation ID across Slack, Hermes, host/tool, artifact |
 | Gas City | visible or exportable profile/run/work metadata |
 | Manual UI | Computer Use evidence across Slack Mac app, Google UI, and Hermes dashboard if enabled |
+| Manual tooling | friction log for Computer Use, Chrome DevTools MCP, `agent-browser`, and Playwright |
 
 ## Recommended First Task
 
