@@ -63,6 +63,7 @@ index surfaces. It only operates on the allowlisted repositories in
 - `prime-radiant-ai`
 - `affordabot`
 - `llm-common`
+- `bd-symphony`
 
 Default index root:
 

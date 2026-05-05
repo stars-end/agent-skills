@@ -36,6 +36,15 @@ def test_allowlist_config_parsing(tmp_path: Path) -> None:
     assert "agent-skills" in cfg["repositories"]
 
 
+def test_checked_in_config_includes_active_repos() -> None:
+    cfg = sir.load_config(sir.DEFAULT_CONFIG_PATH)
+    assert "bd-symphony" in cfg["allowlist"]
+    symphony = cfg["repositories"]["bd-symphony"]
+    assert symphony["canonical_path"] == "/home/fengning/bd-symphony"
+    assert symphony["source_remote"] == "git@github.com:fengning-starsend/bd-symphony.git"
+    assert symphony["source_branch"] == "main"
+
+
 def test_unknown_repo_rejected(tmp_path: Path) -> None:
     cfg_path = write_config(tmp_path)
     rc = sir.main(["--repo-name", "unknown", "--config", str(cfg_path)])
