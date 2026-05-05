@@ -73,6 +73,16 @@ surfaces. This file records their ownership boundaries.
    - scheduled runs create Git branches and draft PRs for reviewable doc
      changes; runtime logs and lock files are operational evidence, not
      canonical memory
+6. Codex session health state (not committed)
+   - `dx-codex-session-repair.sh` writes scan/repair reports under
+     `~/.dx-state/codex-session-repair/last.json` by default
+   - backup-first repair copies original JSONL files under
+     `~/.codex/session-repair-backups/` before changing session files
+   - `dx-codex-weekly-health.sh` stores its latest digest JSON under
+     `~/.dx-state/codex-weekly-health/last.json`
+   - Codex session JSONL files and repair backups are host-local operational
+     state, not repo-owned memory; the repo owns only the scripts and tests
+     that govern how they are inspected or repaired
 
 ## Memory Surface Policy
 

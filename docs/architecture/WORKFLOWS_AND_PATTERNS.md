@@ -117,6 +117,23 @@ Architecture review should evaluate:
   canonical checkout; PR branches should ship the service/timer files without
   enabling them.
 
+## Core Pattern: Codex Session Health Cron
+
+- `dx-codex-session-repair.sh` is the host-local backup-first session JSONL
+  scanner/repair wrapper. It delegates to `dx-codex-session-repair.py` and
+  `lib/codex_session_repair.py`.
+- Installed daily cron entries must call the tracked wrapper from the canonical
+  checkout through `dx-job-wrapper.sh`; cron installation without the tracked
+  script present is invalid because canonical sync can remove unmerged files.
+- Repair mode skips recently modified sessions by default, writes a JSON
+  report, and creates backups before in-place edits.
+- `dx-codex-weekly-health.sh` is read-only fleet health summarization over
+  Codex version, app-server age, stale browser processes, and the latest
+  session-repair report. `dx-codex-weekly-health-cron.sh` sends that summary
+  through the deterministic Slack alert transport.
+- These scripts are operational guardrails for Codex Desktop/CLI health; they
+  do not replace Beads, repo-memory maps, or product test suites.
+
 ## Pilot Adoption Checklist
 
 - map docs exist and are linked by AGENTS routing policy
