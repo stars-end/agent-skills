@@ -88,6 +88,9 @@ surfaces. This file records their ownership boundaries.
      `~/.codex/session-repair-backups/` before changing session files
    - `dx-codex-weekly-health.sh` stores its latest digest JSON under
      `~/.dx-state/codex-weekly-health/last.json`
+   - cron installer scripts are tracked repo policy; they may update host
+     crontabs, but the schedule entries and generated logs remain host-local
+     operational state
    - Codex session JSONL files and repair backups are host-local operational
      state, not repo-owned memory; the repo owns only the scripts and tests
      that govern how they are inspected or repaired
