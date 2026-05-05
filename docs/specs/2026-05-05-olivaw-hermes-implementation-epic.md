@@ -64,6 +64,7 @@ flowchart TD
   F["Phase 5: Governed coding dispatch bridge"]
   G["Phase 6: Startup, lifeops, finance, and health pilots"]
   H["Phase 7: Gas City pane and final acceptance hardening"]
+  I["Phase 8: Manual UI and Computer Use verification"]
 
   A --> B
   A --> C
@@ -77,6 +78,8 @@ flowchart TD
   E --> G
   F --> H
   G --> H
+  G --> I
+  H --> I
 ```
 
 ## Phase Contract
@@ -91,6 +94,7 @@ flowchart TD
 | 5 | `bd-1ocyi.6` | Governed coding dispatch bridge | Slack request can create/select Beads work and launch `dx-loop` or `dx-runner` with worktree and Feature-Key enforcement |
 | 6 | `bd-1ocyi.7` | Startup/lifeops/finance/health pilots | Bounded workflows pass live smoke tests and sensitive-data guardrail tests |
 | 7 | `bd-1ocyi.8` | Gas City pane and final acceptance | Hermes/Codex/OpenCode/Beads state is surfaced or exported with correlation IDs and rollback gates |
+| 8 | `bd-1ocyi.9` | Manual UI and Computer Use verification | Local Slack, Google, and dashboard surfaces are verified with evidence and redaction notes |
 
 ## Beads Structure
 
@@ -108,6 +112,7 @@ Children:
 - `bd-1ocyi.6` - Phase 5: governed coding dispatch bridge
 - `bd-1ocyi.7` - Phase 6: startup, lifeops, finance, and health pilots
 - `bd-1ocyi.8` - Phase 7: Gas City pane and final acceptance hardening
+- `bd-1ocyi.9` - Phase 8: manual UI and Computer Use verification
 
 Blocking edges:
 
@@ -123,6 +128,8 @@ Blocking edges:
 - `bd-1ocyi.5` blocks `bd-1ocyi.7`
 - `bd-1ocyi.6` blocks `bd-1ocyi.8`
 - `bd-1ocyi.7` blocks `bd-1ocyi.8`
+- `bd-1ocyi.7` blocks `bd-1ocyi.9`
+- `bd-1ocyi.8` blocks `bd-1ocyi.9`
 
 Related planning epic:
 
@@ -333,6 +340,39 @@ Tests:
 - One rollback scenario is exercised without data loss.
 - Final acceptance checklist passes.
 
+### Phase 8 - Manual UI and Computer Use verification
+
+Deliverables:
+
+- Manual verification pass using Computer Use or equivalent local UI control.
+- Slack Mac app checks across:
+  - `#railway-dev-alerts`
+  - `#fleet-events`
+  - `#lifeops`
+  - `#finance`
+  - `#coding-misc`
+  - `#all-stars-end`
+- Google UI checks for:
+  - business Calendar visibility and personal-calendar shared view
+  - business Gmail isolation from personal Gmail
+  - Drive/Docs/Sheets artifact placement
+- Hermes dashboard check if enabled, bound to `127.0.0.1` only.
+- Evidence record per scenario:
+  - channel or surface
+  - timestamp
+  - correlation ID
+  - expected result
+  - actual result
+  - redaction note
+
+Tests:
+
+- Alert channels show threaded Hermes summaries, not top-level routine noise.
+- Discussion channels can host digest threads and agent follow-up discussion.
+- Google UI confirms `fengning@stars-end.ai` scope and personal Gmail exclusion.
+- Dashboard/API locality is verified from the UI/browser surface when enabled.
+- Screenshots or notes do not expose healthcare or finance payloads.
+
 ## Global Test Matrix
 
 | Test family | Required proof |
@@ -347,6 +387,7 @@ Tests:
 | Sensitive data | blocked action, Slack redaction, no default memory/log source payloads |
 | Observability | correlation ID across Slack, Hermes, host/tool, artifact |
 | Gas City | visible or exportable profile/run/work metadata |
+| Manual UI | Computer Use evidence across Slack Mac app, Google UI, and Hermes dashboard if enabled |
 
 ## Recommended First Task
 
@@ -388,3 +429,4 @@ Rollback triggers:
 - finance/health payload appears in Slack or default Hermes memory/logs
 - coding dispatch bypasses Beads or worktree/Feature-Key rules
 - multi-hop failure cannot be traced by correlation ID
+- manual UI verification contradicts CLI or automated test results
