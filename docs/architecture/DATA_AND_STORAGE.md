@@ -36,6 +36,10 @@ surfaces. This file records their ownership boundaries.
    - `ccc` / CocoIndex Code semantic index state lives under
      `~/.cache/agent-semantic-indexes/<repo-name>/` when the optional
      semantic-hints lane is enabled
+   - active warmed repo scope is declared in
+     `configs/semantic-index/repositories.json` and currently includes
+     `agent-skills`, `prime-radiant-ai`, `affordabot`, `llm-common`, and
+     `bd-symphony`
    - owner: semantic index refresh workflow (`scripts/semantic-index-refresh`)
    - contents: non-canonical `repo/`, repo-scoped `coco-global/`,
      `state.json`, `refresh.log`, and `refresh.lock`
