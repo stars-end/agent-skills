@@ -16,6 +16,7 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/canonical-git-remotes.sh"
 
 # Colors for output (defined early for validation functions)
 RED='\033[0;31m'
@@ -25,7 +26,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
+CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common" "bd-symphony")
 WORKTREE_BASE="${DX_WORKTREE_BASE:-$HOME/.dx/worktrees}"
 LEGACY_WORKTREE_BASE="/tmp/agents"
 
@@ -433,6 +434,7 @@ process_worktree() {
     local wt_is_detached="$4"
     local is_main="$5"
     local repo_path="$6"
+    local upstream_ref="${7:-origin/master}"
 
     if [[ "$is_main" == true ]]; then
         log "  Skipping main worktree: $wt_path" >&2
@@ -486,9 +488,9 @@ process_worktree() {
         reason="Path missing from disk"
     fi
 
-    # Case 2: Branch merged into origin/master AND clean AND stale
+    # Case 2: Branch merged into the repo's upstream branch AND clean AND stale
     if [[ "$should_prune" == false && -n "$wt_branch" ]]; then
-        if git merge-base --is-ancestor "$wt_head" origin/master 2>/dev/null; then
+        if git merge-base --is-ancestor "$wt_head" "$upstream_ref" 2>/dev/null; then
             if [[ "$is_dirty" == true ]]; then
                 # P0 SAFETY: Never auto-prune dirty worktrees
                 warn "  Worktree $wt_path is MERGED but DIRTY - skipping auto-prune" >&2
@@ -498,7 +500,7 @@ process_worktree() {
             else
                 if [[ "$is_stale" == true ]]; then
                     should_prune=true
-                    reason="Branch '$wt_branch' merged into origin/master (clean + stale)"
+                    reason="Branch '$wt_branch' merged into $upstream_ref (clean + stale)"
                 else
                     log "  Keeping merged clean worktree (not stale yet): $wt_path" >&2
                 fi
@@ -506,16 +508,16 @@ process_worktree() {
         fi
     fi
 
-    # Case 3: Detached HEAD merged into origin/master AND clean AND stale
+    # Case 3: Detached HEAD merged into the repo's upstream branch AND clean AND stale
     if [[ "$should_prune" == false && "$wt_is_detached" == true ]]; then
-        if git merge-base --is-ancestor "$wt_head" origin/master 2>/dev/null; then
+        if git merge-base --is-ancestor "$wt_head" "$upstream_ref" 2>/dev/null; then
             if [[ "$is_dirty" == true ]]; then
                 # P0 SAFETY: Never auto-prune dirty worktrees
                 warn "  Worktree $wt_path has DETACHED merged HEAD but is DIRTY - skipping auto-prune" >&2
             else
                 if [[ "$is_stale" == true ]]; then
                     should_prune=true
-                    reason="Detached HEAD ($wt_head) merged into origin/master (clean + stale)"
+                    reason="Detached HEAD ($wt_head) merged into $upstream_ref (clean + stale)"
                 else
                     log "  Keeping detached merged worktree (not stale yet): $wt_path" >&2
                 fi
@@ -576,6 +578,9 @@ process_repo() {
     local repo_path="$HOME/$repo"
     local pruned_count=0
     local total_count=0
+    local canonical_branch upstream_ref
+    canonical_branch="$(canonical_repo_branch "$repo")"
+    upstream_ref="origin/$canonical_branch"
     
     log "\n📁 Processing repo: $repo" >&2
 
@@ -587,9 +592,9 @@ process_repo() {
     
     cd "$repo_path"
     
-    # Fetch origin master to ensure merge-base is accurate
+    # Fetch the repo's canonical branch to ensure merge-base is accurate.
     if [[ "$DRY_RUN" == false ]]; then
-        git fetch origin master --quiet || { warn "$repo: Failed to fetch origin master" >&2; }
+        git fetch origin "$canonical_branch" --quiet || { warn "$repo: Failed to fetch $upstream_ref" >&2; }
     fi
     
     local path=""
@@ -604,7 +609,7 @@ process_repo() {
                 local is_main=false
                 if [[ $count -eq 0 ]]; then is_main=true; fi
                 total_count=$((total_count + 1))
-                if ! process_worktree "$path" "$head" "$branch" "$is_detached" "$is_main" "$repo_path"; then
+                if ! process_worktree "$path" "$head" "$branch" "$is_detached" "$is_main" "$repo_path" "$upstream_ref"; then
                     pruned_count=$((pruned_count + 1))
                 fi
                 ((count+=1))
@@ -626,7 +631,7 @@ process_repo() {
         local is_main=false
         if [[ $count -eq 0 ]]; then is_main=true; fi
         total_count=$((total_count + 1))
-        if ! process_worktree "$path" "$head" "$branch" "$is_detached" "$is_main" "$repo_path"; then
+        if ! process_worktree "$path" "$head" "$branch" "$is_detached" "$is_main" "$repo_path" "$upstream_ref"; then
             pruned_count=$((pruned_count + 1))
         fi
     fi

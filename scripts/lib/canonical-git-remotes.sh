@@ -1,17 +1,34 @@
 #!/usr/bin/env bash
 #
-# Canonical Git remote helpers for stars-end canonical repos.
+# Canonical Git remote helpers for canonical repos.
 #
 set -euo pipefail
 
 canonical_expected_ssh_origin() {
   local repo="$1"
+  if [[ "$repo" == "bd-symphony" ]]; then
+    printf 'git@github.com:fengning-starsend/bd-symphony.git\n'
+    return 0
+  fi
   printf 'git@github.com:stars-end/%s.git\n' "$repo"
+}
+
+canonical_repo_branch() {
+  local repo="$1"
+  if [[ "$repo" == "bd-symphony" ]]; then
+    printf 'main\n'
+    return 0
+  fi
+  printf '%s\n' "${CANONICAL_TRUNK_BRANCH:-master}"
 }
 
 canonical_is_ssh_origin() {
   local repo="$1"
   local url="$2"
+  if [[ "$repo" == "bd-symphony" ]]; then
+    [[ "$url" == "git@github.com:fengning-starsend/bd-symphony" || "$url" == "git@github.com:fengning-starsend/bd-symphony.git" || "$url" == "ssh://git@github.com/fengning-starsend/bd-symphony" || "$url" == "ssh://git@github.com/fengning-starsend/bd-symphony.git" ]]
+    return $?
+  fi
   local base_no_git="git@github.com:stars-end/${repo}"
   local base_with_git="${base_no_git}.git"
   local ssh_no_git="ssh://git@github.com/stars-end/${repo}"
@@ -22,6 +39,10 @@ canonical_is_ssh_origin() {
 canonical_is_convertible_https_origin() {
   local repo="$1"
   local url="$2"
+  if [[ "$repo" == "bd-symphony" ]]; then
+    [[ "$url" == "https://github.com/fengning-starsend/bd-symphony" || "$url" == "https://github.com/fengning-starsend/bd-symphony.git" ]]
+    return $?
+  fi
   local https_no_git="https://github.com/stars-end/${repo}"
   local https_with_git="${https_no_git}.git"
   [[ "$url" == "$https_no_git" || "$url" == "$https_with_git" ]]
@@ -75,6 +96,8 @@ canonical_ensure_origin_ssh() {
 canonical_github_ssh_smoke() {
   local repo="${1:-agent-skills}"
   local timeout_s="${2:-8}"
+  local origin
+  origin="$(canonical_expected_ssh_origin "$repo")"
   GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=${timeout_s} -o StrictHostKeyChecking=accept-new" \
-    git ls-remote "git@github.com:stars-end/${repo}.git" HEAD >/dev/null 2>&1
+    git ls-remote "$origin" HEAD >/dev/null 2>&1
 }

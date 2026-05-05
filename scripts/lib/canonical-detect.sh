@@ -17,7 +17,7 @@ _dx_is_canonical_cwd_fast() {
   real_path="$(pwd -P)"
 
   local canonical_root
-  for canonical_root in ~/agent-skills ~/prime-radiant-ai ~/affordabot ~/llm-common; do
+  for canonical_root in ~/agent-skills ~/prime-radiant-ai ~/affordabot ~/llm-common ~/bd-symphony; do
     canonical_root="${canonical_root/#\~/$HOME}"
     case "$real_path" in
       "$canonical_root"|"$canonical_root"/*)

@@ -2004,7 +2004,7 @@ Use [$tech-lead-handoff](/Users/fengning/agent-skills/core/tech-lead-handoff/SKI
 This prompt follows the structure of [$prompt-writing](/Users/fengning/agent-skills/extended/prompt-writing/SKILL.md).
 
 ## DX Global Constraints (Always-On)
-1) NO WRITES in canonical clones: `~/{"{"}agent-skills,prime-radiant-ai,affordabot,llm-common{"}"}`
+1) NO WRITES in canonical clones: `~/{"{"}agent-skills,prime-radiant-ai,affordabot,llm-common,bd-symphony{"}"}`
 2) Worktree-first: you are already in the task worktree for `{beads_id}`
 3) Before claiming complete, run repo-appropriate validation for the files you changed
 4) Open or update a draft PR after the first real commit

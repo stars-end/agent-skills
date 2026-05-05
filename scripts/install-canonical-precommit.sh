@@ -4,7 +4,7 @@ set -euo pipefail
 # Installs the canonical commit-blocking pre-commit hook in all canonical clones.
 # Purpose: keep canonical repos read-mostly; all work must happen in worktrees.
 
-CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common)
+CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common bd-symphony)
 
 install_for_repo() {
   local repo_root="$1"
@@ -38,7 +38,7 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 REPO_NAME="$(basename -- "$REPO_ROOT")"
 
-CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common)
+CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common bd-symphony)
 
 # Worktree detection: in a worktree, git-dir != git-common-dir.
 GIT_DIR="$(git rev-parse --git-dir)"

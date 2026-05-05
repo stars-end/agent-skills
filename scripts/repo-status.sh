@@ -26,19 +26,23 @@ if [[ -f ~/logs/canonical-sync.log ]]; then
     fi
 fi
 
-for repo in agent-skills prime-radiant-ai affordabot llm-common; do
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/canonical-git-remotes.sh"
+
+for repo in agent-skills prime-radiant-ai affordabot llm-common bd-symphony; do
     cd ~/$repo 2>/dev/null || continue
+    EXPECTED_BRANCH="$(canonical_repo_branch "$repo")"
     
     BRANCH=$(git branch --show-current)
     
-    # Check if on master
-    if [[ "$BRANCH" != "master" ]]; then
-        echo -e "${YELLOW}⚠️  $repo on $BRANCH (expected master)${RESET}"
+    # Check if on canonical branch
+    if [[ "$BRANCH" != "$EXPECTED_BRANCH" ]]; then
+        echo -e "${YELLOW}⚠️  $repo on $BRANCH (expected $EXPECTED_BRANCH)${RESET}"
         ISSUES=$((ISSUES + 1))
     fi
     
     # Check if behind
-    BEHIND=$(git rev-list --count HEAD..origin/master 2>/dev/null || echo 0)
+    BEHIND=$(git rev-list --count HEAD..origin/$EXPECTED_BRANCH 2>/dev/null || echo 0)
     if [[ $BEHIND -gt 5 ]]; then
         echo -e "${YELLOW}⚠️  $repo $BEHIND commits behind${RESET}"
         ISSUES=$((ISSUES + 1))

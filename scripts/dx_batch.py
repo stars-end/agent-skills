@@ -46,6 +46,7 @@ CANONICAL_REPOS = [
     Path.home() / "prime-radiant-ai",
     Path.home() / "affordabot",
     Path.home() / "llm-common",
+    Path.home() / "bd-symphony",
 ]
 
 WORKSPACE_BASE = Path("/tmp/agents")

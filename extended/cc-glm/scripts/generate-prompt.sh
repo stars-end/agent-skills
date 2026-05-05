@@ -269,7 +269,7 @@ Worktree: $WORKTREE
 Agent: cc-glm-headless
 
 Hard constraints:
-- Work ONLY in the worktree path above (never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common})
+- Work ONLY in the worktree path above (never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common,bd-symphony})
 - Do NOT run git commit, git push, or open PRs
 - Do NOT print secrets, dotfiles, or config files
 - Output must be reviewable: diff + validation + risks

@@ -1,7 +1,7 @@
 # Universal Baseline — Agent Skills
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: fadbcdbb6891b34e83722d0a737f667cfbad8657 -->
-<!-- Last updated: 2026-05-05 01:18:48 UTC -->
+<!-- Source SHA: e3e48b9687dfb6f9d1f336542fd47c008902df41 -->
+<!-- Last updated: 2026-05-05 15:59:52 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -144,10 +144,11 @@ At session end, agents may include:
 - \`~/prime-radiant-ai\`
 - \`~/affordabot\`
 - \`~/llm-common\`
+- \`~/bd-symphony\`
 
 ### Enforcement
 **Primary**: Git pre-commit hook blocks commits when not in worktree
-**Safety net**: Daily sync to origin/master (non-destructive)
+**Safety net**: Daily sync to the repo's canonical branch (non-destructive)
 
 ### Workflow
 Always use worktrees for development:

@@ -303,7 +303,7 @@ test_refresh_rolling_branch_push_mode() {
 }
 
 test_refresh_all_targets_canonical_repos() {
-  if grep -Fq -- 'agent-skills affordabot prime-radiant-ai llm-common' "$REFRESH_ALL" &&
+  if grep -Fq -- 'agent-skills affordabot prime-radiant-ai llm-common bd-symphony' "$REFRESH_ALL" &&
     grep -Fq -- 'dx-repo-memory-refresh' "$REFRESH_ALL"; then
     pass "refresh-all targets canonical repos"
   else

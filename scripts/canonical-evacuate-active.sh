@@ -4,12 +4,12 @@
 #
 # Purpose
 # - Keep canonical working trees from staying dirty/stale during active hours.
-# - Preserve work safely (commit-aware evacuation) and then reset canonicals to origin/master.
+# - Preserve work safely (commit-aware evacuation) and then reset canonicals to each repo's upstream branch.
 #
 # Policy (defaults tuned for deterministic SLO with 15-min cadence)
 # - Warn once at >=15m dirty
 # - Evacuate at >=45m dirty (worst-case <=60m with */15 cadence)
-# - Immediate evacuate if commits exist in canonical (ahead of origin/master)
+# - Immediate evacuate if commits exist in canonical (ahead of the repo's upstream branch)
 #
 # Invariants
 # - NEVER reset canonical unless rescue branch push succeeded.
@@ -38,7 +38,7 @@ LOG_DIR="$HOME/logs/dx"
 LOG_FILE="$LOG_DIR/canonical-evacuate.log"
 FETCH_ERR_LOG="$LOG_DIR/fetch-errors.log"
 
-CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
+CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common" "bd-symphony")
 
 DIRTY_WARN_MINUTES="${DIRTY_WARN_MINUTES:-15}"
 DIRTY_EVICT_MINUTES="${DIRTY_EVICT_MINUTES:-45}"
@@ -318,13 +318,15 @@ normalize_off_trunk_clean_repo() {
   local repo="$1"
   local repo_path="$2"
   local current_branch="$3"
+  local branch="$4"
+  local upstream_ref="$5"
   local checkout_err lock_path active=false
 
   cd "$repo_path"
-  if checkout_err="$(git checkout master -q 2>&1)"; then
-    git reset --hard origin/master -q
+  if checkout_err="$(git checkout "$branch" -q 2>&1)"; then
+    git reset --hard "$upstream_ref" -q
     git clean -fdq
-    log "OK: $repo reset from off-trunk clean state (branch=$current_branch) to origin/master"
+    log "OK: $repo reset from off-trunk clean state (branch=$current_branch) to $upstream_ref"
     echo "normalized||false"
     return 0
   fi
@@ -334,12 +336,12 @@ normalize_off_trunk_clean_repo() {
     if is_tmux_attached_to_path "$lock_path"; then
       active=true
     fi
-    log "INFO: $repo master checkout blocked by worktree lock (branch=$current_branch lock=$lock_path tmux_attached=$active)"
+    log "INFO: $repo $branch checkout blocked by worktree lock (branch=$current_branch lock=$lock_path tmux_attached=$active)"
     echo "branch_locked_by_worktree|$lock_path|$active"
     return 0
   fi
 
-  log "ERROR: $repo failed to checkout master from off-trunk clean state: $checkout_err"
+  log "ERROR: $repo failed to checkout $branch from off-trunk clean state: $checkout_err"
   return 1
 }
 
@@ -421,6 +423,9 @@ PY
 evacuate_diverged() {
   local repo="$1"
   local repo_path="$HOME/$repo"
+  local branch upstream_ref
+  branch="$(canonical_repo_branch "$repo")"
+  upstream_ref="origin/$branch"
   local host timestamp rescue_branch
   host="$(short_host)"
   timestamp="$(iso_timestamp)"
@@ -443,10 +448,10 @@ evacuate_diverged() {
     log_recovery "$repo" "evacuated" "diverged" "$rescue_branch" "branch=${current_branch}" "$agent"
     state_upsert "$repo" "rescue_branch=$rescue_branch" "evacuated_at_epoch=$(now_epoch)" "evac_reason=diverged"
 
-    git checkout master -q >/dev/null 2>&1 || true
-    git reset --hard origin/master -q
+    git checkout "$branch" -q >/dev/null 2>&1 || true
+    git reset --hard "$upstream_ref" -q
     git clean -fdq
-    log "OK: $repo reset to origin/master after diverged evacuation"
+    log "OK: $repo reset to $upstream_ref after diverged evacuation"
     return 0
   fi
 
@@ -457,6 +462,9 @@ evacuate_diverged() {
 evacuate_dirty() {
   local repo="$1"
   local repo_path="$HOME/$repo"
+  local branch upstream_ref
+  branch="$(canonical_repo_branch "$repo")"
+  upstream_ref="origin/$branch"
 
   local host timestamp rescue_branch rescue_dir
   host="$(short_host)"
@@ -470,7 +478,7 @@ evacuate_dirty() {
 
   log "Evacuating dirty $repo (branch=$current_branch) -> $rescue_branch"
 
-  if ! git worktree add -b "$rescue_branch" "$rescue_dir" origin/master >/dev/null 2>&1; then
+  if ! git worktree add -b "$rescue_branch" "$rescue_dir" "$upstream_ref" >/dev/null 2>&1; then
     log "ERROR: $repo failed to create rescue worktree"
     rm -rf "$rescue_dir" >/dev/null 2>&1 || true
     return 1
@@ -552,14 +560,14 @@ Agent: canonical-evacuate-active" --quiet 2>&1)"; then
     fi
 
     cd "$repo_path"
-    git checkout master -q >/dev/null 2>&1 || true
-    git reset --hard origin/master -q
+    git checkout "$branch" -q >/dev/null 2>&1 || true
+    git reset --hard "$upstream_ref" -q
     git clean -fdq
 
     git worktree remove "$rescue_dir" --force >/dev/null 2>&1 || true
     rm -rf "$rescue_dir" >/dev/null 2>&1 || true
 
-    log "OK: $repo reset to origin/master after dirty evacuation"
+    log "OK: $repo reset to $upstream_ref after dirty evacuation"
     return 0
   fi
 
@@ -573,6 +581,9 @@ Agent: canonical-evacuate-active" --quiet 2>&1)"; then
 process_repo() {
   local repo="$1"
   local repo_path="$HOME/$repo"
+  local branch upstream_ref
+  branch="$(canonical_repo_branch "$repo")"
+  upstream_ref="origin/$branch"
 
   log "Checking $repo..."
 
@@ -610,7 +621,7 @@ process_repo() {
   #   - reconcile cron job (every 2h)
   # The 'behind' count may be slightly stale but evacuation logic is safe:
   #   - 'ahead' count is purely local (doesn't need fetch)
-  #   - reset --hard origin/master happens AFTER rescue push
+  #   - reset --hard upstream happens AFTER rescue push
   # Removing this fetch also eliminates race condition with reconcile.
 
   local porcelain
@@ -619,13 +630,13 @@ process_repo() {
   [[ -n "$porcelain" ]] && is_dirty=true
 
   local current_branch
-  current_branch="$(git branch --show-current 2>/dev/null || echo "master")"
+  current_branch="$(git branch --show-current 2>/dev/null || echo "$branch")"
   local is_off_trunk=false
-  [[ "$current_branch" != "master" ]] && is_off_trunk=true
+  [[ "$current_branch" != "$branch" ]] && is_off_trunk=true
 
   local ahead behind
-  ahead="$(git rev-list --count origin/master..HEAD 2>/dev/null || echo "0")"
-  behind="$(git rev-list --count HEAD..origin/master 2>/dev/null || echo "0")"
+  ahead="$(git rev-list --count "$upstream_ref"..HEAD 2>/dev/null || echo "0")"
+  behind="$(git rev-list --count HEAD.."$upstream_ref" 2>/dev/null || echo "0")"
   local is_diverged=false
   [[ "$ahead" -gt 0 ]] && is_diverged=true
 
@@ -665,7 +676,7 @@ PY
 
   if [[ "$is_diverged" == false && "$is_dirty" == false && "$is_off_trunk" == true ]]; then
     local off_trunk_resolution
-    if ! off_trunk_resolution="$(normalize_off_trunk_clean_repo "$repo" "$repo_path" "$current_branch")"; then
+    if ! off_trunk_resolution="$(normalize_off_trunk_clean_repo "$repo" "$repo_path" "$current_branch" "$branch" "$upstream_ref")"; then
       return 1
     fi
 

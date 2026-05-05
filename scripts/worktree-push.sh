@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Configuration
-CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
+CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common" "bd-symphony")
 
 # Colors for output
 RED='\033[0;31m'

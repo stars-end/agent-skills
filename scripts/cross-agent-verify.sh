@@ -43,7 +43,7 @@ else
 fi
 
 # 3. Pre-commit hook in canonical repos
-CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
+CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common" "bd-symphony")
 for repo in "${CANONICAL_REPOS[@]}"; do
     if [[ -f "$HOME/$repo/.git/hooks/pre-commit" ]]; then
         if grep -q "worktree\|canonical" "$HOME/$repo/.git/hooks/pre-commit" 2>/dev/null; then

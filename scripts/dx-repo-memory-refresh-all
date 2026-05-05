@@ -8,7 +8,7 @@ export PATH="$HOME/.local/share/mise/shims:$HOME/.local/share/mise/bin:$HOME/.lo
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-REPOS="${DX_REPO_MEMORY_REPOS:-agent-skills affordabot prime-radiant-ai llm-common}"
+REPOS="${DX_REPO_MEMORY_REPOS:-agent-skills affordabot prime-radiant-ai llm-common bd-symphony}"
 FALLBACK_HOST="${DX_REPO_MEMORY_FALLBACK_HOST:-macmini}"
 AGE_DAYS="${DX_REPO_MEMORY_AGE_DAYS:-30}"
 STATE_ROOT="${DX_REPO_MEMORY_STATE_ROOT:-$HOME/.dx-state/repo-memory}"

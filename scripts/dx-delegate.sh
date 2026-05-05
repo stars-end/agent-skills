@@ -115,7 +115,7 @@ Worktree: $WORKTREE_DIR
 Agent: cc-glm
 
 DX V8.1 invariants (must follow):
-- Work ONLY inside the worktree path above. Never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common}.
+- Work ONLY inside the worktree path above. Never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common,bd-symphony}.
 - Do NOT run git commit/push, do NOT open PRs.
 - If changes are needed: output a unified diff patch. Keep it minimal. Include file paths.
 - Provide validation commands to run (tests/lint). If you didn’t run them, say so.

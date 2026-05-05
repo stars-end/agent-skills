@@ -3,7 +3,8 @@
     "stars-end/affordabot",
     "stars-end/prime-radiant-ai",
     "stars-end/agent-skills",
-    "stars-end/llm-common"
+    "stars-end/llm-common",
+    "fengning-starsend/bd-symphony"
   ],
   "failed_run_limit": 30,
   "recent_run_limit": 80
