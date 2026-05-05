@@ -147,6 +147,18 @@ Architecture review should evaluate:
 - These scripts are operational guardrails for Codex Desktop/CLI health; they
   do not replace Beads, repo-memory maps, or product test suites.
 
+## Core Pattern: Deterministic Slack Follow-Ups
+
+- `slack-coordination` is optional, but when agents schedule operational
+  follow-ups they should use the deterministic Agent Coordination helpers from
+  `scripts/lib/dx-slack-alerts.sh`, not ad hoc Slack clients.
+- The default operational destination is `#fleet-events`, currently resolved as
+  channel ID `C0A8YU9JW06`; literal channel names can fail in some workspaces,
+  so scripts should prefer `agent_coordination_default_channel` or a known ID.
+- Cron/systemd follow-up jobs must be non-interactive and cache-only. Use
+  `DX_AUTH_CACHE_ONLY=1`, a due-only/idempotent state file, log redirection,
+  and the `agent_coordination_transport_ready` readiness check before posting.
+
 ## Pilot Adoption Checklist
 
 - map docs exist and are linked by AGENTS routing policy

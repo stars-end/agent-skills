@@ -27,7 +27,8 @@ stale_if_paths:
   status/query only when semantic status is `ready`, `serena` for
   symbol-aware edits, explicit versioned-hook update opt-in, narrow
   `dx-verify-clean` hook-only self-heal, and tracked-wrapper requirements for
-  Codex session health cron jobs and installer host coverage
+  Codex session health cron jobs and installer host coverage, plus
+  deterministic Agent Coordination follow-up patterns for `#fleet-events`
 
 Current review-dispatch policy lives in `configs/dx-review/default.yaml` and the
 map docs: `dx-review` reads reviewer `id/provider/model` rows and uses only the

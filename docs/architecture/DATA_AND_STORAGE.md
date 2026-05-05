@@ -74,6 +74,11 @@ surfaces. This file records their ownership boundaries.
    - `dx-batch`/`dx-wave` artifacts are legacy compatibility or operator
      substrate state and should not be treated as the default agent workflow
      record
+   - deterministic Agent Coordination/Slack follow-ups are operational
+     notifications, not repo state. Skill docs should route scheduled posts
+     through `scripts/lib/dx-slack-alerts.sh`, cache-only auth, and the
+     resolved `#fleet-events` default rather than storing channel discovery in
+     ad hoc scripts.
 5. Repo-memory refresh state (not committed)
    - `dx-repo-memory-refresh` and `dx-repo-memory-refresh-all` store run
      reports and generated worktrees under the configured state root,
