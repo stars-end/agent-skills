@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: acda9791b30c2533550101bcc180d3def3bae86c
-last_verified_at: 2026-05-05T01:25:00Z
+last_verified_commit: 18255c07873a8a1889515a17102c447e3ff2e2d9
+last_verified_at: 2026-05-05T23:45:07Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -79,6 +79,10 @@ surfaces. This file records their ownership boundaries.
      through `scripts/lib/dx-slack-alerts.sh`, cache-only auth, and the
      resolved `#fleet-events` default rather than storing channel discovery in
      ad hoc scripts.
+   - goal-seeking eval loop artifacts are run evidence, not canonical memory.
+     The skill can initialize local artifact roots under `/tmp` or reference
+     repo-committed eval summaries, but durable product truth stays in the
+     target repo, Beads, and reviewed PR artifacts.
 5. Repo-memory refresh state (not committed)
    - `dx-repo-memory-refresh` and `dx-repo-memory-refresh-all` store run
      reports and generated worktrees under the configured state root,
