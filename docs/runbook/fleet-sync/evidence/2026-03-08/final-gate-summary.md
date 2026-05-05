@@ -14,8 +14,8 @@ Fleet Sync Phase 2 delivers stable ops platform with partial MCP tool-value lane
 | Gate | Status | Evidence |
 |------|--------|----------|
 | Manifest Truth | ✅ PASS | 3/4 tools disabled with explicit rationale |
-| MCP Tool Health (local) | ✅ PASS | llm-tldr healthy, disabled tools exempt |
-| IDE Surfaces (local) | ✅ PASS | 5/5 IDEs configured with llm-tldr |
+| MCP Tool Health (local) | ✅ PASS | legacy semantic tool healthy, disabled tools exempt |
+| IDE Surfaces (local) | ✅ PASS | 5/5 IDEs configured with legacy semantic tool |
 | Spec/Runbook Consistency | ✅ PASS | Both state "GO: ops-platform only" |
 | Truth Alignment | ✅ PASS | No contradictions between artifacts |
 | Fleet Audit (daily) | ⚠️ PARTIAL | 1/4 hosts red (stale state on epyc6) |
@@ -27,12 +27,12 @@ Fleet Sync Phase 2 delivers stable ops platform with partial MCP tool-value lane
 
 **Definition:** 
 - Ops infrastructure healthy (Beads, GitHub, Railway, 1Password, Slack)
-- Enabled MCP tools operational (llm-tldr only)
+- Enabled MCP tools operational (legacy semantic tool only)
 - Disabled tools have explicit rationale documented
 - Core ops capabilities fully functional
 
 ### Enabled MCP Tools (1/4)
-- ✅ `llm-tldr` (1.5.2): Operational and healthy
+- ✅ `legacy semantic tool` (1.5.2): Operational and healthy
   - Provides context slicing for codebases
   - Configured in all 5 IDE surfaces
 
@@ -59,7 +59,7 @@ Fleet Sync Phase 2 delivers stable ops platform with partial MCP tool-value lane
   - Slack alerting
 
 - **MCP tool-value lane:** ⚠️ Partial (intentionally)
-  - Only llm-tldr enabled and operational
+  - Only legacy semantic tool enabled and operational
   - 3 tools disabled with explicit rationale
   - Does not impact core ops operations
   - Suitable for ops-platform focused workloads
@@ -134,7 +134,7 @@ All artifacts verified consistent with "GO: ops-platform only" verdict:
 Fleet Sync Phase 2 delivers a stable, truthful platform with:
 - ✅ Correct manifest (disabled tools with rationale)
 - ✅ Consistent documentation (ops-platform only)
-- ✅ Operational enabled tool (llm-tldr)
+- ✅ Operational enabled tool (legacy semantic tool)
 - ✅ No contradictions between artifacts
 - ✅ Fail-closed semantics preserved
 

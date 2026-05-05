@@ -1,20 +1,20 @@
 # bd-hayo / bd-eyiu — dx-check Active-Runtime MCP Exposure Preflight
 
 ## Summary
-Add a small preflight to `scripts/dx-check.sh` that verifies the active client/runtime can see the canonical required MCP discovery stack before deeper review or investigation work begins. The preflight should stay lightweight, should not build indexes or run expensive probes, and should surface a precise blocker when `llm-tldr` or `serena` are not exposed in the active runtime.
+Add a small preflight to `scripts/dx-check.sh` that verifies the active client/runtime can see the canonical required MCP discovery stack before deeper review or investigation work begins. The preflight should stay lightweight, should not build indexes or run expensive probes, and should surface a precise blocker when `source inspection` or `serena` are not exposed in the active runtime.
 
 ## Problem
-We saw a runtime-specific tool-routing exception where a heavy review pass expected to use `llm-tldr`, but the active runtime could not access it. The host was otherwise healthy, and later checks showed `llm-tldr` available in canonical Codex. That means the failure mode is not necessarily fleet-wide tool outage; it is often active-runtime exposure drift.
+We saw a runtime-specific tool-routing exception where a heavy review pass expected to use `source inspection`, but the active runtime could not access it. The host was otherwise healthy, and later checks showed `source inspection` available in canonical Codex. That means the failure mode is not necessarily fleet-wide tool outage; it is often active-runtime exposure drift.
 
 Today `dx-check` verifies baseline DX health and can auto-hydrate the environment, but it does not explicitly answer the question that matters before a deep review pass:
 
-- can the active client/runtime see `llm-tldr`?
+- can the active client/runtime see `source inspection`?
 - can the active client/runtime see `serena`?
 
 ## Goals
 1. Extend `dx-check` with a lightweight active-runtime MCP exposure preflight.
 2. Check the canonical required MCP tools:
-   - `llm-tldr`
+   - `source inspection`
    - `serena`
 3. Keep the preflight cheap:
    - use client-native `mcp list` commands or equivalent visibility checks
@@ -28,7 +28,7 @@ Today `dx-check` verifies baseline DX health and can auto-hydrate the environmen
 - replacing `mcp-doctor`
 - fleet-wide rollout validation inside `dx-check`
 - semantic index readiness checks
-- expensive smoke calls against `llm-tldr` or `serena`
+- expensive smoke calls against `source inspection` or `serena`
 - adding new MCP tools beyond the canonical required pair
 
 ## Active Contract
@@ -49,7 +49,7 @@ Expected behavior:
 Implement a small helper in `scripts/dx-check.sh` that:
 - detects or accepts an explicit runtime target
 - runs the matching `<client> mcp list`
-- verifies visibility of `llm-tldr` and `serena`
+- verifies visibility of `source inspection` and `serena`
 - returns a compact pass/fail summary
 
 ### Runtime selection
@@ -67,7 +67,7 @@ If the implementation finds an existing repo convention for runtime selection, u
 ### Failure mode
 On failure, `dx-check` should print a precise message like:
 - active runtime: codex
-- missing MCP exposure: `llm-tldr`, `serena`
+- missing MCP exposure: `source inspection`, `serena`
 - action: run Fleet Sync / repair MCP config / retry after runtime restart
 
 This should be a DX-blocking failure for heavy MCP-first work, not a silent warning.
@@ -82,7 +82,7 @@ This should be a DX-blocking failure for heavy MCP-first work, not a silent warn
 ## Beads Structure
 - `BEADS_EPIC`: `bd-hayo` — Add active-runtime MCP exposure preflight to dx-check
 - `BEADS_CHILDREN`:
-  - `bd-eyiu` — Implement dx-check MCP exposure preflight for llm-tldr and serena
+  - `bd-eyiu` — Implement dx-check MCP exposure preflight for source inspection and serena
 - `BLOCKING_EDGES`: none beyond parent-child
 
 ## Validation

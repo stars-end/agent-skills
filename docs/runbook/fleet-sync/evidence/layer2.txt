@@ -27,7 +27,7 @@ Date: 2026-03-09T19:23:15Z
   ],
   "tools": [
     {
-      "tool": "llm-tldr",
+      "tool": "legacy semantic tool",
       "version": "1.5.2",
       "integration_mode": "mcp",
       "status": "pass",
@@ -36,8 +36,8 @@ Date: 2026-03-09T19:23:15Z
       "install_rc": 0,
       "health_rc": 0,
       "install_output": "",
-      "health_output": "usage: tldr-mcp [-h] [--project PROJECT]
-tldr-mcp: error: unrecognized arguments: --version
+      "health_output": "usage: legacy-semantic-mcp [-h] [--project PROJECT]
+legacy-semantic-mcp: error: unrecognized arguments: --version
 tldr 1.5.2"
     },
     {
@@ -86,7 +86,7 @@ tldr 1.5.2"
       "details": "in sync",
       "managed_tools": [
         "context-plus",
-        "llm-tldr",
+        "legacy semantic tool",
         "serena"
       ],
       "hash": "1af6bc08b483669cd1648f5145b7c88f2e16e7634644a7729aadec517e796906"
@@ -99,7 +99,7 @@ tldr 1.5.2"
       "details": "in sync",
       "managed_tools": [
         "context-plus",
-        "llm-tldr",
+        "legacy semantic tool",
         "serena"
       ],
       "hash": "829462c0beb2355717a3838e69273e64596845132e4a26391a4849ebfb7ef19b"
@@ -112,7 +112,7 @@ tldr 1.5.2"
       "details": "in sync",
       "managed_tools": [
         "context-plus",
-        "llm-tldr",
+        "legacy semantic tool",
         "serena"
       ],
       "hash": "23a67f022197d934cdb831d89d0357b219f1d6e4d86ebe71a3d99565f3222de5"
@@ -125,7 +125,7 @@ tldr 1.5.2"
       "details": "in sync",
       "managed_tools": [
         "context-plus",
-        "llm-tldr",
+        "legacy semantic tool",
         "serena"
       ],
       "hash": "1af6bc08b483669cd1648f5145b7c88f2e16e7634644a7729aadec517e796906"
@@ -138,7 +138,7 @@ tldr 1.5.2"
       "details": "in sync",
       "managed_tools": [
         "context-plus",
-        "llm-tldr",
+        "legacy semantic tool",
         "serena"
       ],
       "hash": "1b558f19d10773f1d7cfb27c895b385fa16cda115167e6c99ca26035bcef9f98"

@@ -49,7 +49,7 @@ We recommend **Option 3: Serena + Context+ Embeddings (Tethered Local) + Nightly
 Why enable `context-plus` over Serena alone?
 1. **Semantic Navigation:** Groups files by logic (e.g., "auth flow") even if filenames don't match. Ripgrep fails here.
 2. **Concept Discovery:** Helps agents answer "how is transaction signing handled?" without knowing the exact variable names.
-3. **Context Filling:** Automatically finds relevant code for RAG that `llm-tldr` (structural only) might miss.
+3. **Context Filling:** Automatically finds relevant code for RAG that `legacy semantic tool` (structural only) might miss.
 
 ---
 

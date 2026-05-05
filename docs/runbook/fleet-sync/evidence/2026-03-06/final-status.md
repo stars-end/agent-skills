@@ -34,7 +34,7 @@ All 4 canonical VMs converged to SHA f24de360602a6cfff8ef44a886db2250fed79daf
    - **Overall**: green
    - **Hosts passed**: 4/4
    - **Hosts failed**: 0/4
-   - **Tools passing**: llm-tldr (1 tool enabled)
+   - **Tools passing**: legacy semantic tool (1 tool enabled)
    - **IDE configs**: All 5 canonical IDEs configured
 
 ### Per-Host MCP Health

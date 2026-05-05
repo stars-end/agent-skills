@@ -10,7 +10,6 @@ stale_if_paths:
   - configs/semantic-index/**
   - templates/**
   - core/beads-memory/**
-  - docs/llm-tldr-removal-inventory-bd-9n1t2.33.md
   - extended/serena/**
 ---
 
@@ -47,7 +46,7 @@ surfaces. This file records their ownership boundaries.
      this warmed state; init/index/refresh remains infra-owned
    - worktree creation and query paths must not start indexing; spoke cron
      installation owns the scheduled `semantic-index-cron.sh` refresh and
-     prunes legacy llm-tldr semantic prewarm entries
+     prunes legacy semantic prewarm entries
    - rollback: disable scheduler, then remove or rename
      `~/.cache/agent-semantic-indexes`
 4. Orchestration runtime state (not committed)

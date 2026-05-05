@@ -8,14 +8,14 @@
 Fleet Sync Phase 2 completion with **GO: ops-platform only** status.
 
 Manifest has been corrected to disable broken tools with explicit rationale.
-Only `llm-tldr` is enabled and operational.
+Only `legacy semantic tool` is enabled and operational.
 
 ## Convergence Results
 
 ### Manifest State (Corrected)
 | Tool | Enabled | Status | Rationale |
 |------|---------|--------|-----------|
-| llm-tldr | true | ✅ healthy | Operational |
+| legacy semantic tool | true | ✅ healthy | Operational |
 | context-plus | false | disabled | Package not found in npm registry (404) |
 | cass-memory | false | disabled | Requires bun runtime (not installed) |
 | serena | false | disabled | PyPI package provides no executable entrypoint |
@@ -41,13 +41,13 @@ Current fleet audit status:
 ### IDE Surfaces (Local)
 | IDE | Config Path | Status | Managed Tools |
 |-----|-------------|--------|---------------|
-| antigravity | ~/.gemini/antigravity/mcp_config.json | ✅ green | llm-tldr |
-| claude-code | ~/.claude.json | ✅ green | llm-tldr |
-| codex-cli | ~/.codex/config.toml | ✅ green | llm-tldr |
-| opencode | ~/.opencode/config.json | ✅ green | llm-tldr |
-| gemini-cli | ~/.gemini/antigravity/mcp_config.json | ✅ green | llm-tldr |
+| antigravity | ~/.gemini/antigravity/mcp_config.json | ✅ green | legacy semantic tool |
+| claude-code | ~/.claude.json | ✅ green | legacy semantic tool |
+| codex-cli | ~/.codex/config.toml | ✅ green | legacy semantic tool |
+| opencode | ~/.opencode/config.json | ✅ green | legacy semantic tool |
+| gemini-cli | ~/.gemini/antigravity/mcp_config.json | ✅ green | legacy semantic tool |
 
-**Total:** 5/5 IDE surfaces green with llm-tldr
+**Total:** 5/5 IDE surfaces green with legacy semantic tool
 
 ## Platform Contract
 **Status:** GO: ops-platform only
@@ -56,7 +56,7 @@ Current fleet audit status:
 
 **Current State:**
 - Core ops: ✅ Operational (Beads, GitHub, Railway, 1Password, Slack)
-- MCP tool-value lane: ⚠️ Partial (llm-tldr only)
+- MCP tool-value lane: ⚠️ Partial (legacy semantic tool only)
 - Disabled tools: ✅ Documented with rationale
 - Fleet convergence: ⏳ Pending remote host pulls
 

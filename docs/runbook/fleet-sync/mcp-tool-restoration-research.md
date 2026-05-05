@@ -12,7 +12,6 @@ This document captures the current status, installation methods, and validation 
 
 | Tool | Status | Current Version | Target Version | Runtime | Source Type |
 |------|--------|-----------------|----------------|---------|-------------|
-| `llm-tldr` | Working | 1.5.2 | 1.5.2 | Python | PyPI (stable) |
 | `context-plus` | Broken | 0.4.2 (typo) | 1.0.7 | Node | npm (stable) |
 | `cass-memory` | Broken | 1.0.0 (invalid) | git HEAD | Node | GitHub (moving) |
 | `serena` | Broken | 0.9.1 (wrong) | git HEAD | Python | GitHub (moving) |
@@ -24,17 +23,7 @@ This document captures the current status, installation methods, and validation 
 
 ---
 
-## Tool 1: llm-tldr
-- **Status:** [VERIFIED] Working
-- **Real Upstream:** [simonw/llm-tldr](https://github.com/simonw/llm-tldr) [INFERRED from package metadata]
-- **Current Install Method:** `uv tool install "llm-tldr==1.5.2"` [VERIFIED on epyc6, macmini]
-- **Required Runtime:** Python 3.12+ [VERIFIED]
-- **Executable/MCP Entrypoint:** `llm-tldr` (Package provides `tldr` and `tldr-mcp` entrypoints) [VERIFIED]
-- **Health Command:** `llm-tldr --version` [VERIFIED]
-- **Config/Env Vars:** None required for baseline. [VERIFIED]
-- **Cross-VM Notes:** [VERIFIED] Working on `epyc6` and `macmini`.
-
-## Tool 2: context-plus
+## Tool 1: context-plus
 - **Status:** [INFERRED BROKEN] Package name typo in manifest
 - **Real Upstream:** [ForLoopCodes/contextplus](https://github.com/ForLoopCodes/contextplus) [VERIFIED]
 - **Real Package Name:** `contextplus` (on npm, NOT `@forloopcodes/contextplus`) [VERIFIED from npm registry]
@@ -45,7 +34,7 @@ This document captures the current status, installation methods, and validation 
 - **Config/Env Vars:** `OLLAMA_EMBED_MODEL`, `OLLAMA_CHAT_MODEL` (Optional). [INFERRED]
 - **Cross-VM Notes:** [INFERRED] Needs global npm install on all VMs.
 
-## Tool 3: cass-memory
+## Tool 2: cass-memory
 - **Status:** [VERIFIED BROKEN] Wrong package name, version, and binary name in manifest
 - **Real Upstream:** [Dicklesworthstone/cass_memory_system](https://github.com/Dicklesworthstone/cass_memory_system) [VERIFIED]
 - **Real Package Name:** `cass-memory` [INFERRED - not on npm, must use GitHub]
@@ -57,7 +46,7 @@ This document captures the current status, installation methods, and validation 
 - **Cross-VM Notes:** [VERIFIED] `bun` is missing on `epyc6`, [RECOMMENDED] use `npm` for broader VM compatibility.
 - **Version Pinning:** [NOT AVAILABLE] Git installation means moving target, no stable version tag
 
-## Tool 4: serena
+## Tool 3: serena
 - **Status:** [VERIFIED BROKEN] Points to wrong `serena` package on PyPI (AMQP client)
 - **Real Upstream:** [oraios/serena](https://github.com/oraios/serena) [VERIFIED]
 - **Real Package Name:** `serena` (MUST install from GitHub to avoid PyPI collision) [VERIFIED]

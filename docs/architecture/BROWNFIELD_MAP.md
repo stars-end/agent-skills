@@ -90,7 +90,7 @@ For changes that touch architecture or workflow behavior, read in this order:
 - routing contracts for `rg`/semantic-search readiness, Serena, and Beads runtime assumptions
 - Fleet Sync skill guidance is an active routing surface: it must describe
   semantic search as optional warmed hints via `scripts/semantic-search`, not
-  as an MCP tool or legacy llm-tldr prewarm path.
+  as an MCP tool or legacy semantic prewarm path.
 - scripts that enforce cross-repo policy (`dx-*` checks, dispatch helpers)
 - stale "canonical dx-batch" wording in generated baselines, skill metadata,
   or wrapper help text; treat this as policy drift and route through the

@@ -45,7 +45,7 @@ surfaces and still missed the current brownfield map:
 - Beads memories and comments were useful but too fragmented for architecture.
 - Skills gave workflow guidance but should not contain repo-specific truth.
 - AGENTS.md was an index, not a deep architecture map.
-- llm-tldr and Serena are verification/edit tools, not durable maps.
+- source inspection and Serena are verification/edit tools, not durable maps.
 - Legacy context-area skills generated repo-local context, but their freshness
   and activation were unreliable.
 - Manual map maintenance creates exactly the kind of recurring cognitive load
