@@ -44,16 +44,16 @@ for repo in "${CANONICAL_REPOS[@]}"; do
     echo "✅ $repo: clean"
   fi
 
-  # Legacy containment regression guard for leftover tldr runtime artifacts.
+  # Legacy containment regression guard for leftover semantic runtime artifacts.
   artifact_paths="$(
     find "$repo_path" \
       \( -path "$repo_path/.git" -o -path "$repo_path/.git/*" \) -prune -o \
       \( -type d -name ".tldr" -o -type f -name ".tldrignore" \) -print 2>/dev/null || true
   )"
   if [[ -n "$artifact_paths" ]]; then
-    echo "❌ $repo: legacy tldr artifact leakage detected (.tldr/.tldrignore)"
+    echo "❌ $repo: legacy semantic artifact leakage detected (.tldr/.tldrignore)"
     echo "$artifact_paths" | sed 's/^/   /'
-    echo "   Remove leaked artifacts (legacy llm-tldr runtime state)."
+    echo "   Remove leaked artifacts (legacy semantic runtime state)."
     fail=1
   fi
 

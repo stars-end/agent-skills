@@ -11,7 +11,7 @@
 
 The current agent memory stack has several useful surfaces, but no enforced
 repo-owned brownfield map contract. That is why repeated agents can miss large
-existing subsystems even after Beads memory, skills, AGENTS.md, llm-tldr, and
+existing subsystems even after Beads memory, skills, AGENTS.md, source inspection, and
 Markdown research artifacts exist.
 
 This plan establishes one canonical truth surface per knowledge type:
@@ -22,7 +22,7 @@ This plan establishes one canonical truth surface per knowledge type:
 - Beads structured memory is for durable decisions and gotchas with provenance;
 - AGENTS.md is the routing/index surface that points to repo maps;
 - skills enforce workflow, not repo-specific truth;
-- llm-tldr verifies map claims against source code;
+- source inspection verifies map claims against source code;
 - Serena performs symbol-aware edits after source verification.
 
 The plan intentionally avoids making one more memory system. It creates
@@ -103,23 +103,23 @@ Beads memory is reliable as a cross-VM pointer and provenance layer. It is not a
 good primary store for long-form architecture maps because it is string-KV,
 harder to review with code, and does not naturally model stale-if source paths.
 
-### llm-tldr
+### source inspection
 
 Audited files:
 
-- `/Users/fning/agent-skills/extended/llm-tldr/SKILL.md`
+- `/Users/fning/agent-skills/extended/source inspection/SKILL.md`
 - `agent-skills` generated baseline references to the V8.6 routing contract
 
 Findings:
 
-- llm-tldr is the canonical tool for semantic discovery, static analysis,
+- source inspection is the canonical tool for semantic discovery, static analysis,
   call-path/slice/impact tracing, and source verification.
 - It is filesystem-local and can analyze a project path directly.
 - It is a verification engine, not durable memory.
 
 Implication:
 
-Repo memory docs should cite what to verify, while llm-tldr should verify the
+Repo memory docs should cite what to verify, while source inspection should verify the
 current code before acting on those docs.
 
 ### Serena
@@ -219,7 +219,7 @@ frontmatter, stale-if checks, generated inventories, and dx-review gates.
 | Beads KV | Short durable facts via `bdx remember` | Cross-VM and prime-injected | Too flat for architecture | Pointers only |
 | Beads issues labeled `memory` | Structured durable memory | Provenance and comments | Polluted by active tasks; missing metadata | Closed decision/gotcha records only |
 | Beads comments | Task chronology | Good local history | Hard to discover globally | Task-local unless promoted |
-| llm-tldr | Semantic/static verification | Verifies code now | Not durable memory | Required verifier for maps |
+| source inspection | Semantic/static verification | Verifies code now | Not durable memory | Required verifier for maps |
 | Serena | Symbol-aware edits | Precise changes | Not shared memory | Edit support only |
 | AGENTS.md | Agent routing | Always visible | Too large if abused | Link/index only |
 | Canonical skills | Workflow instructions | Enforces process | Can hide repo truth | Workflow only |
@@ -254,7 +254,7 @@ Beads structured memory
 skills
   workflow enforcement and reusable process
 
-llm-tldr / Serena
+source inspection / Serena
   verification and edit tools
 ```
 
@@ -305,7 +305,7 @@ Optional frontmatter fields:
 
 ```yaml
 verification:
-  - llm-tldr
+  - source inspection
   - human-or-agent-review
 generated_inventory:
   - docs/architecture/generated/pipeline-inventory.md
@@ -323,7 +323,7 @@ outcomes:
 
 1. **Verify-only bump.** Use when code paths matched `stale_if_paths`, but the
    existing map claims are still correct after inspection. The agent must verify
-   the relevant claim with source inspection or llm-tldr, then update
+   the relevant claim with source inspection or source inspection, then update
    `last_verified_commit` and `last_verified_at`.
 2. **Content update.** Use when code changes invalidate or materially alter the
    map. The agent must update the curated prose, update any affected
@@ -368,12 +368,12 @@ pilot prove the curated-map contract works.
 
 Reason:
 
-llm-tldr already provides on-demand tree, structure, call, import, and
+source inspection already provides on-demand tree, structure, call, import, and
 architecture analysis for many mechanical inventory questions. Committed
 generated docs can recreate the same stale-file-list problem that made
 context-area skills expensive.
 
-Generated docs are allowed only when they provide value that on-demand llm-tldr
+Generated docs are allowed only when they provide value that on-demand source inspection
 does not cover well, such as:
 
 - cross-repo inventory summaries;
@@ -500,7 +500,7 @@ Trigger examples:
 - "what already exists".
 
 Avoid generic triggers such as only "architecture", "pipeline", "storage", or
-"data flow". Those should normally route first to llm-tldr or the relevant
+"data flow". Those should normally route first to source inspection or the relevant
 domain skill. Brownfield-map-first should activate when the task is explicitly
 about existing-codebase understanding, duplicate avoidance, repo maps, or
 architecture-level change.
@@ -511,7 +511,7 @@ The skill must enforce this order:
 2. Read the canonical repo maps.
 3. Check Beads KV for pointer memories.
 4. If relevant code paths changed, check stale-if status.
-5. Verify non-trivial claims with llm-tldr.
+5. Verify non-trivial claims with source inspection.
 6. Use Serena only for symbol-aware edits after verification.
 7. If implementation changes mapped areas, update docs or add a waiver.
 
@@ -578,7 +578,7 @@ not allowed.
 The new default path for brownfield work is deterministic:
 
 ```text
-AGENTS.md -> repo map docs -> Beads pointer -> llm-tldr verification -> edit
+AGENTS.md -> repo map docs -> Beads pointer -> source inspection verification -> edit
 ```
 
 Agents no longer need to decide between:
@@ -712,7 +712,7 @@ Status:
 Tasks:
 
 - define generated docs schema;
-- generate only inventories not already well covered by llm-tldr on-demand
+- generate only inventories not already well covered by source inspection on-demand
   tooling;
 - prefer cross-repo or CI-consumed inventories over per-file area listings;
 - add generated header with command, source commit, and timestamp;
@@ -762,7 +762,7 @@ Tasks:
 
 - create `extended/brownfield-map-first/SKILL.md`;
 - teach strict surface roles;
-- require AGENTS.md -> docs -> Beads pointer -> llm-tldr verification;
+- require AGENTS.md -> docs -> Beads pointer -> source inspection verification;
 - update skill metadata for activation;
 - regenerate AGENTS baseline.
 
@@ -977,7 +977,7 @@ Suggested order:
 Reviewers should evaluate:
 
 1. Is the initial problem framed correctly and grounded in the audit?
-2. Is the landscape of Beads/bdx, llm-tldr, Serena, AGENTS.md, skills,
+2. Is the landscape of Beads/bdx, source inspection, Serena, AGENTS.md, skills,
    context-area skills, and Markdown docs accurately represented?
 3. Does the proposed solution keep truth in one place and use other surfaces as
    pointers/workflow/verification?

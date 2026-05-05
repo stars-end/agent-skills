@@ -1,17 +1,17 @@
-# llm-tldr Codex Thread Tool-Surface Gap
+# legacy semantic tool Codex Thread Tool-Surface Gap
 
-CLASS: `dx_loop_control_plane`  
+CLASS: `dx_loop_control_plane`
 NOT_A_PRODUCT_BUG: `true`
 
 ## Summary
 
-`llm-tldr` did not fail as an MCP server in this wave.
+`legacy semantic tool` did not fail as an MCP server in this wave.
 
 The failure was a Codex runtime exposure gap:
 
-1. Codex config contained `llm-tldr` and `serena`
+1. Codex config contained `legacy semantic tool` and `serena`
 2. `codex mcp list` reported both as `enabled`
-3. `tldr-mcp-contained.py` processes were alive
+3. `legacy-semantic-mcp-contained.py` processes were alive
 4. but the live thread tool surface still did not expose either tool to the model
 
 This forced fallback to direct repo reads even though the servers were configured
@@ -33,19 +33,19 @@ and running.
 
 `~/.codex/config.toml` contains:
 
-- `[mcp_servers."llm-tldr"]`
+- `[mcp_servers."legacy semantic tool"]`
 - `[mcp_servers."serena"]`
 
 ### Codex CLI says both are enabled
 
 `codex mcp list` returned:
 
-- `llm-tldr ... enabled`
+- `legacy semantic tool ... enabled`
 - `serena ... enabled`
 
 ### Server processes are alive
 
-Process list showed active `tldr-mcp-contained.py` processes.
+Process list showed active `legacy-semantic-mcp-contained.py` processes.
 
 ### But Codex thread state shows no MCP tool exposure
 
@@ -59,13 +59,13 @@ Result:
 
 - `read_thread_terminal`
 
-No `llm-tldr`.  
+No `legacy semantic tool`.
 No `serena`.
 
 And:
 
 ```sql
-select count(*) from thread_dynamic_tools where name in ('llm-tldr','serena');
+select count(*) from thread_dynamic_tools where name in ('legacy semantic tool','serena');
 ```
 
 Result:
@@ -90,9 +90,9 @@ runtime should fail loudly and precisely.
 
 This does **not** look like:
 
-- `llm-tldr` daemon failure
+- `legacy semantic tool` daemon failure
 - bad launcher config
-- missing `llm-tldr` install
+- missing `legacy semantic tool` install
 - missing Codex MCP config
 
 It does look like:
@@ -104,7 +104,7 @@ The strongest local evidence is:
 
 - `codex mcp list`: pass
 - server process presence: pass
-- `thread_dynamic_tools`: missing `llm-tldr` and `serena`
+- `thread_dynamic_tools`: missing `legacy semantic tool` and `serena`
 
 Likely fault boundary:
 
@@ -121,9 +121,9 @@ Likely fault boundary:
 
 ```bash
 codex mcp list
-ps aux | rg 'tldr-mcp-contained|tldr-contained-daemon|codex'
+ps aux | rg 'legacy-semantic-mcp-contained|legacy-semantic-contained-daemon|codex'
 sqlite3 ~/.codex/state_5.sqlite "select distinct name from thread_dynamic_tools order by name;"
-sqlite3 ~/.codex/state_5.sqlite "select count(*) from thread_dynamic_tools where name in ('llm-tldr','serena');"
+sqlite3 ~/.codex/state_5.sqlite "select count(*) from thread_dynamic_tools where name in ('legacy semantic tool','serena');"
 sqlite3 ~/.codex/state_5.sqlite "select t.id, datetime(t.updated_at,'unixepoch','localtime'), t.cwd, group_concat(d.name, ',') from threads t left join thread_dynamic_tools d on d.thread_id=t.id where t.cwd='/Users/fengning/agent-skills' group by t.id order by t.updated_at desc limit 10;"
 ```
 
@@ -140,7 +140,7 @@ Add a Codex-specific thread-surface check to local DX tooling:
 
 1. keep existing `codex mcp list` preflight
 2. add a second check against `~/.codex/state_5.sqlite`
-3. if recent thread state for the current workspace lacks `llm-tldr` / `serena`,
+3. if recent thread state for the current workspace lacks `legacy semantic tool` / `serena`,
    fail `dx-check` and warn in `mcp-doctor`
 
 This does not repair Codex itself, but it prevents false-green MCP health.

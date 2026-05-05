@@ -3,6 +3,13 @@
 Feature-Key: `bd-0oal8.2`
 Scope: fresh-device/bootstrap cleanup + role-aware entrypoint rollout
 
+## Supersession Note
+
+The previous semantic fallback contract from `bd-0oal8.2` has been superseded.
+Current routing uses `rg` and direct reads first, with `scripts/semantic-search`
+as an optional warmed semantic hint lane only when status is `ready`. Query and
+worktree-creation paths must not trigger semantic indexing.
+
 ## Decision Categories
 
 - `canonical`: keep as active contract surface.
@@ -17,8 +24,8 @@ Scope: fresh-device/bootstrap cleanup + role-aware entrypoint rollout
 - Beads runtime truth: `~/.beads-runtime/.beads`.
 - Beads coordination command surface: `bdx` (transport/safety wrapper) to hub host `epyc12`.
 - `~/beads` is Beads source/build checkout; `~/bd` is legacy/rollback state only.
-- MCP routing contract: `llm-tldr` for semantic/static analysis, `serena` for symbol-aware edits.
-- `llm-tldr` locality rule: analysis runs on the host that can read the path; do not send Mac-local worktree paths to an `epyc12`-hosted process unless mirrored.
+- MCP routing contract: `serena` for symbol-aware edits; semantic hints are optional through `scripts/semantic-search` when status is `ready`.
+- Semantic locality rule: warmed indexes are canonical-repo scoped; worktree query paths must not trigger indexing.
 - Auth topology: `epyc12` is OP cache refresh source; spokes sync cache artifacts.
 - macOS GUI `op` (`op signin`, `op whoami`) is human bootstrap/recovery only.
 - Host scheduling: cron/systemd by role; legacy `io.agentskills.ru` LaunchAgent must stay disabled.
@@ -53,8 +60,8 @@ Scope: fresh-device/bootstrap cleanup + role-aware entrypoint rollout
 | `scripts/setup-slack-mcp.sh` | compatibility shim | Useful optional helper, but V4.2.1 framing and broad IDE mutation are stale. | Keep as optional helper, refresh docs later. |
 | `scripts/install-ru.sh` | canonical | Minimal, idempotent tool installer for `ru`, no secrets. | Keep. |
 | `infra/vm-bootstrap/SKILL.md` | canonical (Linux adapter) | Explicitly Linux-only and points to this audit for cross-host contract. | Keep as Linux adapter under unified bootstrap contract. |
-| `infra/fleet-sync/SKILL.md` | canonical | Current MCP convergence/source-of-truth skill, including llm-tldr containment details. | Keep. |
-| `health/mcp-doctor/SKILL.md` | canonical | Active skill + checker now validate `llm-tldr` + `serena` only and no longer teach `context-plus` launcher contracts. | Keep. |
+| `infra/fleet-sync/SKILL.md` | canonical | Current MCP convergence/source-of-truth skill, including optional semantic-search routing details. | Keep. |
+| `health/mcp-doctor/SKILL.md` | canonical | Active skill + checker validate the current MCP roster and no longer teach `context-plus` launcher contracts. | Keep. |
 | `health/bd-doctor/SKILL.md` | canonical | Current Beads diagnosis contract: `bdx`, `~/.beads-runtime/.beads`, epyc12 hub, readiness caveats. | Keep. |
 | `health/dx-cron/SKILL.md` | canonical | Current cron/log observability surface with canonical cleanup expectations. | Keep. |
 | `core/op-secrets-quickref/SKILL.md` | canonical | Current auth mode matrix reflects GUI-human vs cache/service-account agent paths and epyc12 hub refresh rule. | Keep. |
@@ -73,22 +80,14 @@ The following stale themes are still present and should be handled in later clea
   longer installed by `scripts/setup-git-hooks.sh`.
 - Legacy mounts (`~/.agent/skills`) remain as compatibility behavior in `dx-hydrate.sh`.
 
-## llm-tldr Bounded Fallback Requirement
-
-### Current finding on this Mac
-
-- GNU `timeout` is now installed at `/Users/fning/.local/bin/timeout`.
-- A bounded semantic fallback smoke with `tldr-daemon-fallback.sh` still timed out at 25s.
-- This is acceptable only if failure is bounded and the workflow falls back cleanly to direct source inspection; hanging indefinitely is not acceptable.
-
-### Required bootstrap checks going forward
+## Semantic Hint Readiness Requirement
 
 Every fresh-device bootstrap smoke must assert:
 
-1. `timeout` is available (`timeout --version` should succeed).
-2. `llm-tldr` fallback calls are wrapped in bounded timeout.
-3. On timeout, scripts return a clear reason and proceed to documented fallback path (for example targeted `rg`/direct reads), rather than hanging.
-4. MCP locality rule is explicit: host-local path analyzed on same host unless mirrored.
+1. `scripts/semantic-search status` exits cleanly.
+2. `scripts/semantic-search query` never starts indexing.
+3. When status is not `ready`, agents get the documented fallback path:
+   targeted `rg` and direct reads.
 
 ## Smoke Coverage Requirements (macOS + Linux)
 
@@ -97,8 +96,8 @@ Fresh-device acceptance must include both a macOS client and one Linux spoke:
 - macOS client smoke:
   - `bdx dolt test --json`
   - `bdx show <known-id> --json`
-  - runtime MCP visibility for `llm-tldr` and `serena`
-  - bounded `llm-tldr` fallback smoke with timeout behavior recorded
+  - runtime MCP visibility for `serena`
+  - optional semantic-search status behavior recorded
   - `dx-bootstrap-auth.sh --json` returns `agent_ready_cache` or `agent_ready_service_account`
   - verify no `io.agentskills.ru` LaunchAgent active
 
@@ -106,7 +105,7 @@ Fresh-device acceptance must include both a macOS client and one Linux spoke:
   - same Beads checks (`bdx dolt test` + targeted `bdx show`)
   - OP cache sync path from `epyc12` validated
   - cron entries align with spoke profile (`dx-spoke-cron-install.sh`)
-  - bounded `llm-tldr` fallback smoke behavior validated
+  - optional semantic-search status behavior validated
 
 ## Cleanup Wave Decisions Implemented
 

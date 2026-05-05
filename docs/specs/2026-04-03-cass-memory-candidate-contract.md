@@ -35,11 +35,11 @@ idea directly into shared memory, the result will drift toward:
 2. Keep shared memory low-noise.
 3. Require provenance, redaction, and scope before durable admission.
 4. Let the pilot capture cross-agent/cross-repo/cross-VM knowledge that does
-   not fit naturally in `llm-tldr` or `serena`.
+   not fit naturally in `source inspection` or `serena`.
 
 ## Non-Goals
 
-1. Replacing `llm-tldr` or `serena`.
+1. Replacing `source inspection` or `serena`.
 2. Automatic ingestion of raw agent transcripts.
 3. Free-form autonomous writes directly into durable shared memory.
 4. Storing product strategy, secrets, or user-specific context.
@@ -88,7 +88,7 @@ Do not create candidates for:
 2. user-specific preferences unless explicitly confirmed
 3. secrets/tokens/cookies/raw logs
 4. speculative architecture claims without evidence
-5. code-structure facts better handled by `llm-tldr`
+5. code-structure facts better handled by `source inspection`
 6. symbol/project memory better handled by `serena`
 
 ## Candidate Schema

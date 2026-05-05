@@ -18,8 +18,8 @@ semantic index unavailable; use rg.
 
 ## Problem
 
-`llm-tldr` semantic fallback is failing often enough that agents repeatedly see
-`semantic_index_missing` and fall back manually. We should remove it from default
+`legacy semantic tool` semantic fallback is failing often enough that agents repeatedly see
+`semantic index missing` and fall back manually. We should remove it from default
 routing and provide a simpler optional semantic lane that does not block agent
 lookup.
 
@@ -46,20 +46,20 @@ Prior local POC artifacts:
 
 ## Migration Rationale
 
-This work intentionally replaces the default `llm-tldr` semantic route. It does
-not run a second default semantic system beside `llm-tldr`.
+This work intentionally replaces the default `legacy semantic tool` semantic route. It does
+not run a second default semantic system beside `legacy semantic tool`.
 
-`llm-tldr` remains available only for explicitly bounded structural/context
+`legacy semantic tool` remains available only for explicitly bounded structural/context
 operations until those are separately removed or replaced. The existing
-`tldr-semantic-prewarm` path must not remain part of the default agent semantic
+`legacy semantic prewarm` path must not remain part of the default agent semantic
 workflow after this implementation lands. If a host still has an old
-`llm-tldr` semantic cron/prewarm job, the integration task must document whether
+`legacy semantic tool` semantic cron/prewarm job, the integration task must document whether
 it is disabled, left as an operator-only legacy command, or removed from
 published guidance.
 
 ## Goals
 
-- Replace failing `llm-tldr` semantic fallback with a bounded optional
+- Replace failing `legacy semantic tool` semantic fallback with a bounded optional
   `semantic-search` lane.
 - Keep cloud calls out of the default critical path; tested `ccc` configuration
   uses local SentenceTransformers embeddings.
@@ -77,8 +77,8 @@ published guidance.
 - Do not write `.cocoindex_code` into canonical working clones during ordinary
   agent work.
 - Do not require OpenRouter or any cloud embedding provider for this lane.
-- Do not preserve dual llm-tldr semantic routing in default guidance.
-- Do not leave `llm-tldr` semantic prewarm as a required scheduled job for the
+- Do not preserve dual legacy semantic tool semantic routing in default guidance.
+- Do not leave `legacy semantic tool` semantic prewarm as a required scheduled job for the
   default agent workflow.
 
 ## Active Contract
@@ -240,7 +240,7 @@ Owned paths:
 - `tests/test_semantic_search.py`
 - `tests/semantic_index_fixtures.py`
 - `docs/semantic-search.md`
-- `extended/llm-tldr/SKILL.md`
+- `removed semantic skill`
 - `fragments/dx-global-constraints.md`
 - generated `AGENTS.md` / `dist/*` after `make publish-baseline`
 
@@ -249,7 +249,7 @@ Required behavior:
 - Metadata-based freshness; do not use `.git/index` mtime as truth.
 - Configurable index root, defaulting to `~/.cache/agent-semantic-indexes`.
 - Worktree resolver from `/tmp/agents/<beads-id>/<repo>` to `<repo-name>`.
-- Routing docs remove `llm-tldr` semantic as the default first-hop and describe
+- Routing docs remove `legacy semantic tool` semantic as the default first-hop and describe
   `semantic-search` as optional warmed hints only.
 - Query and status paths assert no raw `ccc` invocation.
 - Bounded direct query reads use the ccc Python environment and warmed SQLite
@@ -320,7 +320,7 @@ Required test cases:
 - unknown `state.json.schema_version` returns non-ready.
 - worktree resolver exact matches allowlisted repo names and fails closed on
   unknown paths.
-- routing docs no longer instruct semantic discovery to call `llm-tldr` first.
+- routing docs no longer instruct semantic discovery to call `legacy semantic tool` first.
 - external cache surface is documented in architecture storage docs.
 
 ### Shell Smoke Tests

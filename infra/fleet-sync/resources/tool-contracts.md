@@ -63,16 +63,14 @@ Current state: Layer 4 GO does not imply Layer 5 GO.
 - Fleet Sync expands `~` launcher paths to absolute host-local paths before
   writing client configs so direct stdio clients do not depend on shell
   expansion.
-  semantic index on first use for the target project path. The daemon fallback
-  is bounded for agent recovery: when the semantic index is cold, it fails fast
-  instead of doing a cold build inside the fallback call.
-  `tldr warm <project>` only warms structural caches.
-  Every MCP tool call accepts a `project` parameter for worktree-safe operation.
-  is resolved outside the project tree by contained runtime patching in
-  `$TLDR_STATE_HOME/<project-hash>/` (default: `~/.cache/tldr-state/`). No
-  `.tldr`/`.tldrignore` paths are created under repo/worktree trees. This is
-  enforced by `scripts/dx-verify-clean.sh`, which fails on leaked artifacts in
-  canonical repos.
+- Semantic search is an optional warmed hint lane, not a required MCP routing
+  surface. Agents should call `scripts/semantic-search status` first and only
+  query when status is `ready`.
+- Query paths must not trigger indexing. If the semantic index is `missing`,
+  `indexing`, or `stale`, use `rg` and direct reads.
+- Legacy `.tldr` and `.tldrignore` paths must not be created under
+  repo/worktree trees. This is enforced by `scripts/dx-verify-clean.sh`, which
+  fails on leaked artifacts in canonical repos.
 
 ## Removed Tools
 

@@ -2,7 +2,7 @@
 
 ## Summary
 
-Run a bounded pilot for `cass-memory` as an explicit cross-agent, cross-VM procedural memory surface for DX/control-plane work. This pilot is additive and manual; it does not change canonical routing for repo discovery (`llm-tldr`) or assistant continuity/symbol-aware memory (`serena`).
+Run a bounded pilot for `cass-memory` as an explicit cross-agent, cross-VM procedural memory surface for DX/control-plane work. This pilot is additive and manual; it does not change canonical routing for repo discovery (`source inspection`) or assistant continuity/symbol-aware memory (`serena`).
 
 ## Problem
 
@@ -17,14 +17,14 @@ Agents repeatedly rediscover the same operational tricks across hosts and sessio
 
 ## Non-Goals
 
-1. Replacing `llm-tldr` or `serena`.
+1. Replacing `source inspection` or `serena`.
 2. Product behavior changes.
 3. Automatic transcript sync or autonomous memory ingestion.
 4. Fleet-wide runtime integration changes in this wave.
 
 ## Canonical Boundary
 
-- `llm-tldr`: semantic discovery and static analysis.
+- `source inspection`: semantic discovery and static analysis.
 - `serena`: assistant continuity and symbol-aware memory/editing context.
 - `cass-memory` pilot: cross-agent procedural playbooks and learned recovery tricks across sessions/VMs.
 

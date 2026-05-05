@@ -22,16 +22,6 @@ WORKTREE_BASE="/tmp/agents"
 TARGET_DIR="$WORKTREE_BASE/$BEADS_ID/$REPO_NAME"
 REPO_PATH="$HOME/$REPO_NAME"
 
-start_semantic_prewarm() {
-    local worktree_dir="$1"
-    local prewarm_script="$SCRIPT_DIR/tldr-semantic-prewarm.sh"
-    local log_file="$HOME/logs/dx/tldr-semantic-prewarm-worktree.log"
-
-    [[ -x "$prewarm_script" ]] || return 0
-    mkdir -p "$HOME/logs/dx" >/dev/null 2>&1 || true
-    nohup "$prewarm_script" --path "$worktree_dir" >>"$log_file" 2>&1 &
-}
-
 seed_railway_context() {
     local canonical_repo="$1"
     local worktree_dir="$2"
@@ -167,7 +157,6 @@ git fetch --quiet --prune origin "${DEFAULT_BRANCH}" || git fetch --quiet --prun
 if [[ -d "$TARGET_DIR" ]]; then
     echo "Worktree directory $TARGET_DIR already exists" >&2
     seed_railway_context "$REPO_PATH" "$TARGET_DIR" "$REPO_NAME" || true
-    start_semantic_prewarm "$TARGET_DIR" || true
     if [[ -x "$SCRIPT_DIR/dx-session-lock.sh" ]]; then
         "$SCRIPT_DIR/dx-session-lock.sh" touch "$TARGET_DIR" >/dev/null 2>&1 || true
     fi
@@ -180,7 +169,6 @@ BRANCH="feature-$BEADS_ID"
 # Try creating worktree with new branch
 if git worktree add "$TARGET_DIR" -b "$BRANCH" "$UPSTREAM_REF" > /dev/null 2>&1; then
     seed_railway_context "$REPO_PATH" "$TARGET_DIR" "$REPO_NAME" || true
-    start_semantic_prewarm "$TARGET_DIR" || true
     if [[ -x "$SCRIPT_DIR/dx-session-lock.sh" ]]; then
         "$SCRIPT_DIR/dx-session-lock.sh" touch "$TARGET_DIR" >/dev/null 2>&1 || true
     fi
@@ -191,7 +179,6 @@ fi
 # Fallback: Branch might already exist, try checking it out
 if git worktree add "$TARGET_DIR" "$BRANCH" > /dev/null 2>&1; then
     seed_railway_context "$REPO_PATH" "$TARGET_DIR" "$REPO_NAME" || true
-    start_semantic_prewarm "$TARGET_DIR" || true
     if [[ -x "$SCRIPT_DIR/dx-session-lock.sh" ]]; then
         "$SCRIPT_DIR/dx-session-lock.sh" touch "$TARGET_DIR" >/dev/null 2>&1 || true
     fi

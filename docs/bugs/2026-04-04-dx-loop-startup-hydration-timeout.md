@@ -237,4 +237,4 @@ Why:
 
 ## Validation Notes
 
-`llm-tldr` tool routing was attempted via CLI search from the worktree, but it returned no matches for known dx-loop symbols in this environment. Direct file inspection was used to complete the code-path validation.
+`legacy semantic tool` tool routing was attempted via CLI search from the worktree, but it returned no matches for known dx-loop symbols in this environment. Direct file inspection was used to complete the code-path validation.

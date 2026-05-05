@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 1860c9ad30a874b653cf7b18147371990fb7fdbd
-last_verified_at: 2026-05-04T14:48:00Z
+last_verified_commit: 1ac6de75932e98c0f8331eefcc03421adee09a655
+last_verified_at: 2026-05-05T01:30:00Z
 stale_if_paths:
   - docs/architecture/**
 ---
@@ -16,7 +16,7 @@ stale_if_paths:
   dev context
 - `DATA_AND_STORAGE.md`: memory, storage, portable handoff context, delegated
   prompt, optional ccc semantic-index cache, and orchestration runtime artifact
-  ownership boundaries
+  ownership boundaries, including scheduled canonical semantic-index refresh
 - `WORKFLOWS_AND_PATTERNS.md`: recurring workflow contracts, orchestration
   surface hierarchy, anti-drift rules, and the active discovery contract:
   `rg` + direct reads first, optional read-only `scripts/semantic-search`
