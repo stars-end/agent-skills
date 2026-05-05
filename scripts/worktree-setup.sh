@@ -22,6 +22,45 @@ WORKTREE_BASE="/tmp/agents"
 TARGET_DIR="$WORKTREE_BASE/$BEADS_ID/$REPO_NAME"
 REPO_PATH="$HOME/$REPO_NAME"
 
+install_common_canonical_precommit() {
+    local repo_root="$1"
+    local git_common_dir hooks_dir
+    git_common_dir="$(git -C "$repo_root" rev-parse --git-common-dir 2>/dev/null || echo "$repo_root/.git")"
+    if [[ "$git_common_dir" != /* ]]; then
+        git_common_dir="$repo_root/$git_common_dir"
+    fi
+    hooks_dir="$git_common_dir/hooks"
+    mkdir -p "$hooks_dir"
+    cat > "$hooks_dir/pre-commit" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+REPO_NAME="$(basename -- "$REPO_ROOT")"
+GIT_DIR="$(git rev-parse --git-dir)"
+GIT_COMMON_DIR="$(git rev-parse --git-common-dir)"
+
+case "$REPO_NAME" in
+  agent-skills|prime-radiant-ai|affordabot|llm-common|bd-symphony)
+    if [ "$GIT_DIR" = "$GIT_COMMON_DIR" ]; then
+      cat >&2 <<EOF
+
+❌ CANONICAL COMMIT BLOCKED: $REPO_NAME
+
+Use a worktree for mutating work:
+  dx-worktree create <beads-id> $REPO_NAME
+  cd /tmp/agents/<beads-id>/$REPO_NAME
+
+EOF
+      exit 1
+    fi
+    ;;
+esac
+HOOK
+    chmod +x "$hooks_dir/pre-commit"
+    git -C "$repo_root" config --unset core.hooksPath >/dev/null 2>&1 || true
+}
+
 seed_railway_context() {
     local canonical_repo="$1"
     local worktree_dir="$2"
@@ -132,8 +171,8 @@ if [[ "$is_canonical_repo" == "1" ]]; then
         if [[ -x "$REPO_PATH/.githooks/_bootstrap.sh" ]]; then
             "$REPO_PATH/.githooks/_bootstrap.sh" >/dev/null 2>&1 || true
         fi
-    elif [[ -x "$SCRIPT_DIR/install-canonical-precommit.sh" ]]; then
-        "$SCRIPT_DIR/install-canonical-precommit.sh" >/dev/null 2>&1 || true
+    else
+        install_common_canonical_precommit "$REPO_PATH"
     fi
 fi
 
