@@ -60,6 +60,10 @@ The repo ships:
    first unless a task is explicitly maintaining batch internals.
 4. `dx-wave` is an operator/compatibility wrapper over the legacy batch
    substrate, not the default agent path.
+5. `slack-coordination` is an optional notification/coordination surface. For
+   deterministic Agent Coordination follow-ups, it routes through
+   `scripts/lib/dx-slack-alerts.sh`; the default operational channel resolves
+   to `#fleet-events` / `C0A8YU9JW06`.
 
 ## Brownfield Entry Points
 
@@ -96,6 +100,9 @@ For changes that touch architecture or workflow behavior, read in this order:
   semantic search as optional warmed hints via `scripts/semantic-search`, not
   as an MCP tool or legacy semantic prewarm path.
 - scripts that enforce cross-repo policy (`dx-*` checks, dispatch helpers)
+- deterministic Slack/Agent Coordination delivery docs; keep channel defaults,
+  cache-only auth, and cron-safe follow-up recipes in `slack-coordination`
+  aligned with `scripts/lib/dx-slack-alerts.sh`
 - stale "canonical dx-batch" wording in generated baselines, skill metadata,
   or wrapper help text; treat this as policy drift and route through the
   baseline source fragments rather than editing generated artifacts directly
