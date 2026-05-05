@@ -25,6 +25,11 @@ surfaces. This file records their ownership boundaries.
    - versioned by git; reviewable in PRs
    - handoff runbooks and delegated prompts under `docs/runbook/` and
      `docs/prompts/` are portable context surfaces, not runtime state
+   - generated canonical hook drift in `.githooks/commit-msg` and
+     `.githooks/pre-commit` is treated as disposable local enforcement state
+     when it is the only canonical dirt; `scripts/dx-verify-clean.sh`
+     auto-restores those two files from HEAD and still blocks any mixed source
+     dirt
    - non-secret product topology can live in targeted skills, such as the
      Affordabot and Prime Radiant AI Railway dev topology skills; credentials
      and tokens remain external runtime state behind cache-backed auth helpers
