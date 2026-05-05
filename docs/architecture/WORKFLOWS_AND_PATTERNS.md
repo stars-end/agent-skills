@@ -135,6 +135,9 @@ Architecture review should evaluate:
 - Installed daily cron entries must call the tracked wrapper from the canonical
   checkout through `dx-job-wrapper.sh`; cron installation without the tracked
   script present is invalid because canonical sync can remove unmerged files.
+- `dx-codex-session-repair-cron-install.sh` owns per-host nightly install
+  schedules for macmini, epyc12, and epyc6. `dx-codex-weekly-health-cron-install.sh`
+  owns weekly health digest installation for macmini and epyc12.
 - Repair mode skips recently modified sessions by default, writes a JSON
   report, and creates backups before in-place edits.
 - `dx-codex-weekly-health.sh` is read-only fleet health summarization over
