@@ -33,6 +33,7 @@ program scope.
 | Beads interop | Yes | Shared | `coder`, `olivaw` | 1-2 | Beads remains canonical work memory |
 | Beads read/write contract | Yes | Shared | `coder`, `olivaw` | 1 | Query/write boundaries must be explicit |
 | MCP integration | Yes | Hermes | `coder`, `olivaw` | 3 | Main way to integrate tools and internal APIs cleanly |
+| MCP inventory | Yes | Shared | `coder`, `olivaw` | 1-3 | Inventory Chrome DevTools, Serena, GitHub, Google, Railway, Beads surfaces before wiring |
 | ACP integration | Yes | Hermes | `coder` | 3 | Useful for editor surfaces, less central than Codex Desktop |
 | API server | Yes | Hermes | `coder`, `olivaw` | 3-5 | Strong fit for Gas City and internal tooling |
 | Provider routing | Yes | Hermes | all | 1-2 | Needed as Hermes becomes real infrastructure |
@@ -43,17 +44,21 @@ program scope.
 | OpenCode interop | Yes | Shared | `coder` | 3 | Strong headless lane for Slack-launched jobs |
 | Governed coding dispatch | Yes | Shared | `coder` | 3 | `dx-loop` / `dx-runner` interop must be defined before steady-state launch |
 | Worktree / Feature-Key enforcement | Yes | Shared | `coder` | 1-3 | Hermes-launched coding work must inherit canonical repo safety rules |
+| Coding launch prompt artifacts | Yes | Shared | `coder` | 1-3 | Governed runs need prompt-file artifacts, Beads ids, repo, worktree, and validation contract |
 | Remote SSH execution | Yes | Shared | `coder` | 3 | Canonical VM universe is a core part of this design |
 | Gas City pane integration | Yes | Gas City + Hermes | `coder`, `olivaw` | 5 | Gas City should surface and route, not absorb Hermes |
 | Agent Coordination coexistence | Yes | Shared | `olivaw`, `coder` | 1-2 | Deterministic transport stays there |
 | Deterministic `dx-*` input adapters | Yes | Shared | `olivaw`, `coder` | 1-2 | Hermes must consume explicit artifacts, not scrape ad hoc surfaces |
+| Deterministic producer mapping | Yes | Shared | `olivaw`, `coder` | 1-2 | Map each named producer to stdout, file, Beads, Slack, or webhook adapter |
 | Healthcare workflows | Yes | Hermes | `finance`, `family` | 4 | Use docs/sheets/browser before broad inbox expansion |
 | Healthcare/finance guardrails | Yes | Shared | `finance`, `family`, `olivaw` | 0-1 | Write down the "must never" rules before granting data access |
+| Healthcare/finance technical security | Yes | Shared | `finance`, `family`, `olivaw` | 0-1 | Define redaction, retention, audit trail, and approved artifact sinks |
 | Restaurant reservations | Yes | Hermes | `family` | 4 | Browser automation + Gmail/Calendar is the useful combo |
 | Startup founder operations | Yes | Hermes | `olivaw` | 2 | One of the highest-ROI early lanes |
 | EODHD / pipeline integration | Yes | Shared | `olivaw`, `coder` | 2 | Deterministic pipeline outputs need an explicit Hermes interaction path |
 | `llm-common` disposition | Yes | Shared | `coder`, `olivaw` | 2 | Avoid duplicating shared provider/routing abstractions |
 | Observability / traceability | Yes | Shared | all | 1-3 | Multi-hop debugging must be designed, not discovered |
+| Correlation-id log contract | Yes | Shared | all | 1 | Required for Slack -> Hermes -> host/tool traceability |
 | Cross-profile communication | Yes | Shared | all | 2-4 | Escalation and artifact handoff between profiles must be explicit |
 | Rollback trigger conditions | Yes | Shared | all | 1-4 | Safety rollback should be governed by explicit triggers, not panic |
 | Code factory integration (`~/gascity`) | Yes | Shared | `coder` | 5 | Pane and orchestration contract, not role duplication |

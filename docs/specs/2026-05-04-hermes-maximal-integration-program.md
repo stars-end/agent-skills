@@ -195,6 +195,23 @@ Process supervision must be explicit:
 
 This is not optional documentation. It is part of the execution substrate.
 
+### Canonical VM capability matrix
+
+| Host | Primary Hermes role | Coding role | Browser role | Default profile access |
+| --- | --- | --- | --- | --- |
+| `macmini` | primary operator host, Slack gateway, local Hermes services | local Codex Desktop adjacency and local-only automations | primary Chrome / DevTools MCP / `agent-browser` host | `olivaw`, `family`, `finance`, `coder` |
+| `epyc12` | remote execution target and Beads-adjacent automation host | primary remote coding throughput; default governed `dx-loop` / `dx-runner` host | none by default | `coder`, selected `olivaw` automation |
+| `epyc6` | secondary remote execution target | overflow or specialized coding work | none by default | `coder` only unless explicitly expanded |
+| `homedesktop-wsl` | secondary remote execution target | WSL-specific or overflow coding work | none by default | `coder` only unless explicitly expanded |
+
+Default routing rule:
+
+- browser-heavy and desktop-local workflows start on `macmini`
+- governed coding tasks start on `epyc12` unless the task needs local macOS
+  state or a specific alternate host
+- finance/family profiles should not target remote coding hosts unless an
+  explicit workflow requires it
+
 ## Active Contract
 
 ### 1. Role split
@@ -286,6 +303,20 @@ Secret handling contract:
   or approved helper wrappers over ad hoc secret fetches
 - any task that cannot meet the Agent Secret-Auth Invariant must fail closed
 
+Technical data-security contract:
+
+- sensitive finance/healthcare source documents must land in approved
+  Workspace artifacts or bounded exports, not Hermes session memory by default
+- Slack notifications for finance/healthcare workflows should contain only
+  summaries and links to approved artifacts, not raw source payloads
+- every finance/healthcare workflow must define retention expectations for
+  intermediate files, screenshots, browser downloads, and generated artifacts
+- workflow logs must avoid raw account numbers, member IDs, claim numbers, or
+  full document payloads unless a later task explicitly approves a redaction
+  and storage plan
+- approved artifacts should preserve enough audit trail to reconstruct what was
+  read, produced, and sent without relying on chat logs
+
 ### 3. Automation boundary
 
 - Deterministic checks stay deterministic.
@@ -307,6 +338,20 @@ surface must be declared:
 
 Hermes should consume deterministic outputs through explicit adapters, not by
 implicitly scraping whichever human-facing surface happens to exist.
+
+Initial producer mapping:
+
+| Producer | Initial Hermes adapter surface | Hermes role |
+| --- | --- | --- |
+| `dx-founder-daily.sh` | stdout/text artifact plus existing Slack-thread delimiter semantics | summarize, route, and follow up on founder-briefing outputs |
+| `dx-fleet-check.sh` | stdout/text or file artifact emitted by deterministic fleet check | summarize fleet health and suggest follow-up, without owning fleet enforcement |
+| `queue-hygiene-enforcer.sh` | file or Beads-linked artifact from deterministic queue policy | explain queue-health outcomes and route human follow-up |
+| `railway-parity-check.sh` | stdout/file artifact from deterministic parity check | summarize Railway drift and draft remediation tasks |
+| `dx-eodhd-monitor.sh` | deterministic monitor output, preferably file or Beads-linked artifact | summarize market-data/pipeline anomalies and route follow-up |
+| Affordabot nightly dispatch | GitHub Actions artifact, Beads/task artifact, or deterministic summary output | summarize dispatch outcomes and capture follow-up work |
+
+These mappings are starting contracts. Phase 1 should verify the actual runtime
+surface of each producer before wiring Hermes automation.
 
 ### 4. Session and execution boundary
 
@@ -350,6 +395,14 @@ The following rules should be explicit in Phase 0/1:
   acceptable default store for healthcare or finance source documents
 - finance and healthcare artifacts should default to approved Docs/Sheets/Drive
   sinks or bounded exports, not broad chat distribution
+
+Enforcement tests should exist before live finance/healthcare data access:
+
+- blocked-action tests for claim submission and Mercury money movement
+- redaction tests for Slack notifications
+- memory/log tests proving raw sensitive payloads are not stored by default
+- artifact-routing tests proving Docs/Sheets/Drive are used for source material
+  and audit trails
 
 ## Current-State Findings
 
@@ -636,6 +689,20 @@ These are separate surfaces and each deserves a role:
 This does not mean "replace Codex Desktop." It means Hermes can show up in more
 places and expose more leverage.
 
+Initial MCP inventory:
+
+| MCP surface | In scope | Primary use |
+| --- | --- | --- |
+| Chrome DevTools MCP | yes | live-browser inspection and operator workflows |
+| Serena | yes, for coding-adjacent review/edit planning | symbol-aware repository inspection when needed |
+| GitHub MCP / GitHub CLI equivalent | likely | PR, issue, and repository context where Hermes workflows need it |
+| Google Workspace skill / Google APIs | yes | Gmail, Calendar, Drive, Docs, Sheets, Contacts |
+| Railway CLI/API/MCP equivalent | likely | deployment/status context through deterministic wrappers first |
+| Beads via `bdx` / Dolt-backed runtime | yes | canonical work state and durable memory |
+
+Phase 3 should turn this inventory into exact installed tools, auth surfaces,
+and profile-specific allowlists.
+
 ### 9. Reliability controls
 
 As Hermes becomes more central, the platform-reliability features should be in
@@ -791,6 +858,34 @@ Worktree and Feature-Key contract:
   required `Feature-Key: bd-...` trailer
 - governed task wrappers should treat missing worktree binding or missing
   Feature-Key enforcement as a hard failure, not a warning
+
+Enforcement mechanism:
+
+- Hermes should not ask Codex/OpenCode to infer repository safety rules from
+  prose only
+- coding launch wrappers should materialize a prompt file that includes:
+  - concrete `BEADS_SUBTASK`
+  - concrete repo name
+  - expected worktree command
+  - required `Feature-Key` trailer
+  - validation and return contract
+- wrappers should run from the created worktree and export the Beads subtask in
+  the runtime context where supported
+- commit validation should rely on the existing repo hooks and the wrapper's
+  done gate; a failed Feature-Key/pre-commit check is a failed Hermes-launched
+  coding task
+
+Governed dispatch interface:
+
+- for chained work, Hermes should create or select a Beads subtask, write a
+  prompt artifact, then call `dx-loop` against that subtask
+- for direct governed provider execution, Hermes should call:
+  - `dx-runner start --provider <provider> --beads <BEADS_SUBTASK>
+    --prompt-file <prompt-file>`
+- prompt artifacts should live in a declared runtime scratch/artifact directory
+  and be referenced in Slack/Gas City results
+- raw `codex exec` / `opencode run` should be used only for approved
+  smoke/fallback paths or explicitly local workflows
 
 ### Slack -> Hermes -> remote VM orchestration
 
@@ -1163,6 +1258,39 @@ Examples:
 - background task log discoverability
 - cross-host failure classification
 
+### Observability architecture
+
+Every multi-hop Hermes workflow should carry a correlation id.
+
+Minimum event fields:
+
+- `correlation_id`
+- `profile`
+- `source_surface` such as Slack, cron, webhook, browser, or API
+- `target_host`
+- `beads_id` when the workflow is task-bound
+- `repo` and `worktree` when the workflow is coding-bound
+- `tool_surface` such as `dx-loop`, `dx-runner`, `codex`, `opencode`,
+  browser, Google Workspace, or webhook
+- `artifact_refs`
+- `status`
+- `failure_reason`
+
+Initial log surfaces:
+
+- Hermes gateway/service logs on the deployment host
+- per-run prompt and result artifacts for governed coding dispatch
+- Slack thread reference for user-visible status
+- Beads comment or artifact reference when work is task-bound
+- Gas City-visible session/run metadata once pane integration begins
+
+Retention and redaction:
+
+- logs should be structured enough for `rg`/JSON-style inspection
+- sensitive finance/healthcare payloads should be redacted or linked as
+  approved artifacts rather than embedded in logs
+- Phase 1 should prove one trace end to end before later workflow rollout
+
 ### Testing ladder by phase
 
 #### Phase 1
@@ -1174,6 +1302,8 @@ Examples:
 - deployment host and supervisor verification
 - per-profile secret-access verification
 - deterministic input adapter verification
+- healthcare/finance guardrail enforcement tests before live data access
+- observability/correlation-id smoke test
 
 #### Phase 2
 
@@ -1407,10 +1537,16 @@ Each phase should have explicit "definition of done" checks:
   - runtime supervisor surface is declared
   - healthcare/finance "must never" rules are written
 - Phase 1 done:
+  - declared supervisor is verified running
   - profile secret boundaries are documented
+  - profile secret access checks are verified without printing secrets
   - Beads read/write contract is documented
+  - Beads read path is verified against the central runtime
   - deterministic input contract is documented
+  - deterministic producer mappings are verified for the first adapter set
   - observability/debug contract is documented
+  - one correlation-id trace is verified across at least Slack -> Hermes ->
+    execution target
 - Phase 2 done:
   - founder workflow artifacts land in the intended Workspace sinks
   - startup deterministic inputs are consumed through explicit adapters
