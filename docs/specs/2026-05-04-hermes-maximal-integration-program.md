@@ -164,6 +164,37 @@ The right mental model is:
 We should design toward that shape now, even if the implementation arrives in
 phases.
 
+### Deployment topology contract
+
+Hermes needs an explicit runtime anchor. The program should not proceed with an
+abstract "gateway install strategy" only.
+
+Initial topology:
+
+- `macmini`
+  - primary Hermes operator host
+  - Slack gateway host
+  - local browser-automation host
+  - local Codex Desktop adjacency host
+- `epyc12`
+  - primary remote coding execution host
+  - Beads central Dolt server host
+  - primary high-throughput automation and coding-side execution host
+- `epyc6` and `homedesktop-wsl`
+  - secondary remote execution targets
+  - overflow/specialized coding targets
+
+Process supervision must be explicit:
+
+- Hermes gateway and long-lived services must run under a declared supervisor
+  surface
+- macOS-hosted long-lived Hermes services should use LaunchAgent or an
+  equivalent explicit host contract
+- Linux-hosted long-lived Hermes services should use systemd user services or
+  an equivalent explicit host contract
+
+This is not optional documentation. It is part of the execution substrate.
+
 ## Active Contract
 
 ### 1. Role split
@@ -230,6 +261,31 @@ systems.
 - Hermes profiles separate state, memory, sessions, cron jobs, and tokens, but
   they do not sandbox filesystem access.
 
+### 2.5 Secret-access model
+
+Per-profile secret access must be explicit.
+
+- `olivaw`
+  - may use startup/business secret material needed for Slack, Google
+    Workspace, webhook ingestion, and approved startup systems
+- `coder`
+  - may use coding and deployment secrets needed for approved coding workflows
+    and governed remote execution
+- `family`
+  - should default to minimal or no secret-backed system access beyond approved
+    messaging/calendar/browser tasks
+- `finance`
+  - should begin with no direct financial-secret authority unless a later task
+    explicitly approves it
+
+Secret handling contract:
+
+- OP CLI remains the canonical secret source
+- profile-specific access must be allowlisted, not inferred
+- Hermes-launched tasks should prefer injected least-privilege runtime context
+  or approved helper wrappers over ad hoc secret fetches
+- any task that cannot meet the Agent Secret-Auth Invariant must fail closed
+
 ### 3. Automation boundary
 
 - Deterministic checks stay deterministic.
@@ -237,6 +293,20 @@ systems.
   or routed follow-ups.
 - Hermes should not become the canonical owner of fleet checks, parity checks,
   queue enforcers, or controller heartbeats.
+
+### 3.5 Deterministic input contract
+
+For every `dx-*` or deterministic producer that Hermes consumes, the input
+surface must be declared:
+
+- stdout/text artifact
+- file artifact
+- Beads artifact
+- Slack message/thread
+- webhook/event
+
+Hermes should consume deterministic outputs through explicit adapters, not by
+implicitly scraping whichever human-facing surface happens to exist.
 
 ### 4. Session and execution boundary
 
@@ -246,6 +316,40 @@ systems.
 - Gas City should eventually surface session inventory, routing, and control.
 - Session continuity should be designed around durable identifiers and surfaced
   artifacts, not around pretending every tool shares the same resume primitive.
+
+### 4.5 Beads read/write contract
+
+Beads is not just "memory in principle." Hermes needs a concrete contract for
+reading and, where approved, writing Beads state.
+
+Read-path examples:
+
+- query active work context
+- attach startup/coding summaries to task history
+- retrieve targeted memory records for cross-session context
+
+Write-path examples:
+
+- create follow-up tasks only through approved surfaces
+- add task-local comments when a workflow is explicitly task-bound
+- preserve durable cross-agent memory in Beads memory primitives rather than in
+  ad hoc profile notes
+
+The central runtime truth remains the Dolt-backed Beads server on `epyc12`.
+
+### 4.6 Sensitive-data "must never" guardrails
+
+The following rules should be explicit in Phase 0/1:
+
+- Hermes must never auto-submit healthcare claims without an explicit later
+  approval task
+- Hermes must never initiate Mercury banking actions or money movement
+- Hermes must never treat Slack as the canonical sink for healthcare-sensitive
+  payloads
+- Hermes must never assume built-in memory or chat/session logs are an
+  acceptable default store for healthcare or finance source documents
+- finance and healthcare artifacts should default to approved Docs/Sheets/Drive
+  sinks or bounded exports, not broad chat distribution
 
 ## Current-State Findings
 
@@ -262,6 +366,18 @@ outside Hermes core ownership:
 - Affordabot nightly dispatch workflows
 
 These are strong Hermes inputs, but weak Hermes replacement candidates.
+
+### Shared-substrate disposition still needed
+
+Two existing shared surfaces need explicit disposition decisions:
+
+- `llm-common`
+  - determine whether Hermes-side provider routing, credential logic, or
+    wrapper behavior should integrate with, remain separate from, or explicitly
+    avoid duplication with `llm-common`
+- EODHD pipeline and monitoring work
+  - determine how Hermes consumes, summarizes, or reacts to EODHD pipeline
+    outputs without becoming the pipeline owner
 
 ### Existing Codex-local decision already made
 
@@ -640,6 +756,16 @@ Feasible now through Hermes terminal/SSH execution:
 - start/attach to `opencode serve`
 - capture outputs, session IDs, and result artifacts
 
+Governance rule:
+
+- ad hoc raw CLI invocation is not sufficient as the steady-state contract
+- coding tasks that materially matter should route through the canonical
+  governance/orchestration surfaces where appropriate:
+  - `dx-loop` for chained/non-trivial Beads work
+  - `dx-runner` for governed provider execution
+- direct `codex exec` or `opencode run` use should be framed as an explicitly
+  approved or fallback execution primitive, not the only control-plane story
+
 This should expand into an explicit command contract for:
 
 - local Codex CLI execution
@@ -647,7 +773,9 @@ This should expand into an explicit command contract for:
 - local OpenCode execution
 - remote OpenCode execution
 - worktree/workdir binding
+- Feature-Key injection and commit-trailer enforcement
 - artifact return into Slack threads
+- governed run visibility through `dx-runner` or equivalent surfaced state
 
 ### Slack -> Hermes -> remote VM orchestration
 
@@ -657,6 +785,13 @@ Feasible now through:
 - controlled command templates
 - existing repo/worktree wrappers
 - future Gas City/dispatch adapters
+
+Host capability matrix must be explicit:
+
+- which hosts support local browser adjacency
+- which hosts are preferred for coding throughput
+- which hosts are acceptable for background jobs
+- which profiles may target which hosts by default
 
 ### Codex/OpenCode bookkeeping from Hermes
 
@@ -873,6 +1008,7 @@ High-value Hermes combinations:
 - deployment alerts -> Hermes diagnosis -> Slack action summary
 - domain and DNS tasks -> Hermes workflow orchestration with artifact trail
 - scheduled infra summaries fed from deterministic `dx-*` jobs
+- explicit EODHD / pipeline-alert ingestion where market-data workflows matter
 
 ### 6. Repo and memory synergy
 
@@ -897,6 +1033,8 @@ High-value Hermes combinations:
 - founder and startup summaries that cut across multiple repos and pipelines
 - Gas City eventually surfacing Hermes/Codex/OpenCode work as one visible
   system
+- explicit `llm-common` disposition to avoid rebuilding provider/routing
+  abstractions twice
 
 ### 7. Canonical VM universe synergy
 
@@ -978,6 +1116,10 @@ Examples:
 - webhook prompt-injection handling
 - remote-host unavailable behavior
 - browser auth/session expiry behavior
+- browser anti-bot / CAPTCHA / 2FA viability and fallback behavior
+- healthcare/finance-specific "must never" enforcement tests
+- governed-coding-launch checks for worktree / Feature-Key / orchestration
+  compliance
 - provider failure / fallback behavior
 
 #### 5. Human acceptance tests
@@ -993,6 +1135,19 @@ Required acceptance lanes:
 - reservation/admin workflow
 - healthcare/admin workflow
 
+#### 6. Observability tests
+
+Purpose:
+
+- prove multi-hop workflows can be debugged deterministically
+
+Examples:
+
+- Slack -> Hermes -> SSH -> remote execution traceability
+- webhook/hook failure surfacing
+- background task log discoverability
+- cross-host failure classification
+
 ### Testing ladder by phase
 
 #### Phase 1
@@ -1001,12 +1156,16 @@ Required acceptance lanes:
 - Slack gateway health
 - routing/fallback dry runs
 - memory/Beads coexistence checks
+- deployment host and supervisor verification
+- per-profile secret-access verification
+- deterministic input adapter verification
 
 #### Phase 2
 
 - startup Google Workspace integration tests
 - founder brief acceptance run
 - Gmail/Calendar/Docs/Sheets write-path proof
+- EODHD / pipeline-summary ingestion proof if founder operations depend on it
 
 #### Phase 3
 
@@ -1014,6 +1173,8 @@ Required acceptance lanes:
 - Slack -> coding run end-to-end tests
 - session-artifact and resume-contract tests
 - MCP/API/ACP smoke tests where enabled
+- governed `dx-loop` / `dx-runner` interop proof
+- worktree / Feature-Key enforcement proof for Hermes-launched tasks
 
 #### Phase 4
 
@@ -1041,6 +1202,21 @@ The first useful test pack for this program should be only five flows:
 If those five pass, we will have proven the substrate instead of only the
 configuration.
 
+## Cross-profile communication contract
+
+Profiles are meant to split concerns, but the system still needs explicit
+handoff rules.
+
+Examples:
+
+- `finance` may escalate founder-relevant startup-admin findings to `olivaw`
+- `family` may escalate scheduling or healthcare-admin outputs into shared
+  calendar or approved notification channels
+- `coder` may escalate engineering-operational findings into `olivaw` or
+  deterministic alerting lanes
+
+Cross-profile communication should be declared, not assumed.
+
 ## Comprehensive phase plan
 
 ### Phase 0 - Platform contract
@@ -1051,6 +1227,8 @@ Deliver:
 - ownership map across Hermes / Agent Coordination / Codex / OpenCode / Gas City
 - data and trust boundary contract
 - profile model and startup Google Workspace plan
+- deployment topology and supervision contract
+- sensitive-data "must never" guardrails
 
 ### Phase 1 - Hermes substrate hardening
 
@@ -1060,6 +1238,10 @@ Deliver:
 - provider routing / fallback / credential pool plan
 - hooks/webhooks/plugin architecture
 - memory contract and skill strategy
+- per-profile secret-access model
+- Beads read/write contract
+- deterministic input-consumption contract
+- observability and debug contract
 
 ### Phase 2 - Startup operations rollout
 
@@ -1070,6 +1252,8 @@ Deliver:
 - startup cron jobs
 - webhook-fed operational follow-ups
 - Slack home-channel and delivery contract
+- EODHD / market-data pipeline interaction contract where relevant
+- `llm-common` disposition for shared provider/routing concerns
 
 ### Phase 3 - Coding operations rollout
 
@@ -1080,6 +1264,8 @@ Deliver:
 - session/result artifact contract
 - goals/background patterns for coding investigations
 - ACP/API/MCP evaluation for coding-side leverage
+- `dx-loop` / `dx-runner` interop contract
+- worktree / Feature-Key enforcement contract for Hermes-launched tasks
 
 ### Phase 4 - Family / finance / healthcare / reservations rollout
 
@@ -1089,6 +1275,8 @@ Deliver:
 - finance/admin document workflows
 - healthcare/admin workflows
 - browser automation flows for reservations and portals
+- healthcare/finance compliance and data-handling contract
+- anti-bot and browser-resilience fallback contract
 
 ### Phase 5 - Gas City orchestration integration
 
@@ -1098,6 +1286,7 @@ Deliver:
 - surfaced actions and status feeds
 - session inventory strategy
 - explicit boundaries between controller, pane, and operator
+- host-capability and routing visibility model
 
 ### Phase 6 - Advanced optimization and expansion
 
@@ -1179,6 +1368,32 @@ Validation gates for the program:
    prioritized.
 10. Prime Persona Tester remains on its existing local Codex Desktop automation
     lane unless a later task intentionally changes that decision.
+
+### Phase gates
+
+Each phase should have explicit "definition of done" checks:
+
+- Phase 0 done:
+  - deployment host is declared
+  - runtime supervisor surface is declared
+  - healthcare/finance "must never" rules are written
+- Phase 1 done:
+  - profile secret boundaries are documented
+  - Beads read/write contract is documented
+  - deterministic input contract is documented
+  - observability/debug contract is documented
+- Phase 2 done:
+  - founder workflow artifacts land in the intended Workspace sinks
+  - startup deterministic inputs are consumed through explicit adapters
+- Phase 3 done:
+  - at least one governed coding run path is proven
+  - Hermes-launched coding tasks preserve worktree and Feature-Key rules
+- Phase 4 done:
+  - at least one browser-heavy healthcare or reservation flow has a viable
+    fallback story
+- Phase 5 done:
+  - Gas City surfaces Hermes/Codex/OpenCode state without inventing fake shared
+    session semantics
 
 ## Risks / Rollback
 
