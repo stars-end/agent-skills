@@ -23,6 +23,9 @@ surfaces. This file records their ownership boundaries.
 1. Repository files
    - source of truth for skills, scripts, templates, and docs
    - versioned by git; reviewable in PRs
+   - tracked `.githooks/` files are repository policy artifacts, not routine
+     bootstrap output; `scripts/install-canonical-precommit.sh` must not update
+     them unless the operator explicitly opts into a versioned hook migration
    - handoff runbooks and delegated prompts under `docs/runbook/` and
      `docs/prompts/` are portable context surfaces, not runtime state
    - generated canonical hook drift in `.githooks/commit-msg` and
