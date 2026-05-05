@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: acda9791b30c2533550101bcc180d3def3bae86c
-last_verified_at: 2026-05-05T01:25:00Z
+last_verified_commit: 4083dafd480091af5b83019e6b00cb95ffe614ed
+last_verified_at: 2026-05-05T23:45:07Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -64,6 +64,11 @@ The repo ships:
    deterministic Agent Coordination follow-ups, it routes through
    `scripts/lib/dx-slack-alerts.sh`; the default operational channel resolves
    to `#fleet-events` / `C0A8YU9JW06`.
+6. `goal-seeking-eval-loop` is a Codex-native planning/orchestration skill for
+   bounded eval-led mutation campaigns. It does not replace `dx-loop` or
+   `dx-runner`; it defines the fixed eval set, scalar score, hard gates,
+   post-mortem cadence, artifact schema, and subagent budget that an
+   orchestrator uses before dispatching implementation or evaluation work.
 
 ## Brownfield Entry Points
 
@@ -106,6 +111,10 @@ For changes that touch architecture or workflow behavior, read in this order:
 - stale "canonical dx-batch" wording in generated baselines, skill metadata,
   or wrapper help text; treat this as policy drift and route through the
   baseline source fragments rather than editing generated artifacts directly
+- goal-seeking loop guidance must keep the eval/rubric contract frozen during a
+  campaign. Do not let it become an open-ended implementation loop, duplicate
+  provider execution semantics owned by `dx-runner`, or mutate canonical repos
+  outside worktrees.
 - repo-memory automation (`dx-repo-memory-*`, systemd templates, and Codex
   prompts); keep this path conservative because it is allowed to create
   scheduled documentation PRs

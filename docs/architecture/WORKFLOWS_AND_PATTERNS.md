@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 456268c093c0ef8af369f9bdcc68faad485ef146
-last_verified_at: 2026-05-05T14:08:00Z
+last_verified_commit: 4083dafd480091af5b83019e6b00cb95ffe614ed
+last_verified_at: 2026-05-05T23:45:07Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -111,6 +111,26 @@ Architecture review should evaluate:
 - operational ergonomics
 - complexity budget
 - repo-memory compliance for brownfield work
+
+## Core Pattern: Goal-Seeking Eval Loops
+
+- `extended/goal-seeking-eval-loop/` is for bounded optimization campaigns, not
+  ordinary implementation waves.
+- A campaign must define the fixed eval set, eval version/hash, scalar score,
+  score dimensions, hard gates, final acceptance criteria, mutable/frozen
+  surfaces, max cycles, subagent budget, artifact root, and keep/discard rule
+  before the first mutation.
+- Each cycle must produce a scored delta, keep/discard decision, post-mortem,
+  and next-cycle plan. Activity without a measured delta is not progress.
+- The skill may dispatch Codex subagents or route through `dx-loop`/`dx-runner`,
+  but provider execution, Beads/worktree governance, commits, and PR mechanics
+  remain owned by the existing DX surfaces.
+- The helper scripts under `extended/goal-seeking-eval-loop/scripts/` are local
+  utilities for artifact initialization and deterministic score aggregation;
+  they are not a separate service or durable state store.
+- The Affordabot reference in `resources/affordabot.md` is an example of the
+  pattern: real structured/unstructured evidence is not accepted as a data moat
+  proof until it reaches the canonical economic-analysis and admin/HITL path.
 
 ## Core Pattern: Scheduled Repo-Memory Refresh
 
