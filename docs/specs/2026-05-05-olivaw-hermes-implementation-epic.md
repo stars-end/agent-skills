@@ -195,6 +195,21 @@ Tests:
 Deliverables:
 
 - Install and configure `gog` for `fengning@stars-end.ai`.
+- Complete pre-`gog` OAuth readiness:
+  - create or select a Google Cloud project for Olivaw
+  - configure the OAuth consent screen
+  - enable required APIs in the same project that owns the OAuth client:
+    - Gmail API
+    - Google Calendar API
+    - Google Drive API
+    - Google Docs API
+    - Google Sheets API
+    - People/Contacts API
+  - create a Desktop OAuth client
+  - download the client JSON
+  - store it in `gog` with `gog auth credentials <client_secret.json>`
+  - run `gog auth add fengning@stars-end.ai --services gmail,calendar,drive,docs,sheets,contacts`
+  - run `gog auth doctor --check`
 - Create at least two execution profiles:
   - read-only profile
   - agent-safe profile with draft/artifact actions but blocked send/delete/admin
@@ -207,6 +222,9 @@ Tests:
 - `gog` can list calendar events with machine-readable output.
 - `gog` can list/search business Gmail with bounded output.
 - `gog` can create a draft or safe artifact if enabled.
+- Google Cloud APIs are enabled in the same project as the Desktop OAuth client.
+- If OAuth app is External + Testing, token-expiry risk is documented; publish
+  the app when long-lived refresh tokens are required.
 - Gmail send is blocked.
 - Gmail delete is blocked.
 - Drive sharing/admin actions are blocked.
