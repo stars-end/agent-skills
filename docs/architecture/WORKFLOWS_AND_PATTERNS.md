@@ -147,6 +147,23 @@ Architecture review should evaluate:
 - These scripts are operational guardrails for Codex Desktop/CLI health; they
   do not replace Beads, repo-memory maps, or product test suites.
 
+## Core Pattern: Olivaw Helper Scripts
+
+- `scripts/olivaw-runtime-check.sh` is the non-destructive runtime health
+  probe for the Olivaw LaunchAgent/gateway surface.
+- `scripts/olivaw-redaction-canary.sh` and
+  `scripts/olivaw-cron-silent-canary.sh` are synthetic contract tests; they do
+  not use live sensitive payloads.
+- `scripts/olivaw-gog-safe.sh` is the guarded Google Workspace command surface
+  for `fengning@stars-end.ai`. It is a positive allowlist, not a denylist, and
+  blocks send/share/permission/OAuth mutation paths before invoking `gog`.
+- `scripts/olivaw-slack-thread-evidence.sh` is a read-only Slack evidence
+  helper for manual Computer Use canaries. It may resolve the Olivaw Slack bot
+  token through the agent-safe cache, but it must not print token values.
+- Browser verification for Olivaw should prefer Computer Use for Slack and
+  account-sensitive UI. Chrome DevTools MCP is suitable only on non-sensitive
+  pages because page enumeration can expose full callback URLs.
+
 ## Pilot Adoption Checklist
 
 - map docs exist and are linked by AGENTS routing policy

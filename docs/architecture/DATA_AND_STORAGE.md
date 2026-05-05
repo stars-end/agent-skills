@@ -94,6 +94,18 @@ surfaces. This file records their ownership boundaries.
    - Codex session JSONL files and repair backups are host-local operational
      state, not repo-owned memory; the repo owns only the scripts and tests
      that govern how they are inspected or repaired
+7. Olivaw/Hermes implementation evidence
+   - Olivaw planning, runbooks, and QA reports live under `docs/specs/` as
+     reviewable implementation evidence for the `bd-1ocyi` rollout.
+   - Local Hermes profile state, including the `olivaw-gog-safe` skill,
+     gateway logs, sessions, and Kanban DBs, lives under `~/.hermes/` and is
+     operational runtime state, not committed repo state.
+   - Olivaw helper scripts in `scripts/olivaw-*.sh` are repo-owned wrappers
+     and canaries. They should emit sanitized JSON or policy blocks and must
+     resolve secrets only through agent-safe cache helpers.
+   - Slack thread IDs, Kanban card IDs, and Beads IDs are acceptable evidence
+     pointers. OAuth callback URLs, tokens, raw healthcare/finance payloads,
+     and client secrets are not acceptable repo data.
 
 ## Memory Surface Policy
 
