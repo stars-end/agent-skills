@@ -372,12 +372,15 @@ These are strong Hermes inputs, but weak Hermes replacement candidates.
 Two existing shared surfaces need explicit disposition decisions:
 
 - `llm-common`
-  - determine whether Hermes-side provider routing, credential logic, or
-    wrapper behavior should integrate with, remain separate from, or explicitly
-    avoid duplication with `llm-common`
+  - decision: reusable provider/client abstractions that are broadly useful
+    across product repos should continue to live in `llm-common`
+  - Hermes-specific routing, profile policy, and operator-facing workflow logic
+    should remain Hermes-side and must not fork shared provider code without a
+    clear reason
 - EODHD pipeline and monitoring work
-  - determine how Hermes consumes, summarizes, or reacts to EODHD pipeline
-    outputs without becoming the pipeline owner
+  - decision: Hermes consumes explicit outputs from deterministic EODHD
+    monitoring and ETL jobs, summarizes them, and routes follow-up actions, but
+    does not own the pipeline runtime or alert-production logic
 
 ### Existing Codex-local decision already made
 
@@ -776,6 +779,18 @@ This should expand into an explicit command contract for:
 - Feature-Key injection and commit-trailer enforcement
 - artifact return into Slack threads
 - governed run visibility through `dx-runner` or equivalent surfaced state
+
+Worktree and Feature-Key contract:
+
+- every Hermes-launched coding task must target a real worktree, not a
+  canonical repo
+- the default pattern is:
+  - `dx-worktree create <BEADS_SUBTASK> <repo>`
+  - run the coding surface inside that worktree
+- every commit produced by a Hermes-launched coding task must include the
+  required `Feature-Key: bd-...` trailer
+- governed task wrappers should treat missing worktree binding or missing
+  Feature-Key enforcement as a hard failure, not a warning
 
 ### Slack -> Hermes -> remote VM orchestration
 
@@ -1217,6 +1232,20 @@ Examples:
 
 Cross-profile communication should be declared, not assumed.
 
+Transport contract:
+
+- startup/coding operational escalations should use:
+  - approved Slack thread delivery, or
+  - Beads-linked work artifacts when work tracking is involved
+- calendar/logistics escalations should use:
+  - approved calendar and Workspace artifact updates
+- sensitive finance/healthcare escalations should prefer:
+  - approved Docs/Sheets/Drive artifacts first
+  - bounded notification summaries second
+
+Profiles should not silently leak context through implicit shared memory or ad
+hoc hidden channels.
+
 ## Comprehensive phase plan
 
 ### Phase 0 - Platform contract
@@ -1419,6 +1448,16 @@ Each phase should have explicit "definition of done" checks:
 - do not migrate deterministic jobs until Hermes-added value is proven
 - keep ACP/API-server adoption optional
 - leave external memory providers disabled unless their value is demonstrated
+
+Trigger conditions should also be explicit:
+
+- repeated incorrect Workspace artifact generation on the same workflow class
+- repeated governed-coding-launch failures caused by missing worktree or
+  Feature-Key enforcement
+- browser workflows entering anti-bot/CAPTCHA loops without a safe fallback
+- healthcare/finance guardrail violations or near-misses
+- repeated multi-hop observability failures where a Slack-launched run cannot be
+  traced across system boundaries
 
 ## Recommended First Task
 

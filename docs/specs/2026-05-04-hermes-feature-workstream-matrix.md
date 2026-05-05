@@ -42,6 +42,7 @@ program scope.
 | Codex Desktop launch/resume interop | Yes, partial | Shared | `coder` | 3 | Launch/resume via CLI and artifacts now; native desktop-resume bridge unproven |
 | OpenCode interop | Yes | Shared | `coder` | 3 | Strong headless lane for Slack-launched jobs |
 | Governed coding dispatch | Yes | Shared | `coder` | 3 | `dx-loop` / `dx-runner` interop must be defined before steady-state launch |
+| Worktree / Feature-Key enforcement | Yes | Shared | `coder` | 1-3 | Hermes-launched coding work must inherit canonical repo safety rules |
 | Remote SSH execution | Yes | Shared | `coder` | 3 | Canonical VM universe is a core part of this design |
 | Gas City pane integration | Yes | Gas City + Hermes | `coder`, `olivaw` | 5 | Gas City should surface and route, not absorb Hermes |
 | Agent Coordination coexistence | Yes | Shared | `olivaw`, `coder` | 1-2 | Deterministic transport stays there |
@@ -54,6 +55,7 @@ program scope.
 | `llm-common` disposition | Yes | Shared | `coder`, `olivaw` | 2 | Avoid duplicating shared provider/routing abstractions |
 | Observability / traceability | Yes | Shared | all | 1-3 | Multi-hop debugging must be designed, not discovered |
 | Cross-profile communication | Yes | Shared | all | 2-4 | Escalation and artifact handoff between profiles must be explicit |
+| Rollback trigger conditions | Yes | Shared | all | 1-4 | Safety rollback should be governed by explicit triggers, not panic |
 | Code factory integration (`~/gascity`) | Yes | Shared | `coder` | 5 | Pane and orchestration contract, not role duplication |
 
 ## Phase intent
