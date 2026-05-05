@@ -31,6 +31,11 @@ not rediscover them from scratch.
 - canonical fetch/sync/evacuation/worktree cleanup scripts must use
   `scripts/lib/canonical-git-remotes.sh` for branch and origin decisions rather
   than assuming `origin/master`
+- `scripts/dx-verify-clean.sh` is allowed one narrow self-heal: if a canonical
+  clone is on its expected branch and the only dirty paths are generated
+  `.githooks/commit-msg` or `.githooks/pre-commit`, it restores those files
+  from HEAD and rechecks. Real source dirt, mixed hook+source dirt, off-branch
+  repos, semantic artifacts, and strict stash checks still block.
 
 ## Core Pattern: Skill As Workflow, Not Memory Store
 

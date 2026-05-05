@@ -4,13 +4,18 @@
 #
 # Verify canonical clones are clean + on trunk.
 #
-# This is a safety gate for "I am done" claims. It is intentionally simple and
-# does not try to auto-fix anything.
+# This is a safety gate for "I am done" claims. It normally verifies only. The
+# one auto-repair exception is generated hook drift in canonical clones: local
+# hook bootstrap/cron paths can rewrite the two tracked hook files and briefly
+# block unrelated product work. If those are the only dirty paths, restore them
+# from HEAD and re-check.
 #
 # Environment Variables:
 #   DX_VERIFY_FAIL_ON_STASHES=1  Treat canonical stashes as blocking hidden state
 #   DX_VERIFY_ALLOW_STASHES=1    Compatibility override; stashes are warn-only
 #                                by default for worker done gates
+#   DX_VERIFY_AUTO_REPAIR_HOOK_DRIFT=0
+#                                Disable auto-restore of hook-only drift
 #
 set -euo pipefail
 
@@ -20,6 +25,31 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/canonical-git-remotes.sh"
 
 fail=0
+
+is_hook_only_dirty() {
+  local status="$1"
+
+  [[ -n "$status" ]] || return 1
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    case "${line:3}" in
+      .githooks/commit-msg|.githooks/pre-commit)
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done <<< "$status"
+
+  return 0
+}
+
+repair_hook_only_dirty() {
+  local repo_path="$1"
+
+  git -C "$repo_path" restore --staged --worktree -- .githooks/commit-msg .githooks/pre-commit 2>/dev/null
+}
 
 echo "🔍 Verifying canonical repos are clean + on their canonical branches..."
 
@@ -37,6 +67,13 @@ for repo in "${CANONICAL_REPOS[@]}"; do
   if [[ "$branch" != "$expected_branch" ]]; then
     echo "❌ $repo: on '$branch' (expected '$expected_branch')"
     fail=1
+  fi
+
+  if [[ -n "$status" && "$branch" == "$expected_branch" && "${DX_VERIFY_AUTO_REPAIR_HOOK_DRIFT:-1}" != "0" ]]; then
+    if is_hook_only_dirty "$status" && repair_hook_only_dirty "$repo_path"; then
+      echo "🧹 $repo: auto-restored hook-only canonical drift"
+      status="$(git -C "$repo_path" status --porcelain=v1 2>/dev/null || true)"
+    fi
   fi
 
   if [[ -n "$status" ]]; then
