@@ -171,6 +171,7 @@ install_fetch_jobs() {
   remove_wrapper_job_entries "fetch-prime" "canonical-fetch.sh"
   remove_wrapper_job_entries "fetch-affordabot" "canonical-fetch.sh"
   remove_wrapper_job_entries "fetch-llm" "canonical-fetch.sh"
+  remove_wrapper_job_entries "fetch-bd-symphony" "canonical-fetch.sh"
   remove_wrapper_job_entries "reconcile" "canonical-reconcile.sh"
 
   install_cron_entry "DX spoke: fetch-agent-skills" \
@@ -181,6 +182,8 @@ install_fetch_jobs() {
     "15,45 * * * * $BASH_PATH $WRAPPER fetch-affordabot -- $AGENTS_ROOT/scripts/canonical-fetch.sh affordabot >> $HOME/logs/dx/fetch-affordabot.log 2>&1"
   install_cron_entry "DX spoke: fetch-llm" \
     "20,50 * * * * $BASH_PATH $WRAPPER fetch-llm -- $AGENTS_ROOT/scripts/canonical-fetch.sh llm-common >> $HOME/logs/dx/fetch-llm.log 2>&1"
+  install_cron_entry "DX spoke: fetch-bd-symphony" \
+    "25,55 * * * * $BASH_PATH $WRAPPER fetch-bd-symphony -- $AGENTS_ROOT/scripts/canonical-fetch.sh bd-symphony >> $HOME/logs/dx/fetch-bd-symphony.log 2>&1"
   install_cron_entry "DX spoke: reconcile" \
     "0 */2 * * * $BASH_PATH $WRAPPER reconcile -- $AGENTS_ROOT/scripts/canonical-reconcile.sh >> $HOME/logs/dx/reconcile.log 2>&1"
 }

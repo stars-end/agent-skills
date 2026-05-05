@@ -51,6 +51,11 @@ class TestCanonicalRepoDetection:
         canonical = Path.home() / "llm-common"
         assert is_canonical_repo_path(canonical)
 
+    def test_detects_bd_symphony(self):
+        """Should detect ~/bd-symphony as canonical."""
+        canonical = Path.home() / "bd-symphony"
+        assert is_canonical_repo_path(canonical)
+
     def test_allows_tmp_agents(self):
         """Should allow /tmp/agents paths."""
         workspace = Path("/tmp/agents/bd-test/agent-skills")

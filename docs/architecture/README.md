@@ -13,11 +13,12 @@ stale_if_paths:
 - `BROWNFIELD_MAP.md`: first-stop orientation for existing-system changes,
   including the `dx-loop`/`dx-runner`/`dx-batch` runtime boundary and
   repo-specific Railway topology skills such as Affordabot and Prime Radiant
-  dev context
+  dev context, plus the active warmed semantic-index repo scope
 - `DATA_AND_STORAGE.md`: memory, storage, portable handoff context, delegated
   prompt, optional ccc semantic-index cache, and orchestration runtime artifact
   ownership boundaries, including scheduled canonical semantic-index refresh
-  and host-local Codex session health reports/backups
+  and the current allowlisted cache surfaces, plus host-local Codex session
+  health reports/backups
 - `WORKFLOWS_AND_PATTERNS.md`: recurring workflow contracts, orchestration
   surface hierarchy, anti-drift rules, and the active discovery contract:
   `rg` + direct reads first, optional read-only `scripts/semantic-search`

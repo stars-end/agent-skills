@@ -30,7 +30,7 @@ allowed-tools:
 
 Keep canonical clones clean mirrors and put all writable work in isolated workspaces:
 
-- **Canonical repos**: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}` (read-only for agents)
+- **Canonical repos**: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common,bd-symphony}` (read-only for agents)
 - **Workspaces**: `/tmp/agents/<beads-id>/<repo>` (all mutating work happens here)
 
 ## Workspace-First Contract (DX V8.6)
@@ -82,7 +82,7 @@ dx-worktree prune <repo>
 
 ## Guidance for Agents (Simple Rules)
 
-- **Never edit in canonical repos** (`~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`)
+- **Never edit in canonical repos** (`~/{agent-skills,prime-radiant-ai,affordabot,llm-common,bd-symphony}`)
 - **Always work inside workspace paths** (`/tmp/agents/<beads-id>/<repo>`)
 - **Use `bdx` for Beads coordination commands** (`create`, `show`, `ready`, `comments`, `note`, etc.)
 - **Use raw `bd` only** for local diagnostics/bootstrap/path-sensitive operations or explicit override
@@ -104,7 +104,7 @@ remedy=dx-worktree create <beads-id> <repo>
 ### Normal Operations Still Work
 
 These operations are **unaffected** in canonical repos:
-- `git fetch`, `git checkout master`, `git pull --ff-only`
+- `git fetch`, `git checkout <canonical-branch>`, `git pull --ff-only`
 - `railway status`, `railway run`, `railway shell`
 - Normal shell startup
 - Loading skills from `~/agent-skills`

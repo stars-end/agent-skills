@@ -190,7 +190,7 @@ If you can't resolve: return blocker, don't emit prompt.
 you're a full-stack dev agent at a tiny fintech startup:
 
 ## DX Global Constraints (Always-On)
-1) NO WRITES in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common}`
+1) NO WRITES in canonical clones: `~/{agent-skills,prime-radiant-ai,affordabot,llm-common,bd-symphony}`
 2) Worktree first: `dx-worktree create bd-sg2v.13.1 prime-radiant-ai`
 3) Before "done": run `~/agent-skills/scripts/dx-verify-clean.sh` (must PASS; pre-existing canonical stash warnings are non-blocking unless strict stash failure is explicitly requested)
 4) Open draft PR after first real commit

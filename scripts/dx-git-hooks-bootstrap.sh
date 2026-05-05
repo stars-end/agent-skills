@@ -4,7 +4,7 @@ set -euo pipefail
 # Ensure canonical repos use versioned `.githooks/` and have fallback shims installed.
 # Safe to run repeatedly.
 
-CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common)
+CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common bd-symphony)
 HOOK_NAMES=(pre-commit commit-msg pre-push post-merge post-checkout post-rewrite)
 
 shim_body() {

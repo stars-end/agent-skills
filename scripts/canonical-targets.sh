@@ -19,7 +19,8 @@
 # These are the primary VMs used for development and deployment.
 # Format: "user@hostname:OS:Description"
 
-# Canonical repos use the default branch on GitHub. In this org we standardize on `master`.
+# Canonical repos default to `master`; repo-specific helpers may override this
+# (for example, bd-symphony tracks `main`).
 # Override for experiments via: export CANONICAL_TRUNK_BRANCH=main
 export CANONICAL_TRUNK_BRANCH="${CANONICAL_TRUNK_BRANCH:-master}"
 
@@ -52,14 +53,16 @@ export CANONICAL_IDES=(
 # ------------------------------------------------------------
 # Canonical Repos (Git)
 # ------------------------------------------------------------
-# These repos should stay on CANONICAL_TRUNK_BRANCH at their canonical paths,
-# so automation (ru, dx-check, pre-flight) can safely fast-forward and verify.
+# These repos should stay on their configured canonical branch at their
+# canonical paths, so automation (ru, dx-check, pre-flight) can safely
+# fast-forward and verify.
 
 export CANONICAL_REPOS=(
   "agent-skills"
   "prime-radiant-ai"
   "affordabot"
   "llm-common"
+  "bd-symphony"
 )
 
 # ------------------------------------------------------------
@@ -182,23 +185,23 @@ canonical_op_token_cred_candidates() {
 # Required vs optional repos (by host role)
 case "$CANONICAL_HOST_KEY" in
   homedesktop-wsl)
-    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "affordabot" "llm-common" )
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "affordabot" "llm-common" "bd-symphony" )
     export CANONICAL_OPTIONAL_REPOS=( "prime-radiant-ai" )
     ;;
   macmini)
-    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" )
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" "bd-symphony" )
     export CANONICAL_OPTIONAL_REPOS=( "affordabot" "llm-common" )
     ;;
   epyc6)
-    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" )
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" "bd-symphony" )
     export CANONICAL_OPTIONAL_REPOS=( "affordabot" "llm-common" )
     ;;
   epyc12)
-    export CANONICAL_REQUIRED_REPOS=( "agent-skills" )
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "bd-symphony" )
     export CANONICAL_OPTIONAL_REPOS=( "prime-radiant-ai" "affordabot" "llm-common" )
     ;;
   *)
-    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" "affordabot" "llm-common" )
+    export CANONICAL_REQUIRED_REPOS=( "agent-skills" "prime-radiant-ai" "affordabot" "llm-common" "bd-symphony" )
     export CANONICAL_OPTIONAL_REPOS=()
     ;;
 esac

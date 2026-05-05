@@ -125,11 +125,13 @@ done
 ssh fengning@homedesktop-wsl 'scp ~/.local/bin/my-script.sh fengning@epyc6:~/.local/bin/'
 ```
 
-## Canonical Git Trunk
+## Canonical Git Branches
 
-**Trunk branch**: `master`
+**Default trunk branch**: `master`
 
-**Rule**: keep the canonical clones in `~/<repo>` on `master` and clean (no uncommitted changes). If you need to work on a feature branch, use a worktree (recommended) or a separate `*.wip.*` directory, so automation can still fast-forward the canonical clones.
+**Repo override**: `~/bd-symphony` tracks `main`.
+
+**Rule**: keep canonical clones in `~/<repo>` on their configured canonical branch and clean (no uncommitted changes). If you need to work on a feature branch, use a worktree (recommended) or a separate `*.wip.*` directory, so automation can still fast-forward the canonical clones.
 
 ### Environment Variables
 
@@ -175,8 +177,12 @@ These repos are expected to exist as canonical clones at:
 - `~/prime-radiant-ai`
 - `~/affordabot`
 - `~/llm-common`
+- `~/bd-symphony`
 
-They should remain on `master` for cross-VM sync and DX verification.
+They should remain on their configured canonical branch for cross-VM sync and DX verification. Current branch mapping:
+
+- `agent-skills`, `prime-radiant-ai`, `affordabot`, `llm-common`: `master`
+- `bd-symphony`: `main`
 
 ## Repo Sync with ru (repo_updater)
 

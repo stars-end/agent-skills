@@ -6,7 +6,7 @@ set -euo pipefail
 
 STATE_DIR="$HOME/.dx-state"
 STATE_FILE="$STATE_DIR/dirty-incidents.json"
-CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
+CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common" "bd-symphony")
 STALE_THRESHOLD_HOURS=48
 
 mkdir -p "$STATE_DIR"

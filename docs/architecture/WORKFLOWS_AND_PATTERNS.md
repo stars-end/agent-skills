@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: acda9791b30c2533550101bcc180d3def3bae86c
-last_verified_at: 2026-05-05T01:25:00Z
+last_verified_commit: 456268c093c0ef8af369f9bdcc68faad485ef146
+last_verified_at: 2026-05-05T14:08:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -24,6 +24,13 @@ not rediscover them from scratch.
 - canonical clones are read-mostly
 - mutating work happens in worktrees under `/tmp/agents/<beads-id>/<repo>`
 - avoid direct canonical writes
+- canonical fleet repos are `agent-skills`, `prime-radiant-ai`, `affordabot`,
+  `llm-common`, and `bd-symphony`
+- canonical branch handling is repo-aware: existing stars-end repos track
+  `master`, while `bd-symphony` tracks `main`
+- canonical fetch/sync/evacuation/worktree cleanup scripts must use
+  `scripts/lib/canonical-git-remotes.sh` for branch and origin decisions rather
+  than assuming `origin/master`
 
 ## Core Pattern: Skill As Workflow, Not Memory Store
 
@@ -102,7 +109,8 @@ Architecture review should evaluate:
   Codex only when action is needed, and restrict committed changes to
   `docs/architecture/`, `AGENTS.md`, and `AGENTS.local.md`.
 - `dx-repo-memory-refresh-all` is the fleet wrapper for canonical repos:
-  `agent-skills`, `affordabot`, `prime-radiant-ai`, and `llm-common`.
+  `agent-skills`, `affordabot`, `prime-radiant-ai`, `llm-common`, and
+  `bd-symphony`.
 - The epyc12 systemd timer is the primary automation surface; macmini is a
   Tailscale SSH fallback for the same scripts and prompt.
 - Timer installation is a deployment step after the script is present in the

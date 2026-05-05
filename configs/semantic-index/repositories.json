@@ -5,7 +5,8 @@
     "agent-skills",
     "prime-radiant-ai",
     "affordabot",
-    "llm-common"
+    "llm-common",
+    "bd-symphony"
   ],
   "repositories": {
     "agent-skills": {
@@ -27,6 +28,11 @@
       "canonical_path": "/home/fengning/llm-common",
       "source_remote": "git@github.com:stars-end/llm-common.git",
       "source_branch": "master"
+    },
+    "bd-symphony": {
+      "canonical_path": "/home/fengning/bd-symphony",
+      "source_remote": "git@github.com:fengning-starsend/bd-symphony.git",
+      "source_branch": "main"
     }
   }
 }

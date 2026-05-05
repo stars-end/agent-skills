@@ -49,6 +49,7 @@ CANONICAL_REPOS = [
     Path.home() / "prime-radiant-ai",
     Path.home() / "affordabot",
     Path.home() / "llm-common",
+    Path.home() / "bd-symphony",
 ]
 
 CACHE_FILE = ".mcp_data/embeddings-cache.json"

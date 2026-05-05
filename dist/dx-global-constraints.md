@@ -7,10 +7,11 @@
 - \`~/prime-radiant-ai\`
 - \`~/affordabot\`
 - \`~/llm-common\`
+- \`~/bd-symphony\`
 
 ### Enforcement
 **Primary**: Git pre-commit hook blocks commits when not in worktree
-**Safety net**: Daily sync to origin/master (non-destructive)
+**Safety net**: Daily sync to the repo's canonical branch (non-destructive)
 
 ### Workflow
 Always use worktrees for development:

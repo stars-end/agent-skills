@@ -2,7 +2,7 @@
 #
 # scripts/canonical-sync-v8.sh (V8.6)
 #
-# Purpose: Evacuate canonical repo changes to rescue branches and reset to master.
+# Purpose: Evacuate canonical repo changes to rescue branches and reset to each repo's canonical branch.
 # Cron schedule: daily at 3:05 AM
 # Bead: bd-obyk
 #
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 # Configuration
-CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
+CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common" "bd-symphony")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/canonical-git-remotes.sh"
 
@@ -216,6 +216,9 @@ process_repo() {
     local repo_path="$HOME/$repo"
     local host
     host=$(short_hostname)
+    local branch upstream_ref
+    branch="$(canonical_repo_branch "$repo")"
+    upstream_ref="origin/$branch"
 
     log "\n📁 Processing canonical: $repo"
 
@@ -264,11 +267,11 @@ process_repo() {
             ;;
     esac
 
-    # Fetch origin master
+    # Fetch the repo's canonical branch.
     if [[ "$DRY_RUN" == false ]]; then
-        git fetch origin master --quiet || { warn "$repo: Failed to fetch origin master"; log_recovery "$repo" "skip" "fetch_failed" "" "path=origin/master"; }
+        git fetch origin "$branch" --quiet || { warn "$repo: Failed to fetch $upstream_ref"; log_recovery "$repo" "skip" "fetch_failed" "" "path=$upstream_ref"; }
     else
-        log "[DRY-RUN] Would fetch origin master"
+        log "[DRY-RUN] Would fetch $upstream_ref"
     fi
 
     # Detect state
@@ -280,12 +283,12 @@ process_repo() {
     fi
 
     local is_off_trunk=false
-    if [[ "$current_branch" != "master" ]]; then
+    if [[ "$current_branch" != "$branch" ]]; then
         is_off_trunk=true
     fi
 
     if [[ "$is_dirty" == false && "$is_off_trunk" == false ]]; then
-        log "$repo: Already clean and on master"
+        log "$repo: Already clean and on $branch"
         log_recovery "$repo" "skip" "clean" "" "branch=${current_branch}"
         return 0
     fi
@@ -294,9 +297,9 @@ process_repo() {
 
     if [[ "$is_off_trunk" == true ]]; then
         local ahead
-        ahead=$(git rev-list --count origin/master..HEAD 2>/dev/null || echo "0")
+        ahead=$(git rev-list --count "$upstream_ref"..HEAD 2>/dev/null || echo "0")
         if [[ "$ahead" -gt 0 ]]; then
-            log "$repo: Branch '$current_branch' is ahead of origin/master by $ahead commits. Pushing branch..."
+            log "$repo: Branch '$current_branch' is ahead of $upstream_ref by $ahead commits. Pushing branch..."
             if [[ "$DRY_RUN" == true ]]; then
                 log "[DRY-RUN] Would push branch '$current_branch'"
                 log_recovery "$repo" "skip" "off_trunk_ahead" "$current_branch" "ahead=$ahead controller=${DX_CONTROLLER}"
@@ -319,17 +322,17 @@ process_repo() {
         # Off-trunk but clean/behind/no push candidate
         if [[ "$is_dirty" == false ]]; then
             if [[ "$DRY_RUN" == true ]]; then
-                log "[DRY-RUN] Would evaluate reset-to-master for off-trunk clean state"
+                log "[DRY-RUN] Would evaluate reset-to-$branch for off-trunk clean state"
                 log_recovery "$repo" "skip" "off_trunk_clean" "$current_branch" "ahead=${ahead}"
                 return 0
             fi
 
             if [[ "$has_write_authority" == true ]]; then
-                log "$repo: Off-trunk but clean, resetting to master..."
-                git checkout master -q
-                git reset --hard origin/master
+                log "$repo: Off-trunk but clean, resetting to $branch..."
+                git checkout "$branch" -q
+                git reset --hard "$upstream_ref"
                 git clean -fdq
-                success "$repo: Reset to clean master"
+                success "$repo: Reset to clean $branch"
                 log_recovery "$repo" "evacuated" "off_trunk_clean_reset" "$current_branch" "ahead=${ahead}"
                 return 0
             fi
@@ -362,7 +365,7 @@ process_repo() {
         fi
 
         # 1. Create rescue worktree
-        if ! git worktree add -b "$rescue_branch" "$rescue_dir" origin/master >/dev/null 2>&1; then
+        if ! git worktree add -b "$rescue_branch" "$rescue_dir" "$upstream_ref" >/dev/null 2>&1; then
             error "$repo: Failed to create rescue worktree at $rescue_dir"
             log_recovery "$repo" "failed" "worktree_create_failed" "$rescue_branch" "branch=${current_branch}"
             return 1
@@ -428,12 +431,12 @@ Agent: canonical-sync-v8" --quiet; then
 
             # NOW safe to reset canonical
             cd "$repo_path"
-            git checkout master -q
-            git reset --hard origin/master
+            git checkout "$branch" -q
+            git reset --hard "$upstream_ref"
             git clean -fdq
             git worktree remove "$rescue_dir" --force >/dev/null 2>&1 || true
             rm -rf "$rescue_dir" 2>/dev/null || true
-            success "$repo: Reset to clean master"
+            success "$repo: Reset to clean $branch"
             log_recovery "$repo" "evacuated" "dirty_reset" "$rescue_branch" "source=$current_branch"
         else
             error "$repo: Push failed for $rescue_branch — canonical NOT reset"

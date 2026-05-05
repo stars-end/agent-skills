@@ -26,7 +26,8 @@ set -euo pipefail
 
 AGENTS_ROOT="${AGENTS_ROOT:-$HOME/agent-skills}"
 WORKSPACE_BASE="/tmp/agents"
-CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
+CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common" "bd-symphony")
+source "$AGENTS_ROOT/scripts/lib/canonical-git-remotes.sh"
 
 cmd="${1:-explain}"
 shift || true
@@ -141,6 +142,8 @@ evacuate_canonical() {
   is_canonical_repo "$repo" || die "$repo is not a canonical repo"
   
   local repo_path="$HOME/$repo"
+  local canonical_branch
+  canonical_branch="$(canonical_repo_branch "$repo")"
   local timestamp
   timestamp="$(iso_timestamp)"
   local recovery_branch="recovery/canonical-$repo-$timestamp"
@@ -232,7 +235,7 @@ EOF
   # Reset canonical to clean state
   git reset --hard HEAD
   git clean -fd
-  git checkout master 2>/dev/null || git checkout main 2>/dev/null || true
+  git checkout "$canonical_branch" 2>/dev/null || true
   git pull --ff-only 2>/dev/null || true
   
   # Build recovery commands
@@ -286,8 +289,8 @@ explain() {
   cat <<'EOF'
 Worktree policy (DX V8.6 - Workspace-First):
 
-1) Canonical repos MUST stay clean + on master:
-   ~/agent-skills, ~/prime-radiant-ai, ~/affordabot, ~/llm-common
+1) Canonical repos MUST stay clean + on their configured canonical branch:
+   ~/agent-skills, ~/prime-radiant-ai, ~/affordabot, ~/llm-common, ~/bd-symphony
 
 2) All mutating work happens in workspace paths:
    /tmp/agents/<beads-id>/<repo>

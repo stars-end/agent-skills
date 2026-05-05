@@ -1288,6 +1288,7 @@ is_canonical_repo_path() {
         "$HOME/prime-radiant-ai"
         "$HOME/affordabot"
         "$HOME/llm-common"
+        "$HOME/bd-symphony"
     )
     
     # bd-kuhj.3: Reject canonical roots AND their descendants

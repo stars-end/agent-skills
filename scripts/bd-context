@@ -20,7 +20,7 @@ EXPECTED_PREFIX=""
 CURRENT_ISSUE_PREFIX=""
 
 case "$REPO_NAME" in
-  agent-skills|prime-radiant-ai|affordabot|llm-common)
+  agent-skills|prime-radiant-ai|affordabot|llm-common|bd-symphony)
     EXPECTED_PREFIX="bd"
     ;;
 esac

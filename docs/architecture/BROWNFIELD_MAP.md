@@ -42,6 +42,10 @@ The repo ships:
    tooling.
 5. Repo-memory refresh tooling audits architecture maps and opens narrow
    doc-only PRs when those maps fall behind mapped source changes.
+6. Optional warmed semantic search is scoped by
+   `configs/semantic-index/repositories.json`; active cache surfaces include
+   `agent-skills`, `prime-radiant-ai`, `affordabot`, `llm-common`, and
+   `bd-symphony`.
 
 ## Current Orchestration Boundary
 

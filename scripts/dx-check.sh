@@ -239,7 +239,7 @@ else
 fi
 
 # Canonical cron rescue pushes must use non-interactive GitHub SSH remotes.
-CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common)
+CANONICAL_REPOS=(agent-skills prime-radiant-ai affordabot llm-common bd-symphony)
 canonical_repo_present=0
 canonical_repo_ssh_ready=0
 for repo in "${CANONICAL_REPOS[@]}"; do

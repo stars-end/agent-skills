@@ -14,12 +14,14 @@
 #
 set -euo pipefail
 
-CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common")
+CANONICAL_REPOS=("agent-skills" "prime-radiant-ai" "affordabot" "llm-common" "bd-symphony")
 TRUNK_BRANCH="master"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/canonical-git-remotes.sh"
 
 fail=0
 
-echo "🔍 Verifying canonical repos are clean + on ${TRUNK_BRANCH}..."
+echo "🔍 Verifying canonical repos are clean + on their canonical branches..."
 
 for repo in "${CANONICAL_REPOS[@]}"; do
   repo_path="$HOME/$repo"
@@ -30,9 +32,10 @@ for repo in "${CANONICAL_REPOS[@]}"; do
 
   branch="$(git -C "$repo_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")"
   status="$(git -C "$repo_path" status --porcelain=v1 2>/dev/null || true)"
+  expected_branch="$(canonical_repo_branch "$repo")"
 
-  if [[ "$branch" != "$TRUNK_BRANCH" ]]; then
-    echo "❌ $repo: on '$branch' (expected '$TRUNK_BRANCH')"
+  if [[ "$branch" != "$expected_branch" ]]; then
+    echo "❌ $repo: on '$branch' (expected '$expected_branch')"
     fail=1
   fi
 

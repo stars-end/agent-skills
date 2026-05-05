@@ -18,7 +18,7 @@ Worktree: /tmp/agents/<beads-id>/<repo-name>
 Agent: cc-glm-headless
 
 Hard constraints:
-- Work ONLY in the worktree path above (never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common})
+- Work ONLY in the worktree path above (never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common,bd-symphony})
 - Do NOT run git commit, git push, or open PRs
 - Do NOT print secrets, dotfiles, or config files
 - Output must be reviewable: diff + validation + risks
@@ -140,7 +140,7 @@ Worktree: /tmp/agents/bd-3p27.2/agent-skills
 Agent: cc-glm-headless
 
 Hard constraints:
-- Work ONLY in the worktree path above (never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common})
+- Work ONLY in the worktree path above (never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common,bd-symphony})
 - Do NOT run git commit, git push, or open PRs
 - Do NOT print secrets, dotfiles, or config files
 - Output must be reviewable: diff + validation + risks
@@ -173,7 +173,7 @@ Worktree: /tmp/agents/bd-3p28.1/agent-skills
 Agent: cc-glm-headless
 
 Hard constraints:
-- Work ONLY in the worktree path above (never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common})
+- Work ONLY in the worktree path above (never touch canonical clones under ~/{agent-skills,prime-radiant-ai,affordabot,llm-common,bd-symphony})
 - Do NOT run git commit, git push, or open PRs
 - Do NOT print secrets, dotfiles, or config files
 - Output must be reviewable: diff + validation + risks
