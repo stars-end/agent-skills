@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 81dfd51cd9a7e6fbad925bdaf6bcbc197790a048
-last_verified_at: 2026-05-06T13:08:00Z
+last_verified_commit: b1d57c744d03181bf5bc4ef5799903a1a40f4c5f
+last_verified_at: 2026-05-06T15:01:00Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -79,6 +79,10 @@ surfaces. This file records their ownership boundaries.
      through `scripts/lib/dx-slack-alerts.sh`, cache-only auth, and the
      resolved `#fleet-events` default rather than storing channel discovery in
      ad hoc scripts.
+   - `goal-seeking-eval-loop` run artifacts are either committed under a
+     target repo's chosen eval/artifact directory or kept under `/tmp` for
+     local-only exploration. The skill owns the artifact shape and helper
+     scripts; product repos own their domain-specific scores and evidence.
 5. Repo-memory refresh state (not committed)
    - `dx-repo-memory-refresh` and `dx-repo-memory-refresh-all` store run
      reports and generated worktrees under the configured state root,

@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 81dfd51cd9a7e6fbad925bdaf6bcbc197790a048
-last_verified_at: 2026-05-06T13:08:00Z
+last_verified_commit: be5c2bc14a7bdb2126869cfa097c191a662cbd34
+last_verified_at: 2026-05-06T14:58:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -93,6 +93,21 @@ not rediscover them from scratch.
   it first for new orchestration work.
 - `dx-wave` is a compatibility/operator entrypoint over the legacy batch
   substrate, not the preferred agent entrypoint.
+
+## Core Pattern: Goal-Seeking Eval Loops
+
+- `extended/goal-seeking-eval-loop/` is the reusable Codex-native loop contract
+  for bounded data, product, code, or pipeline improvement campaigns.
+- The default abstraction is one final evaluator gate with N criteria, not
+  phases or sub-gates. Passing one criterion is progress only.
+- Evaluator outputs should expose `passed`, `scalar_score`,
+  `dimension_scores`, `hard_gate_failures`, `failing_criteria`,
+  `dominant_blocker`, and optional `candidate_next_mutation_target`.
+- Orchestrators use the previous cycle's post-mortem to choose one or two
+  mutation targets, keep/discard changes, and log artifacts before the next
+  cycle.
+- Domain-specific verdicts, product rubrics, and live-data gates belong in the
+  target repo's loop plan; the skill stays domain-agnostic.
 
 ## Core Pattern: Review Contracts
 

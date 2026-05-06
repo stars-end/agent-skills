@@ -1,0 +1,4 @@
+interface:
+  display_name: "Goal-Seeking Eval Loop"
+  short_description: "Run single-gate autoresearch-style eval loops with Codex subagents."
+  default_prompt: "Use goal-seeking-eval-loop to define one final evaluator gate with N criteria, a fixed eval set, scalar scoring rubric, hard gates, and an iterative keep/discard loop for improving a code or product pipeline."
