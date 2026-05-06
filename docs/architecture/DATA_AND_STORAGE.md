@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 9641414aa2c852ce7ecefa2647d358de9c6e5427
-last_verified_at: 2026-05-06T13:16:00Z
+last_verified_commit: 81dfd51cd9a7e6fbad925bdaf6bcbc197790a048
+last_verified_at: 2026-05-06T13:08:00Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -111,6 +111,21 @@ surfaces. This file records their ownership boundaries.
    - the durable Olivaw non-GasCity contract and verification evidence live in
      `docs/specs/2026-05-05-olivaw-*` specs; runtime logs, Slack messages,
      Google artifacts, and Kanban DB rows remain external operational evidence
+8. Olivaw Google Workspace operational state (not committed)
+   - `scripts/olivaw-gog-safe.sh` is the repo-owned policy wrapper for the
+     Star's End `olivaw-gog` Google client and `fengning@stars-end.ai` account
+   - `scripts/olivaw-google-ops-bootstrap.sh` creates or binds the approved
+     Drive folder tree, `Olivaw Ops Tracker`, Gmail labels, and calendar ID,
+     then writes host-local state to
+     `~/.hermes/profiles/olivaw/google-ops-state.env`
+   - `scripts/olivaw-google-ops-canary.sh` creates only synthetic Drive, Docs,
+     Sheets, Gmail draft, and Calendar artifacts and verifies blocked external
+     actions
+   - Google OAuth tokens, Drive files, Docs, Sheets, Gmail drafts/labels, and
+     Calendar events are external Workspace state, not repo state
+   - the durable repo contract and evidence live in
+     `docs/specs/2026-05-06-olivaw-google-internal-write-surfaces.md` and
+     `docs/specs/2026-05-06-olivaw-google-internal-write-evidence.md`
 
 ## Memory Surface Policy
 
