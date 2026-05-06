@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 456268c093c0ef8af369f9bdcc68faad485ef146
-last_verified_at: 2026-05-05T14:08:00Z
+last_verified_commit: 9641414aa2c852ce7ecefa2647d358de9c6e5427
+last_verified_at: 2026-05-06T13:16:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -158,6 +158,22 @@ Architecture review should evaluate:
 - Cron/systemd follow-up jobs must be non-interactive and cache-only. Use
   `DX_AUTH_CACHE_ONLY=1`, a due-only/idempotent state file, log redirection,
   and the `agent_coordination_transport_ready` readiness check before posting.
+
+## Core Pattern: Olivaw Non-GasCity Scope
+
+- Olivaw/Hermes owns Slack and Google-facing operator behavior, intake,
+  reminders, blocked-card visibility, handoff UX, and policy canaries.
+- Gas City, BD Symphony, `dx-runner`, `dx-review`, `dx-loop`, and dx-*
+  implementation remain owner-owned outside the Olivaw lane.
+- Hermes Kanban is pointer-only for engineering work: a real engineering card
+  must carry `source_bdx`, and cards without canonical Beads identity remain
+  intake/reminder cards.
+- Use `scripts/olivaw-kanban-policy-canary.sh` to prove stop conditions for
+  missing/invalid `source_bdx`, independent Kanban engineering attempts, and
+  BD Symphony signoff requirements.
+- Use `scripts/olivaw-gog-safe.sh` as the guarded Google substrate for the
+  Olivaw profile; direct Google writes outside the wrapper are not part of the
+  non-GasCity contract.
 
 ## Pilot Adoption Checklist
 

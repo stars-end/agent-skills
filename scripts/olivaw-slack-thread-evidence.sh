@@ -47,6 +47,7 @@ if [[ -z "${channel}" || -z "${contains}" || -z "${expect_reply}" ]]; then
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
 # shellcheck source=scripts/lib/dx-auth.sh
 source "${repo_root}/scripts/lib/dx-auth.sh"
 

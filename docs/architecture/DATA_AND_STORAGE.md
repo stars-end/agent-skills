@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: acda9791b30c2533550101bcc180d3def3bae86c
-last_verified_at: 2026-05-05T01:25:00Z
+last_verified_commit: 9641414aa2c852ce7ecefa2647d358de9c6e5427
+last_verified_at: 2026-05-06T13:16:00Z
 stale_if_paths:
   - docs/**
   - scripts/**
@@ -99,6 +99,18 @@ surfaces. This file records their ownership boundaries.
    - Codex session JSONL files and repair backups are host-local operational
      state, not repo-owned memory; the repo owns only the scripts and tests
      that govern how they are inspected or repaired
+7. Olivaw/Hermes local operational state (not committed)
+   - Olivaw profile files, gateway logs, Kanban SQLite data, and Google OAuth
+     token material live under host-local Hermes/gog state, not in this repo
+   - `scripts/olivaw-gog-safe.sh`, `scripts/olivaw-runtime-check.sh`,
+     `scripts/olivaw-redaction-canary.sh`,
+     `scripts/olivaw-cron-silent-canary.sh`,
+     `scripts/olivaw-kanban-policy-canary.sh`, and
+     `scripts/olivaw-slack-thread-evidence.sh` are repo-owned policy and
+     evidence helpers for those external/local state surfaces
+   - the durable Olivaw non-GasCity contract and verification evidence live in
+     `docs/specs/2026-05-05-olivaw-*` specs; runtime logs, Slack messages,
+     Google artifacts, and Kanban DB rows remain external operational evidence
 
 ## Memory Surface Policy
 

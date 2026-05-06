@@ -44,6 +44,8 @@ cat <<JSON
   "reason": "$(printf '%s' "${reason}")",
   "launchctl_rc": ${launchctl_rc},
   "gateway_rc": ${gateway_rc},
+  "launchctl_output": $(printf '%s' "${launchctl_out}" | json_escape),
+  "gateway_output": $(printf '%s' "${gateway_out}" | json_escape),
   "public_listeners": $(printf '%s' "${public_listeners}" | json_escape),
   "log_paths": [
     "$HOME/.hermes/profiles/${profile}/logs/gateway.log",

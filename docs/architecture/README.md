@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 1ac6de75932e98c0f8331eefcc03421adee09a655
-last_verified_at: 2026-05-05T01:30:00Z
+last_verified_commit: 9641414aa2c852ce7ecefa2647d358de9c6e5427
+last_verified_at: 2026-05-06T13:16:00Z
 stale_if_paths:
   - docs/architecture/**
 ---
@@ -19,8 +19,8 @@ stale_if_paths:
   ownership boundaries, including scheduled canonical semantic-index refresh
   and the current allowlisted cache surfaces, versioned-hook migration
   boundaries, hook-only canonical drift auto-restore boundaries, plus
-  host-local Codex session health reports/backups, and tracked cron installer
-  boundaries
+  host-local Codex session health reports/backups, tracked cron installer
+  boundaries, and Olivaw/Hermes host-local operational state boundaries
 - `WORKFLOWS_AND_PATTERNS.md`: recurring workflow contracts, orchestration
   surface hierarchy, anti-drift rules, and the active discovery contract:
   `rg` + direct reads first, optional read-only `scripts/semantic-search`
@@ -28,7 +28,8 @@ stale_if_paths:
   symbol-aware edits, explicit versioned-hook update opt-in, narrow
   `dx-verify-clean` hook-only self-heal, and tracked-wrapper requirements for
   Codex session health cron jobs and installer host coverage, plus
-  deterministic Agent Coordination follow-up patterns for `#fleet-events`
+  deterministic Agent Coordination follow-up patterns for `#fleet-events` and
+  the Olivaw non-GasCity operator-surface contract
 
 Current review-dispatch policy lives in `configs/dx-review/default.yaml` and the
 map docs: `dx-review` reads reviewer `id/provider/model` rows and uses only the
