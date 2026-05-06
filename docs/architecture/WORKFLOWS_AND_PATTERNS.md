@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: 9641414aa2c852ce7ecefa2647d358de9c6e5427
-last_verified_at: 2026-05-06T13:16:00Z
+last_verified_commit: 81dfd51cd9a7e6fbad925bdaf6bcbc197790a048
+last_verified_at: 2026-05-06T13:08:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -174,6 +174,23 @@ Architecture review should evaluate:
 - Use `scripts/olivaw-gog-safe.sh` as the guarded Google substrate for the
   Olivaw profile; direct Google writes outside the wrapper are not part of the
   non-GasCity contract.
+
+## Core Pattern: Olivaw Google Internal Writes
+
+- Olivaw Google Workspace access must go through `scripts/olivaw-gog-safe.sh`;
+  agents should not call raw `gog` for routine Olivaw work.
+- `scripts/olivaw-google-ops-bootstrap.sh` owns idempotent setup for the
+  approved Olivaw Ops Drive tree, tracker tabs, Gmail labels, and calendar
+  binding. Its generated state file is host-local runtime state.
+- Runtime writes are intentionally narrow: Drive uploads into approved folders,
+  Docs create/write in approved folders, Sheets append/update on approved
+  tracker tabs, Gmail label/draft-only actions, and Calendar internal events
+  with no guests or update emails.
+- `scripts/olivaw-google-ops-canary.sh` is the executable regression check for
+  synthetic positive writes plus blocked send/share/delete/guest probes.
+- External-effect work remains outside this pattern: email send, Calendar
+  guests, Drive sharing/deletes, healthcare claim submission, banking actions,
+  reservation booking/calling, and portal mutations require separate approval.
 
 ## Pilot Adoption Checklist
 
