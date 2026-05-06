@@ -1,0 +1,5 @@
+openai:
+  - name: goal-seeking-eval-loop
+    description: Codex-native eval-led improvement loop with fixed eval set, scalar score, hard gates, post-mortems, and bounded subagent mutation.
+    prompt: |
+      Use the goal-seeking-eval-loop skill. First define the goal, fixed eval set, eval version/hash, scalar score rubric, hard gates, final acceptance criteria, mutable/frozen surfaces, subagent budget, artifact root, and keep/discard rule. Then run bounded cycles where each cycle includes baseline or previous score, mutation plan, integration, eval, scored delta, keep/discard decision, post-mortem, and next-cycle plan. Do not change the eval set during the campaign.

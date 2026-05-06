@@ -1,7 +1,7 @@
 # AGENTS.md — Agent Skills Index
 <!-- AUTO-GENERATED -->
-<!-- Source SHA: e3e48b9687dfb6f9d1f336542fd47c008902df41 -->
-<!-- Last updated: 2026-05-05 15:59:52 UTC -->
+<!-- Source SHA: 4341403775d5d9889c9b00f7c24a59ff3b4b9f19 -->
+<!-- Last updated: 2026-05-06 14:32:29 UTC -->
 <!-- Regenerate: make publish-baseline -->
 
 ## Nakomi Agent Protocol
@@ -613,6 +613,7 @@ Use `dx-repo-memory-check --repo .` to validate map freshness.
 | **dx-review** | Dispatch a low-friction review quorum through dx-review: OpenCode Kimi K2.6 and DeepSeek V4 Pro lanes only. Use when the user asks for multi-model review, Kimi/DeepSeek review quorum, or a quick POC of reviewer lanes. | `dx-review run \` | workflow, review, dispatch, opencode, kimi, deepseek, dx-runner |
 | **dx-runner** | Lower-level unified runner for multi-provider dispatch with shared governance. Routes to cc-glm, opencode, claude-code, or gemini providers with unified preflight, gates, and failure taxonomy. Use directly for provider debugging, custom orchestration, headless jobs, or when a task-specific shim such as dx-loop, dx-review, or dx-research delegates to it. | `dx-runner start --beads bd-xxx --provider cc-glm --worktree ` | workflow, dispatch, governance, multi-provider, automation |
 | **fleet-sync** | Fleet Sync orchestrator for MCP tool convergence, health checks, and IDE config management across canonical VMs. | — |  |
+| **goal-seeking-eval-loop** | Run Codex-native goal-seeking improvement loops when there is a fixed eval set, scalar score, hard gates, max cycles, and an explicit keep/discard rule. Use for eval-led code, product, data, or pipeline campaigns where Codex should mutate a bounded surface, score each cycle, write post-mortems, and stop on a final acceptance gate or strategic blocker. Do not use for ordinary implementation, open-ended brainstorming, single-pass QA, or loops that lack a stable eval/rubric contract. | — |  |
 | **grill-me** | Relentless product interrogation before planning or implementation. Use when the user wants exhaustive discovery, blind-spot identification, assumption stress-testing, edge-case analysis, or hard pushback on vague problem framing. | — | product, strategy, interrogation, discovery |
 | **gskill** | Auto-learn repository-specific skills for coding agents using SWE-smith + GEPA. Generates synthetic tasks and evolves skills through reflective optimization. Use when you want to improve agent performance on a specific repository. | — | skill-learning, gepa, swe-smith, optimization, auto-ml |
 | **impeccable** | Design skills for AI coding tools. Create distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Includes 7 reference guides and 17 design commands. Use when building web components, pages, artifacts, posters, or applications. Keywords: frontend, design, UI, UX, typography, color, motion, interaction, responsive, audit, polish | — | design, frontend, ui, ux, typography, color, motion, accessibility |
