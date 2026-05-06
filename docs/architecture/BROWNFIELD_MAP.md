@@ -2,8 +2,8 @@
 repo_memory: true
 status: active
 owner: dx-architecture
-last_verified_commit: acda9791b30c2533550101bcc180d3def3bae86c
-last_verified_at: 2026-05-05T01:25:00Z
+last_verified_commit: be5c2bc14a7bdb2126869cfa097c191a662cbd34
+last_verified_at: 2026-05-06T14:58:00Z
 stale_if_paths:
   - core/**
   - extended/**
@@ -64,6 +64,10 @@ The repo ships:
    deterministic Agent Coordination follow-ups, it routes through
    `scripts/lib/dx-slack-alerts.sh`; the default operational channel resolves
    to `#fleet-events` / `C0A8YU9JW06`.
+6. `goal-seeking-eval-loop` is the Codex-native contract for bounded
+   eval-led mutation campaigns. It does not own provider execution; it defines
+   the final-gate schema, artifact layout, stochastic noise controls, and
+   post-mortem loop that orchestrators apply to product repos.
 
 ## Brownfield Entry Points
 
@@ -109,6 +113,9 @@ For changes that touch architecture or workflow behavior, read in this order:
 - repo-memory automation (`dx-repo-memory-*`, systemd templates, and Codex
   prompts); keep this path conservative because it is allowed to create
   scheduled documentation PRs
+- `extended/goal-seeking-eval-loop/` helper scripts and skill contract; keep
+  the skill domain-agnostic and place product-specific verdicts or scoring
+  rubrics in the target repo's loop plan.
 
 ## AGENTS Routing Integration Note
 
