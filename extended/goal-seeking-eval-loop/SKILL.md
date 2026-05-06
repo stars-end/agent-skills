@@ -35,10 +35,23 @@ Before mutable work:
 1. Create or identify the Beads epic/task for the campaign.
 2. Create a worktree for every repo that may be edited.
 3. Record `Feature-Key: bd-...` in prompts, artifact metadata, commits, and PRs.
-4. Define the final acceptance gate and hard gates.
-5. Define where run artifacts will live.
+4. Clarify whether the loop is path-proving, product-quality proving, or
+   durability/coverage proving.
+5. Define the final acceptance gate and hard gates.
+6. Define where run artifacts will live.
 
 Do not write in canonical clones. Do not mutate the eval set to flatter a candidate. Do not silently downgrade requested subagent models. If the requested model is unavailable, stop with a clear blocker or ask for an override.
+
+For complex repo campaigns, use a Beads epic as the durable control plane:
+
+- epic: goal, fixed final gate, hard gates, stop conditions;
+- child task: Cycle 0 goal/eval/rubric/baseline contract;
+- child task per mutation cycle, created or updated after the prior
+  post-mortem;
+- final task or epic close gate: final report and acceptance evidence.
+
+Small local experiments may use only artifacts, but repo/product campaigns
+should not rely on chat history as the run ledger.
 
 ## Core Contract
 
@@ -47,16 +60,22 @@ Write a loop spec before dispatching agents:
 1. **Goal**: one sentence describing the product or engineering outcome.
 2. **Eval set**: fixed cases that represent success.
 3. **Eval set version/hash**: a stable identifier for the cases and rubric.
-4. **Mutable surface**: files, services, prompts, data paths, schemas, data sources, or UI layers the orchestrator may change.
-5. **Frozen surface**: evaluation harness, scoring rules, secrets rules, production safety rules, and explicit out-of-scope areas.
-6. **Scalar score**: one number per run, normally 0-100.
-7. **Score dimensions**: dimensions that sum to the scalar score.
-8. **Hard gates**: failures that override score.
-9. **Final acceptance criteria**: exact pass condition for the campaign.
-10. **Keep/discard rule**: what makes a mutation worth keeping.
-11. **Loop budget**: max cycles or stop condition.
-12. **Subagent budget**: max concurrent subagents, model, reasoning effort, and ownership boundaries.
-13. **Artifact root**: location for logs, score JSON, prompts, diffs, commands, and post-mortems.
+4. **Goal type**: `PATH_PROVING`, `PRODUCT_QUALITY_PROVING`,
+   `DURABILITY_COVERAGE_PROVING`, or another explicit type.
+5. **Mutable surface**: files, services, prompts, data paths, schemas, data sources, or UI layers the orchestrator may change.
+6. **Mutation authority map**: how dominant blockers map to allowed mutation
+   surfaces.
+7. **Frozen surface**: evaluation harness, scoring rules, secrets rules, production safety rules, and explicit out-of-scope areas.
+8. **Scalar score**: one number per run, normally 0-100.
+9. **Score dimensions**: dimensions that sum to the scalar score.
+10. **Hard gates**: failures that override score.
+11. **Final acceptance criteria**: exact pass condition for the campaign.
+12. **Keep/discard rule**: what makes a mutation worth keeping.
+13. **Breadth/regression guard**: required when the eval set is smaller than
+    the product surface the loop might affect.
+14. **Loop budget**: max cycles or stop condition.
+15. **Subagent budget**: max concurrent subagents, model, reasoning effort, and ownership boundaries.
+16. **Artifact root**: location for logs, score JSON, prompts, diffs, commands, and post-mortems.
 
 If any item is missing, write the spec before dispatching agents.
 
@@ -82,8 +101,11 @@ For high-risk work, reduce concurrency and increase review depth. For independen
 
 Final acceptance must be written before the first mutation. It must include:
 
+- goal type and what passing the gate proves;
 - required eval cases or slice count;
+- any breadth/regression guard cases when the eval set is intentionally small;
 - minimum aggregate score;
+- minimum per-case score if one strong case could hide a weak one;
 - minimum approved/successful cases;
 - live/manual checks, if required;
 - hard gates that must be zero;
@@ -125,6 +147,42 @@ Each cycle must include a post-mortem before the next plan:
 
 Do not count a cycle as progress unless it produces a scored delta and a keep/discard decision.
 
+## Goal Clarification
+
+Before writing the full loop spec, restate the goal in plain language and name
+what the gate proves:
+
+- `PATH_PROVING`: proves a canonical path can work deeply on representative
+  cases. It does not prove broad durability.
+- `PRODUCT_QUALITY_PROVING`: proves output quality against the fixed eval set
+  is good enough for the product decision at hand.
+- `DURABILITY_COVERAGE_PROVING`: proves coverage and robustness across a broad
+  enough eval quorum.
+
+If a campaign uses a small eval set to move fast, say so explicitly and add a
+breadth/regression guard. The loop may mutate broad pipeline surfaces, so a
+two-case eval set must not become a license to overfit the system to two cases.
+
+## Mutation Authority Map
+
+The spec must say what the orchestrator may mutate for each blocker class. A
+generic pattern:
+
+```text
+data_gap -> source selection, structured/unstructured extraction, coverage
+adapter_gap -> schemas, adapters, handoff package shape
+persistence_gap -> storage writes, idempotency, provenance refs
+orchestration_gap -> runtime envelopes, schedules, retry/fanout evidence
+analysis_gap -> prompts, model config, mechanism classifier, parameter tables
+admin_gap -> admin read model, HITL visibility, failure attribution
+public_gap -> public trust output, source-bound claim rendering
+model_gap -> provider/model config, JSON/retry behavior, validation harness
+```
+
+Every kept mutation must plausibly address the current dominant blocker, close
+a hard gate, or produce a more precise blocker. When the blocker moves, the
+next mutation should move with it.
+
 ## Post-Mortem Template
 
 ```markdown
@@ -153,6 +211,10 @@ Do not count a cycle as progress unless it produces a scored delta and a keep/di
 ```
 
 If two consecutive cycles fail to improve the same blocker, change strategy instead of repeating a similar mutation.
+
+When breadth/regression guard cases are configured, include their result in the
+post-mortem. A mutation that improves the fixed approval cases by weakening
+guard cases should be discarded or revised.
 
 ## Scoring Rules
 
@@ -318,8 +380,11 @@ For Affordabot data-moat/economic-analysis campaigns, use [resources/affordabot.
 When using this skill, return:
 
 - `GOAL`
+- `GOAL_TYPE`
 - `EVAL_SET_VERSION`
 - `FINAL_GATE`
+- `BREADTH_REGRESSION_GUARD`
+- `MUTATION_AUTHORITY_MAP`
 - `MUTABLE_SURFACES`
 - `FROZEN_SURFACES`
 - `SUBAGENT_BUDGET`
