@@ -35,8 +35,11 @@ Policy:
 - Defaults account to `fengning@stars-end.ai`.
 - Defaults client to `olivaw-gog`.
 - Always applies `--gmail-no-send`.
-- Allows only approved read/doctor commands before invoking `gog`.
-- Supports read-only and doctor-style verification lanes.
+- Allows approved read/doctor commands before invoking `gog`.
+- Allows approved internal-write operations only after the Olivaw Google Ops
+  state file exists.
+- Approved internal writes are documented in
+  `docs/specs/2026-05-06-olivaw-google-internal-write-surfaces.md`.
 
 Human confirmation gate (document-only, no automation here):
 
@@ -46,7 +49,8 @@ Human confirmation gate (document-only, no automation here):
 
 Purpose:
 
-- Prove fail-closed behavior for Gmail send/delete and Drive sharing/admin paths.
+- Prove fail-closed behavior for external-effect Google actions while preserving
+  the approved internal-write surface.
 
 Method:
 
@@ -58,7 +62,8 @@ Method:
    - `scripts/olivaw-gog-safe.sh gmail send ...`
    - `scripts/olivaw-gog-safe.sh gmail delete ...`
    - `scripts/olivaw-gog-safe.sh drive share ...`
-   - `scripts/olivaw-gog-safe.sh drive permissions ...`
+   - `scripts/olivaw-gog-safe.sh drive permissions ...` is read-only and may be
+     used for verification; use `drive share`/`drive delete` as blocked probes.
 4. Capture evidence:
    - command
    - exit code
@@ -83,16 +88,22 @@ Interface contract:
 - Olivaw profile skill installed at:
   `/Users/fengning/.hermes/profiles/olivaw/skills/productivity/olivaw-gog-safe/SKILL.md`
 - Tool inputs are mapped to a constrained command grammar:
-  - allowed examples: `auth doctor`, `gmail search`, `calendar calendars`,
+  - allowed read examples: `auth doctor`, `gmail search`, `calendar calendars`,
     `calendar events`, `drive ls`, `drive search`, `docs info`, `docs cat`,
     `sheets get`, `sheets metadata`, `contacts list`
-  - disallowed families: `gmail send/delete`, Drive sharing/permissions/admin actions, credential mutation commands
+  - allowed internal-write examples: Drive upload to approved folders, Docs
+    create/write in approved folders, Sheets append/update on approved tracker
+    tabs, Gmail draft create/update with `[Olivaw` subjects, and Calendar
+    internal holds without guests or update emails
+  - disallowed families: `gmail send/delete`, Drive sharing/admin actions,
+    Calendar external effects, credential mutation commands
 - JSON output mode is required for machine parsing.
 
 Operational notes:
 
 - Keep business account and personal Gmail isolation explicit in bridge prompts/tool docs.
-- If future requirement needs draft creation, add explicit allowlist entry and accompanying blocked-action regression tests before enabling by default.
+- Gmail draft creation is now explicitly allowed only through the guarded
+  draft-only surface; Gmail send remains blocked.
 - Verify skill loading with `hermes -p olivaw skills list | rg olivaw-gog-safe`.
 
 ## 5) OAuth Hygiene Decision Checklist
